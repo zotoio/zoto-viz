@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/dogfood-tile-hud.ts b/web/src/plugins/dogfood-tile-hud.ts
+index a6b42dd..4e446c1 100644
+--- a/web/src/plugins/dogfood-tile-hud.ts
++++ b/web/src/plugins/dogfood-tile-hud.ts
+@@ -76,7 +76,7 @@ export function runTileHudSim(
+   return {
+     delivered: tile.delivered,
+     skipped: tile.skipped,
+-    skipRateAt: tileHudSkipRatePerSec(hudSamplesForTile(tile), nowTick),
++    skipRateAt: tileHudSkipRatePerSec(hudSamplesForTile(tile), nowTick, true),
+     limitedLabel: chrome.limitedLabel,
+     state: chrome.state,
+   };

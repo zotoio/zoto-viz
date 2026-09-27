@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-tile-budget.ts b/web/src/plugins/viz-tile-budget.ts
+index e7b2d3c..bdb302c 100644
+--- a/web/src/plugins/viz-tile-budget.ts
++++ b/web/src/plugins/viz-tile-budget.ts
+@@ -355,7 +355,6 @@ export function mirrorMosaicTileCadenceFromPrimary(
+     t.delivered = primary.delivered;
+     t.shareLimitedSkips = primary.shareLimitedSkips;
+     t.shedding = primary.shedding;
+-    t.lastDeliveredFrame = primary.lastDeliveredFrame;
+     t.lastBuildCostTicks = primary.lastBuildCostTicks;
+     copyHudRingFromPrimary(primary, t);
+   }

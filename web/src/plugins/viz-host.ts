@@ -1,4 +1,8 @@
 import type { Device, StateMsg } from "../core/types";
+import { vizBuildCostMs, vizBuildCostTicksForTile, vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
+import { type MonoMs, monoMs, monoMsDeltaSec } from "../core/viz-time";
+import { msToVizTicks, vizTileBudgetRegistry } from "./viz-tile-budget";
+import { VIZ_WALL_BUDGET_TICKS } from "./viz-tile-constants";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
@@ -413,9 +417,18 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
  * Build a decimated data frame from monitor state. Selection cost scales with
  * the output cap (top-K), not the full device / flow lists.
  */
-export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: SourceBind | Record<string, string>): VizDataFrame {
-  const t = state.ts || Date.now() / 1000;
-  const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
+/**
+ * @param prevVizClockMs previous {@link vizClockMs} sample from the last delivered frame (ms), not wall epoch.
+ */
+export function buildVizFrame(
+  state: StateMsg,
+  prevVizClockMs: MonoMs = monoMs(0),
+  audio = 0,
+  bind?: SourceBind | Record<string, string>,
+): VizDataFrame {
+  const t = vizFrameEpochSec(state.ts);
+  const nowClock = vizClockMs();
+  const dt = prevVizClockMs > monoMs(0) ? monoMsDeltaSec(prevVizClockMs, nowClock) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
   return {
     t,
@@ -439,12 +452,12 @@ export function buildVizFrame(state: StateMsg, prevTs = 0, audio = 0, bind?: Sou
 /** Build a live frame and merge idle demo slices when monitor traffic is absent. */
 export function buildVizFrameForPlugin(
   state: StateMsg,
-  prevTs: number,
+  prevVizClockMs: MonoMs,
   audio: number,
   idle: VizIdleConfig,
   bind?: SourceBind | Record<string, string>,
 ): VizDataFrame {
-  return mergeVizIdleFrame(buildVizFrame(state, prevTs, audio, bind), idle);
+  return mergeVizIdleFrame(buildVizFrame(state, prevVizClockMs, audio, bind), idle);
 }
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
@@ -455,10 +468,18 @@ export class VizFrameBudget {
   private _total = 0;
   private _lastBuilt: VizDataFrame | null = null;
   private _lastPresent = -1;
+  private _lastTileSkipped = 0;
   private readonly now: () => number;
+  private tileId: string;
 
-  constructor(now: () => number = () => performance.now()) {
+  constructor(now: () => number = vizClockMs, tileId = "main") {
     this.now = now;
+    this.tileId = tileId;
+  }
+
+  /** Retarget deliver ledger when mosaic promotes a different header pane. */
+  setTileId(tileId: string): void {
+    this.tileId = tileId;
   }
 
   get stats(): VizFrameBudgetStats {
@@ -477,7 +498,6 @@ export class VizFrameBudget {
 
   /** Record a measured duration; returns true when over budget. */
   record(ms: number): boolean {
-    this._total++;
     this._lastMs = ms;
     if (ms > VIZ_FRAME_BUDGET_MS) {
       this._overBudget++;
@@ -501,26 +521,43 @@ export class VizFrameBudget {
   }
 
   /**
-   * Build and optionally deliver a viz frame. Over-budget frames are skipped
-   * (not delivered) and the over-budget counter increments.
+   * Build and optionally deliver a viz frame. Tile debt skips and builds over
+   * {@link VIZ_WALL_BUDGET_TICKS} do not call `onFrame`; skip/over counters accrue.
    */
   deliver(
     state: StateMsg,
-    prevTs: number,
+    prevVizClockMs: MonoMs,
     audio: number,
     onFrame: (frame: VizDataFrame) => void,
-    build: (state: StateMsg, prevTs: number, audio: number) => VizDataFrame = buildVizFrame,
+    build: (state: StateMsg, prevVizClockMs: MonoMs, audio: number) => VizDataFrame = buildVizFrame,
   ): VizDataFrame | null {
-    const t0 = this.now();
-    const frame = build(state, prevTs, audio);
-    this._lastBuilt = frame;
-    const over = this.record(this.now() - t0);
-    if (over) {
-      this._skipped++;
+    const deliverIndex = this._total++;
+    const tickInject = vizBuildCostTicksForTile(this.tileId, deliverIndex);
+    const msInject = vizBuildCostMs(deliverIndex);
+    const result = vizTileBudgetRegistry.deliver(
+      this.tileId,
+      () => {
+        const t0 = this.now();
+        const frame = build(state, prevVizClockMs, audio);
+        const elapsed = this.now() - t0;
+        const costTicks = tickInject ?? msToVizTicks(msInject ?? elapsed);
+        this._lastMs = msInject ?? elapsed;
+        if (costTicks > VIZ_WALL_BUDGET_TICKS) this._overBudget++;
+        return { frame, costTicks };
+      },
+      (frame) => onFrame(frame),
+      { deliverIndex },
+    );
+    const tile = vizTileBudgetRegistry.getTile(this.tileId);
+    const tileSkips = tile.skipped;
+    this._skipped += tileSkips - this._lastTileSkipped;
+    this._lastTileSkipped = tileSkips;
+    if (!result.delivered) {
+      this._lastBuilt = tile.lastDeliveredFrame;
       return null;
     }
-    onFrame(frame);
-    return frame;
+    this._lastBuilt = result.frame;
+    return result.frame;
   }
 
   reset(): void {
@@ -530,6 +567,19 @@ export class VizFrameBudget {
     this._total = 0;
     this._lastBuilt = null;
     this._lastPresent = -1;
+    this._lastTileSkipped = 0;
+    const tile = vizTileBudgetRegistry.getTile(this.tileId);
+    tile.debt = 0;
+    tile.cadenceK = 1;
+    tile.deliverAttempt = 0;
+    tile.skipped = 0;
+    tile.delivered = 0;
+    tile.shareLimitedSkips = 0;
+    tile.shedding = false;
+    tile.lastDeliveredFrame = null;
+    tile.lastBuildCostTicks = null;
+    tile.hudRingCount = 0;
+    tile.hudRingNext = 0;
   }
 }
 

@@ -1,5 +1,9 @@
 import type { StateMsg } from "../core/types";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
+import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
+import { tileHudChrome, wallHudChrome } from "../plugins/viz-tile-hud";
+import { createTileHudLabelLine, type TileHudLabelLine } from "./tile-hud-label";
+import { TILE_LIMITED_SHARING_TOOLTIP, formatHudSkipsPerSec } from "./viz-copy";
 import { morphCopy, Select } from "./ui";
 
 /** First-party demoscene viz packs that share the host UBO frame. */
@@ -72,6 +76,32 @@ export interface VizHudTick {
   frame: VizDataFrame | null;
   state: StateMsg;
   now: number;
+  tileBudget?: VizTileBudgetStats;
+  /** Active mosaic / viz tiles (for LIMITED label mate count). */
+  activeTiles?: number;
+  /** Per-tile budget lines when mosaic shares the wall budget. */
+  tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats }[];
+}
+
+export function tileHudSkipLabel(
+  tile: VizTileBudgetStats,
+  skipRate: number,
+  activeTiles = 1,
+  nowTick = 0,
+): string {
+  const chrome = tileHudChrome(tile, nowTick, activeTiles);
+  if (chrome.limitedLabel) return chrome.limitedLabel;
+  if (chrome.state === "over_budget") return formatSkipRate(skipRate);
+  return formatHudSkipsPerSec(skipRate);
+}
+
+/** Shedding tiles keep the last delivered frame on screen (never blank). */
+export function tileHudDisplayFrame(
+  tile: VizTileBudgetStats,
+  built: VizDataFrame | null,
+): VizDataFrame | null {
+  if (tile.shedding && tile.lastDeliveredFrame) return tile.lastDeliveredFrame;
+  return built ?? tile.lastDeliveredFrame;
 }
 
 /** Estimate talker-storm particle count (mirrors the plugin cap, host-side only). */
@@ -173,6 +203,7 @@ export class VizHud {
   private readonly metricLabelEl: HTMLElement;
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly tileShareRow: HTMLElement;
   private readonly swapRow: HTMLElement;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
@@ -182,6 +213,16 @@ export class VizHud {
   private skipNeedsSync = true;
   private readonly skipSamples: { t: number; n: number }[] = [];
   private pulseUntil = 0;
+  private readonly skipLabelLine: TileHudLabelLine = createTileHudLabelLine();
+  private readonly mosaicTileLines = new Map<string, { el: HTMLSpanElement; label: TileHudLabelLine }>();
+  mosaicHudLinesCreated = 0;
+  mosaicHudLinesReleased = 0;
+  private lastMetricLabel = "";
+  private lastMetricValue = "";
+  private lastSkipTitle = "";
+  private readonly lastMosaicLineText = new Map<string, string>();
+  private readonly devBadInputEl: HTMLDivElement;
+  private lastDevBadInput = "";
 
   constructor(parent: HTMLElement, onSwap: (packId: VizDemoPackId) => void) {
     this.onSwap = onSwap;
@@ -208,6 +249,10 @@ export class VizHud {
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
+    this.tileShareRow = document.createElement("div");
+    this.tileShareRow.className = "viz-hud-tile-shares";
+    this.tileShareRow.hidden = true;
+
     this.swapRow = document.createElement("div");
     this.swapRow.className = "viz-hud-swap";
     this.packSel = new Select({
@@ -226,10 +271,22 @@ export class VizHud {
       return el;
     };
     line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
-    root.append(line);
+    this.devBadInputEl = document.createElement("div");
+    this.devBadInputEl.className = "viz-hud-dev-bad-input sec-hint";
+    this.devBadInputEl.hidden = true;
+    root.append(line, this.devBadInputEl, this.tileShareRow);
 
     parent.append(root);
     this.root = root;
+  }
+
+  /** Dev dogfood flag bad-input strip (wall rebuild path only). */
+  syncDevWallBadInputMessage(message: string | null): void {
+    const msg = message?.trim() ?? "";
+    if (msg === this.lastDevBadInput) return;
+    this.lastDevBadInput = msg;
+    this.devBadInputEl.textContent = msg;
+    this.devBadInputEl.hidden = !msg;
   }
 
   setActive(packId: string | null, packName: string): void {
@@ -251,12 +308,41 @@ export class VizHud {
     this.skipNeedsSync = true;
   }
 
+  /** Create/release per-tile HUD lines only when the mosaic wall is rebuilt. */
+  syncMosaicTileHudLines(tileIds: readonly string[]): void {
+    const want = new Set(tileIds);
+    for (const [id, row] of this.mosaicTileLines) {
+      if (!want.has(id)) {
+        row.el.remove();
+        this.mosaicTileLines.delete(id);
+        this.mosaicHudLinesReleased++;
+      }
+    }
+    for (const id of tileIds) {
+      if (this.mosaicTileLines.has(id)) continue;
+      const el = document.createElement("span");
+      el.className = "viz-hud-tile-share";
+      el.dataset.tileId = id;
+      this.tileShareRow.append(el);
+      this.mosaicTileLines.set(id, { el, label: createTileHudLabelLine() });
+      this.mosaicHudLinesCreated++;
+    }
+    this.tileShareRow.hidden = this.mosaicTileLines.size === 0;
+  }
+
   tick(input: VizHudTick): void {
     if (!this.activeId) return;
-    const { stats, frame, state, now } = input;
-    const metric = vizHudMetric(this.activeId, frame, state);
-    this.metricLabelEl.textContent = metric.label;
-    this.metricValueEl.textContent = metric.value;
+    const { stats, frame, state, now, tileBudget, activeTiles = 1, tileBudgetLines } = input;
+    const displayFrame = tileBudget ? tileHudDisplayFrame(tileBudget, frame) : frame;
+    const metric = vizHudMetric(this.activeId, displayFrame, state);
+    if (metric.label !== this.lastMetricLabel) {
+      this.metricLabelEl.textContent = metric.label;
+      this.lastMetricLabel = metric.label;
+    }
+    if (metric.value !== this.lastMetricValue) {
+      this.metricValueEl.textContent = metric.value;
+      this.lastMetricValue = metric.value;
+    }
 
     if (this.skipNeedsSync) {
       this.lastSkipped = stats.skipped;
@@ -272,7 +358,44 @@ export class VizHud {
     const cutoff = now - SKIP_WINDOW_MS;
     while (this.skipSamples.length && this.skipSamples[0].t < cutoff) this.skipSamples.shift();
 
-    this.skipEl.textContent = formatSkipRate(skipRatePerSec(this.skipSamples, now));
+    const rate = skipRatePerSec(this.skipSamples, now);
+    if (tileBudget) {
+      const nowTick = Math.round(now * 300);
+      const wallTiles = (tileBudgetLines ?? []).map((l) => l.tile);
+      const chrome = wallTiles.length
+        ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
+        : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
+      const limited =
+        chrome.state === "limited" && chrome.limitedLabel
+          ? this.skipLabelLine.limitedLabel(activeTiles, chrome.cadenceK)
+          : null;
+      const skipText = limited ?? formatSkipRate(rate);
+      this.skipLabelLine.writeText(this.skipEl, skipText);
+      const title = limited ? TILE_LIMITED_SHARING_TOOLTIP : "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
+      if (title !== this.lastSkipTitle) {
+        this.skipEl.title = title;
+        this.lastSkipTitle = title;
+      }
+      this.skipEl.classList.toggle("viz-hud-skip-limited", Boolean(limited));
+      this.skipEl.classList.toggle("viz-hud-skip-fail", chrome.useFailTone);
+    } else {
+      this.skipLabelLine.writeText(this.skipEl, formatSkipRate(rate));
+      this.skipEl.classList.remove("viz-hud-skip-limited", "viz-hud-skip-fail");
+    }
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
+
+    const lines = tileBudgetLines ?? [];
+    for (const { tileId, tile } of lines) {
+      const row = this.mosaicTileLines.get(tileId);
+      if (!row) continue;
+      const nowTick = Math.round(now * 300);
+      const chrome = tileHudChrome(tile, nowTick, activeTiles);
+      const text = `${tileId}: ${formatHudSkipsPerSec(chrome.skipRatePerSec)}`;
+      const prev = this.lastMosaicLineText.get(tileId);
+      if (prev !== text) {
+        row.label.writeText(row.el, text);
+        this.lastMosaicLineText.set(tileId, text);
+      }
+    }
   }
 }

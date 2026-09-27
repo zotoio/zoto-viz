@@ -1,0 +1,13 @@
+diff --git a/web/src/app/main-present-opts-localstorage.ts b/web/src/app/main-present-opts-localstorage.ts
+index 5c58ebc..8ea33c4 100644
+--- a/web/src/app/main-present-opts-localstorage.ts
++++ b/web/src/app/main-present-opts-localstorage.ts
+@@ -45,6 +45,8 @@ export function invokePresentLoopOptsForSites(
+   if (packId === "hn-rain") {
+     parseHnRainLook(optsFor(mode));
+   }
++
++  optsFor(mode);
+ }
+ 
+ /** Pinned at main `6520b01` for plugin steady present (2× optsFor; 5 knob keys × 2 store reads each). */

@@ -10,6 +10,7 @@
     "dev": "vite",
     "asbuild": "asc --config asconfig.json --target release",
     "build": "pnpm asbuild && tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",

@@ -3,14 +3,20 @@
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
-    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "strict": true,
     "noEmit": true,
     "skipLibCheck": true,
     "isolatedModules": true,
     "resolveJsonModule": true,
-    "types": ["vite/client"]
+    "types": [
+      "vite/client"
+    ]
   },
-  "include": ["src", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/drive.ts", "../plugins/src/backrooms/frontend/director.ts", "../plugins/src/stereo-gram/frontend/recipe.ts", "../plugins/src/syscon/frontend/telemetry.ts", "../plugins/src/nixie-clock/frontend/tubes.ts"],
+  "include": ["src", "typecheck/**/*.ts", "../shared/nixie-tubes.ts", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/drive.ts", "../plugins/src/backrooms/frontend/director.ts", "../plugins/src/stereo-gram/frontend/recipe.ts", "../plugins/src/syscon/frontend/telemetry.ts", "../plugins/src/nixie-clock/frontend/tubes.ts"],
   "exclude": ["src/**/*.test.ts"]
 }

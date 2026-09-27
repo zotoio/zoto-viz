@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import * as tileBudget from "./viz-tile-budget";
 import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
 
 describe("hash consent and TypeScript allow", () => {
@@ -50,6 +51,14 @@ describe("PluginSandbox", () => {
     box.tick([{ id: "a", rate: 1, role: "lan" }]);
     box.unload();
     expect(document.querySelector("iframe")).toBeNull();
+  });
+
+  it("unload resets viz tile scope to solo main", () => {
+    const spy = vi.spyOn(tileBudget, "syncVizTileScope");
+    const box = new PluginSandbox();
+    box.unload();
+    expect(spy).toHaveBeenCalledWith(["main"]);
+    spy.mockRestore();
   });
 
   it("fetches /plugins/<id>/module.js then loads the iframe", async () => {

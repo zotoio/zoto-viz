@@ -169,13 +169,16 @@ export function cycleSkyPool(): BackdropKind[] {
   return CYCLE_SKIES;
 }
 
-const VERT = /* glsl */ `
+/** Host sky sphere vertex shared by plugin skies (tests compile this with the fragment probe). */
+export const pluginSkyVertGlsl = /* glsl */ `
 out vec3 vDir;
 void main() {
   vDir = normalize(position);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
+
+const VERT = pluginSkyVertGlsl;
 
 const FRAG = /* glsl */ `
 uniform float uTime;
@@ -653,6 +656,26 @@ let lastPlugin: { id: string; frag: string } | null = null;
 export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
 export const PLUGIN_SKY_MAX = 128_000;
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
+
+/** Compile the host sky vertex on a throwaway WebGL2 context. `null` if no GPU or it linked. */
+export function probePluginSkyVertCompile(vert: string): string | null {
+  if (typeof document === "undefined") return null;
+  let gl: WebGL2RenderingContext | null = null;
+  try {
+    gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: false });
+    if (!gl) return null;
+    const sh = gl.createShader(gl.VERTEX_SHADER);
+    if (!sh) return null;
+    gl.shaderSource(sh, `#version 300 es\n${vert}`);
+    gl.compileShader(sh);
+    if (gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return null;
+    return (gl.getShaderInfoLog(sh) || "compile failed").replace(/\0/g, "").trim() || "compile failed";
+  } catch {
+    return null;
+  } finally {
+    releaseThrowawayGl(gl);
+  }
+}
 
 /** Compile the wrapped fragment on a throwaway WebGL2 context. `null` if no GPU or it linked. */
 export function probePluginSkyCompile(frag: string): string | null {

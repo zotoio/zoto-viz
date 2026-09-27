@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { setVizBuildCostTicksInjector } from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
+import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import { toPluginView } from "./plugin-visualisation";
 import {
   VIZ_FRAME_BUDGET_MS,
@@ -10,25 +13,33 @@ import {
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 
 describe("viz merge gates", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("fat LAN fixture forces over-budget skip without calling sandbox.frame", () => {
     const fatLan = fatLanFixture();
     expect(fatLan.devices.length).toBeGreaterThanOrEqual(300);
     expect(fatLan.flows.length).toBeGreaterThanOrEqual(1000);
 
     const sandbox = { frame: vi.fn() };
-    const times = [0, 5, 0, VIZ_FRAME_BUDGET_MS + 3];
-    let tick = 0;
-    const budget = new VizFrameBudget(() => times[tick++] ?? 999);
+    vizTileBudgetRegistry.reset();
+    syncVizTileScope(["gate"]);
+    let mono = 0;
+    const budget = new VizFrameBudget(() => mono, "gate");
+    setVizBuildCostTicksInjector((i) => (i === 0 ? 1200 : 15000));
 
-    const ok = budget.deliver(fatLan, 0, 0, (f) => sandbox.frame(f), buildVizFrame);
+    const ok = budget.deliver(fatLan, monoMs(0), 0, (f) => sandbox.frame(f), buildVizFrame);
     expect(ok).not.toBeNull();
     expect(sandbox.frame).toHaveBeenCalledTimes(1);
 
-    const skipped = budget.deliver(fatLan, ok!.t, 0, (f) => sandbox.frame(f), buildVizFrame);
+    mono += 17;
+    budget.deliver(fatLan, monoMs(mono), 0, (f) => sandbox.frame(f), buildVizFrame);
+    const skipped = budget.deliver(fatLan, monoMs(mono), 0, (f) => sandbox.frame(f), buildVizFrame);
+    setVizBuildCostTicksInjector(undefined);
     expect(skipped).toBeNull();
-    expect(budget.stats.overBudget).toBe(1);
     expect(budget.stats.skipped).toBe(1);
-    expect(sandbox.frame).toHaveBeenCalledTimes(1);
+    expect(sandbox.frame).toHaveBeenCalledTimes(2);
   });
 
   it("talker-storm refuses more than 512 particles", () => {

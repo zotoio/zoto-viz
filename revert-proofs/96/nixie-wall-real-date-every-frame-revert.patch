@@ -1,0 +1,25 @@
+diff --git a/web/src/plugins/nixie-wall-parts.ts b/web/src/plugins/nixie-wall-parts.ts
+--- a/web/src/plugins/nixie-wall-parts.ts
++++ b/web/src/plugins/nixie-wall-parts.ts
+@@ -32,16 +32,11 @@ export function localWallPartsFromDate(d: Date): { h: number; m: number; s: numbe
+ }
+ 
+ export function fillRealWallPartsScratch(wallMs?: number): typeof nixieWallPartsScratch {
+-  if (!realWallBooted) bootNixieRealWallClock();
+   const ms = wallMs !== undefined ? Number(wallMs) : Number(vizWallMs());
+-  realWallDate.setTime(ms);
+-  const secKey = Math.floor(ms / 1000);
+-  if (secKey !== realWallLastSecKey) {
+-    realWallLastSecKey = secKey;
+-    const p = localWallPartsFromDate(realWallDate);
+-    nixieWallPartsScratch.h = p.h;
+-    nixieWallPartsScratch.m = p.m;
+-    nixieWallPartsScratch.s = p.s;
+-  }
++  const d = new Date(ms);
++  const p = localWallPartsFromDate(d);
++  nixieWallPartsScratch.h = p.h;
++  nixieWallPartsScratch.m = p.m;
++  nixieWallPartsScratch.s = p.s;
+   return nixieWallPartsScratch;
+ }

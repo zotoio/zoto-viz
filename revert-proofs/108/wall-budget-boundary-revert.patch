@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-tile-hud.ts b/web/src/plugins/viz-tile-hud.ts
+--- a/web/src/plugins/viz-tile-hud.ts
++++ b/web/src/plugins/viz-tile-hud.ts
+@@ -67,7 +67,7 @@ export function computeTileHudViewerState(
+     return lastBuildCostTicks > VIZ_WALL_BUDGET_TICKS ? "over_budget" : "limited";
+   }
+ 
+-  const anyOverWall = builds.some((b) => (b.costTicks ?? 0) > VIZ_WALL_BUDGET_TICKS);
++  const anyOverWall = builds.some((b) => (b.costTicks ?? 0) >= VIZ_WALL_BUDGET_TICKS);
+   if (anyOverWall) return "over_budget";
+   return "limited";
+ }
