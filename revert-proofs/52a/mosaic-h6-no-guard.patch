@@ -2,7 +2,7 @@ diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
 index 95f8f4c..1c60f3e 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1720,23 +1720,9 @@ export class Settings {
+@@ -1720,22 +1720,8 @@ export class Settings {
        mosaicUniqueSkies: a.mosaicUniqueSkies,
        mosaicSkies: a.mosaicSkies,
      });
@@ -17,11 +17,9 @@ index 95f8f4c..1c60f3e 100644
 -          countMosaicTiles(candidate),
 -          VIZ_MAX_ACTIVE_TILES,
 -        );
--      this.renderMosaicWallStatus();
 -      return;
 -    }
      this.lastMosaicTileLimitMessage = "";
-     this.renderMosaicWallStatus();
 -    this.anim = anim;
 +    this.anim = candidate;
      this.syncAnimUi();

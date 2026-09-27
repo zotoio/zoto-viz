@@ -34,17 +34,13 @@ describe("mosaic viz tile guard H6", () => {
       s.applyAnim(profileAnim);
       expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(bytesBefore);
       expect(s.lastMosaicTileLimitMessage).toBe(bootMsg);
-      const status = s.el.querySelector<HTMLElement>(".mosaic-wall-status");
-      expect(status?.hidden).toBe(false);
-      expect(status?.classList.contains("fail")).toBe(false);
-      expect(status?.classList.contains("viz-hud-skip-fail")).toBe(false);
-      expect(status?.textContent).toBe(bootMsg);
+      expect(s.el.querySelector(".mosaic-wall-status")).toBeNull();
       expect(s.animSettings.mosaic).toBe("off");
       expect(s.animSettings.mosaicTiles).toEqual([]);
       expect(s.animSettings.mosaic).toBe(DEFAULT_DREAM.mosaic);
       s.applyAnim(profileAnim);
       expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(bytesBefore);
-      expect(status?.textContent).toBe(bootMsg);
+      expect(s.lastMosaicTileLimitMessage).toBe(bootMsg);
     }
   });
 
@@ -60,13 +56,12 @@ describe("mosaic viz tile guard H6", () => {
     const profileAnim = shippedSettings().anim;
 
     const tab1 = new Settings({ storePrefix: prefix, onChange: () => {} });
-    let status = tab1.el.querySelector<HTMLElement>(".mosaic-wall-status");
-    expect(status?.textContent).toBe(bootMsg);
+    expect(tab1.lastMosaicTileLimitMessage).toBe(bootMsg);
+    expect(tab1.el.querySelector(".mosaic-wall-status")).toBeNull();
     expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(bytesBefore);
 
     const tab2 = new Settings({ storePrefix: prefix, onChange: () => {} });
-    status = tab2.el.querySelector<HTMLElement>(".mosaic-wall-status");
-    expect(status?.textContent).toBe(bootMsg);
+    expect(tab2.lastMosaicTileLimitMessage).toBe(bootMsg);
     expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(bytesBefore);
 
     const origFetch = globalThis.fetch;
@@ -89,8 +84,7 @@ describe("mosaic viz tile guard H6", () => {
     expect(store.available).toBe(false);
 
     const tab3 = new Settings({ storePrefix: prefix, onChange: () => {} });
-    status = tab3.el.querySelector<HTMLElement>(".mosaic-wall-status");
-    expect(status?.textContent).toBe(bootMsg);
+    expect(tab3.lastMosaicTileLimitMessage).toBe(bootMsg);
     tab3.applyAnim(profileAnim);
     expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(bytesBefore);
 
@@ -116,15 +110,8 @@ describe("mosaic viz tile guard H6", () => {
     expect(s.lastMosaicTileLimitMessage).toBe(
       "Couldn't load this wall layout. It has 9 tiles and the limit is 8, so your current wall is still showing.",
     );
-    const status = s.el.querySelector<HTMLElement>(".mosaic-wall-status");
-    expect(status).toBeTruthy();
-    expect(status?.hidden).toBe(false);
-    expect(status?.classList.contains("fail")).toBe(false);
-    expect(status?.classList.contains("viz-hud-skip-fail")).toBe(false);
-    expect(status?.textContent).toBe(mosaicWallLayoutRefusedMessage(9, 8));
-    expect(status?.textContent).toBe(
-      "Couldn't load this wall layout. It has 9 tiles and the limit is 8, so your current wall is still showing.",
-    );
+    expect(s.el.querySelector(".mosaic-wall-status")).toBeNull();
+    expect(s.lastMosaicTileLimitMessage).toBe(mosaicWallLayoutRefusedMessage(9, 8));
     expect(s.animSettings.mosaicTiles).toEqual(eight);
     expect(s.animSettings.mosaic).toBe("8");
   });
