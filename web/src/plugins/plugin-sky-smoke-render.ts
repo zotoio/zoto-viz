@@ -28,17 +28,21 @@ void main() {
 
 let sharedBrowser: Browser | null = null;
 
+/** Chromium defaults include --disable-software-rasterizer, which blocks SwiftShader WebGL2 on GPU-less CI. */
+const PLUGIN_SKY_SMOKE_LAUNCH_ARGS = [
+  "--use-gl=angle",
+  "--use-angle=swiftshader",
+  "--enable-unsafe-swiftshader",
+  "--hide-scrollbars",
+  "--mute-audio",
+] as const;
+
 async function browser(): Promise<Browser> {
   if (!sharedBrowser) {
     sharedBrowser = await chromium.launch({
       headless: true,
-      args: [
-        "--use-gl=angle",
-        "--use-angle=swiftshader",
-        "--enable-unsafe-swiftshader",
-        "--hide-scrollbars",
-        "--mute-audio",
-      ],
+      ignoreDefaultArgs: ["--disable-software-rasterizer"],
+      args: [...PLUGIN_SKY_SMOKE_LAUNCH_ARGS],
     });
   }
   return sharedBrowser;
