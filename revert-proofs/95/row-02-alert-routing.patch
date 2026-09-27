@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 8ee2a46..7e009f2 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -55,7 +55,7 @@ function syncQueueCount(): void {
+   if (regionNode) regionNode.dataset.queueCount = String(queue.size);
+ }
+ function pickContainer(key: NoticeKey): HTMLElement {
+-  return NOTICE_ROUTE[key] === "alert" ? alertContainer! : statusContainer!;
++  return statusContainer!;
+ }
+ function clearNoticeTimer(e: Entry): void {
+   if (e.timer != null) {

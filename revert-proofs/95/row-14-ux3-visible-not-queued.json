@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > never queues a key that is already visible among three alerts",
+  "description": "Revert production guard (row-14-ux3-visible-not-queued)",
+  "red": "AssertionError: expected 2 to be 1 // Object.is equality"
+}

@@ -1,0 +1,36 @@
+# Host VizDataFrame → aquarium effects (declared mapping; read in pack only).
+# Schema: field, effect, default, clamp
+
+mappings:
+  - field: talkers[].id
+    effect: stable fish identity (Map key); never list index
+    default: —
+    clamp: max fish per preset / plugin.yml maxParticles
+  - field: talkers[].rate
+    effect: fish vigour, swim speed, body scale; rate-ranked slots (#22 rules)
+    default: 0
+    clamp: 0..1 via rate/220; 2 s hold, 1.2× challenger, empty slot fill, release on talker leave
+  - field: talkers[].role
+    effect: species pick (gateway → largest enabled species)
+    default: hash bucket
+    clamp: enabled species set from config
+  - field: packets[].proto
+    effect: plankton/bubble tint hash
+    default: ip
+    clamp: —
+  - field: packets[].size
+    effect: particle spawn height and kind mix
+    default: 64
+    clamp: 0..1500 → 0..1
+  - field: packets[].field
+    effect: particle lifetime; feeding burst hint with feedingTraffic
+    default: 0
+    clamp: 0..1
+  - field: sys.failed
+    effect: tank-wide murk + Zoto Fail banner (never per-fish)
+    default: 0
+    clamp: 0..1 → murk when above FAIL_MURK_THRESHOLD
+  - field: demo
+    effect: golden host idle schools; label suffix demo
+    default: false
+    clamp: boolean

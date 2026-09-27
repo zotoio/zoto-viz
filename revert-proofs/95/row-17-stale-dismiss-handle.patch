@@ -1,0 +1,16 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 8ee2a46..6fcc9c8 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -127,8 +127,9 @@ function evictOldestNonError(): boolean {
+   return false;
+ }
+ function dismissEntry(e: Entry): void {
+-  if (keyToLive.get(e.key) === e) {
+-    removeLiveNotice(e);
++  const cur = keyToLive.get(e.key);
++  if (cur) {
++    removeLiveNotice(cur);
+     if (queue.size > 0) {
+       const next = queue.values().next().value as Entry;
+       queue.delete(next.key);
