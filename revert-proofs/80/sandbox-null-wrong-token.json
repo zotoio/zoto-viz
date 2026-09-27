@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access_sandbox_token.py::SandboxAssetTokenOriginTests::test_null_origin_module_js_denied_with_wrong_token",
+  "description": "Wrong token \u2192 token_invalid.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 404 == 401"
+}

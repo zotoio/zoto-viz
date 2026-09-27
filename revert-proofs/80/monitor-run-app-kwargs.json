@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_monitor_access_log.py::test_make_app_session_and_production_access_log_disabled",
+  "description": "Production disables aiohttp access_log.",
+  "timeoutSec": 60,
+  "red": "assert False is None"
+}

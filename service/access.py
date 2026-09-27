@@ -64,6 +64,15 @@ def host_ok(request: web.Request) -> bool:
     if request.app.get("insecure_lan"):
         return bool(host)
     return is_loopback_name(host)
+def host_header_raw(request: web.Request) -> str:
+    return (request.headers.get("Host") or "").strip()
+
+
+def pack_asset_csp_origin(request: web.Request) -> str:
+    """Origin for sandbox CSP script-src (never raw untrusted Host fragments)."""
+    from .request_guard import validated_http_origin
+
+    return validated_http_origin(request)
 
 
 def origin_ok(request: web.Request) -> bool:

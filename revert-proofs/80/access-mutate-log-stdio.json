@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access_mutate_log_stdio.py::test_mutate_stdout_redacts_pack_asset_token",
+  "red": "AssertionError: assert '11111111-11...28pCtWCdo-n4' not in '[monitor] P....js -> 204\\n'",
+  "description": "access-mutate-log-stdio",
+  "timeoutSec": 120
+}

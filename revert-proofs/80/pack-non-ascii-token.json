@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_non_ascii_token_rejected",
+  "description": "Non-ASCII pack-asset tokens rejected.",
+  "timeoutSec": 60,
+  "red": "AssertionError: assert 404 == 401"
+}
