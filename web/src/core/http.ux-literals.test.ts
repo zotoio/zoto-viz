@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { apiFetch, noteCsrf } from "./http";
 import { bindServerRestartWallNotice } from "./http-notice";
+import { mountWallNoticeRegion } from "./wall-notice-region";
 
 describe("UX copy literals", () => {
   const orig = globalThis.fetch;
@@ -17,6 +18,7 @@ describe("UX copy literals", () => {
       window.removeEventListener("zoto-viz-server-restart", onRestart);
       onRestart = undefined;
     }
+    document.body.innerHTML = "";
   });
 
   it("pins restart notice as exact literal", async () => {
@@ -52,6 +54,7 @@ describe("UX copy literals", () => {
 
   it("pins retry-failed notice as exact literal", async () => {
     document.body.innerHTML = "<div id=\"wall\"></div>";
+    mountWallNoticeRegion(document.getElementById("wall")!);
     const off = bindServerRestartWallNotice();
     globalThis.fetch = (async (url: string) => {
       const path = String(url);
@@ -72,14 +75,14 @@ describe("UX copy literals", () => {
       } as Response;
     }) as typeof fetch;
     await apiFetch("/api/profiles/user", { method: "PUT" });
-    const span = document.querySelector("#wall .mosaic-wall-notice span");
+    const span = document.querySelector('[data-notice-key="retry-failed"] .wall-notice-text');
     expect(span?.textContent).toBe("That request still failed after the server restarted.");
     off();
-    document.body.innerHTML = "";
   });
 
   it("pins Retry button label as exact literal", async () => {
     document.body.innerHTML = "<div id=\"wall\"></div>";
+    mountWallNoticeRegion(document.getElementById("wall")!);
     const off = bindServerRestartWallNotice();
     globalThis.fetch = (async (url: string) => {
       const path = String(url);
@@ -100,9 +103,8 @@ describe("UX copy literals", () => {
       } as Response;
     }) as typeof fetch;
     await apiFetch("/api/profiles/user", { method: "PUT" });
-    const btn = document.querySelector("#wall .mosaic-wall-notice-retry");
+    const btn = document.querySelector(".wall-notice-action");
     expect(btn?.textContent).toBe("Retry");
     off();
-    document.body.innerHTML = "";
   });
 });

@@ -392,35 +392,6 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
   font: 600 11px/20px inherit; letter-spacing: 0.02em; cursor: pointer;
 }
 .mosaic-pane.focus .mosaic-cap, .mosaic-pane.focus .mosaic-pick { border-color: var(--accent); color: var(--accent); }
-.mosaic-wall-notice {
-  position: fixed;
-  top: calc(var(--bar-h, 44px) + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  z-index: 30;
-  max-width: min(90vw, 720px);
-  flex: none;
-  margin: 0;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  pointer-events: auto;
-  background: color-mix(in srgb, var(--accent) 18%, var(--overlay));
-  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line));
-}
-.mosaic-wall-notice-retry {
-  margin: 0 0 0 8px;
-  padding: 2px 8px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  border-radius: 6px;
-  border: 1px solid var(--line);
-  background: var(--chip);
-  color: var(--fg);
-}
 .mosaic-tools { margin-left: auto; display: flex; gap: 4px; cursor: default; }
 .mosaic-tool {
   height: 22px; padding: 0 7px; margin: 0;
@@ -1676,3 +1647,35 @@ body.panel-wide #debuglog {
 #livechat.floated {
   overflow: visible;
 }
+
+/* Shared wall notice stack (wall-notice-region.ts) */
+.wall-notice-region {
+  position: fixed;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--bar-h) + 16px);
+  margin-bottom: 10px;
+  z-index: 7;
+  width: min(480px, calc(100vw - 24px));
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  pointer-events: none;
+  text-transform: none;
+}
+.wall-notice-status,
+.wall-notice-alert { display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+.wall-notice-row {
+  pointer-events: auto;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--fg);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px var(--shadow);
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.wall-notice-alert .wall-notice-row { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
+.wall-notice-action { margin-left: 8px; }

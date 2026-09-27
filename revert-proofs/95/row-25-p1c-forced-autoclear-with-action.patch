@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 8ee2a46..170fbc1 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -64,7 +64,7 @@ function clearNoticeTimer(e: Entry): void {
+   }
+ }
+ function syncNoticeTimer(e: Entry, restart: boolean): void {
+-  const ms = e.autoClearMs && e.autoClearMs > 0 && !e.isError && !e.action ? e.autoClearMs : undefined;
++  const ms = e.autoClearMs && e.autoClearMs > 0 && !e.isError ? e.autoClearMs : undefined;
+   if (ms != null && e.timer != null && ms === e.armedMs && !restart) return;
+   clearNoticeTimer(e);
+   if (ms == null) return;

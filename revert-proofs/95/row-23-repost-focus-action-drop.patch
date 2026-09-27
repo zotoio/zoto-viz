@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 8ee2a46..7e6772c 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -94,7 +94,7 @@ function writeRowContent(e: Entry): void {
+       btn.addEventListener("click", (ev) => { ev.stopPropagation(); e.action?.onClick(); });
+       node.append(btn);
+     } else if (existingBtn.textContent !== e.action.label) existingBtn.textContent = e.action.label;
+-  } else if (existingBtn) detachRow(existingBtn);
++  } else existingBtn?.remove();
+ }
+ function removeLiveNotice(e: Entry): void {
+   e.cleared = true;
