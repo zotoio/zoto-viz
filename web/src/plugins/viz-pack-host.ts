@@ -8,6 +8,7 @@ import type { VizDataFrame, VizUniformValue } from "./viz-host";
 import {
   TERM_COLS, TERM_ROWS, packScreen, preferHnStories, scriptFromStories, visibleScreen,
 } from "../../../plugins/src/hn-term/frontend/teletype";
+import { HnTermFrameDriver } from "../../../plugins/src/hn-term/frontend/frame";
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
@@ -139,42 +140,7 @@ export function packHnTermBuffer(
   return packScreen(screen, audio, blink);
 }
 
-let termTyped = 0;
-let termLastT = 0;
-let termScript = "";
-
-export function resetHnTermPack(): void {
-  termTyped = 0;
-  termLastT = 0;
-  termScript = "";
-}
-
-function termNow(frame: VizDataFrame): number {
-  return frame.t;
-}
-
-function hnTermDt(now: number): number {
-  if (termLastT <= 0) return 1 / 60;
-  const raw = now - termLastT;
-  if (!Number.isFinite(raw) || raw < 0) return 1 / 60;
-  if (raw === 0) return 0;
-  return Math.min(1, raw);
-}
-
-function hnTermFrameBuffer(frame: VizDataFrame): number[] {
-  const next = scriptFromStories(preferHnStories(frame.headlines));
-  if (next !== termScript) {
-    termScript = next;
-    termTyped = Math.min(termTyped, termScript.length);
-  }
-  const now = termNow(frame);
-  const dt = hnTermDt(now);
-  termLastT = now;
-  termTyped += dt * (28 + frame.audio * 18);
-  if (termScript.length > 0 && termTyped > termScript.length + 40) termTyped = 0;
-  const screen = visibleScreen(termScript, termTyped, TERM_COLS, TERM_ROWS);
-  return packScreen(screen, frame.audio, Math.floor(frame.t * 2.4) % 2);
-}
+const hostHnTermDriver = new HnTermFrameDriver();
 
 /** Host-side mirror of pack frontend onFrame handlers (no iframe). */
 export function runPackFrameHandler(
@@ -291,7 +257,7 @@ export function runPackFrameHandler(
       break;
     }
     case "hn-term": {
-      handlers.writeBuffer(0, hnTermFrameBuffer(frame));
+      handlers.writeBuffer(0, hostHnTermDriver.onFrame(frame));
       handlers.writeUniform("uAccent", [0.35, 1.0, 0.42]);
       handlers.writeUniform("uBg", [0.0, 0.04, 0.01]);
       break;

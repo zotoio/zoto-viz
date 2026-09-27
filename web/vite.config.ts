@@ -21,6 +21,11 @@ function gitShortRev(): string {
 }
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      "plugins/sdk": path.join(repoRoot, "plugins/sdk"),
+    },
+  },
   define: {
     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
     __VIZ_BUILD_COUNTERS__: JSON.stringify(Boolean(process.env.VITEST)),
