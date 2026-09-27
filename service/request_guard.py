@@ -18,12 +18,21 @@ _log = logging.getLogger("zoto-viz.monitor")
 
 HOST_REJECT_BODY = (
     "This zoto-viz server doesn't accept the address it was opened with. "
-    "Open it by its IP address, or add this name to `allowed_hosts` in the server config."
+    "Open it by its IP address instead, or add this host name to allowed_hosts in the server config."
+)
+
+HOST_HEADER_INVALID_BODY = (
+    "This zoto-viz server couldn't read the address in this request. "
+    "If you're using a proxy, check that it sends a single valid Host header."
 )
 
 HANDLER_ERROR_BODY = (
     "zoto-viz ran into a problem with this request. "
     "Reload to try again. If it keeps happening, check the server log."
+)
+
+PATH_REJECT_BODY = (
+    "zoto-viz can't open that page. Check the link and try again."
 )
 
 _HOST_FORBIDDEN_CHARS = re.compile(r'[;,\s"\']')
@@ -272,6 +281,18 @@ def _host_reject_response() -> web.Response:
     return resp
 
 
+def _host_invalid_response() -> web.Response:
+    resp = web.Response(status=400, text=HOST_HEADER_INVALID_BODY, content_type="text/plain")
+    attach_frame_embed_policy(resp)
+    return resp
+
+
+def _path_reject_response() -> web.Response:
+    resp = web.Response(status=400, text=PATH_REJECT_BODY, content_type="text/plain")
+    attach_frame_embed_policy(resp)
+    return resp
+
+
 def register_response_prepare_hook(app: web.Application) -> None:
     if app.get("request_guard_prepare_hook"):
         return
@@ -366,14 +387,14 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
     port = int(request.app.get("request_guard_port") or 7020)
     hosts = _host_header_values(request)
     if not hosts or len(hosts) != 1:
-        return _host_reject_response()
+        return _host_invalid_response()
 
     raw_host = hosts[0].strip()
     tls = bool(request.secure)
     key = normalize_host_header_key(raw_host, port, tls=tls)
     if key is None:
         _log.warning("rejected Host header (format): %s", escape_log_host(raw_host))
-        return _host_reject_response()
+        return _host_invalid_response()
 
     if not await _lookup_allowed(request.app, key):
         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
@@ -385,9 +406,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
     raw_path = getattr(request, "raw_path", None) or request.path or "/"
     _norm_path, path_err = decode_request_path(raw_path)
     if path_err:
-        resp = web.Response(status=400, text="bad request", content_type="text/plain")
-        attach_frame_embed_policy(resp)
-        return resp
+        return _path_reject_response()
 
     try:
         resp = await handler(request)

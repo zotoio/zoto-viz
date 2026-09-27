@@ -8,7 +8,7 @@ import pytest
 from aiohttp import ClientSession
 
 from service import request_guard
-from service.request_guard import HOST_REJECT_BODY
+from service.request_guard import HOST_HEADER_INVALID_BODY, HOST_REJECT_BODY
 from tests.monitor_app_test_util import make_app_server
 
 
@@ -32,8 +32,8 @@ def _run(headers_for_port: Callable[[int], dict[str, str]], status: int, body: s
     ("headers_for_port", "status", "body"),
     [
         (lambda p: {"Host": f"LOCALHOST:{p}"}, 200, None),
-        (lambda p: {"Host": f"localhost.:{p}"}, 400, HOST_REJECT_BODY),
-        (lambda _p: {"Host": "127.0.0.1"}, 400, HOST_REJECT_BODY),
+        (lambda p: {"Host": f"localhost.:{p}"}, 400, HOST_HEADER_INVALID_BODY),
+        (lambda _p: {"Host": "127.0.0.1"}, 400, HOST_HEADER_INVALID_BODY),
         (
             lambda p: {
                 "Host": f"evil.example:{p}",
@@ -43,7 +43,7 @@ def _run(headers_for_port: Callable[[int], dict[str, str]], status: int, body: s
             HOST_REJECT_BODY,
         ),
         (lambda p: {"Host": f"[::1]:{p}"}, 200, None),
-        (lambda p: {"Host": f"[fe80::1%eth0]:{p}"}, 400, HOST_REJECT_BODY),
+        (lambda p: {"Host": f"[fe80::1%eth0]:{p}"}, 400, HOST_HEADER_INVALID_BODY),
     ],
     ids=[
         "case_fold_localhost",

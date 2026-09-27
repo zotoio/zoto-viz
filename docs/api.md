@@ -2,13 +2,7 @@
 
 Monitor listens on loopback (`127.0.0.1:7020`) unless `~/.zoto-viz/sys-config.yml` sets `bind` (or you pass `--bind`). Non-loopback bind needs `insecure_lan: true` / `--insecure-lan`.
 
-Every HTTP request (including `/ws`, `/mcp`, and `/api`) must send a `Host` header that matches the server allowlist for the bound port, plus any extra entries in `allowed_hosts` (hostname, IPv4, or bracketed IPv6, optional `:port`; no spaces, commas, semicolons, or quotes). How the base allowlist is built from `bind` in sys-config (or `--bind`):
-
-- **Loopback bind** — any address where `ipaddress.ip_address(bind).is_loopback` is true (e.g. `127.0.0.1`, `127.0.0.2`, `::1`) or the name `localhost`: only the three loopback keys (`127.0.0.1`, `[::1]`, `localhost`, each with `:port`).
-- **Wildcard bind** (unspecified address: `ipaddress.ip_address(bind).is_unspecified`, e.g. `0.0.0.0` or `::`) — those three loopback keys plus every local interface address on that port (refreshed from the OS about every 30s while serving). Global IPv6 interface addresses appear bracketed in the allowlist (e.g. `[2001:db8::5]:7020`).
-- **Specific non-loopback bind** — the three loopback keys plus only that bind address and port (no other interface IPs).
-
-Other hosts get `400` with a fixed plain-text message (the rejected name is logged, not echoed). Browser `Origin` must also be loopback when present (unless `--insecure-lan`). Mutating methods (`POST` / `PUT` / `DELETE` / `PATCH`) need `X-Zoto-Viz-Csrf` matching the process token. `GET /api/session` mints the header and a `zoto-viz-csrf` cookie (cookie is optional; a stale cookie after a monitor restart is ignored).
+Every HTTP request (including `/ws`, `/mcp`, and `/api`) must send exactly one valid `Host` header. The server allowlist includes loopback names and addresses for the bound port, the explicit bind address when it is not a wildcard, plus any extra entries in allowed_hosts (hostname, IPv4, or bracketed IPv6, optional :port; no spaces, commas, semicolons, or quotes). A well-formed Host that is not allowlisted returns 400 with a fixed plain-text message (the rejected name is logged, not echoed). A missing, duplicated, or malformed Host returns a different fixed 400 message. Dot-segment and other rejected paths return 400 with another fixed plain-text message. Browser `Origin` must also be loopback when present (unless `--insecure-lan`). Mutating methods (`POST` / `PUT` / `DELETE` / `PATCH`) need `X-Zoto-Viz-Csrf` matching the process token. `GET /api/session` mints the header and a `zoto-viz-csrf` cookie (cookie is optional; a stale cookie after a monitor restart is ignored).
 
 | Path | Role |
 | --- | --- |
