@@ -6,7 +6,6 @@ import { describe, expect, it } from "vitest";
 import {
   disallowedHostPackSrcImports,
   formatViolationMessage,
-  HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT,
   isLegacyDeclareZotoPackAllowed,
   LEGACY_DECLARE_ZOTO_PACK_IDS,
   scanHostLintFixture,
@@ -23,7 +22,7 @@ import {
   scanPackLintFixture,
 } from "../../../plugins/sdk/pack-lint-test-support";
 import { PACK_BOUNDARY_FIX_HINT, packSymlinkEscapes } from "../../../plugins/sdk/pack-lint-import";
-import { extractModuleSpecifiers } from "../../../plugins/sdk/pack-lint-host";
+import { extractModuleSpecifiers, HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT } from "../../../plugins/sdk/pack-lint-host";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const fixtureRoot = path.join(repoRoot, "plugins/sdk/pack-lint-fixtures");
@@ -33,6 +32,26 @@ const FIXTURE_PACK_ID = "lint-fixture-pack";
 const HOST_FIXTURE_REL = "web/src/plugins/pack-lint-host-fixture.ts";
 const OFF_ALLOWLIST_ZOTO_FIXTURE = "plugins/sdk/pack-lint-fixtures/off-allowlist-inline-zoto.ts";
 const OFF_ALLOWLIST_PACK_REPO_REL = "plugins/src/not-on-legacy-allowlist/frontend/index.ts";
+
+const SHIPPED_GET_VIZ_ZOTO_PACK_IDS = [
+  "backrooms",
+  "blob-mesh",
+  "cypher-cic",
+  "hn-rain",
+  "hn-term",
+  "kefrens-bars",
+  "lan-pulse",
+  "marble-run",
+  "nixie-clock",
+  "packet-tunnel",
+  "pulse-ts",
+  "rf-constellation",
+  "roto-proto",
+  "star-sines",
+  "stereo-gram",
+  "syscon",
+  "talker-storm",
+] as const;
 
 const hostAliasPaths = JSON.parse(
   readFileSync(path.join(hostFixtureRoot, "alias-paths.json"), "utf8"),
@@ -330,6 +349,17 @@ describe("pack lint guardrails", () => {
     expect(disallowedHostPackSrcImports(hits).length).toBeGreaterThan(0);
   });
 
+  it("shipped pack entries import getVizZoto via plugins/sdk/viz-zoto (PR C)", () => {
+    for (const packId of SHIPPED_GET_VIZ_ZOTO_PACK_IDS) {
+      const indexSrc = readFileSync(
+        path.join(repoRoot, "plugins/src", packId, "frontend/index.ts"),
+        "utf8",
+      );
+      expect(indexSrc).toMatch(/from "plugins\/sdk\/viz-zoto"/);
+      expect(indexSrc).toMatch(/getVizZoto\(\)/);
+    }
+  });
+
   it("off-allowlist inline zoto declare fails disallowedLegacyZoto guard", () => {
     expect(isLegacyDeclareZotoPackAllowed("not-on-legacy-allowlist")).toBe(false);
     const text = readFileSync(path.join(repoRoot, OFF_ALLOWLIST_ZOTO_FIXTURE), "utf8");
@@ -354,9 +384,28 @@ describe("pack lint guardrails", () => {
     }
   });
 
+  it("LEGACY_DECLARE_ZOTO_PACK_IDS excludes every getVizZoto-migrated pack (PR C)", () => {
+    for (const packId of SHIPPED_GET_VIZ_ZOTO_PACK_IDS) {
+      expect(isLegacyDeclareZotoPackAllowed(packId)).toBe(false);
+    }
+    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toEqual([
+      "ant-colony",
+      "aquarium",
+      "koi-pond",
+      "metro-lines",
+      "rocket-car-soccer",
+      "voxel-world",
+    ]);
+    const text = readFileSync(path.join(repoRoot, OFF_ALLOWLIST_ZOTO_FIXTURE), "utf8");
+    const hits = scanPackLintFixture(OFF_ALLOWLIST_PACK_REPO_REL, text, "not-on-legacy-allowlist", repoRoot);
+    expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
+    const { disallowedLegacyZoto } = assertBaselineGuard(hits, loadBaseline(repoRoot));
+    expect(disallowedLegacyZoto.length).toBeGreaterThan(0);
+  });
+
   it("reports baseline counts per pack and per rule (documentation)", () => {
     const baseline = loadBaseline(repoRoot);
-    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(23);
+    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(9);
     expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBe(0);
   });
 

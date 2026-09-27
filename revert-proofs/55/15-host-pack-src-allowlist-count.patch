@@ -1,0 +1,12 @@
+diff --git a/plugins/sdk/host-pack-src-import-allowlist.ts b/plugins/sdk/host-pack-src-import-allowlist.ts
+index 0000000..1111111 100644
+--- a/plugins/sdk/host-pack-src-import-allowlist.ts
++++ b/plugins/sdk/host-pack-src-import-allowlist.ts
+@@ -9,7 +9,6 @@ export const HOST_PACK_SRC_IMPORT_ALLOWLIST: readonly string[] = [
+   "marble-run", // debt: web/src/plugins/marble-run.test.ts (tests excluded from guard; pack used in host fixtures)
+   "nixie-clock", // debt: web/src/plugins/viz-pack-host.ts
+   "packet-tunnel", // debt: web/src/plugins/viz-pack-host.ts, dogfood tests
+-  "stereo-gram", // debt: web/src/app/main.ts, stereo-ai.ts, viz-pack-host.ts
+ ];
+ 
+ export const HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT = HOST_PACK_SRC_IMPORT_ALLOWLIST.length;

@@ -325,8 +325,6 @@ export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
 
 export {
   disallowedHostPackSrcImports,
-  HOST_PACK_SRC_IMPORT_ALLOWLIST,
-  HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT,
   isHostCodeRepoPath,
   scanHostLintFixture,
   scanService,
