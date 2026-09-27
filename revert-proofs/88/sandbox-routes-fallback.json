@@ -1,0 +1,5 @@
+{
+  "testFile": "src/plugins/host.test.ts",
+  "testName": "PluginSandbox > sandbox-routes-fallback",
+  "redValue": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
+}

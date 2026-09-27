@@ -1,0 +1,12 @@
+diff --git a/plugins/src/nixie-clock/frontend/index.ts b/plugins/src/nixie-clock/frontend/index.ts
+index be7009f..6ecb897 100644
+--- a/plugins/src/nixie-clock/frontend/index.ts
++++ b/plugins/src/nixie-clock/frontend/index.ts
+@@ -27,7 +27,6 @@ function nixieFallbackLine(): string {
+   return formatNixieFallbackLine(NIXIE_NOW, look, NIXIE_SCRATCH, NIXIE_CACHE);
+ }
+ 
+-zoto.fallbackText = () => nixieFallbackLine();
+ 
+ zoto.onConfig = (cfg) => {
+   look = parseNixieLook(cfg);

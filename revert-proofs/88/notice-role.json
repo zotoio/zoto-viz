@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-notice.test.ts",
+  "testName": "shader fallback gfx wall notice > notice-role",
+  "redValue": "AssertionError: expected null to be 'status' // Object.is equality"
+}

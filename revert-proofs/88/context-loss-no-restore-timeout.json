@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-gl.test.ts",
+  "testName": "shader fallback gl context > context-loss-no-restore-timeout",
+  "redValue": "AssertionError: expected 'Graphics were interrupted. Restoring \u2026' to be 'Graphics didn\\'t come back. Reload to\u2026' // Object.is equality"
+}

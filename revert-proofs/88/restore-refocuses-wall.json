@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-notice.test.ts",
+  "testName": "shader fallback gfx wall notice > restore-refocuses-wall",
+  "redValue": "AssertionError: expected <body>\u2026(1)</body> to be <div tabindex=\"-1\">\u2026(1)</div> // Object.is equality"
+}

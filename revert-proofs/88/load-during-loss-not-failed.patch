@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c7f4f94..f42f9df 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -236,7 +236,6 @@ export class RenderHost {
+     camera: THREE.Camera,
+     log: (msg: string) => void = () => {},
+   ): string | null {
+-    if (this.contextLost) return null;
+     const ok = this.compilePluginSky(tileId, scene, camera, log);
+     if (!ok) {
+       this.onTileShaderCompileFailed(tileId);

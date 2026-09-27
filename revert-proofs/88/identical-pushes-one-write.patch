@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
+index 10c8022..9fb2b87 100644
+--- a/web/src/graph/tile-shader-fallback.ts
++++ b/web/src/graph/tile-shader-fallback.ts
+@@ -103,7 +103,6 @@ export class TileShaderFallback {
+   }
+ 
+   private writeText(next: string): void {
+-    if (next === this.lastWritten) return;
+     this.lastWritten = next;
+     this.text.textContent = next;
+   }

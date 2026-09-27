@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/backdrop.ts b/web/src/graph/backdrop.ts
+index 41ecf04..8f73d17 100644
+--- a/web/src/graph/backdrop.ts
++++ b/web/src/graph/backdrop.ts
+@@ -924,7 +924,7 @@ export class Backdrop {
+     }
+     const prevMat = this.mesh.material;
+     this.ensurePluginMat(opts.id, wrapped.frag);
+-    const gpuErr = gpuProbe ? gpuProbe() : probePluginSkyCompile(wrapped.frag);
++    const gpuErr = probePluginSkyCompile(wrapped.frag);
+     if (this.kind !== "plugin") this.mesh.material = prevMat;
+     if (gpuErr) {
+       lastPlugin = null;

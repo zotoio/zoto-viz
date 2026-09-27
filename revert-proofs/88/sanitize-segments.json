@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-host.test.ts",
+  "testName": "tile shader fallback host > sanitize-segments",
+  "redValue": "AssertionError: expected '../evil/Nixie Clock' to be 'Nixie Clock' // Object.is equality"
+}

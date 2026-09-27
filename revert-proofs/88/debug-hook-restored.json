@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-compile.test.ts",
+  "testName": "tile shader compile latch > debug-hook-restored",
+  "redValue": "AssertionError: expected true to be false // Object.is equality"
+}

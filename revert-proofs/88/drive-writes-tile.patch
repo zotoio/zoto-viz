@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c7f4f94..695393c 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -325,7 +325,6 @@ export class RenderHost {
+     if (!trimmed) return;
+     slot.stagedPush = trimmed;
+     if (!slot.fallback) return;
+-    slot.fallback.pushPackText(trimmed);
+   }
+ 
+   receiveFallbackPushForPack(packId: string, text: string): void {

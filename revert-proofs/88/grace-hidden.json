@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-tile.test.ts",
+  "testName": "shader fallback tile overlay > grace-hidden",
+  "redValue": "AssertionError: expected '' to be 'hidden' // Object.is equality"
+}

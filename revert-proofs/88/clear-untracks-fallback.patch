@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c7f4f94..4dd8e71 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -354,7 +354,6 @@ export class RenderHost {
+   private untrackFallback(fb: TileShaderFallback | null): void {
+     if (!fb) return;
+     const i = this.liveFallbacks.indexOf(fb);
+-    if (i >= 0) this.liveFallbacks.splice(i, 1);
+   }
+ 
+   private onSharedContextLost(): void {

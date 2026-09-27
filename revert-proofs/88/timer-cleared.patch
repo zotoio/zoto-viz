@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/gfx-wall-notice.ts b/web/src/graph/gfx-wall-notice.ts
+index e37591e..fa7fd3e 100644
+--- a/web/src/graph/gfx-wall-notice.ts
++++ b/web/src/graph/gfx-wall-notice.ts
+@@ -35,7 +35,6 @@ export class GfxWallNotice {
+ 
+   onContextRestored(): void {
+     if (this.restoreTimer) {
+-      clearTimeout(this.restoreTimer);
+       this.restoreTimer = null;
+     }
+     const btn = this.el?.querySelector(".gfx-wall-reload") as HTMLButtonElement | null;

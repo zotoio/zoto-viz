@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/host.ts b/web/src/plugins/host.ts
+index a62a8a2..072c5a4 100644
+--- a/web/src/plugins/host.ts
++++ b/web/src/plugins/host.ts
+@@ -157,6 +157,5 @@ export class PluginSandbox {
+     if (d.type === "writeBuffer") this.handlers.writeBuffer?.(d.payload.slot, d.payload.data);
+     if (d.type === "writeUniform") this.handlers.writeUniform?.(d.payload.name, d.payload.value);
+     if (d.type === "writeParticles") this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+-    if (d.type === "fallbackText") this.handlers.fallbackText?.(d.payload.text);
+   };
+ }

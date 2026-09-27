@@ -1,0 +1,12 @@
+diff --git a/plugins/src/packet-tunnel/frontend/index.ts b/plugins/src/packet-tunnel/frontend/index.ts
+index d23c52c..a3b29f0 100644
+--- a/plugins/src/packet-tunnel/frontend/index.ts
++++ b/plugins/src/packet-tunnel/frontend/index.ts
+@@ -9,7 +9,6 @@ declare const zoto: VizZotoPluginHooks & {
+   writeUniform: (name: string, value: number | [number, number, number]) => void;
+ };
+ 
+-zoto.fallbackText = (frame) => packetTunnelFallbackText(frame);
+ 
+ zoto.onFrame = (frame) => {
+   const sample = packetTunnelSample(frame);

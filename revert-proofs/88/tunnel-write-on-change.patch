@@ -1,0 +1,12 @@
+diff --git a/plugins/src/packet-tunnel/frontend/tunnel.ts b/plugins/src/packet-tunnel/frontend/tunnel.ts
+index 225210a..2c373d4 100644
+--- a/plugins/src/packet-tunnel/frontend/tunnel.ts
++++ b/plugins/src/packet-tunnel/frontend/tunnel.ts
+@@ -45,7 +45,6 @@ export function packetTunnelFallbackText(frame: Pick<VizDataFrame, "t" | "packet
+     | (Math.round(PT_SCRATCH.lead * 20) << 10)
+     | Math.round(PT_SCRATCH.depth * 20);
+   if (key === ptKey) return ptCached;
+-  ptKey = key;
+   const proto = frame.packets[0]?.proto ?? "DATA";
+   ptCached = `${proto} ${PT_SCRATCH.lead.toFixed(2)} · depth ${PT_SCRATCH.depth.toFixed(2)}`;
+   return ptCached;

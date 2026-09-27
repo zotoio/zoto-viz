@@ -1,0 +1,15 @@
+diff --git a/plugins/src/nixie-clock/frontend/tubes.ts b/plugins/src/nixie-clock/frontend/tubes.ts
+index 08f81d5..caa5765 100644
+--- a/plugins/src/nixie-clock/frontend/tubes.ts
++++ b/plugins/src/nixie-clock/frontend/tubes.ts
+@@ -75,10 +75,6 @@ export function nixieClockParts(
+   let h = date.getHours();
+   scratch.m = date.getMinutes();
+   scratch.s = date.getSeconds();
+-  if (hour12) {
+-    h = h % 12;
+-    if (h === 0) h = 12;
+-  }
+   scratch.h = h;
+ }
+ 

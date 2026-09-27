@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c7f4f94..95f9c21 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -304,7 +304,6 @@ export class RenderHost {
+   private mountShaderFallback(tileId: string, contextLoss = false): void {
+     const slot = this.tileSlot(tileId);
+     if (!contextLoss) slot.compileFailed = true;
+-    if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;
+     this.untrackFallback(slot.fallback);
+     slot.fallback?.dispose();
+     const staged = slot.stagedPush?.trim() || "";

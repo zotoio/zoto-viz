@@ -1,0 +1,5 @@
+{
+  "testFile": "src/plugins/shader-fallback-push.test.ts",
+  "testName": "shader fallback push contract > never-push-grace-generic",
+  "redValue": "AssertionError: expected '' to be '\u2039Quiet\u203a can\\'t run its graphics on th\u2026' // Object.is equality"
+}

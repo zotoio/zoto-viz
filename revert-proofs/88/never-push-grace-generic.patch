@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c7f4f94..275f2e8 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -347,7 +347,6 @@ export class RenderHost {
+ 
+   driveShaderFallbacks(_frame: VizDataFrame): void {
+     for (let i = 0; i < this.liveFallbacks.length; i++) {
+-      this.liveFallbacks[i]!.tickGrace();
+     }
+   }
+ 

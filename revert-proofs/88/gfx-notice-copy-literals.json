@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-gl.test.ts",
+  "testName": "shader fallback gl context > gfx-notice-copy-literals",
+  "redValue": "AssertionError: expected '' to be 'Graphics were interrupted. Restoring \u2026' // Object.is equality"
+}

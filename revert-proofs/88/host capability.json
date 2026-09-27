@@ -1,0 +1,5 @@
+{
+  "testFile": "src/plugins/host.test.ts",
+  "testName": "hash consent and TypeScript allow > host capability",
+  "redValue": "AssertionError: expected false to be true // Object.is equality"
+}

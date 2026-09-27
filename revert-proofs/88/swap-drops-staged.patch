@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c7f4f94..3045cab 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -84,7 +84,6 @@ class TileShaderSlot {
+       this.fallback?.dispose();
+       this.fallback = null;
+       this.mountedFallbackPackKey = "";
+-      this.stagedPush = null;
+     }
+     this.packName = packName;
+     this.mount = mount;

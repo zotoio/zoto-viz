@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index c7f4f94..fb5f9f3 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -415,7 +415,6 @@ export class RenderHost {
+       }
+       return { x: x * this.pr, y: y * this.pr, w: w * this.pr, h: h * this.pr };
+     }
+-    if (this.glContextLost) return { x: x * this.pr, y: y * this.pr, w: w * this.pr, h: h * this.pr };
+     const rd = this.renderer as THREE.WebGLRenderer;
+     const gl = this.gl;
+     const draw = () => {

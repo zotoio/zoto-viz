@@ -1,0 +1,5 @@
+{
+  "testFile": "src/plugins/shader-fallback-pack-sdk.test.ts",
+  "testName": "shader fallback pack sdk > tunnel-pack-pushes",
+  "redValue": "TypeError: fallbackText is not a function"
+}

@@ -1,0 +1,5 @@
+{
+  "testFile": "src/plugins/shader-fallback-push.test.ts",
+  "testName": "shader fallback push contract > failed-tile-survives-restore",
+  "redValue": "AssertionError: expected null not to be null"
+}

@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
+index 10c8022..83fb854 100644
+--- a/web/src/graph/tile-shader-fallback.ts
++++ b/web/src/graph/tile-shader-fallback.ts
+@@ -42,7 +42,6 @@ export class TileShaderFallback {
+     if (this.contextLoss) {
+       this.reveal();
+       this.setShowChip(true);
+-      if (opts.initialText?.trim()) this.writeText(opts.initialText);
+     } else if (this.packPush) {
+       if (opts.skipGrace || opts.initialText) {
+         this.graceLeft = 0;

@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-scene.test.ts",
+  "testName": "shader fallback net scene > scene-clear-on-ok",
+  "redValue": "AssertionError: expected 1 to be +0 // Object.is equality"
+}

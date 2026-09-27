@@ -1,0 +1,11 @@
+diff --git a/web/src/graph/shader-fallback-copy.ts b/web/src/graph/shader-fallback-copy.ts
+index e3edb54..62916c9 100644
+--- a/web/src/graph/shader-fallback-copy.ts
++++ b/web/src/graph/shader-fallback-copy.ts
+@@ -5,6 +5,5 @@ export const GFX_NO_RESTORE_NOTICE = "Graphics didn't come back. Reload to resto
+ 
+ /** Host copy when a pack does not ship {@link VizPackFallbackText}. */
+ export function genericShaderFallbackMessage(packName: string): string {
+-  const name = sanitizePackDisplayName(packName) || "This view";
+   return `‹${name}› can't run its graphics on this device. Other tiles aren't affected.`;
+ }
