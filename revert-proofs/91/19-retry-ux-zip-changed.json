@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-install-retry.test.ts",
+  "testName": "pack install retry UX > zip_changed: keeps blocked row with zip-changed copy",
+  "description": "zip_changed: keeps blocked row with zip-changed copy",
+  "patchedFailure": "AssertionError: expected 'Upgrade probe v2 couldn\\'t start, so \u2026' to be 'Upgrade probe has changed since it wa\u2026' // Object.is equality"
+}

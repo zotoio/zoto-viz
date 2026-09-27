@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_zip_blocks.py",
-  "testName": "test_block_write_crash_before_rename_keeps_prior_record",
-  "description": "Per-pack block records must be atomically replaced so a crash before rename keeps the prior record."
-}

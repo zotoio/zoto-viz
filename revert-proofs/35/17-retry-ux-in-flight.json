@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-install-retry.test.ts",
-  "testName": "pack install retry UX > in flight: disables button and shows Retrying…; second submit is a no-op",
-  "description": "in flight: disables button and shows Retrying…; second submit is a no-op"
-}

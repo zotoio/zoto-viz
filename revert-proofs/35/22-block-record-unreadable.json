@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_zip_blocks.py",
-  "testName": "test_truncated_block_record_quarantines_one_pack_only",
-  "description": "Unreadable per-pack block files must quarantine only that pack (not fail open)."
-}

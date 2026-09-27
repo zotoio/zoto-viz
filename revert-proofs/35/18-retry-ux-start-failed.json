@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-install-retry.test.ts",
-  "testName": "pack install retry UX > start_failed: updates blocked record in place with still-couldn't-start copy",
-  "description": "start_failed: updates blocked record in place with still-couldn't-start copy"
-}

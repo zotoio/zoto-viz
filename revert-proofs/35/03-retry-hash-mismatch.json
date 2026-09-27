@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_install.py",
-  "testName": "test_retry_zip_hash_mismatch_returns_409_without_installing",
-  "description": "Retry does not compare drop-folder zip sha to blocked digest."
-}

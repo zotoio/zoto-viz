@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_install.py",
-  "testName": "test_concurrent_install_passes_20_of_20",
-  "description": "Concurrent installs for the same pack are not serialized.",
-  "testNodeId": "tests/test_plugin_install.py::test_concurrent_install_passes_20_of_20"
-}

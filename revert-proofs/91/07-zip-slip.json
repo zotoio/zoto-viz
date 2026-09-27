@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_zip_slip_rejected_on_unpack",
+  "description": "Zip slip paths are unpacked.",
+  "patchedFailure": "\"illegal zip path\"):\nE   Failed: DID NOT RAISE ValueError\n=========================== short test summary info ============================\nFAILED tests/test_plugin_install.py::test_zip_slip_rejected_on_unpack - Faile...\n============================== 1 failed in 0.04s ==============================="
+}

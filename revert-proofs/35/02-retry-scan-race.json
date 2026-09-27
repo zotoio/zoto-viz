@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_install.py",
-  "testName": "test_retry_and_scan_race_single_install",
-  "description": "Drop-folder install ignores persisted sha256 block rows.",
-  "testNodeId": "tests/test_plugin_install.py::test_retry_and_scan_race_single_install"
-}

@@ -1,0 +1,12 @@
+diff --git a/service/plugin_local.py b/service/plugin_local.py
+index a04e611..425af88 100644
+--- a/service/plugin_local.py
++++ b/service/plugin_local.py
+@@ -640,6 +640,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+ 
+ 
+ def retry_blocked_zip_http_status(info: dict[str, Any]) -> int:
++    return 200
+     if info.get("ok") or info.get("consentRequired"):
+         return 200
+     result = str(info.get("retryResult") or "")

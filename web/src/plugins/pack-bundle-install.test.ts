@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { formatPackInstallBlocked, isPackInstallBlockedPayload } from "./pack-install-surface";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -85,6 +85,9 @@ print(json.dumps({"info": info, "ids": ids, "mode_before": mode_before}))
 }
 
 describe.skipIf(!pythonDepsReady())("pack bundle install gate (local zip path)", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
   const fixtures = [
     { dir: "host-escape", id: "pack-boundary-host-escape" },
     { dir: "json-escape", id: "pack-boundary-json-escape" },
