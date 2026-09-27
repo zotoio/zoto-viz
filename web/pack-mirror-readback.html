@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>pack mirror readback</title>
+  </head>
+  <body>
+    <script type="module">
+      window.addEventListener("error", (e) => {
+        window.__readbackError = String(e.error ?? e.message);
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        window.__readbackError = String(e.reason);
+      });
+      import {
+        runPackMirrorLetterbox16x9ReadbackInPage,
+        runPackMirrorReadbackInPage,
+      } from "/src/graph/pack-mirror-readback.harness.ts";
+      const q = new URLSearchParams(location.search);
+      try {
+        const windowDpr = Number(q.get("windowDpr") || q.get("dpr") || "1");
+        const rendererDprRaw = q.get("rendererDpr");
+        const modeRaw = q.get("mode");
+        const mode = modeRaw === "quadrant" ? "quadrant" : modeRaw === "letterbox16x9" ? "letterbox16x9" : "arrow";
+        if (mode === "letterbox16x9") {
+          window.__readbackOk = await runPackMirrorLetterbox16x9ReadbackInPage({
+            windowDpr,
+            rendererDpr: rendererDprRaw != null && rendererDprRaw !== ""
+              ? Number(rendererDprRaw)
+              : undefined,
+            antialias: q.get("aa") === "1",
+            path: "host",
+            mode: "letterbox16x9",
+          });
+        } else {
+        window.__readbackOk = await runPackMirrorReadbackInPage({
+          windowDpr,
+          rendererDpr: rendererDprRaw != null && rendererDprRaw !== ""
+            ? Number(rendererDprRaw)
+            : undefined,
+          antialias: q.get("aa") === "1",
+          path: q.get("path") === "sandbox" ? "sandbox" : "host",
+          mode,
+        });
+        }
+      } catch (e) {
+        window.__readbackError = e instanceof Error ? e.message : String(e);
+      }
+    </script>
+  </body>
+</html>
