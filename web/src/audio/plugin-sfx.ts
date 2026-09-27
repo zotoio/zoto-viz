@@ -3,6 +3,8 @@ import {
   backroomsEvents,
   backroomsFrame,
   backroomsOptions,
+  parseBackroomsOptions,
+  setBackroomsOptions,
   type BrEvent,
   type BrOptions,
   type BrSfx,
@@ -97,6 +99,21 @@ export class PluginSfx {
   private gaspFlip = false;
   private loadedRev = "";
   private hydrate: Promise<void> | null = null;
+  private viewOptsSrc: Record<string, string> | null = null;
+  private viewOptsJson = "";
+
+  /** View sliders / MCP set_plugin → director options; updates master volume when opts change. */
+  syncBackroomsViewConfig(opts: Record<string, string>): void {
+    if (this.viewOptsSrc !== opts) {
+      this.viewOptsSrc = opts;
+      const json = JSON.stringify(opts);
+      if (json !== this.viewOptsJson) {
+        this.viewOptsJson = json;
+        setBackroomsOptions(parseBackroomsOptions(opts));
+      }
+    }
+    this.setMasterVolume(backroomsOptions().volume);
+  }
 
   setBackrooms(t: number): void {
     const prev = this.lastT;

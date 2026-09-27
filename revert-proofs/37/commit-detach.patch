@@ -1,0 +1,12 @@
+diff --git a/web/src/app/mode-switch-attempt.ts b/web/src/app/mode-switch-attempt.ts
+index 27b3391..fb3434f 100644
+--- a/web/src/app/mode-switch-attempt.ts
++++ b/web/src/app/mode-switch-attempt.ts
+@@ -52,7 +52,6 @@ export function commitModeSwitchAttempt(signal?: AbortSignal): void {
+   const ac = activeAttempt;
+   if (!ac) return;
+   if (signal && ac.signal !== signal) return;
+-  detachModeSwitchAbortListeners(ac.signal);
+   activeAttempt = null;
+ }
+ 

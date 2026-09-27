@@ -17,6 +17,7 @@ capabilities:
   - viz.write   # writeBuffer / writeUniform / writeParticles
 viz:
   graphWalk: false          # required — plugins never walk the full graph
+  presentTick: false        # opt-in: host sends VizPresentTick on rAF (requires viz.write)
   maxBuffers: 4             # reserved Float32 slots (1..8)
   maxBufferFloats: 64       # per-slot float cap (4..256)
   maxParticles: 512         # hard particle record cap (0 disables particles)
@@ -74,6 +75,39 @@ default `64`). Resolved into `state.host.vizFrame` on each `/api/state` snapshot
 
 Plugins must **not** request or traverse the full device graph. Use
 `graph.read` only when you need the legacy `{id, rate, role}` tick.
+
+Copy or type-only-import `plugins/sdk/viz-contract.ts` in packs. The host
+advertises `VIZ_CONTRACT_VERSION` on sandbox `init` (`contractVersion`).
+
+### Present tick (opt-in, `viz.write`)
+
+When `viz.presentTick: true`, the host sends one `VizPresentTick` per sandbox
+per display frame (mosaic panes may share one iframe). Fields:
+
+| Field | Meaning |
+| --- | --- |
+| `frameMs` | rAF timestamp (ms) |
+| `tileId` | **pack id** (not instance / mosaic slot). Reserved until Andrew decides one-sandbox-per-tile vs per-pack; re-scoped with `aspect` in **contract v3** (after #27). |
+| `pluginClock` | host sky clock in seconds — monotonic, global, always sent; per-frame `dt` clamped to **0.25 s before** speed scaling; rate follows the motion slider and scene pulse (up to **2.4×** at full pulse) |
+| `aspect?` | **w/h of the stage tile** the sandbox draws into (contract **v3**, with `tileId`). Not iframe size — do not use `innerWidth`/`innerHeight` alone. In mosaic, host currently sends the **main camera** aspect while reserved. |
+
+```ts
+import type { VizZoto } from "../../plugins/sdk/viz-zoto";
+
+const zoto = globalThis.zoto as VizZoto;
+zoto.onPresent = (tick) => {
+  zoto.writeBuffer(0, [tick.pluginClock ?? 0]);
+};
+```
+
+Packs without `presentTick` receive **no** host present ticks and **no** host
+slot writes (only the sandbox may write via `zoto.writeBuffer` when it runs).
+`viz.presentTick` without `viz.write` is rejected at catalog validate time.
+Merge host (#37) and pack PRs that enable `presentTick` as one unit.
+
+Pack media files live under `assets/` and are served by the **host only** at
+`GET /api/plugins/<id>/asset/<path>` (reviewed / src). The sandbox CSP blocks
+`connect-src`, so the iframe cannot fetch these URLs.
 
 ## Writes (plugin → host)
 
@@ -181,7 +215,7 @@ budget.
 | `plugins/src/hn-term/` | greenscreen teletype of HN titles + RSS blurbs |
 | `plugins/src/stereo-gram/` | Magic Eye autostereogram — eight morphing objects, a six-bin mic analyser, and local-model AI scenes (`POST /api/ai/stereo`) while the header AI switch is on |
 | `plugins/src/cypher-cic/` | Cypherpunk CIC wall — neon holodeck infograph of SYS + NET, center-hero mosaic |
-| `plugins/src/backrooms/` | Level 0 camcorder footage — the host runs `frontend/director.ts` on the sky clock (one unbroken take per episode, default 120 s: rule-made encounters in a walled pillar maze, freeze then flee along open halls, the last chase ends in the catch and drag) and writes camera, creature, walled edges and look options to slots 0–1; every knob is a view setting (`visualisation.yml` config, MCP `set_plugin`); CC0 footsteps, breathing, screams, heartbeat, tube buzz, creature roars and chase screams |
+| `plugins/src/backrooms/` | Level 0 camcorder footage — with `presentTick`, `frontend/director.ts` runs in the sandbox on `onPresent` |
 
 Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
 with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,

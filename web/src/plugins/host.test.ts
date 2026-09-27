@@ -18,6 +18,7 @@ import {
 } from "./host";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { VIZ_CONTRACT_VERSION, defaultVizContract } from "./viz-host";
 
 describe("hash consent and TypeScript allow", () => {
   afterEach(() => {
@@ -87,6 +88,40 @@ describe("PluginSandbox", () => {
     spy.mockRestore();
   });
 
+  it("bakes contractVersion into sandbox srcdoc before init", async () => {
+    const box = new PluginSandbox();
+    await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
+    const iframe = document.querySelector("iframe");
+    expect(iframe?.srcdoc).toContain(`__zotoContractVersion = ${VIZ_CONTRACT_VERSION}`);
+    box.unload();
+  });
+
+  it("posts contractVersion on init", async () => {
+    const inits: { type?: string; contractVersion?: number }[] = [];
+    const append = document.body.appendChild.bind(document.body);
+    document.body.appendChild = (node: Node) => {
+      const out = append(node);
+      if (node instanceof HTMLIFrameElement && node.contentWindow) {
+        vi.spyOn(node.contentWindow, "postMessage").mockImplementation((data) => {
+          inits.push(data as { type?: string; contractVersion?: number });
+        });
+      }
+      return out;
+    };
+    const box = new PluginSandbox();
+    await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
+    document.body.appendChild = append;
+    expect(inits.find((m) => m.type === "init")?.contractVersion).toBe(VIZ_CONTRACT_VERSION);
+    box.unload();
+  });
+
+  it("resolves load when the iframe is removed before onload", async () => {
+    const box = new PluginSandbox();
+    const pending = box.load("slow", "globalThis.ok = true;", ["graph.read"], {});
+    box.unload();
+    await expect(pending).resolves.toBeUndefined();
+  });
+
   it("loads srcdoc, ticks, and unloads", async () => {
     const box = new PluginSandbox();
     const styles: Record<string, unknown>[] = [];
@@ -139,6 +174,38 @@ describe("PluginSandbox module load", () => {
     await box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
     const iframe = document.querySelector("iframe");
     expect(iframe?.src).toContain("/pack-assets/sess-tok-abc/_sandbox/plugin-sandbox.html");
+    box.unload();
+  });
+
+  it("does not post present ticks after unload", async () => {
+    const box = new PluginSandbox();
+    await box.load(
+      "demo",
+      "globalThis.ok = true;",
+      ["viz.write"],
+      {},
+      defaultVizContract({ presentTick: true }),
+    );
+    const iframe = document.querySelector("iframe")!;
+    const cw = iframe.contentWindow!;
+    const spy = vi.spyOn(cw, "postMessage");
+    box.deliverPresentTick(1, "plugin:demo");
+    expect(spy).toHaveBeenCalled();
+    box.unload();
+    spy.mockClear();
+    box.deliverPresentTick(2, "plugin:demo");
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
+  });
+
+  it("does not post present when presentTick is off", async () => {
+    const box = new PluginSandbox();
+    await box.load("demo", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
+    const cw = document.querySelector("iframe")!.contentWindow!;
+    const spy = vi.spyOn(cw, "postMessage");
+    box.deliverPresentTick(1, "x");
+    expect(spy).not.toHaveBeenCalled();
+    spy.mockRestore();
     box.unload();
   });
 });

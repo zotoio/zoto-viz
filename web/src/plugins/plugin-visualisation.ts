@@ -57,6 +57,7 @@ export type CatalogRow = {
   viz?: unknown;
   typesafe?: unknown;
   hash?: unknown;
+  sha256?: unknown;
   service?: unknown;
   consent?: unknown;
   origin?: unknown;
@@ -457,6 +458,7 @@ export function toPluginView(raw: unknown): PluginView {
   if (typeof row.has_backend === "boolean") spec.has_backend = row.has_backend;
   if (typeof row.has_datasource === "boolean") spec.has_datasource = row.has_datasource;
   if (asString(row.shader_sha256)) spec.shader_sha256 = asString(row.shader_sha256);
+  if (asString(row.sha256)) spec.sha256 = asString(row.sha256);
   if (typeof row.sky_available === "boolean") spec.sky_available = row.sky_available;
   if (asString(row.sky_error)) spec.sky_error = asString(row.sky_error);
   return spec;

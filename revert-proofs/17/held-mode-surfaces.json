@@ -1,0 +1,1 @@
+{"runner":"vitest","testFile":"src/app/apply-mode.test.ts","testName":"held consent keeps picker label and sky prompt on previous pack until commit","description":"Picker label switches before consent commit"}

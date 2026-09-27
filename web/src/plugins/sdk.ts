@@ -12,6 +12,7 @@ window.zoto = {
   onTick: null,
   onConfig: null,
   onFrame: null,
+  onPresent: null,
   setStyle(s) { if (allowed.has("graph.style")) send("setStyle", s); },
   setNodeColor(id, hex) { if (allowed.has("graph.style")) send("setNodeColor", { id, hex }); },
   writeBuffer() {},
@@ -27,6 +28,7 @@ window.addEventListener("message", (ev) => {
     window.__zotoConfig = d.config || {};
     window.__zotoViz = d.viz || null;
     if (d.workBudget !== undefined) window.__zotoWorkBudget = d.workBudget;
+    if (typeof d.contractVersion === "number") window.__zotoContractVersion = d.contractVersion;
   }
   if (d.type === "config") { window.__zotoConfig = d.config || {}; window.zoto.onConfig && window.zoto.onConfig(d.config); }
   if (d.type === "tick" && allowed.has("graph.read") && window.zoto.onTick) window.zoto.onTick(d.nodes);

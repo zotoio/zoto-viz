@@ -6,6 +6,35 @@
 /** Bump when frame slice shapes or semantics change. */
 export const VIZ_CONTRACT_VERSION = 2;
 
+/**
+ * Host → sandbox tick when `viz.presentTick` is true in plugin.yml.
+ * Delivered once per sandbox per display frame (mosaic panes may share one sandbox).
+ */
+export interface VizPresentTick {
+  /** rAF / vsync timestamp in milliseconds (`performance.now()` clock). */
+  frameMs: number;
+  /**
+   * **Pack id** (`plugins/src/<id>/`), not a view-instance id or mosaic slot id.
+   * Field reserved until Andrew decides the sandbox model (one sandbox per tile vs
+   * per pack); semantics will be re-scoped together with `aspect` when that lands.
+   */
+  tileId: string;
+  /**
+   * Host sky clock in seconds (`scene.skyTime()` / shader `uTime`): monotonic (never
+   * decreases), global across views, always sent on present ticks. Per-frame `dt` is
+   * clamped to 0.25 s **before** speed scaling; the integrated rate follows the motion
+   * speed slider and scene pulse (up to **2.4×** extra at full pulse, same as the sky).
+   */
+  pluginClock?: number;
+  /**
+   * Width/height of the **stage tile** the sandbox is drawing into (`w / h`), not the
+   * hidden iframe size. In mosaic layout the host currently uses the main scene camera
+   * aspect while this field is reserved. Re-scoped with `tileId` after the sandbox model
+   * decision; do not use `innerWidth`/`innerHeight` alone in the iframe.
+   */
+  aspect?: number;
+}
+
 export interface VizPacketSample {
   /** Uppercased protocol label from the decimated capture slice (e.g. TCP, UDP). */
   proto: string;

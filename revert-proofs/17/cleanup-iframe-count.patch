@@ -1,0 +1,12 @@
+diff --git a/web/src/app/apply-mode.ts b/web/src/app/apply-mode.ts
+index cc8e088..1e28998 100644
+--- a/web/src/app/apply-mode.ts
++++ b/web/src/app/apply-mode.ts
+@@ -191,7 +191,6 @@ function scheduleConsentFinalize(
+         settleConsentAndDrainAuto("failed", m.id);
+         return;
+       }
+-      commitModeSwitchAttempt(signal);
+       settleConsentAndDrainAuto(result);
+       host.focusModePicker();
+       return;

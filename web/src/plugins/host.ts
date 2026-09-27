@@ -2,7 +2,8 @@ import { syncVizTileScope } from "./viz-tile-budget";
 import { PLUGIN_SDK } from "./sdk";
 import { SANDBOX_DUPLICATE_TILE_SHIM } from "./sandbox-shim";
 import { laneRegistry } from "./sandbox-bitmap";
-import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
+import type { VizDataFrame, VizPluginContract, VizPresentTick, VizUniformValue } from "./viz-host";
+import { VIZ_CONTRACT_VERSION } from "./viz-host";
 
 const ALLOWED = new Set([
   "graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write",
@@ -28,9 +29,17 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "publishBitmapFailed"; payload: Record<string, never> };
 
 export type ParentMsg =
-  | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: VizPluginContract }
+  | {
+    source: "zoto-viz-host";
+    type: "init";
+    caps: string[];
+    config: Record<string, string>;
+    viz?: VizPluginContract;
+    contractVersion?: number;
+  }
   | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: "zoto-viz-host"; type: "frame"; frame: VizDataFrame }
+  | { source: "zoto-viz-host"; type: "present"; tick: VizPresentTick }
   | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
 
 export interface PluginHostHandlers {
@@ -75,12 +84,18 @@ export function pluginModuleUrl(id: string, hash?: string): string {
   return hash ? `${path}?h=${encodeURIComponent(hash)}` : path;
 }
 
+export function countPluginSandboxIframes(): number {
+  return document.querySelectorAll("iframe[sandbox]").length;
+}
+
 export class PluginSandbox {
   private iframe: HTMLIFrameElement | null = null;
   private caps: string[] = [];
   private vizContract: VizPluginContract | undefined;
   /** Id passed to the last `load` / `loadModule` (for sandbox bitmap routing). */
   loadedPluginId: string | null = null;
+  private readonly presentTickPayload: VizPresentTick = { frameMs: 0, tileId: "" };
+  private lastPresentFrameMs = -1;
   handlers: PluginHostHandlers = {};
 
   constructor() {
@@ -93,6 +108,7 @@ export class PluginSandbox {
     this.iframe = null;
     this.loadedPluginId = null;
     syncVizTileScope(["main"]);
+    this.lastPresentFrameMs = -1;
   }
 
   setDuplicateTileCount(count: number): void {
@@ -121,14 +137,21 @@ export class PluginSandbox {
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     const plugin = js.replace(/<\/script/gi, "<\\/script");
     iframe.srcdoc = `<!doctype html><meta charset="utf-8">
-<script>window.__zotoConfig = ${JSON.stringify(pluginConfig)};</script>
+<script>window.__zotoConfig = ${JSON.stringify(pluginConfig)};window.__zotoContractVersion = ${VIZ_CONTRACT_VERSION};</script>
 <script data-caps='${JSON.stringify(this.caps)}'>${PLUGIN_SDK}</script>
 <script>${SANDBOX_DUPLICATE_TILE_SHIM}</script>
 <script type="module">const zoto = globalThis.zoto; ${plugin}</script>`;
     document.body.appendChild(iframe);
     this.iframe = iframe;
     this.iframe.contentWindow?.postMessage(
-      { source: "zoto-viz-host", type: "init", caps: this.caps, config: pluginConfig, viz } satisfies ParentMsg,
+      {
+        source: "zoto-viz-host",
+        type: "init",
+        caps: this.caps,
+        config: pluginConfig,
+        viz,
+        contractVersion: VIZ_CONTRACT_VERSION,
+      } satisfies ParentMsg,
       "*",
     );
   }
@@ -158,6 +181,27 @@ export class PluginSandbox {
     if (!this.caps.includes("viz.read")) return;
     this.iframe?.contentWindow?.postMessage(
       { source: "zoto-viz-host", type: "frame", frame: data } satisfies ParentMsg,
+      "*",
+    );
+  }
+
+  /**
+   * One {@link VizPresentTick} per sandbox per display frame (mosaic tiles share a sandbox).
+   * Reuses {@link presentTickPayload}; stops after {@link unload}.
+   */
+  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number, aspect?: number): void {
+    if (!this.caps.includes("viz.write") || !this.vizContract?.presentTick || !this.iframe) return;
+    if (frameMs === this.lastPresentFrameMs) return;
+    this.lastPresentFrameMs = frameMs;
+    const tick = this.presentTickPayload;
+    tick.frameMs = frameMs;
+    tick.tileId = tileId;
+    if (pluginClock != null && Number.isFinite(pluginClock)) tick.pluginClock = pluginClock;
+    else delete tick.pluginClock;
+    if (aspect != null && Number.isFinite(aspect) && aspect > 0) tick.aspect = aspect;
+    else delete tick.aspect;
+    this.iframe.contentWindow?.postMessage(
+      { source: "zoto-viz-host", type: "present", tick } satisfies ParentMsg,
       "*",
     );
   }

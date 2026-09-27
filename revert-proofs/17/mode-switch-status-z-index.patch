@@ -1,0 +1,13 @@
+diff --git a/web/src/app/mode-switch-message.ts b/web/src/app/mode-switch-message.ts
+index 1457878..251792d 100644
+--- a/web/src/app/mode-switch-message.ts
++++ b/web/src/app/mode-switch-message.ts
+@@ -30,7 +30,7 @@ export function ensureModeSwitchStatusEl(): HTMLElement {
+     statusEl.setAttribute("role", "status");
+     statusEl.setAttribute("aria-live", "polite");
+     statusEl.className = "mode-switch-status";
+-    statusEl.style.zIndex = "60";
++    statusEl.style.zIndex = "30";
+     document.body.appendChild(statusEl);
+   }
+   return statusEl;

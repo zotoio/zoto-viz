@@ -60,12 +60,15 @@ export interface VizPluginContract {
   uniforms: VizSkyUniform[];
   ubo: typeof VIZ_UBO;
   idle: VizIdleConfig;
+  /** When true, host delivers {@link VizPresentTick} once per sandbox per display frame. */
+  presentTick?: boolean;
 }
 
 export type {
   VizDataFrame,
   VizHeadline,
   VizPacketSample,
+  VizPresentTick,
   VizRfBeacon,
   VizSysTelemetry,
   VizTalkerSample,
@@ -75,6 +78,7 @@ import type {
   VizDataFrame,
   VizHeadline,
   VizPacketSample,
+  VizPresentTick,
   VizRfBeacon,
   VizSysTelemetry,
   VizTalkerSample,
@@ -300,7 +304,8 @@ export function parseVizContract(raw: unknown): VizPluginContract | undefined {
   const maxBuffers = clampInt(doc.maxBuffers, 1, VIZ_UBO.slotCount, VIZ_DEFAULT_MAX_BUFFERS);
   const maxBufferFloats = clampInt(doc.maxBufferFloats, 4, VIZ_UBO.slotFloats, VIZ_DEFAULT_MAX_BUFFER_FLOATS);
   const maxParticles = clampInt(doc.maxParticles, 0, 8192, 0);
-  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO, idle };
+  const presentTick = doc.presentTick === true;
+  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO, idle, presentTick };
 }
 
 function clampInt(raw: unknown, lo: number, hi: number, fallback: number): number {

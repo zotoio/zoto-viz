@@ -16,12 +16,42 @@ import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
 import { liveSound } from "../audio/sound";
 import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
+import { backroomsSlots } from "../../../plugins/src/backrooms/frontend/director";
+import { deliverPluginPresentTick } from "../plugins/viz-present-tick";
 import {
-  backroomsOptions as backroomsOptionsNow,
-  backroomsSlots,
-  parseBackroomsOptions,
-  setBackroomsOptions,
-} from "../../../plugins/src/backrooms/frontend/director";
+  activePluginSpec,
+  presentDrive,
+  refreshPluginDriveState,
+} from "./present-drive-app";
+import { applyModeImpl, type ApplyModeFlags, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
+import type { ConsentReviewResult } from "./pack-consent";
+import { ensurePackReviewedOutcome } from "./pack-consent";
+import {
+  addModeSwitchAbortListener,
+  beginModeSwitchAttempt,
+  commitModeSwitchAttempt,
+  detachModeSwitchAbortListeners,
+  getActiveModeSwitchSignal,
+  throwIfAborted,
+} from "./mode-switch-attempt";
+import {
+  getLastConsentedModeId,
+  setLastConsentedModeId,
+} from "./mode-switch-state";
+import {
+  beginCoordinatedModeSwitch,
+  registerAutoSwitchRunner,
+  registerDreamPulseReset,
+  settleConsentAndDrainAuto,
+  type ModeSwitchSource,
+  type PendingAutoSwitch,
+} from "./mode-switch-coordinator";
+import { registerApplyModeTestBindings } from "./apply-mode-test-host";
+import {
+  flashModeKeptPrevious,
+  flashModeLoadFailed,
+  initModeSwitchStatusStrip,
+} from "./mode-switch-message";
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
@@ -379,14 +409,14 @@ function applyViewLook(): void {
     applyChrome(userChrome, false);
     const m = modeById(modeSel.value);
     const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-    void syncPluginSky(skySpecForMode(m.id, spec));
+    void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal);
     return;
   }
   const look = pin ? lookForMode(modeSel.value) : undefined;
   scene.setAnim(mergeLook(settings.animSettings, look));
   const m = modeById(modeSel.value);
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-  void syncPluginSky(skySpecForMode(m.id, spec));
+  void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal);
   const want = look?.theme ?? theme.id;
   if (theme.id !== want) applyTheme(want, !!look?.theme, false);
   applyChrome(look?.chrome ?? userChrome, false);
@@ -446,38 +476,40 @@ const syncMosaicPluginHudCaptions = bootPluginSettingsHost({
 });
 
 bindVizDriveElement("main", $("scene"));
+
+function stagePresentAspect(): number {
+  const a = scene.camera.aspect;
+  return Number.isFinite(a) && a > 0 ? a : 16 / 9;
+}
+
+const presentDriveDeps = {
+  sandbox,
+  pluginClock: () => scene.skyTime(),
+  stageAspect: stagePresentAspect,
+};
+
+function refreshPluginDriveForMode(spec: PluginView | null, modeId: string): void {
+  refreshPluginDriveState(spec, modeId, presentDriveDeps);
+}
+
 addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
+  deliverPluginPresentTick(presentDrive, ts);
   if (mode.pluginId === "backrooms") {
-    const br = backroomsViewOptions();
-    pluginSfx.setMasterVolume(br.volume);
+    pluginSfx.syncBackroomsViewConfig(currentOpts);
     pluginSfx.setBackrooms(scene.skyTime());
   } else pluginSfx.silence();
 });
 addPresentListener(markPresent);
-let brOptsSrc: Record<string, string> | null = null;
-let brOptsJson = "";
-/** Backrooms view config (UI sliders / toggles, MCP set_plugin) → director options, re-parsed only when they change. */
-function backroomsViewOptions(): ReturnType<typeof parseBackroomsOptions> {
-  if (brOptsSrc !== currentOpts) {
-    brOptsSrc = currentOpts;
-    const json = JSON.stringify(currentOpts);
-    if (json !== brOptsJson) {
-      brOptsJson = json;
-      setBackroomsOptions(parseBackroomsOptions(currentOpts));
-    }
-  }
-  return backroomsOptionsNow();
-}
 let stereoBins: number[] = [];
 let stereoBinsAt = 0;
 scene.afterLook = () => {
   const mode = modeById(modeSel.value);
   if (mode.pluginId === "backrooms" && vizWriter) {
     // The director owns camera, creature and maze on the sky clock; the sound bed reads the same track.
-    backroomsViewOptions();
+    pluginSfx.syncBackroomsViewConfig(currentOpts);
     scene.setHeard(false);
     const drive = backroomsSlots(
       scene.skyTime(),
@@ -526,11 +558,12 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
     vizHud.resetSkipBaseline();
   }
   if (writer && preserveUbo && !resetFrameTs) broadcastPluginUbo(scene, writer.ubo, mosaic?.on ? mosaic : null);
+  refreshPluginDriveForMode(spec ?? activePluginSpec, modeSel.value);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
   preserveVizUbo = true;
-  applyMode(pluginViewId(packId));
+  applyMode(pluginViewId(packId), {}, { channel: "automatic", auto: "dream-cycle" });
 }
 sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
@@ -572,7 +605,7 @@ const modeSel = new Select({
   title: "view mode (keys 1–9, 0 for the 10th). Type to filter.",
   filterable: true,
   options: viewSelectOptions(),
-  onChange: (id) => applyMode(id),
+  onChange: (id) => applyMode(id, {}, { channel: "user" }),
 });
 $("modeBox").append(modeSel.el);
 const blockedInstallPanel = new BlockedInstallPanel({
@@ -730,36 +763,52 @@ let tsWatch = 0;
 let tsWatchId = "";
 let tsWatchHash = "";
 
-async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
-  if (!spec || !pluginNeedsReview(spec)) return true;
-  if (!catalogReady) return !!spec.consent;
-  if (spec.consent) return true;
-  if (!shouldPromptPluginReview(spec, catalogReady)) return false;
-  if (autoconsentEnabled() && autoconsentEligible(spec)) {
-    const kind = autoconsentKind(spec);
-    try {
-      await grantPluginConsent(spec.id, kind);
-      spec.consent = kind;
-      if (spec.hash) consentHash(spec.id, spec.hash);
-      if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-      return true;
-    } catch (e) {
-      console.warn("zoto-viz plugin autoconsent:", e);
-      return false;
+const refreshPluginSignal = new AbortController();
+
+let ensureReviewedOverride: ((spec: PluginView | null, signal: AbortSignal) => Promise<ConsentReviewResult>) | null = null;
+let askPluginReviewOverride: typeof askPluginReview | null = null;
+
+async function ensureReviewedImpl(spec: PluginView | null, signal: AbortSignal): Promise<ConsentReviewResult> {
+  if (!spec || !pluginNeedsReview(spec)) return "ok";
+  if (spec.consent) return "ok";
+  if (!shouldPromptPluginReview(spec, catalogReady)) return "aborted";
+  return ensurePackReviewedOutcome(spec, async (reviewSignal) => {
+    if (reviewSignal.aborted) return "aborted";
+    if (autoconsentEnabled() && autoconsentEligible(spec)) {
+      const kind = autoconsentKind(spec);
+      try {
+        await grantPluginConsent(spec.id, kind);
+        if (reviewSignal.aborted) return "aborted";
+        spec.consent = kind;
+        if (spec.hash) consentHash(spec.id, spec.hash);
+        if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+        return "ok";
+      } catch (e) {
+        console.warn("zoto-viz plugin autoconsent:", e);
+        return reviewSignal.aborted ? "aborted" : "failed";
+      }
     }
-  }
-  const kind = await askPluginReview(spec);
-  if (!kind) return false;
-  try {
-    await grantPluginConsent(spec.id, kind);
-    spec.consent = kind;
-    if (spec.hash) consentHash(spec.id, spec.hash);
-    if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-    return true;
-  } catch (e) {
-    console.warn("zoto-viz plugin consent:", e);
-    return false;
-  }
+    try {
+      const kind = await (askPluginReviewOverride ?? askPluginReview)(spec, { signal: reviewSignal });
+      if (reviewSignal.aborted) return "aborted";
+      if (!kind) return "declined";
+      try {
+        await grantPluginConsent(spec.id, kind);
+        if (reviewSignal.aborted) return "aborted";
+        spec.consent = kind;
+        if (spec.hash) consentHash(spec.id, spec.hash);
+        if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+        return "ok";
+      } catch (e) {
+        console.warn("zoto-viz plugin consent:", e);
+        return reviewSignal.aborted ? "aborted" : "failed";
+      }
+    } catch (e) {
+      if (reviewSignal.aborted) return "aborted";
+      console.warn("zoto-viz plugin review:", e);
+      return "failed";
+    }
+  }, signal);
 }
 
 function hostTileConfig(): Record<string, string> {
@@ -772,7 +821,12 @@ function hostTileConfig(): Record<string, string> {
   };
 }
 
-async function loadTsPlugin(spec: PluginView | null): Promise<void> {
+async function ensureReviewed(spec: PluginView | null, signal: AbortSignal): Promise<ConsentReviewResult> {
+  if (ensureReviewedOverride) return ensureReviewedOverride(spec, signal);
+  return ensureReviewedImpl(spec, signal);
+}
+
+async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   const vizTileId = mosaic?.on
     ? (mosaic.tileIds.includes(modeSel.value) ? modeSel.value : mosaic.focusedId || mosaic.tileIds[0] || "main")
     : "main";
@@ -819,6 +873,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     );
   });
   try {
+    throwIfAborted(signal);
     const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
     await runPackAssetProtectedLoad(
       tileId,
@@ -826,10 +881,11 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
       mosaicHost,
       async () => {
         await wirePluginFrontendAttach(sandboxConfigBatcher, () =>
-          attachPluginFrontend(sandbox, spec, { ...sandboxPluginConfig(spec), ...hostTileConfig() }),
+          attachPluginFrontend(sandbox, spec, { ...sandboxPluginConfig(spec), ...hostTileConfig() }, signal),
         );
       },
     );
+    throwIfAborted(signal);
     markSandboxStartupOk(tileId);
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
@@ -847,11 +903,16 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     }
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
+    if (signal.aborted || (e instanceof DOMException && e.name === "AbortError")) {
+      sandbox.unload();
+      throw e;
+    }
     console.warn("zoto-viz plugin runtime:", e);
     markSandboxStartupFailed(tileId);
     applyPackFeedPaneNotice(mosaic as import("../plugins/plugin-pack-feed").MosaicNoticeHost | null, tileId, packLabel);
     sandbox.unload();
     scene.clearPluginStyle();
+    throw e;
   }
 }
 
@@ -866,8 +927,9 @@ async function refreshTsPlugin(): Promise<void> {
         spec.hash = next.hash;
         spec.capabilities = next.capabilities;
         spec.consent = next.consent ?? null;
-        if (!(await ensureReviewed(spec))) return;
-        await loadTsPlugin(spec);
+        const reviewed = await ensureReviewed(spec, refreshPluginSignal.signal);
+        if (reviewed !== "ok") return;
+        await loadTsPlugin(spec, refreshPluginSignal.signal);
       }
     }
   } catch { /* monitor down */ }
@@ -922,7 +984,12 @@ function skySpecForMode(modeId: string, fallback: PluginView | null): PluginView
   return selected;
 }
 
-async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinPlugin: boolean): Promise<void> {
+async function loadPluginSkyOnto(
+  target: NetScene,
+  spec: PluginView | null,
+  pinPlugin: boolean,
+  signal: AbortSignal,
+): Promise<void> {
   const look = spec ? (lookForMode(pluginViewId(spec.id, spec.instanceId)) ?? spec.look) : undefined;
   const want = pinPlugin && !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
   const key = want && spec ? `${spec.id}:${spec.shader_sha256 || ""}` : "";
@@ -941,8 +1008,14 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
     if (target === scene) skyLoaded = "";
     return;
   }
+  const disposeSky = () => {
+    target.setPluginShader(null);
+    if (target === scene) skyLoaded = "";
+  };
+  addModeSwitchAbortListener(signal, disposeSky, { once: true });
   try {
-    const source = await fetchPluginSky(spec.id, spec.shader_sha256);
+    const source = await fetchPluginSky(spec.id, spec.shader_sha256, signal);
+    throwIfAborted(signal);
     const err = target.setPluginShader({ id: spec.id, source });
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
@@ -950,38 +1023,37 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
       spec.sky_available = false;
       target.setPluginShader(null);
       if (target === scene) skyLoaded = "";
-      return;
+      throw new Error(err);
     }
     if (target === scene) skyLoaded = key;
   } catch (e) {
     console.warn("zoto-viz plugin sky:", e);
-    target.setPluginShader(null);
-    if (target === scene) skyLoaded = "";
+    disposeSky();
+    detachModeSwitchAbortListeners(signal);
+    throw e;
   }
 }
 
-async function syncPluginSky(spec: PluginView | null): Promise<void> {
+async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   if (mosaic?.on) {
     mosaic.markSkyPending();
     try {
       for (const id of mosaic.tileIds) {
+        throwIfAborted(signal);
         const target = mosaic.graphScene(id);
         if (!target) continue;
         const tileSky = mosaic.paneSky(id);
         const pane = pluginSpecForMode(id);
         const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
-        await loadPluginSkyOnto(target, pane, wantPlugin);
+        await loadPluginSkyOnto(target, pane, wantPlugin, signal);
       }
     } finally {
       mosaic.settlePanes();
     }
     return;
   }
-  await loadPluginSkyOnto(scene, spec, true);
-}
-
-function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
-  void applyModeAsync(id, flags);
+  throwIfAborted(signal);
+  await loadPluginSkyOnto(scene, spec, true, signal);
 }
 
 function teardownMosaicPanelView(viewId: string): void {
@@ -999,7 +1071,9 @@ async function mountMosaicPanelView(viewId: string): Promise<void> {
   target?.setMode(pm, o);
   target?.setStageOnly(skyStage);
   const paneSpec = skySpecForMode(viewId, spec);
-  if (pm.standalone || arcadeSlotFor(pm) !== "carousel") void syncPluginSky(paneSpec);
+  if (pm.standalone || arcadeSlotFor(pm) !== "carousel") {
+    void syncPluginSky(paneSpec, refreshPluginSignal.signal).catch(() => {});
+  }
   const packId = normalizeVizDemoPackId(pm.pluginId);
   syncPanelPackSub(viewId, !!(packId || spec?.capabilities?.includes("viz.read")));
 }
@@ -1008,14 +1082,18 @@ function persistMosaicPickLayout(): void {
   settings.refreshMosaicSlots();
 }
 
-async function runMosaicPaneSwitch(toViewId: string, fromViewId?: string): Promise<SwitchPaneViewResult> {
+async function runMosaicPaneSwitch(
+  toViewId: string,
+  fromViewId?: string,
+  signal: AbortSignal = refreshPluginSignal.signal,
+): Promise<SwitchPaneViewResult> {
   if (!mosaic?.on) return { ok: false, reason: "Mosaic is off." };
   const pm = modeById(toViewId);
   const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
   const pluginId = pm.pluginId ? (parsePluginId(pm.id) ?? pm.pluginId) : null;
   const result = await switchPaneView(mosaic, toViewId, {
     fromViewId,
-    ensureReviewed: () => ensureReviewed(spec),
+    ensureReviewed: async () => (await ensureReviewed(spec, signal)) === "ok",
     spec,
     pluginId,
     teardownView: teardownMosaicPanelView,
@@ -1051,81 +1129,72 @@ initPluginConsentSync({
   pollIntervalMs: 10_000,
 });
 
-async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}): Promise<void> {
-  if (id === MANIFEST_BLOCKED_VIEW_ID) {
-    cancelScheduledSandboxConfig();
-    modeSel.value = id;
-    bindThisView(id);
-    touch();
-    return;
-  }
-  cancelScheduledSandboxConfig();
-  const m = modeById(id);
-  const opts = optsFor(m);
-  const prevMode = liveMode;
-  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  const mosaicGraph = mosaic?.on && !(m.pluginId && m.standalone);
+function computeSkyStage(m: ViewMode, spec: PluginView | null): boolean {
+  return !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
+}
 
-  if (mosaicGraph && mosaic) {
-    const sw = await runMosaicPaneSwitch(m.id);
-    if (!sw.ok) {
-      revertModeSelection(prevMode, modeSel, { mode: liveMode });
-      return;
-    }
-  } else if (!(await ensureReviewed(spec))) {
-    revertModeSelection(prevMode, modeSel, { mode: liveMode });
-    return;
-  }
-
-  currentOpts = opts;
-  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
-  modeSel.value = m.id;
-  localStorage.setItem("zoto-viz.mode", m.id);
-  touch();
-  applyPluginWall(m.id, { ...flags, prevMode });
-  liveMode = m.id;
-
-  const paneSpec = skySpecForMode(m.id, spec);
-  const skyStage = !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
-  document.body.classList.toggle("stage-only", skyStage);
+function applyModeFeedExtras(m: ViewMode, opts: Record<string, string>): void {
   const rainPics = m.pluginId === "hn-rain" && parseHnRainLook(opts).pics && !mosaic?.on;
   feedTitleCube.setActive(rainPics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
-  bindThisView(m.id);
-  $("modeOpts").replaceChildren();
-  feedCtl.feed?.setGraphBase(m.graphBase);
-  if (m.graphBase === "wifi") void syncWifiWatch();
+}
 
-  if (mosaicGraph && mosaic) {
-    if (!flags.keepLayout && mosaic.heroPos !== "off" && mosaic.heroMode !== m.id) {
-      mosaic.setSize(mosaic.current, m.id, mosaic.heroPos, {
-        tree: settings.animSettings.mosaicTree,
-        maximized: settings.animSettings.mosaicMaxId || null,
-        tiles: settings.animSettings.mosaicTiles,
-      });
-    }
-    document.body.classList.remove("arcade");
-    scene.setActive(true);
-    const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.focusedId || mosaic.tileIds[0] || m.id;
-    const target = mosaic.graphScene(focusId);
-    if (target !== scene) scene.setStageOnly(false);
-    morphViewChrome(m, opts, spec, skyStage);
-    applyViewLook();
-    if (m.standalone || arcadeSlotFor(m) !== "carousel") {
-      void loadTsPlugin(paneSpec);
-    }
-    return;
+/** Refresh the settings caption for `m` and return the hint line that carries it. */
+function syncPluginHudCaption(m: ViewMode, spec: PluginView | null, opts: Record<string, string>): string {
+  const fields = spec ? pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config) : [];
+  const cap = spec ? hudCaptionFromOpts(spec, fields, opts) : null;
+  if (cap) {
+    pluginHudCaptions.set(m.id, cap);
+    return `${spec!.name} · ${cap}`;
   }
+  pluginHudCaptions.delete(m.id);
+  return m.hint;
+}
 
-  if (m.standalone || arcadeSlotFor(m) !== "carousel") {
-    void loadTsPlugin(paneSpec);
-    void syncPluginSky(paneSpec);
+function syncModeHud(m: ViewMode, spec: PluginView | null): void {
+  syncPluginHudCaption(m, spec, optsFor(m));
+  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
+  syncMosaicPluginHudCaptions();
+}
+
+function captureMosaicAnimSnap(): MosaicAnimSnap {
+  const a = settings.animSettings;
+  const size = mosaic?.on ? mosaic.current : a.mosaic;
+  return {
+    size,
+    hero: mosaic?.on ? mosaic.heroPos : a.hero,
+    tree: a.mosaicTree,
+    maximized: a.mosaicMaxId || null,
+    tiles: [...a.mosaicTiles],
+  };
+}
+
+function restoreMosaicAnimSnap(snap: MosaicAnimSnap, preferMode: string): void {
+  if (!mosaic) return;
+  mosaic.setSize(snap.size, preferMode, snap.hero, {
+    tree: snap.tree,
+    maximized: snap.maximized,
+    tiles: snap.tiles,
+  });
+}
+
+function applyMosaicModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
+  const focusId = mosaic!.tileIds.includes(m.id) ? m.id : mosaic!.tileIds[0] ?? m.id;
+  mosaic!.focus(focusId);
+  const target = mosaic!.graphScene(focusId);
+  if (target) {
+    target.setMode(m, opts);
+    target.setStageOnly(skyStage);
   }
+  document.body.classList.remove("arcade");
+  scene.setActive(true);
+  if (target !== scene) scene.setStageOnly(false);
+  morphViewChrome(m, opts, spec, skyStage, false);
+}
 
+function applySoloModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
   scene.setMode(m, opts);
-
-  // standalone arcade, or NASA catalog views which share the contain-fit slideshow stage
   const next = arcadeSlotFor(m);
   document.body.classList.toggle("arcade", next !== null);
   unbindTetrisStandaloneHost(scene);
@@ -1140,24 +1209,207 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
   if (next === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
   activeArcade = next;
   syncFeedShift();
-
-  morphViewChrome(m, opts, spec, skyStage);
-  applyViewLook();
+  morphViewChrome(m, opts, spec, skyStage, false);
 }
 
-function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
-  let hint = m.hint;
-  const fields = spec ? pluginViewKnobs({ ...spec, options: m.options, config: m.config }, m.config) : [];
-  const cap = spec ? hudCaptionFromOpts(spec, fields, opts) : null;
-  if (cap) {
-    pluginHudCaptions.set(m.id, cap);
-    hint = `${spec!.name} · ${cap}`;
-  } else {
-    pluginHudCaptions.delete(m.id);
+function reapplyCommittedModeSurfaces(modeId: string): void {
+  const m = modeById(modeId);
+  const opts = optsFor(m);
+  currentOpts = opts;
+  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
+  const spec = m.pluginId ? pluginSpecForMode(modeId) : null;
+  const skyStage = computeSkyStage(m, spec);
+  document.body.classList.toggle("stage-only", skyStage);
+  applyModeFeedExtras(m, opts);
+  bindThisView(modeId);
+  refreshPluginDriveForMode(spec, modeId);
+  if (mosaic?.on && !(m.pluginId && m.standalone)) {
+    applyMosaicModeVisuals(m, opts, spec, skyStage);
+    return;
   }
-  syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
-  syncMosaicPluginHudCaptions();
-  morphCopy($("hint"), hint);
+  applySoloModeVisuals(m, opts, spec, skyStage);
+}
+
+function buildApplyModeHost(): ApplyModeHost {
+  return {
+    modeById,
+    optsFor,
+    getLiveMode: () => liveMode,
+    setLiveMode: (id) => { liveMode = id; },
+    modeSel,
+    touch,
+    applyPluginWall,
+    pluginSpecForMode,
+    skySpecForMode,
+    refreshPluginDrive: refreshPluginDriveForMode,
+    presentDriveDeps,
+    applySkyPrompt: (m, opts) => {
+      currentOpts = opts;
+      setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
+    },
+    reapplyCommittedModeSurfaces,
+    computeSkyStage: (m, spec) => computeSkyStage(m, spec),
+    applyStageOnly: (skyStage) => { document.body.classList.toggle("stage-only", skyStage); },
+    applyModeFeedExtras,
+    bindThisView,
+    clearModeOpts: () => { $("modeOpts").replaceChildren(); },
+    ensureReviewed: (spec, signal) => ensureReviewed(spec, signal),
+    loadTsPlugin: (spec, signal) => loadTsPlugin(spec, signal),
+    syncPluginSky: (spec, signal) => syncPluginSky(spec, signal),
+    mosaic,
+    captureMosaicSnap: captureMosaicAnimSnap,
+    restoreMosaicSnap: restoreMosaicAnimSnap,
+    mosaicSetSizeForMode: (modeId, snap) => {
+      mosaic!.setSize(snap.size, modeId, snap.hero, {
+        tree: snap.tree,
+        maximized: snap.maximized,
+        tiles: snap.tiles,
+      });
+    },
+    mosaicShouldResize: (modeId, keepLayout) =>
+      !keepLayout && !!mosaic && mosaic.heroPos !== "off" && mosaic.heroMode !== modeId,
+    mosaicSetPaneView: (from, to) => mosaic!.setPaneView(from, to),
+    mosaicFocusSlot: () => mosaic?.focusedId || mosaic?.tileIds[0],
+    mosaicHasTile: (modeId) => !!mosaic?.tileIds.includes(modeId),
+    applyMosaicModeVisuals,
+    applySoloModeVisuals,
+    syncModeHud,
+    applyViewLook,
+    feedSetGraphBase: (base) => { feedCtl.feed?.setGraphBase(base); },
+    syncWifiIfNeeded: (m) => { if (m.graphBase === "wifi") void syncWifiWatch(); },
+    modeLabel: (m) => m.label,
+    onConsentDeclined: () => { preserveVizUbo = false; },
+    shouldLoadPluginRuntime: (m) => m.standalone || arcadeSlotFor(m) !== "carousel",
+    getLastConsentedModeId,
+    getFallbackKeptModeId: () => defaultCatalogMode()?.id ?? "topology",
+    markModeConsented: (modeId) => setLastConsentedModeId(modeId),
+    retryDeclinedMode: (modeId) => { applyMode(modeId); },
+    showRollbackMessage: (kind, declined, keptModeId) => {
+      const keptLabel = modeById(keptModeId).label;
+      if (kind === "declined") return flashModeKeptPrevious(keptLabel);
+      return flashModeLoadFailed(declined.label, keptLabel, () => applyMode(declined.id));
+    },
+    focusModePicker: () => { modeSel.focusWithRing(); },
+  };
+}
+
+/** Mosaic graph switches keep the consent-first pane path; the wall only changes after review. */
+async function applyMosaicModeAsync(m: ViewMode, flags: ApplyModeFlags, signal: AbortSignal): Promise<void> {
+  const opts = optsFor(m);
+  const prevMode = liveMode;
+  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
+  const sw = await runMosaicPaneSwitch(m.id, undefined, signal);
+  if (signal.aborted) {
+    settleConsentAndDrainAuto("aborted");
+    return;
+  }
+  if (!sw.ok) {
+    revertModeSelection(prevMode, modeSel, { mode: liveMode });
+    settleConsentAndDrainAuto("declined", m.id);
+    return;
+  }
+  if (!mosaic?.on) {
+    settleConsentAndDrainAuto("aborted");
+    return;
+  }
+
+  currentOpts = opts;
+  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
+  modeSel.value = m.id;
+  localStorage.setItem("zoto-viz.mode", m.id);
+  touch();
+  applyPluginWall(m.id, { ...flags, prevMode });
+  liveMode = m.id;
+  setLastConsentedModeId(m.id);
+
+  const paneSpec = skySpecForMode(m.id, spec);
+  const skyStage = computeSkyStage(m, spec);
+  document.body.classList.toggle("stage-only", skyStage);
+  applyModeFeedExtras(m, opts);
+  bindThisView(m.id);
+  refreshPluginDriveForMode(spec, m.id);
+  $("modeOpts").replaceChildren();
+  feedCtl.feed?.setGraphBase(m.graphBase);
+  if (m.graphBase === "wifi") void syncWifiWatch();
+
+  if (!flags.keepLayout && mosaic.heroPos !== "off" && mosaic.heroMode !== m.id) {
+    mosaic.setSize(mosaic.current, m.id, mosaic.heroPos, {
+      tree: settings.animSettings.mosaicTree,
+      maximized: settings.animSettings.mosaicMaxId || null,
+      tiles: settings.animSettings.mosaicTiles,
+    });
+  }
+  document.body.classList.remove("arcade");
+  scene.setActive(true);
+  const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.focusedId || mosaic.tileIds[0] || m.id;
+  const target = mosaic.graphScene(focusId);
+  if (target !== scene) scene.setStageOnly(false);
+  morphViewChrome(m, opts, spec, skyStage);
+  applyViewLook();
+  if (m.standalone || arcadeSlotFor(m) !== "carousel") {
+    try {
+      await loadTsPlugin(paneSpec, signal);
+    } catch (e) {
+      if (signal.aborted || (e instanceof DOMException && e.name === "AbortError")) {
+        settleConsentAndDrainAuto("aborted");
+        return;
+      }
+      console.warn("zoto-viz mosaic plugin load:", e);
+    }
+  }
+  commitModeSwitchAttempt(signal);
+  settleConsentAndDrainAuto("ok");
+}
+
+function runAutoSwitch(pending: PendingAutoSwitch): void {
+  applyMode(pending.modeId, pending.flags, { channel: "automatic", auto: pending.auto });
+}
+
+export function applyMode(
+  id: string,
+  flags: { keepLayout?: boolean } = {},
+  source: ModeSwitchSource = { channel: "user" },
+): void {
+  cancelScheduledSandboxConfig();
+  if (id === MANIFEST_BLOCKED_VIEW_ID) {
+    modeSel.value = id;
+    bindThisView(id);
+    touch();
+    return;
+  }
+  const { proceed } = beginCoordinatedModeSwitch(source, id, flags);
+  if (!proceed) return;
+  const signal = beginModeSwitchAttempt();
+  const m = modeById(id);
+  if (mosaic?.on && !(m.pluginId && m.standalone)) void applyMosaicModeAsync(m, flags, signal);
+  else applyModeImpl(buildApplyModeHost(), id, flags, signal);
+  if (source.channel === "user") modeSel.focus();
+}
+
+registerAutoSwitchRunner(runAutoSwitch);
+registerDreamPulseReset(() => scene.resetDreamCyclePulse());
+registerApplyModeTestBindings({
+  setEnsureReviewedOverride: (fn) => { ensureReviewedOverride = fn; },
+  setAskPluginReviewOverride: (fn) => { askPluginReviewOverride = fn; },
+  setMosaic: (m) => { mosaic = m; },
+  setPluginSpecs: (specs) => { pluginSpecs = specs; },
+  setLiveMode: (id) => { liveMode = id; },
+  setModeSelValue: (id) => { modeSel.value = id; },
+  refreshModeOptions: () => modeSel.setOptions(viewSelectOptions()),
+  reattachModeSelect: () => {
+    const modeBox = $("modeBox");
+    if (modeBox && !modeBox.contains(modeSel.el)) modeBox.appendChild(modeSel.el);
+  },
+});
+
+function morphViewChrome(
+  m: ViewMode,
+  opts: Record<string, string>,
+  spec: PluginView | null,
+  skyStage: boolean,
+  syncHud = true,
+): void {
+  morphCopy($("hint"), syncPluginHudCaption(m, spec, opts));
   const legend = $("legend");
   const paint = (): void => {
     if (skyStage) legend.replaceChildren();
@@ -1170,6 +1422,7 @@ function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: Plugin
   } else {
     paint();
   }
+  if (syncHud) syncModeHud(m, spec);
 }
 
 function renderLegend(m: ViewMode, opts: Record<string, string>): void {
@@ -1193,6 +1446,12 @@ const initialBootMode = storedBootMode === MANIFEST_BLOCKED_VIEW_ID
   : (storedBootMode ?? defaultCatalogMode()?.id ?? "topology");
 modeSel.value = initialBootMode;
 liveMode = initialBootMode;
+if (!import.meta.env.VITEST) initModeSwitchStatusStrip();
+
+export { getPresentDriveTileId } from "./present-drive-app";
+export function getApplyModeHostForTests(): ApplyModeHost {
+  return buildApplyModeHost();
+}
 
 // ---------------------------------------------------------------- visibility filters
 
@@ -1469,7 +1728,7 @@ settings.onInstancesChange = () => {
     pluginSpecs = await installPlugins();
     modeSel.setOptions(viewSelectOptions());
     settings.refreshMosaicSlots();
-    applyMode(modeSel.value);
+    applyMode(modeSel.value, {}, { channel: "user" });
   })();
 };
 const showSec = settings.addSection(
@@ -1502,7 +1761,7 @@ mosaic = new Mosaic({
     persistMosaicFocus(id);
   },
   onPromote: (id, theme) => {
-    applyMode(id, { keepLayout: true });
+    applyMode(id, { keepLayout: true }, { channel: "user" });
     if (theme) applyTheme(theme.id);
     applyViewLook();
   },
@@ -1817,7 +2076,7 @@ scene.onDreamPulse = () => {
       const graphs = graphModes();
       if (graphs.length) {
         const i = Math.max(0, graphs.findIndex((m) => m.id === modeSel.value));
-        applyMode(graphs[(i + 1) % graphs.length].id);
+        applyMode(graphs[(i + 1) % graphs.length].id, {}, { channel: "automatic", auto: "dream-cycle" });
       }
     }
     if (a.randomize) settings.shuffleAnim();
@@ -1920,7 +2179,7 @@ settings.prependSection(
 );
 uiReady = true;
 applyViewLook();
-void (async () => {
+if (!import.meta.env.VITEST) void (async () => {
   const session = await bootSession();
   typeSafeKeyOn = session.typesafeConfigured;
   setTypeSafeProxyConfigured(() => typeSafeKeyOn);
@@ -1961,7 +2220,7 @@ void (async () => {
     touch();
   }
   quiet(() => {
-    applyMode(modeSel.value);
+    applyMode(modeSel.value, {}, { channel: "automatic", auto: "profile-restore" });
     applyViewLook();
     if (restored && live) applyTheme(live.settings.theme, false, false);
   });
@@ -2191,7 +2450,7 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
     document.body.classList.remove("arcade");
     scene.setStageOnly(false);
   }
-  applyMode(s.mode, { keepLayout: flags.keepLayout });
+  applyMode(s.mode, { keepLayout: flags.keepLayout }, { channel: "user" });
   if (lastRaw) feed(lastRaw);
   void syncWifiWatch();
   persistLive();
@@ -2407,10 +2666,15 @@ function connect(): void {
   ws.onerror = () => ws.close();
 }
 
-connect();
+if (!import.meta.env.VITEST) {
+  connect();
+}
 
 window.addEventListener("keydown", (e) => {
-  if (e.target instanceof HTMLSelectElement || e.target instanceof HTMLInputElement || e.target instanceof HTMLButtonElement || e.target instanceof HTMLTextAreaElement) return;
+  const t = e.target;
+  const onModePicker = t instanceof Node && modeSel.el.contains(t);
+  if (t instanceof HTMLSelectElement || t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
+  if (t instanceof HTMLButtonElement && !onModePicker) return;
   if (e.key === "Escape" && settings.isOpen) { settings.close(); return; }
   if (e.key === "Escape") scene.select(null);
   if (e.key === "r" || e.key === "R") setRedaction(!redaction.enabled);
@@ -2422,6 +2686,6 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);
   const idx = e.key === "0" ? 9 : Number(e.key) - 1;
   const modes = viewSelectOptions();
-  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.value);
+  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.value, {}, { channel: "user" });
 });
 window.addEventListener("pagehide", () => persistLive(true));

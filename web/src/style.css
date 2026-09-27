@@ -720,6 +720,10 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
 }
 .field-btn .cap { padding-top: 1px; }
 .field-btn:hover { background: var(--chip-hover); border-color: var(--line-strong); }
+.field.select.focus-return .field-btn {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
+}
 .field-btn:focus-visible, .field.open .field-btn {
   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
 }
@@ -1456,6 +1460,39 @@ body.modal-open #bar, body.modal-open #foot { pointer-events: none; }
 /* ------------------------------------------------------------------ footer, scene labels */
 
 #foot { position: fixed; left: 12px; bottom: 12px; display: flex; flex-direction: column; gap: 8px; max-width: calc(100vw - 360px); z-index: 5; anchor-name: --viz-foot; }
+.mode-switch-status {
+  position: fixed;
+  left: 50%;
+  bottom: 18px;
+  transform: translateX(-50%);
+  z-index: 60;
+  max-width: min(92vw, 520px);
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--fg);
+  background: color-mix(in srgb, var(--bg) 88%, transparent);
+  border: 1px solid var(--line);
+  box-shadow: 0 4px 20px rgb(0 0 0 / 35%);
+  pointer-events: none;
+}
+.mode-switch-status[hidden] { display: none !important; }
+.mode-switch-status--idle {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+  box-shadow: none;
+  background: transparent;
+  pointer-events: none;
+}
+.mode-switch-status:not(.mode-switch-status--idle) { pointer-events: auto; }
+.mode-switch-status .mode-switch-retry { pointer-events: auto; margin-left: 8px; }
 body[data-chrome="left"] #foot { left: calc(var(--bar-w) + 12px); max-width: calc(100vw - var(--bar-w) - 360px); }
 body[data-chrome="right"] #foot { max-width: calc(100vw - var(--bar-w) - 360px); }
 /* Full glyph outline (not a 4-way shadow) so bright skies cannot bloom through the diagonals. */

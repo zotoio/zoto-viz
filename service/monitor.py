@@ -2033,6 +2033,7 @@ def make_app(
     app.router.add_get("/api/plugins", plugins.api_list_http)
     app.router.add_get("/api/plugins/{id}/module.js", plugins.api_module_http)
     app.router.add_get("/api/plugins/{id}/sky/fragment.glsl", plugins.api_sky_http)
+    app.router.add_get("/api/plugins/{id}/asset/{path:.+}", plugins.api_asset_http)
     app.router.add_get("/api/plugins/hn-rain/still", hn_rain_stills.api_still)
     app.router.add_put("/api/plugins/{id}/consent", plugins.api_consent)
     app.router.add_get("/mcp", plugin_mcp.api_mcp)

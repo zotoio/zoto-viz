@@ -58,6 +58,7 @@ import type { PluginIdleConfig } from "./fixtures/golden-state";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
+import { addModeSwitchAbortListener, detachModeSwitchAbortListeners } from "../app/mode-switch-attempt";
 
 function dimHex(hex: number, amount: number): number {
   const r = Math.round(((hex >> 16) & 255) * amount);
@@ -217,6 +218,7 @@ export interface PluginView {
   viz?: VizPluginContract;
   typesafe?: TypeSafeContract;
   hash?: string;
+  sha256?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;
   /** Catalog provenance: src (shipped), zip (contrib), or local (~/.zoto-viz/plugins/local). */
@@ -300,10 +302,18 @@ export function pluginSkyPath(id: string, hash?: string): string {
 }
 
 /** Fetch `/api/plugins/<id>/sky/fragment.glsl` (403 without consent). */
-export async function fetchPluginSky(id: string, hash?: string): Promise<string> {
+export async function fetchPluginSky(
+  id: string,
+  hash?: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const r = await apiFetch(pluginSkyPath(id, hash));
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   if (!r.ok) throw new Error(`plugin sky ${r.status}`);
-  return r.text();
+  const text = await r.text();
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  return text;
 }
 
 /** Fetch `/plugins/<id>/module.js` and load it in the iframe sandbox. */
@@ -311,13 +321,27 @@ export async function attachPluginFrontend(
   sandbox: PluginSandbox,
   spec: PluginView | null,
   config: Record<string, string> = {},
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  if (signal?.aborted) return false;
   if (!pluginHasFrontend(spec)) {
     sandbox.unload();
     return false;
   }
-  await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
-  return true;
+  const dispose = () => { sandbox.unload(); };
+  addModeSwitchAbortListener(signal, dispose, { once: true });
+  try {
+    await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
+    if (signal?.aborted) {
+      sandbox.unload();
+      if (signal) detachModeSwitchAbortListeners(signal);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    if (signal) detachModeSwitchAbortListeners(signal);
+    throw e;
+  }
 }
 
 export function vizContractFor(spec: PluginView | null | undefined): VizPluginContract | undefined {
