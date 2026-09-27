@@ -1,0 +1,5 @@
+{
+  "testFile": "src/plugins/shader-fallback-contracts.test.ts",
+  "testName": "viz plugin sdk fragment > viz-sdk-on-frame-guard",
+  "redValue": "AssertionError: expected -1 to be greater than -1"
+}

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import * as THREE from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NetScene } from "./scene";
@@ -55,5 +57,11 @@ describe("shader fallback mosaic tiles", () => {
     expect(paneT2.querySelectorAll(".tile-shader-fallback").length).toBe(0);
     host.dispose();
     wall.remove();
+  });
+
+  it("mosaic-class-scene-opts", () => {
+    const src = readFileSync(resolve(import.meta.dirname, "mosaic.ts"), "utf8");
+    const needle = "new NetScene(host, mosaicSceneOpts(id, this.cfg.host!))";
+    expect(src.indexOf(needle)).toBeGreaterThan(-1);
   });
 });

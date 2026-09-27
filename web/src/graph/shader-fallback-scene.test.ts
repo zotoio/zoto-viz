@@ -129,4 +129,22 @@ describe("shader fallback net scene", () => {
     host.dispose();
     wall.remove();
   });
+
+  it("scene-tile-id", () => {
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { value: 640 });
+    Object.defineProperty(wall, "clientHeight", { value: 480 });
+    const pane = document.createElement("div");
+    Object.defineProperty(pane, "clientWidth", { value: 320 });
+    Object.defineProperty(pane, "clientHeight", { value: 240 });
+    wall.appendChild(pane);
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    const keyed = new NetScene(pane, { satellite: true, host, tileId: "pane-a" });
+    expect(keyed.tileId).toBe("pane-a");
+    const solo = new NetScene(pane, { satellite: true, host });
+    expect(solo.tileId).toBe("main");
+    host.dispose();
+    wall.remove();
+  });
 });
