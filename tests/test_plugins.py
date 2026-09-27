@@ -128,7 +128,6 @@ def test_scan_zip_catalog(tmp_path: Path) -> None:
         "id: catalog\nname: Catalog\nversion: 2\n", encoding="utf-8",
     )
     pz.pack_tree(pack, zpath)
-    plugins.reset_scan_memo()
     refreshed = plugins.scan(repo)
     assert refreshed["plugins"][0]["version"] == 2
     assert refreshed["plugins"][0]["sha256"] != row["sha256"]

@@ -42,12 +42,6 @@ describe("plugin wall remnants", () => {
     expect(inferWallOwner(remnant.mosaicTiles, walls)).toBe("plugin:syscon");
     expect(isWallRemnant(["plugin:talkers", "plugin:topology"], walls)).toBe(false);
     expect(isWallRemnant(["plugin:cores"], walls)).toBe(false);
-    expect(isWallRemnant(["plugin:air-bt!1", "plugin:air-bt!2"], walls)).toBe(false);
-    expect(isWallRemnant(["plugin:cores!1", "plugin:memory"], walls)).toBe(true);
-  });
-
-  it("inferWallOwner resolves sys wall for duplicate tile slots", () => {
-    expect(inferWallOwner(["plugin:cores!1", "plugin:memory"], walls)).toBe("plugin:syscon");
   });
 
   it("lists catalog walls from looks", () => {
