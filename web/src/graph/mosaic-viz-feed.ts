@@ -13,6 +13,10 @@ export function dropMosaicTileWriter(tileId: string): void {
   tileWriters.delete(tileId);
 }
 
+export function resetMosaicTileWriters(): void {
+  tileWriters.clear();
+}
+
 function writerForTile(tileId: string, spec: PluginView | null): VizBufferWriter | null {
   let writer = tileWriters.get(tileId);
   if (writer) return writer;

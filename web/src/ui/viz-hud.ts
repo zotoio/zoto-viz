@@ -209,6 +209,10 @@ export class VizHud {
   private readonly onSwap: (packId: VizDemoPackId) => void;
 
   private activeId: VizDemoPackId | null = null;
+  private settingsCaptionHud = false;
+  private packBaseName = "";
+  private packCaptionSuffix: string | null = null;
+  private readonly metricEl: HTMLElement;
   private lastSkipped = 0;
   private skipNeedsSync = true;
   private readonly skipSamples: { t: number; n: number }[] = [];
@@ -244,6 +248,7 @@ export class VizHud {
     this.metricValueEl = document.createElement("strong");
     this.metricValueEl.className = "viz-hud-metric-value";
     metric.append(this.metricLabelEl, " ", this.metricValueEl);
+    this.metricEl = metric;
 
     this.skipEl = document.createElement("span");
     this.skipEl.className = "viz-hud-skip";
@@ -293,12 +298,47 @@ export class VizHud {
     const next = normalizeVizDemoPackId(packId);
     const changed = next !== this.activeId;
     this.activeId = next;
+    this.settingsCaptionHud = false;
+    this.swapRow.hidden = false;
+    this.metricEl.hidden = false;
+    this.skipEl.hidden = false;
     this.root.hidden = !this.activeId;
     if (!this.activeId) return;
     if (changed) this.resetSkipBaseline();
-    if (!this.packEl.textContent) this.packEl.textContent = packName;
-    else morphCopy(this.packEl, packName);
+    this.packBaseName = packName;
+    this.renderPackLine();
     this.packSel.value = this.activeId;
+  }
+
+  /** Show pack name + settings caption for non-demo packs declaring hud.labelFields. */
+  showSettingsCaptionHud(packName: string): void {
+    this.settingsCaptionHud = true;
+    this.activeId = null;
+    this.root.hidden = false;
+    this.packBaseName = packName;
+    this.swapRow.hidden = true;
+    this.metricEl.hidden = true;
+    this.skipEl.hidden = true;
+    this.renderPackLine();
+  }
+
+  hideSettingsCaptionHud(): void {
+    this.settingsCaptionHud = false;
+    if (!this.activeId) this.root.hidden = true;
+  }
+
+  setPackCaption(suffix: string | null): void {
+    this.packCaptionSuffix = suffix;
+    this.renderPackLine();
+  }
+
+  private renderPackLine(): void {
+    const text = this.packCaptionSuffix
+      ? `${this.packBaseName} · ${this.packCaptionSuffix}`
+      : this.packBaseName;
+    if (!text) return;
+    if (!this.packEl.textContent) this.packEl.textContent = text;
+    else morphCopy(this.packEl, text);
   }
 
   /** Re-sync skip delta baseline after host budget reset (avoids desync / false bursts). */
@@ -332,6 +372,7 @@ export class VizHud {
 
   tick(input: VizHudTick): void {
     if (!this.activeId) return;
+    if (this.settingsCaptionHud) return;
     const { stats, frame, state, now, tileBudget, activeTiles = 1, tileBudgetLines } = input;
     const displayFrame = tileBudget ? tileHudDisplayFrame(tileBudget, frame) : frame;
     const metric = vizHudMetric(this.activeId, displayFrame, state);

@@ -508,6 +508,27 @@ export class Mosaic {
     el.textContent = text;
   }
 
+  /** Plugin settings HUD caption for this tile (bottom of frame). */
+  setPaneSettingsCaption(id: string, text: string | null | undefined): void {
+    const pane = this.panes.get(id);
+    if (!pane) return;
+    this.paintPaneSettingsCaption(pane, text);
+  }
+
+  private paintPaneSettingsCaption(pane: HTMLElement, text: string | null | undefined): void {
+    const existing = pane.querySelector(".mosaic-pane-settings-caption");
+    if (!text) {
+      existing?.remove();
+      return;
+    }
+    const el = existing instanceof HTMLElement ? existing : document.createElement("div");
+    if (!existing) {
+      el.className = "mosaic-pane-settings-caption";
+      pane.appendChild(el);
+    }
+    el.textContent = text;
+  }
+
   private paintPaneNotice(
     pane: HTMLElement,
     text: string | null | undefined,

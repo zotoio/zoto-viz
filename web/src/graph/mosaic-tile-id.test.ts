@@ -8,8 +8,7 @@ import {
   mosaicWallUsesView,
   parseMosaicSlotId,
 } from "./mosaic-tile-id";
-import { configStoreId } from "../plugins/instances";
-import { parsePluginId } from "../plugins/instances";
+import { configStoreId, parsePluginId } from "../plugins/instances";
 
 describe("mosaic tile slot ids", () => {
   beforeEach(() => {
@@ -53,12 +52,16 @@ describe("mosaic tile slot ids", () => {
   it("keeps one config store id for two tiles of the same pack", () => {
     const packId = parsePluginId("plugin:air-bt")!;
     const a = configStoreId({ id: packId });
-    const b = configStoreId({ id: parsePluginId("plugin:air-bt!1")! });
-  it("keeps one config store id for two tiles of the same pack", () => {
-    const packId = parsePluginId("plugin:air-bt")!;
-    const a = configStoreId({ id: packId });
     const b = configStoreId({ id: parsePluginId(mosaicTileViewId("plugin:air-bt!1"))! });
     expect(a).toBe("air-bt");
     expect(b).toBe("air-bt");
+  });
+
+  it("strips only an all-digit !<n> slot suffix", () => {
+    expect(mosaicTileViewId("plugin:foo!2")).toBe("plugin:foo");
+  });
+
+  it("leaves non-slot bang tails unchanged", () => {
+    expect(mosaicTileViewId("plugin:foo!bar")).toBe("plugin:foo!bar");
   });
 });
