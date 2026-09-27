@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/ui/media-ask-focus.test.ts",
-  "testName": "media ask focus dialog > closes on Escape without calling getUserMedia and dismisses like Not now",
+  "testFile": "web/src/ui/media-ask-focus.chromium.test.ts",
+  "testName": "media ask focus (chromium) > closes on Escape with no microphone request",
   "description": "Revert production guard (row-04-escape-dismiss-jsdom)",
-  "red": "AssertionError: expected false to be true // Object.is equality"
+  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
 }

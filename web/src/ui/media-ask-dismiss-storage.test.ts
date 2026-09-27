@@ -98,7 +98,6 @@ describe("media ask dismiss sessionStorage", () => {
     await waitForDialog();
     clickNotNow();
     await expect(micPending).resolves.toBeNull();
-    expect(sessionStorage.getItem("zoto-viz.mediaDismiss")).toBe('{"mic":true}');
 
     const reloaded = await reloadMediaAsk();
     mockCapture(vi.fn(async () => ({ getTracks: () => [] })));

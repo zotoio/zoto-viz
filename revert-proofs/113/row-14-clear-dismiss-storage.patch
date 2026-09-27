@@ -1,5 +1,5 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 43b38d8e..b03d3451 100644
+index 1c321c7e..b8570996 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
 @@ -147,7 +147,6 @@ export function resetMediaAsk(): void {

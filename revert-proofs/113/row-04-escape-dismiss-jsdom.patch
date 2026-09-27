@@ -1,12 +1,12 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 78e96b2f..b9726fb4 100644
+index 1c321c7e..ee336d0a 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -370,7 +370,6 @@ function openMediaAsk(waiters: Waiter[]): void {
+@@ -366,7 +366,6 @@ function openMediaAsk(waiters: Waiter[]): void {
    open = host;
    paintCopy(host);
  
 -  modal.addEventListener("close", () => finalizeMediaAskClose(host));
-   watchDialogClosedWithoutCloseEvent(host);
    modal.addEventListener("click", (e) => {
      if (e.target === modal) modal.close("not-now");
+   });
