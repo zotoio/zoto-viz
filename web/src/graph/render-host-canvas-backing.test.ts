@@ -2,6 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { RenderHost } from "./render-host";
+import {
+  configureLayoutMaxDevicePxRatio,
+  DEFAULT_MAX_DEVICE_PX_RATIO,
+  resetLayoutDevicePxRatioWatch,
+} from "../../test-support/layout-device-px-ratio";
 
 const { WebGLRendererMock } = vi.hoisted(() => {
   class WebGLRendererMock {
@@ -43,6 +48,8 @@ describe("RenderHost canvas backing store", () => {
 
   beforeEach(() => {
     expect.hasAssertions();
+    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
+    resetLayoutDevicePxRatioWatch();
   });
 
   it("resizeGpuCanvas uses Math.max(1, …) for zero CSS wall size", () => {
@@ -78,14 +85,11 @@ describe("RenderHost canvas backing store", () => {
     Object.defineProperty(wall, "clientWidth", { configurable: true, value: 200 });
     Object.defineProperty(wall, "clientHeight", { configurable: true, value: 120 });
     document.body.appendChild(wall);
-    const capHost = new RenderHost(wall, { software: true, maxLayoutDevicePxRatio: 1.25 });
-    cancelAnimationFrame((capHost as unknown as { raf: number }).raf);
-    const host = new RenderHost(wall, { software: true });
+    const host = new RenderHost(wall, { software: true, maxLayoutDevicePxRatio: 1.25 });
     cancelAnimationFrame((host as unknown as { raf: number }).raf);
     expect(host.canvas.width).toBe(250);
     expect(host.canvas.height).toBe(150);
     host.dispose();
-    capHost.dispose();
     vi.unstubAllGlobals();
   });
 
