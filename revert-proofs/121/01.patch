@@ -1,0 +1,20 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+index fc6a3705..aab41939 100644
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -69,13 +69,10 @@ export function assignMosaicSkies(
+ 
+ /** A plugin-sky look stays `plugin` even if a saved unique-sky plan named a host sky. */
+ export function pinPluginTileSkies(
+-  skies: Partial<Record<string, BackdropKind>>,
++  skies: Record<string, BackdropKind>,
+   ids: string[],
+ ): Record<string, BackdropKind> {
+-  const out: Record<string, BackdropKind> = {};
+-  for (const [id, sky] of Object.entries(skies)) {
+-    if (sky !== undefined) out[id] = sky;
+-  }
++  const out = { ...skies };
+   for (const id of ids) {
+     if (lookForMode(id)?.backdrop === "plugin") out[id] = "plugin";
+   }

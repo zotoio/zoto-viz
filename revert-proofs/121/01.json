@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic.test.ts",
+  "testName": "mosaic unique skies > drops undefined mosaic sky entries and still pins plugin looks",
+  "description": "Revert pinPluginTileSkies partial mosaic sky handling",
+  "project": "web",
+  "redLine": "AssertionError: expected { 'plugin:backrooms': 'plugin', …(2) } to strictly equal { 'plugin:backrooms': 'plugin', …(1) }"
+}
