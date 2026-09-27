@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assignMosaicSkies,
   mosaicAnimForTile,
@@ -12,6 +12,7 @@ import {
 } from "./mosaic";
 import { defaultTree, leafIds } from "./mosaic-layout";
 import { mosaicTileViewId } from "./mosaic-tile-id";
+import * as plugin from "../plugins/plugin";
 import { memory, setPluginModes, topology } from "../core/modes";
 import { themeById } from "../core/themes";
 import { DEFAULT_DREAM } from "./scene";
@@ -114,6 +115,15 @@ describe("mosaic unique skies", () => {
     const host = ["plugin:a", "plugin:c", "plugin:d"].map((id) => skies[id]);
     expect(new Set(host).size).toBe(3);
     expect(host.includes("aurora")).toBe(false);
+  });
+
+  it("merges catalog look via pack view id when tile slot has a suffix", () => {
+    const lookSpy = vi.spyOn(plugin, "lookForMode").mockImplementation((id) =>
+      (id === "plugin:pulse" ? { backdrop: "matrix" as const } : undefined));
+    const wall = { ...DEFAULT_DREAM, backdrop: "aurora" as const };
+    expect(mosaicAnimForTile(wall, "plugin:pulse!2", undefined).backdrop).toBe("matrix");
+    expect(lookSpy).toHaveBeenCalledWith("plugin:pulse");
+    lookSpy.mockRestore();
   });
 
   it("overrides a host wall sky per tile and keeps plugin shaders", () => {

@@ -58,6 +58,9 @@ describe("close / swap / assign", () => {
     expect(leafIds(assignTiles(t, ["plugin:x", "plugin:x!1", "y"]))).toEqual(["plugin:x", "plugin:x!1", "y", "d"]);
     expect(parseMosaicTiles(["a", "", "a", "b", 1])).toEqual(["a", "b"]);
     expect(parseMosaicTiles(["plugin:a", "plugin:a!1"])).toEqual(["plugin:a", "plugin:a!1"]);
+    const long = `plugin:${"x".repeat(100)}`;
+    expect(parseMosaicTiles([long])[0]).toHaveLength(96);
+    expect(parseMosaicTiles([long])[0]).toBe(long.trim().slice(0, 96));
   });
 
   it("places and moves tile slots", () => {
