@@ -20,8 +20,21 @@ class MockWebSocket {
   addEventListener() {}
 }
 
+async function settleMainBoot(): Promise<void> {
+  await vi.waitFor(
+    () => document.querySelector("#modeBox select") !== null,
+    { timeout: 10_000, interval: 20 },
+  );
+  for (let i = 0; i < 48; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
 describe("main entry wiring", () => {
-  afterEach(() => {
+  afterEach(async () => {
+    for (let i = 0; i < 8; i++) {
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    }
     vi.unstubAllGlobals();
     vi.resetModules();
     document.body.innerHTML = "";
@@ -34,6 +47,7 @@ describe("main entry wiring", () => {
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.resetModules();
     await import("./main.ts");
+    await settleMainBoot();
   });
 
   it("shows the restart strip when the server-restart event fires after entry bind", () => {
