@@ -14,7 +14,7 @@ import {
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
 import { applyPackCoalesceLayout, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
 import type { PluginView } from "../plugins/plugin";
-import { mosaicTileViewId } from "./mosaic-tile-id";
+import { mosaicSetPaneViewWouldNoop, mosaicTileViewId } from "./mosaic-tile-id";
 
 export { centerSplit } from "./mosaic-layout";
 
@@ -506,7 +506,7 @@ export class Mosaic {
 
   /** Change one pane to a catalog view id (swap or allocate a duplicate tile slot). */
   setPaneView(fromSlot: string, viewId: string): boolean {
-    if (!this.tree || !viewId || mosaicTileViewId(fromSlot) === viewId) return false;
+    if (!this.tree || !viewId || mosaicSetPaneViewWouldNoop(fromSlot, viewId)) return false;
     const next = nextPaneTiles(this.tileIds, fromSlot, viewId);
     if (next.join("\0") === this.tileIds.join("\0")) return false;
     this.assignViews(next);

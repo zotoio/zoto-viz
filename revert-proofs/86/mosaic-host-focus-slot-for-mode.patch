@@ -1,0 +1,13 @@
+diff --git a/web/src/app/mosaic-host-wiring.ts b/web/src/app/mosaic-host-wiring.ts
+index a24e82d3..76657ce9 100644
+--- a/web/src/app/mosaic-host-wiring.ts
++++ b/web/src/app/mosaic-host-wiring.ts
+@@ -14,7 +14,7 @@ export function mosaicPanePickFocusSlot(tileIds: readonly string[], toViewId: st
+ 
+ /** Mosaic mode apply: focus tile slot that already shows this view id. */
+ export function mosaicFocusSlotForMode(tileIds: readonly string[], modeId: string, fallback: string): string {
+-  return tileIds.find((id) => mosaicTileViewId(id) === modeId) ?? tileIds[0] ?? fallback;
++  return tileIds[0] ?? fallback;
+ }
+ 
+ /** Mode switch skips pane swap when the view is already placed on the wall. */

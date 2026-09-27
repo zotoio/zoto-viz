@@ -38,6 +38,9 @@ describe("mosaic host wiring", () => {
   it("agentPatchTilesWhenViewOffWall rewrites focused tile when view is not placed", () => {
     const next = agentPatchTilesWhenViewOffWall(["plugin:a", "plugin:b"], "plugin:b", "plugin:c");
     expect(next).toEqual(["plugin:a", "plugin:c"]);
+  });
+
+  it("agentPatchTilesWhenViewOffWall skips when duplicate slot already shows the view", () => {
     expect(agentPatchTilesWhenViewOffWall(["plugin:a!1", "plugin:b"], "plugin:a!1", "plugin:a")).toBeNull();
   });
 

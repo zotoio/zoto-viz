@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/mosaic-host-wiring.test.ts",
+  "testName": "^mosaic host wiring > modeIdForMosaicPluginChange strips duplicate tile slot suffix$",
+  "description": "Revert settings plugin refresh to raw slot id (#86).",
+  "expectedRed": "expected 'plugin:topology!2' to be 'plugin:topology' // Object.is equality"
+}

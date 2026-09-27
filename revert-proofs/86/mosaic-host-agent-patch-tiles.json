@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/mosaic-host-wiring.test.ts",
+  "testName": "^mosaic host wiring > agentPatchTilesWhenViewOffWall skips when duplicate slot already shows the view$",
+  "description": "Revert agent lockLayout tile rewrite guard (#86).",
+  "expectedRed": "expected [ 'plugin:a!1', 'plugin:a' ] to be null // Object.is equality"
+}

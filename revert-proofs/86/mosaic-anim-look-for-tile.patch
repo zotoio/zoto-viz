@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+index b0ef26ae..894385a 100644
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -79,7 +79,7 @@ export function mosaicAnimForTile(
+   id: string,
+   tileSky?: BackdropKind,
+ ): DreamAnim {
+-  const merged = mergeLook(wall, lookForTile(id));
++  const merged = mergeLook(wall, lookForMode(id));
+   if (tileSky === "plugin") return { ...merged, backdrop: "plugin" };
+   if (tileSky) return { ...merged, backdrop: tileSky };
+   return merged;

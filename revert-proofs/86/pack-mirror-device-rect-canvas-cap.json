@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-rect-device-cap.test.ts",
+  "testName": "^deviceRectFromHostViewBoxInto canvas cap > clamps device height when GL rect extends past canvasDevicePx$",
+  "description": "Revert canvasDevicePx height clamp (#86).",
+  "expectedRed": "expected 100 to be less than or equal to 80"
+}

@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/mosaic-tile-id.ts b/web/src/graph/mosaic-tile-id.ts
+--- a/web/src/graph/mosaic-tile-id.ts
++++ b/web/src/graph/mosaic-tile-id.ts
+@@ -38,7 +38,7 @@ export function mosaicWallUsesView(tileSlotIds: readonly string[], viewId: string
+ 
+ /** True when changing a pane to the pack view it already shows (duplicate slot suffix). */
+ export function mosaicSetPaneViewWouldNoop(fromSlot: string, viewId: string): boolean {
+-  return mosaicTileViewId(fromSlot) === viewId;
++  return fromSlot === viewId;
+ }
+ 
+ /** Pick a unique leaf id for another tile of the same pack view. */

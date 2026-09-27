@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/mosaic-host-wiring.test.ts",
+  "testName": "^mosaic host wiring > mosaicFocusSlotForMode picks the duplicate slot carrying the mode id$",
+  "description": "Revert mode focus to first tile slot (#86).",
+  "expectedRed": "expected 'plugin:y' to be 'plugin:x!1' // Object.is equality"
+}

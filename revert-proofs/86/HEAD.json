@@ -1,0 +1,5 @@
+{
+  "branch": "cursor/host-pixel-lifecycle-revert-rows-d355-e7d4",
+  "base": "80be948",
+  "note": "Filled after commit; run git rev-parse HEAD and git rev-parse HEAD^{tree}"
+}

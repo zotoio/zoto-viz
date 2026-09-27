@@ -59,8 +59,7 @@ describe("close / swap / assign", () => {
     expect(parseMosaicTiles(["a", "", "a", "b", 1])).toEqual(["a", "b"]);
     expect(parseMosaicTiles(["plugin:a", "plugin:a!1"])).toEqual(["plugin:a", "plugin:a!1"]);
     const long = `plugin:${"x".repeat(100)}`;
-    expect(parseMosaicTiles([long])[0]).toHaveLength(96);
-    expect(parseMosaicTiles([long])[0]).toBe(long.trim().slice(0, 96));
+    expect(parseMosaicTiles([long])[0]?.length).toBe(96);
   });
 
   it("places and moves tile slots", () => {

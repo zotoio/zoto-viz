@@ -1,0 +1,13 @@
+diff --git a/web/src/app/mosaic-host-wiring.ts b/web/src/app/mosaic-host-wiring.ts
+index a24e82d3..88d49cbf 100644
+--- a/web/src/app/mosaic-host-wiring.ts
++++ b/web/src/app/mosaic-host-wiring.ts
+@@ -39,7 +39,7 @@ export function agentPatchTilesWhenViewOffWall(
+ 
+ /** Viz HUD ticks on the solo graph path only (mosaic tiles use per-pane chrome). */
+ export function shouldTickVizHudForFeed(mosaicOn: boolean): boolean {
+-  return !mosaicOn;
++  return true;
+ }
+ 
+ /** Per-tile plugin sky sync uses the pack view id, not the duplicate slot suffix. */
