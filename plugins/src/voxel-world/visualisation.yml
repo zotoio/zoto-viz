@@ -1,0 +1,13 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: dusk
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.12
+  skyAudio: false
+  skySpeed: 1
+  gridOpacity: 0

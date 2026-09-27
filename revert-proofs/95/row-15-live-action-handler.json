@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > calls the latest action handler after a re-post",
+  "description": "Revert production guard (row-15-live-action-handler)",
+  "red": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
+}
