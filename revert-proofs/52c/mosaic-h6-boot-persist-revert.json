@@ -3,5 +3,6 @@
   "runner": "vitest",
   "testFile": "src/ui/mosaic-wall-h6.test.ts",
   "testName": "^mosaic viz tile guard H6 > Q1 H6 boot: nine saved tiles survive constructor, profiles\\.boot applyAnim, and persistAnim \\(twice\\)$",
-  "patchedAssertion": "AssertionError: expected null to be '[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\",\"h\",\"i\"]' // Object.is equality"
+  "patchedAssertion": "AssertionError: expected null to be '[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\",\"h\",\"i\"]' // Object.is equality",
+  "excerpt": "AssertionError: expected null to be '[\"a\",\"b\",\"c\",\"d\",\"e\",\"f\",\"g\",\"h\",\"i\"]' // Object.is equality"
 }

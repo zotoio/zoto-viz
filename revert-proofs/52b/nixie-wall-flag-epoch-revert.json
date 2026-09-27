@@ -2,6 +2,7 @@
   "row": "F5 flag clock revert to Date.UTC epoch anchor",
   "runner": "vitest",
   "testFile": "src/plugins/nixie-wall-flag-clock.test.ts",
-  "testName": "^nixie \\?vizWallClock= flag \\(mono second clock\\) > 12h 01:05 → blank tens, 1, 05$",
-  "patchedAssertion": "AssertionError: expected [ +0, 1, +0, 5 ] to deeply equal [ -1, 1, +0, 5 ]"
+  "testName": "^nixie \\?vizWallClock= flag \\(mono second clock\\) > 12h 01:05 \u2192 blank tens, 1, 05$",
+  "patchedAssertion": "AssertionError: expected [ +0, 1, +0, 5 ] to deeply equal [ -1, 1, +0, 5 ]",
+  "excerpt": "AssertionError: expected [ +0, 1, +0, 5 ] to deeply equal [ -1, 1, +0, 5 ]"
 }

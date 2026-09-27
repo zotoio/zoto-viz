@@ -1,7 +1,8 @@
 {
-  "row": "Amendment 5 P2 even-gap revert — floor cadence shrinks build-gap count",
+  "row": "Amendment 5 P2 even-gap revert \u2014 floor cadence shrinks build-gap count",
   "runner": "vitest",
   "testFile": "src/core/viz-wall-limited-harness.test.ts",
   "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > Amendment 5 P2: every gap between runs is exactly 3 over 600 frames$",
-  "patchedAssertion": "AssertionError: expected 299 to be 199 // Object.is equality"
+  "patchedAssertion": "AssertionError: expected 299 to be 199 // Object.is equality",
+  "excerpt": "AssertionError: expected 299 to be 199 // Object.is equality"
 }

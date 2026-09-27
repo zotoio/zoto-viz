@@ -2,6 +2,7 @@
   "row": "Shot 6 revert: wall shed clears non-primary tile lastDeliveredFrame",
   "runner": "vitest",
   "testFile": "web/src/core/viz-wall-limited-harness.test.ts",
-  "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > Shot 6 wall shed: 4 tiles keep last frame — 0 clears over shed frames$",
-  "patchedAssertion": "AssertionError: expected 1800 to be +0 // Object.is equality"
+  "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > Shot 6 wall shed: 4 tiles keep last frame \u2014 0 clears over shed frames$",
+  "patchedAssertion": "AssertionError: expected 1800 to be +0 // Object.is equality",
+  "excerpt": "AssertionError: expected 1800 to be +0 // Object.is equality"
 }
