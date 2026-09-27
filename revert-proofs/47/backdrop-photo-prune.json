@@ -1,7 +1,0 @@
-{
-  "runner": "pnpm --dir web exec vitest run src/graph/backdrop.test.ts -t \"^photo sky cache > prunes extra still textures and disposes them$\"",
-  "testFile": "src/graph/backdrop.test.ts",
-  "testName": "^photo sky cache > prunes extra still textures and disposes them$",
-  "description": "Skip photo texture cache pruning.",
-  "excerpt": "AssertionError: expected [] to deeply equal [ '/c' ]"
-}
