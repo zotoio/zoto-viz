@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignTiles, defaultTree, leafIds, placePaneTileView } from "./mosaic-layout";
+import { assignTiles, defaultTree, leafIds, nextPaneTiles, placePaneTileView } from "./mosaic-layout";
 
 describe("mosaic pane view assignment", () => {
   it("apply assignViews tile list replaces one leaf id", () => {
@@ -22,6 +22,8 @@ describe("mosaic pane view assignment", () => {
     const prev = ["plugin:topology", "plugin:wifi"];
     const next = nextPaneTiles(prev, "plugin:topology", "plugin:talkers");
     expect(next.filter((id) => !prev.includes(id))).toEqual(["plugin:talkers"]);
+  });
+
   it("duplicate pack views keep distinct tile slots", () => {
     const tree = defaultTree(["plugin:topology", "plugin:wifi"], "off");
     const next = placePaneTileView(leafIds(tree!), "plugin:wifi", "plugin:topology");

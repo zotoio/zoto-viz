@@ -10,14 +10,17 @@ from urllib.parse import quote, unquote
 
 from aiohttp import web
 
-from . import access, monitor, plugins
+from . import access, plugins
 
 PACK_ID_SANDBOX = "_sandbox"
 
-WEB_DIST = monitor.WEB_DIST
+# Tests patch this; production file serving uses `_web_dist()` → `monitor.WEB_DIST`.
+WEB_DIST = Path(__file__).resolve().parents[1] / "web" / "dist"
 
 
 def _web_dist() -> Path:
+    from . import monitor
+
     return monitor.WEB_DIST
 _FRONTEND_ONLY = frozenset({".js", ".mjs", ".json", ".css", ".wasm", ".map", ".txt", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2"})
 _BLOCKED_BASENAMES = frozenset({"plugin.yml", "plugin.yaml", "service.py"})

@@ -21,7 +21,7 @@ from . import paths
 from . import plugin_migration as pmg
 from . import plugin_zip as pz
 from . import plugins
-from .pack_boundary import PackBundleBoundaryError
+from .pack_boundary import PackBundleBoundaryError, format_upgrade_blocked_message
 from .pack_id import refuse_case_insensitive_id_collision
 from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
 from . import pack_safe_zip as psz
@@ -475,10 +475,22 @@ def install_local_zip(
             )
             staging_to_clean = None
         except PackBundleBoundaryError as e:
+            if upgrade:
+                return _finish(
+                    {
+                        "ok": False,
+                        "error": "pack_install_blocked",
+                        "message": format_upgrade_blocked_message(e.block, doc.get("version")),
+                        "upgrade_blocked": "true",
+                        **{k: v for k, v in e.block.to_dict().items() if k != "message"},
+                    },
+                    activate=False,
+                )
             return _finish({"ok": False, **e.block.to_dict()}, activate=False)
         except InstallV2BlockedError as e:
+            payload = {k: v for k, v in (e.payload or {}).items() if k != "message"}
             return _finish(
-                {"ok": False, "error": "pack_install_blocked", "message": str(e), **e.payload},
+                {"ok": False, "error": "pack_install_blocked", "message": str(e), **payload},
                 activate=False,
             )
         except ValueError as e:
@@ -597,7 +609,8 @@ def publish_local(body: dict[str, Any] | None) -> dict[str, Any]:
             "hint": "a shipped plugins/src tree already owns this id",
         }
     except InstallV2BlockedError as e:
-        return {"ok": False, "error": "pack_install_blocked", "message": str(e), **e.payload}
+        payload = {k: v for k, v in (e.payload or {}).items() if k != "message"}
+        return {"ok": False, "error": "pack_install_blocked", "message": str(e), **payload}
     except InstallStartFailedError as e:
         return {"ok": False, "error": "pack_install_start_failed", "message": str(e), "reason": e.reason}
     except PackBundleBoundaryError as e:
@@ -801,7 +814,14 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
                     version=version,
                 )
             except InstallV2BlockedError as e:
-                return {"ok": False, "error": "pack_install_blocked", "retryResult": "blocked", "message": str(e), **e.payload}
+                payload = {k: v for k, v in (e.payload or {}).items() if k != "message"}
+                return {
+                    "ok": False,
+                    "error": "pack_install_blocked",
+                    "retryResult": "blocked",
+                    "message": str(e),
+                    **payload,
+                }
             except (InstallStartFailedError, RuntimeError):
                 msg = format_retry_start_failed_message(name, version)
                 record_zip_block(

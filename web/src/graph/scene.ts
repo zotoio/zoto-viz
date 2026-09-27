@@ -1682,13 +1682,8 @@ export class NetScene implements HostedView {
     }
     const gl = (this.host?.gl ?? (this.renderer as THREE.WebGLRenderer).getContext()) as WebGL2RenderingContext | null;
     if (!gl) return;
-    let vp: GlRect;
-    if (this.lastVp && isDeviceRect(this.lastVp)) {
-      vp = toGlRectInto(this.lastVp, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);
-    } else {
-      const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-      vp = toGlRectInto(dev, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);
-    }
+    const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+    const vp = toGlRectInto(dev, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);
     this.changeProbe.tick(gl, vp, this.lastFrameTs || now, (ts) => this.paneFps.mark(ts));
   }
 

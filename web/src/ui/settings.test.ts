@@ -200,6 +200,8 @@ describe("Settings panes", () => {
     expect(s.openPane).toBe("appearance");
     s.showPane("view");
     expect(n).toBe(2);
+  });
+
   it("keeps plugin settings announcer on the view pane after randomise", () => {
     const s = new Settings({ storePrefix: "zoto-plugin-ann-rand", onChange: () => {} });
     const spec = loadSettingsDeclFixture();
