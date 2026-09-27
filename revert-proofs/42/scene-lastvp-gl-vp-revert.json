@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/scene-layout-dpr-base.test.ts",
+  "testName": "hosted WebGL notePaneChange builds GlRect via toGlRectInto when lastVp is unset",
+  "expectedRed": "AssertionError: expected \"toGlRectInto\" to be called at least once"
+}
