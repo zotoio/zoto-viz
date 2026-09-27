@@ -36,7 +36,14 @@ function loadDismissed(): void {
 
 function persistDismissed(): void {
   try {
-    sessionStorage.setItem(DISMISS_KEY, JSON.stringify({ mic: dismissed.mic, cam: dismissed.cam }));
+    const payload: { mic?: true; cam?: true } = {};
+    if (dismissed.mic) payload.mic = true;
+    if (dismissed.cam) payload.cam = true;
+    if (!payload.mic && !payload.cam) {
+      sessionStorage.removeItem(DISMISS_KEY);
+      return;
+    }
+    sessionStorage.setItem(DISMISS_KEY, JSON.stringify(payload));
   } catch { /* ignore */ }
 }
 
