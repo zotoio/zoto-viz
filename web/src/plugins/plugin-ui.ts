@@ -4,6 +4,31 @@ import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
 import type { SdmDevice } from "./nest-cams-look";
 
+/** Visible label beside the field caption when the value differs from default. */
+export const FIELD_EDITED_LABEL = "Edited";
+
+/** Screen-reader hint when a control differs from its schema default (not colour-only). */
+export const FIELD_EDITED_ARIA = "Unsaved change";
+
+function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
+  el.classList.toggle("field-dirty", dirty);
+  if (dirty) {
+    el.setAttribute("aria-description", FIELD_EDITED_ARIA);
+    if (!el.querySelector(".field-edited-cue")) {
+      const cue = document.createElement("span");
+      cue.className = "field-edited-cue";
+      cue.textContent = FIELD_EDITED_LABEL;
+      cue.setAttribute("aria-hidden", "true");
+      const cap = el.querySelector(".cap");
+      if (cap?.parentElement === el) cap.before(cue);
+      else el.prepend(cue);
+    }
+  } else {
+    el.removeAttribute("aria-description");
+    el.querySelector(".field-edited-cue")?.remove();
+  }
+}
+
 function appendFieldControl(
   row: HTMLElement,
   f: PluginField,
@@ -13,7 +38,7 @@ function appendFieldControl(
   const current = values[f.key] ?? fieldDefault(f);
   const syncDirty = (el: HTMLElement) => {
     const cur = values[f.key] ?? fieldDefault(f);
-    el.classList.toggle("field-dirty", String(cur) !== String(fieldDefault(f)));
+    syncFieldEditedMarkers(el, String(cur) !== String(fieldDefault(f)));
   };
   const wrap = (el: HTMLElement) => {
     syncDirty(el);

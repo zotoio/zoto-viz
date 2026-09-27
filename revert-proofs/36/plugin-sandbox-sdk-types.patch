@@ -1,0 +1,12 @@
+diff --git a/plugins/sdk/plugin-sandbox.ts b/plugins/sdk/plugin-sandbox.ts
+--- a/plugins/sdk/plugin-sandbox.ts
++++ b/plugins/sdk/plugin-sandbox.ts
+@@ -5,7 +5,7 @@
+ export type ZotoUniformValue = number | [number, number, number];
+ 
+ /** Host-injected `window.zoto` surface for viz + config.read packs. */
+-export interface ZotoVizPluginHost<TFrame> {
++export interface ZotoVizPluginHostRemoved<TFrame> {
+   onFrame: ((frame: TFrame) => void) | null;
+   onConfig: ((config: Record<string, string>) => void) | null;
+   onTick?: ((nodes: unknown) => void) | null;

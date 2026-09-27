@@ -1,0 +1,16 @@
+diff --git a/web/src/style.css b/web/src/style.css
+--- a/web/src/style.css
++++ b/web/src/style.css
+@@ -586,10 +586,9 @@ body[data-chrome="right"] #bar .field-btn { width: 100%; }
+   outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
+ }
+ .field.select.dirty .field-btn { border-color: var(--warn); }
+-.settings-pop .field.select.field-dirty .field-btn,
+-.settings-pop label.slider.field-dirty,
+-.settings-pop label.toggle.field-dirty,
+-.settings-pop .field.text.field-dirty {
++.settings-pop .field-dirty .field-btn,
++.settings-pop .field-dirty .slider-row,
++.settings-pop .field-dirty.field.text {
+   box-shadow: inset 0 0 0 1px var(--warn);
+ }

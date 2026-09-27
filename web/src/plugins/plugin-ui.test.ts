@@ -1,6 +1,14 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { askPluginReview, fillPluginFields } from "./plugin-ui";
-import { fieldDefault } from "./plugin";
+import {
+  FIELD_EDITED_ARIA,
+  FIELD_EDITED_LABEL,
+  askPluginReview,
+  fillPluginFields,
+} from "./plugin-ui";
+import { configStoreId, fieldDefault, writePluginConfig } from "./plugin";
 import type { PluginView } from "./plugin";
 
 describe("fillPluginFields", () => {
@@ -66,23 +74,106 @@ describe("fillPluginFields", () => {
     localStorage.removeItem("zoto-viz.plugin.demo.a");
   });
 
-  it("drops field-dirty when a slider returns to its default", () => {
-    expect.hasAssertions();
-    const spec: PluginView = {
-      id: "demo", name: "Demo", version: 1, engine: "graph",
-      config: [{ key: "gain", label: "gain", type: "number", default: 3, min: 0, max: 10 }],
-    };
+  function dirtySliderRow(spec: PluginView): { host: HTMLElement; range: HTMLInputElement; row: HTMLElement } {
     const host = document.createElement("div");
     fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
-    const range = host.querySelector('input[type="range"]') as HTMLInputElement | null;
-    expect(range).toBeTruthy();
-    const row = range!.closest(".slider") as HTMLElement;
-    range!.value = "7";
-    range!.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(row.classList.contains("field-dirty")).toBe(true);
-    range!.value = "3";
-    range!.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(row.classList.contains("field-dirty")).toBe(false);
+    const range = host.querySelector('input[type="range"]') as HTMLInputElement;
+    const row = range.closest(".slider") as HTMLElement;
+    range.value = "7";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    return { host, range, row };
+  }
+
+  const gainSpec: PluginView = {
+    id: "demo", name: "Demo", version: 1, engine: "graph",
+    config: [{ key: "gain", label: "gain", type: "number", default: 3, min: 0, max: 10 }],
+  };
+
+  it("field edited visible label string", () => {
+    expect.hasAssertions();
+    const { row, range } = dirtySliderRow(gainSpec);
+    expect(row.querySelector(".field-edited-cue")?.textContent).toBe(FIELD_EDITED_LABEL);
+    expect(FIELD_EDITED_LABEL).toBe("Edited");
+    range.value = "3";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(row.querySelector(".field-edited-cue")).toBeNull();
+    writePluginConfig(configStoreId(gainSpec), { gain: "3" });
+    const hostSaved = document.createElement("div");
+    fillPluginFields(hostSaved, gainSpec, gainSpec.config!, () => {}, { skipEmpty: true });
+    expect(hostSaved.querySelector(".field-edited-cue")).toBeNull();
+  });
+
+  it("dirty field-dirty styling selectors target slider and toggle roots", () => {
+    expect.hasAssertions();
+    const cssPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../style.css");
+    const css = readFileSync(cssPath, "utf8");
+    expect(css).toMatch(/label\.slider\.field-dirty/);
+    expect(css).toMatch(/label\.toggle\.field-dirty/);
+    expect(css).not.toMatch(/\.field-dirty \.slider-row/);
+  });
+
+  it("marks dirty number sliders and boolean toggles with field-dirty", () => {
+    expect.hasAssertions();
+    const host = document.createElement("div");
+    const spec: PluginView = {
+      id: "demo", name: "Demo", version: 1, engine: "graph",
+      config: [
+        { key: "gain", label: "gain", type: "number", default: 3, min: 0, max: 10 },
+        { key: "on", label: "on", type: "boolean", default: false },
+      ],
+    };
+    fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
+    const range = host.querySelector('input[type="range"]') as HTMLInputElement;
+    const slider = range.closest("label.slider") as HTMLElement;
+    range.value = "7";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(slider.classList.contains("field-dirty")).toBe(true);
+
+    const toggleInput = host.querySelector("label.toggle input") as HTMLInputElement;
+    const toggle = toggleInput.closest("label.toggle") as HTMLElement;
+    toggleInput.checked = true;
+    toggleInput.dispatchEvent(new Event("change", { bubbles: true }));
+    expect(toggle.classList.contains("field-dirty")).toBe(true);
+  });
+
+  it("does not mark fields dirty while still at schema default", () => {
+    expect.hasAssertions();
+    const host = document.createElement("div");
+    const spec: PluginView = {
+      id: "clean-default", name: "Demo", version: 1, engine: "graph",
+      config: [{ key: "gain", label: "gain", type: "number", default: 3, min: 0, max: 10 }],
+    };
+    localStorage.removeItem("zoto-viz.plugin.clean-default.gain");
+    fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
+    const slider = host.querySelector("label.slider") as HTMLElement;
+    expect(slider.classList.contains("field-dirty")).toBe(false);
+  });
+
+  it("leaves unsectioned-only knobs in a flat sec, not collapsible details", () => {
+    expect.hasAssertions();
+    const host = document.createElement("div");
+    const spec: PluginView = {
+      id: "demo", name: "Demo", version: 1, engine: "graph",
+      config: [{ key: "on", label: "on", type: "boolean", default: false }],
+    };
+    fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
+    expect(host.querySelector("details.sec-collapsible")).toBeNull();
+    expect(host.querySelector(".sec-controls")).toBeTruthy();
+  });
+
+  it("field unsaved change aria description string", () => {
+    expect.hasAssertions();
+    const { row, range } = dirtySliderRow(gainSpec);
+    expect(row.getAttribute("aria-description")).toBe(FIELD_EDITED_ARIA);
+    expect(FIELD_EDITED_ARIA).toBe("Unsaved change");
+    range.value = "3";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(row.getAttribute("aria-description")).toBeNull();
+    writePluginConfig(configStoreId(gainSpec), { gain: "3" });
+    const hostSaved = document.createElement("div");
+    fillPluginFields(hostSaved, gainSpec, gainSpec.config!, () => {}, { skipEmpty: true });
+    const rowSaved = hostSaved.querySelector(".slider") as HTMLElement;
+    expect(rowSaved.getAttribute("aria-description")).toBeNull();
   });
 
   it("renders nest-cams layout and camera chips instead of a pane slider", () => {

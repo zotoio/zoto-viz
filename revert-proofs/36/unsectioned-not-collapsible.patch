@@ -1,0 +1,10 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -145,7 +145,7 @@ export function fillPluginFields(
+     if (f.type === "textarea") notes.push(f);
+     else compact.push(f);
+   }
+-  const hasSections = compact.some((f) => f.section);
++  const hasSections = compact.length > 0;
+   if (compact.length && hasSections) {

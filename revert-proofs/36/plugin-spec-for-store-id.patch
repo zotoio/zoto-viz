@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
+--- a/web/src/plugins/instances.ts
++++ b/web/src/plugins/instances.ts
+@@ -98,7 +98,7 @@ export function expandPluginInstances(spec: PluginView): PluginView[] {
+ export function pluginSpecForStoreId(specs: PluginView[], storeId: string): PluginView | null {
+   for (const raw of specs) {
+     for (const expanded of expandPluginInstances(raw)) {
+-      if (configStoreId(expanded) === storeId) return expanded;
++      if (expanded.id === storeId) return expanded;
+     }
+   }
+   return null;

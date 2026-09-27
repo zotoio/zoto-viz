@@ -1,0 +1,11 @@
+diff --git a/schema/plugin.schema.json b/schema/plugin.schema.json
+--- a/schema/plugin.schema.json
++++ b/schema/plugin.schema.json
+@@ -211,7 +211,6 @@
+         "label": { "type": "string", "maxLength": 64 },
+         "type": { "type": "string", "enum": ["boolean", "select", "number", "text", "textarea"] },
+         "section": {
+-          "type": "string",
+           "minLength": 1,
+           "maxLength": 48,
+           "description": "Settings drawer section title (collapsible group)."

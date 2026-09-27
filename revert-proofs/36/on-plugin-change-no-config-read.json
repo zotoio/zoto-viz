@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/plugin-sandbox-config-push.test.ts",
+  "testName": "plugin sandbox config push guards > onPluginChange path: no config.read yields 0 posts",
+  "description": "onPluginChange guard must require config.read",
+  "red": "AssertionError: expected [ { type: 'config', … } ] to have a length of +0 but got 1"
+}

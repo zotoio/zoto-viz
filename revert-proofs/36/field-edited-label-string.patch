@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -17,7 +17,7 @@ function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
+     if (!el.querySelector(".field-edited-cue")) {
+       const cue = document.createElement("span");
+       cue.className = "field-edited-cue";
+-      cue.textContent = FIELD_EDITED_LABEL;
++      cue.textContent = "Changed";
+       cue.setAttribute("aria-hidden", "true");
+       const cap = el.querySelector(".cap");
+       if (cap?.parentElement === el) cap.before(cue);

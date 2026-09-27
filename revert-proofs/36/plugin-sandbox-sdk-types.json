@@ -1,0 +1,7 @@
+{
+  "runner": "tsc",
+  "testFile": "web/src/plugins/plugin-sandbox-sdk.test.ts",
+  "allowTypeError": true,
+  "allowTypeErrorReason": "ZotoVizPluginHost import must resolve from plugins/sdk/plugin-sandbox.ts",
+  "description": "plugins/sdk/plugin-sandbox.ts stays referenced for pack #24 type imports"
+}

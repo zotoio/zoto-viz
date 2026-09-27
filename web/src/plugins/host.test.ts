@@ -43,15 +43,55 @@ describe("PluginSandbox", () => {
     expect.hasAssertions();
     const box = new PluginSandbox();
     const posted: unknown[] = [];
-    await box.load("cfg-pack", "globalThis.ok = true;", ["config.read"], { a: "1" });
-    const win = document.querySelector("iframe")?.contentWindow as Window & {
-      postMessage: (data: unknown) => void;
-    };
-    const orig = win.postMessage.bind(win);
-    win.postMessage = (data) => { posted.push(data); orig(data); };
-    box.setConfig({ a: "2", b: "on" });
-    expect(posted.some((m) => (m as { type?: string }).type === "config")).toBe(true);
-    box.unload();
+    try {
+      await box.load("cfg-pack", "globalThis.ok = true;", ["config.read"], { a: "1" });
+      const win = document.querySelector("iframe")?.contentWindow as Window & {
+        postMessage: (data: unknown) => void;
+      };
+      const orig = win.postMessage.bind(win);
+      win.postMessage = (data) => { posted.push(data); orig(data); };
+      box.setConfig({ a: "2", b: "on" });
+      expect(posted.some((m) => (m as { type?: string }).type === "config")).toBe(true);
+    } finally {
+      box.unload();
+    }
+  });
+
+  it("does not post config when config.read is missing", async () => {
+    expect.hasAssertions();
+    const box = new PluginSandbox();
+    const posted: unknown[] = [];
+    try {
+      await box.load("cfg-pack", "globalThis.ok = true;", ["graph.read"], { a: "1" });
+      const win = document.querySelector("iframe")?.contentWindow as Window & {
+        postMessage: (data: unknown) => void;
+      };
+      const orig = win.postMessage.bind(win);
+      win.postMessage = (data) => { posted.push(data); orig(data); };
+      box.setConfig({ a: "2" });
+      expect(posted.some((m) => (m as { type?: string }).type === "config")).toBe(false);
+    } finally {
+      box.unload();
+    }
+  });
+
+  it("posts config even when the payload is empty", async () => {
+    expect.hasAssertions();
+    const box = new PluginSandbox();
+    const posted: unknown[] = [];
+    try {
+      await box.load("cfg-pack", "globalThis.ok = true;", ["config.read"], { a: "1" });
+      const win = document.querySelector("iframe")?.contentWindow as Window & {
+        postMessage: (data: unknown) => void;
+      };
+      const orig = win.postMessage.bind(win);
+      win.postMessage = (data) => { posted.push(data); orig(data); };
+      box.setConfig({});
+      const cfg = posted.find((m) => (m as { type?: string }).type === "config") as { config?: Record<string, string> };
+      expect(cfg?.config).toEqual({});
+    } finally {
+      box.unload();
+    }
   });
 
   it("loads srcdoc, ticks, and unloads", async () => {

@@ -95,6 +95,16 @@ export function expandPluginInstances(spec: PluginView): PluginView[] {
   return rows.map((inst) => applyInstance(spec, { ...inst, id: inst.id || spec.id }));
 }
 
+/** Resolve a persisted config store id (catalog or `id:instance`) to the expanded plugin spec. */
+export function pluginSpecForStoreId(specs: PluginView[], storeId: string): PluginView | null {
+  for (const raw of specs) {
+    for (const expanded of expandPluginInstances(raw)) {
+      if (configStoreId(expanded) === storeId) return expanded;
+    }
+  }
+  return null;
+}
+
 export function bindDefaults(inst?: PluginInstance): Record<string, string> {
   return {
     ...BIND_DEFAULTS,

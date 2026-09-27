@@ -65,6 +65,7 @@ import {
   viewSelectOptions,
   writePluginConfig,
   configStoreId,
+  pluginSpecForStoreId,
   type PluginView,
 } from "../plugins/plugin";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
@@ -101,7 +102,10 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
-import { sandboxConfigPushAllowed } from "../plugins/plugin-config-sync";
+import {
+  allowOnPluginChangeConfigPush,
+  allowOnPluginFieldsConfigPush,
+} from "../plugins/plugin-config-sync";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
@@ -498,8 +502,12 @@ function onPluginFields(): void {
   void syncWifiWatch();
   const loadedStore = sandboxLoadedConfigStoreId();
   if (loadedStore) {
-    const spec = pluginSpecs.find((p) => configStoreId(p) === loadedStore);
-    if (spec?.capabilities?.includes("config.read")) {
+    const spec = pluginSpecForStoreId(pluginSpecs, loadedStore);
+    const storeId = spec ? configStoreId(spec) : "";
+    if (
+      spec
+      && allowOnPluginFieldsConfigPush(loadedStore, storeId, spec.capabilities?.includes("config.read") ?? false)
+    ) {
       const fields = pluginViewKnobs(spec, spec.config);
       sandbox.setConfig(loadPluginConfig(spec, fields));
     }
@@ -573,7 +581,7 @@ let tsWatchHash = "";
 
 function sandboxLoadedConfigStoreId(): string | null {
   if (!tsWatchStoreId) return null;
-  const spec = pluginSpecs.find((p) => configStoreId(p) === tsWatchStoreId);
+  const spec = pluginSpecForStoreId(pluginSpecs, tsWatchStoreId);
   if (!spec?.capabilities?.includes("config.read")) return null;
   return tsWatchStoreId;
 }
@@ -1103,10 +1111,13 @@ settings = new Settings({
   onPersist: () => touch(),
 });
 settings.onPluginChange = (storeId, values) => {
-  const spec = pluginSpecs.find((p) => configStoreId(p) === storeId);
+  const spec = pluginSpecForStoreId(pluginSpecs, storeId);
   if (
-    spec?.capabilities?.includes("config.read")
-    && sandboxConfigPushAllowed(sandboxLoadedConfigStoreId(), storeId)
+    allowOnPluginChangeConfigPush(
+      sandboxLoadedConfigStoreId(),
+      storeId,
+      spec?.capabilities?.includes("config.read") ?? false,
+    )
   ) {
     sandbox.setConfig(values);
   }

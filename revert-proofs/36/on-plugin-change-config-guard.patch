@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/plugin-config-sync.ts b/web/src/plugins/plugin-config-sync.ts
+--- a/web/src/plugins/plugin-config-sync.ts
++++ b/web/src/plugins/plugin-config-sync.ts
+@@ -10,7 +10,7 @@ export function allowOnPluginChangeConfigPush(
+   hasConfigRead: boolean,
+ ): boolean {
+   if (!hasConfigRead) return false;
+-  return sandboxConfigPushAllowed(loadedConfigStoreId, editStoreId);
++  return true;
+ }
+ 
+ /** main.ts onPluginFields → sandbox.setConfig */

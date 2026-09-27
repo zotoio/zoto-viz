@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -38,7 +38,7 @@ function appendFieldControl(
+   const current = values[f.key] ?? fieldDefault(f);
+   const syncDirty = (el: HTMLElement) => {
+     const cur = values[f.key] ?? fieldDefault(f);
+-    syncFieldEditedMarkers(el, String(cur) !== String(fieldDefault(f)));
++    syncFieldEditedMarkers(el, String(cur) === String(fieldDefault(f)));
+   };
+   const wrap = (el: HTMLElement) => {
