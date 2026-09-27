@@ -42,6 +42,7 @@ import type { MonoMs } from "../core/viz-time";
 import { vizClockMs } from "../core/viz-clock";
 import { vizClockStepSec } from "./scene-standalone";
 import { timeGpu } from "../core/gpu-time";
+import { notePackHostGpuMs, packPerfEnabled } from "../core/pack-host-perf";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import {
   asCanvasDeviceHeight,
@@ -1574,7 +1575,10 @@ export class NetScene implements HostedView {
 
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: FrameTs): void { this.animate(ts); }
-  noteFrameCost(ms: number): void { this.paneFps.noteGpu(ms); }
+  noteFrameCost(ms: number): void {
+    this.paneFps.noteGpu(ms);
+    if (packPerfEnabled()) notePackHostGpuMs(ms);
+  }
   hostContextLost(): void {
     this.lumaProbe.reset();
     this.changeProbe.reset();

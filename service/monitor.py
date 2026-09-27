@@ -43,6 +43,7 @@ from . import cursor_stats
 from . import hn_rain_stills
 from . import live
 from . import logbuf
+from . import pack_perf
 from . import mcp as plugin_mcp
 from . import plugin_local
 from . import plugin_migration
@@ -2016,6 +2017,8 @@ def make_app(
     app.router.add_get("/api/session", api_session)
     app.router.add_get("/api/logs", logbuf.api_logs)
     app.router.add_get("/api/state", api_state)
+    app.router.add_get("/api/pack-perf", pack_perf.api_pack_perf_get)
+    app.router.add_post("/api/pack-perf", pack_perf.api_pack_perf_post)
     app.router.add_get("/api/traffic", api_traffic)
     app.router.add_get("/api/payload", api_payload)
     app.router.add_get("/api/rf/watch", api_rf_watch)

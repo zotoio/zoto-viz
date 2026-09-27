@@ -21,6 +21,8 @@ import {
 } from "./pack-asset-navigation";
 import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
 import { syncVizTileScope } from "./viz-tile-budget";
+import { validateVizWriteBatch, vizWriteBatchByteSize, type VizWriteBatchPayload } from "./viz-write-batch";
+import { notePackWriteBatch } from "../core/pack-host-perf";
 
 /** Test hook: shorten sandbox handshake waits. */
 let sandboxMsgTimeoutMs = 15_000;
@@ -126,6 +128,15 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeBuffer"; payload: { slot: number; data: number[] } }
   | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
+  | {
+    source: "zoto-viz-plugin";
+    type: "writeBatch";
+    payload: {
+      buffers: { slot: number; data: number[] }[];
+      uniforms: { name: string; value: VizUniformValue }[];
+      particles?: { data: number[]; stride?: number };
+    };
+  }
   | { source: "zoto-viz-plugin"; type: "log"; payload: string };
 
 export type ParentPortMsg =
@@ -149,6 +160,7 @@ export interface PluginHostHandlers {
   writeBuffer?: (slot: number, data: number[]) => void;
   writeUniform?: (name: string, value: VizUniformValue) => void;
   writeParticles?: (data: number[], stride?: number) => void;
+  writeBatch?: (batch: VizWriteBatchPayload) => void;
 }
 
 const TS_STORE = "zoto-viz.tsPlugins";
@@ -498,6 +510,19 @@ export class PluginSandbox {
     if (d.type === "writeParticles") {
       noteSandboxWrite(this.activeTileId);
       this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+    }
+    if (d.type === "writeBatch") {
+      noteSandboxWrite(this.activeTileId);
+      const err = validateVizWriteBatch(d.payload as VizWriteBatchPayload);
+      if (err) {
+        console.warn("zoto-viz viz.write batch:", err);
+        return;
+      }
+      notePackWriteBatch(
+        d.payload.buffers.length + d.payload.uniforms.length + (d.payload.particles ? 1 : 0),
+        vizWriteBatchByteSize(d.payload as VizWriteBatchPayload),
+      );
+      this.handlers.writeBatch?.(d.payload as VizWriteBatchPayload);
     }
   }
 }
