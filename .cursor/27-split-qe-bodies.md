@@ -249,3 +249,24 @@ Hunk table column **lint row** — run `python3 scripts/qe_gate_pr27.py`.
 
 **Split-added fat-LAN tests:** none removed in this stack (only main’s soak was wrongly deleted in `b48a7d81`; now restored).
 
+---
+
+## QE #80 — pnpm tree, AssertionError sidecars, mutation-body dup
+
+### (1) Do not commit `pnpm install` dirt
+
+Main tracks `node_modules/.modules.yaml` and `.pnpm-workspace-state-v1.json`. Never commit changes (TSE untracks on main separately).
+
+```bash
+git diff 6520b01...<branch> --stat | rg 'modules\.yaml|pnpm-workspace'  # empty
+git status --porcelain   # paste before report
+```
+
+### (2) `patchedAssertion`
+
+Must be the **AssertionError line only** — never `Test Files`, `Duration`, or `ms` summary text. Checked by `validate_sidecar_assertion` in `scripts/tse_gate_bc.py`.
+
+### (3) Identical mutation bodies (`@@` stripped)
+
+Section **(b2)** in `python3 scripts/tse_gate_bc.py`: duplicate +/- bodies (headers stripped) with the same test + assertion ⇒ one row blocker. Whole-file `sha256sum` alone is not enough.
+
