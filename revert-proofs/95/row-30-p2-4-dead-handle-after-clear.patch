@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf1..3598efb 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -186,7 +186,7 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+     return queued.handle;
+   }
+   const e = { key, text, action, autoClearMs, node: null, timer: null, isError: isErrorKey(key), cleared: false } as Entry;
+-  e.handle = { dismiss: () => dismissEntry(e), get live() { return !e.cleared; } };
++  e.handle = { dismiss: () => dismissEntry(e), get live() { return keyToLive.has(e.key) || queue.has(e.key); } };
+   if (visible.length >= MAX_VISIBLE && !evictOldestNonError()) { queue.set(key, e); syncQueueCount(); } else insertVisible(e);
+   return e.handle;
+ }

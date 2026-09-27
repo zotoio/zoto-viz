@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-27-p2-1-timer-live)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > live turns false when the timer clears the notice",
+  "red": "AssertionError: expected true to be false // Object.is equality"
+}
