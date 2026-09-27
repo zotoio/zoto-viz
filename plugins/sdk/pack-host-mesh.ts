@@ -10,6 +10,13 @@ import {
   type PackModelSlotState,
   useProceduralArt,
 } from "./pack-model-slot";
+import {
+  canAddBatchBuffer,
+  type VizWriteBatchReserve,
+  vizWriteBatchBufferBytes,
+  vizWriteBatchParticlesBytes,
+  vizWriteBatchUniformBytes,
+} from "./viz-write-batch-caps";
 
 /** Default mesh matrix slot when sim data uses 0–2 (declare `viz.hostMeshSlot` in plugin.yml). */
 export const PACK_HOST_MESH_SLOT = 3;
@@ -82,4 +89,54 @@ export function writeHostMeshMatrixSlot(
 ): void {
   if (matrix.length < HOST_MESH_MATRIX_FLOATS) return;
   writeBuffer(slot, matrix);
+}
+
+/**
+ * Emit host-mesh slot packets within the sandbox frame batch budget (32 messages / 4096 B).
+ * Stops before exceeding caps given other writes already reserved for the same frame.
+ */
+export function flushHostMeshSlotWrites(
+  writeBuffer: (slot: number, data: number[] | Float32Array) => void,
+  baseSlot: number,
+  maxSlotCount: number,
+  packets: number[][],
+  frameReserve: VizWriteBatchReserve = { messages: 0, bytes: 0 },
+): number {
+  let slot = baseSlot;
+  let reserve = { ...frameReserve };
+  let written = 0;
+  for (const data of packets) {
+    if (written >= maxSlotCount) break;
+    if (!canAddBatchBuffer(reserve, data.length)) break;
+    writeBuffer(slot, data);
+    reserve = {
+      messages: reserve.messages + 1,
+      bytes: reserve.bytes + vizWriteBatchBufferBytes(data.length),
+    };
+    slot += 1;
+    written += 1;
+  }
+  return written;
+}
+
+/** Reserve budget for non–host-mesh writes in the same sandbox frame batch. */
+export function hostMeshFrameReserveAfterSimWrites(args: {
+  simBufferCount?: number;
+  simBufferFloats?: number;
+  uniformCount?: number;
+  particleFloats?: number;
+}): VizWriteBatchReserve {
+  const simN = args.simBufferCount ?? 3;
+  const simFloats = args.simBufferFloats ?? 64;
+  let messages = simN;
+  let bytes = simN * vizWriteBatchBufferBytes(simFloats);
+  const uniformCount = args.uniformCount ?? 4;
+  messages += uniformCount;
+  bytes += uniformCount * vizWriteBatchUniformBytes();
+  const pf = args.particleFloats ?? 0;
+  if (pf > 0) {
+    messages += 1;
+    bytes += vizWriteBatchParticlesBytes(pf);
+  }
+  return { messages, bytes };
 }

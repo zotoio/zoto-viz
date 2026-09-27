@@ -4,7 +4,7 @@ import { hexToRgb, parseRcsOptions, themeBgAccent, RCS_SLOT, type RcsOptions } f
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { rcsMount, rcsTick, rcsUnmount, setRcsOptions } from "./match";
 import { PackModelSlotController } from "../../../sdk/pack-model-slot";
-import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
+import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets, hostMeshFrameReserveAfterSimWrites } from "../../../sdk/pack-host-mesh";
 import { writeRcsHostMeshSlots } from "./host-mesh-drive";
 
 declare const zoto: {
@@ -90,7 +90,11 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(1, out.slot1);
   zoto.writeBuffer(2, out.slot2);
   if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
-    writeRcsHostMeshSlots(zoto.writeBuffer, out.slot1, Math.round(out.slot0[RCS_SLOT.carCount]!));
+    const reserve = hostMeshFrameReserveAfterSimWrites({
+      uniformCount: 1,
+      particleFloats: out.budget.particles > 0 ? out.particles.length : 0,
+    });
+    writeRcsHostMeshSlots(zoto.writeBuffer, out.slot1, Math.round(out.slot0[RCS_SLOT.carCount]!), reserve);
   }
   if (out.budget.particles > 0) {
     zoto.writeParticles(out.particles, 4);

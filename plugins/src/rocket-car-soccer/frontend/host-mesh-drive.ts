@@ -3,7 +3,7 @@ import {
   hostMeshMatrixYawPos,
   maxHostMeshInstancesPerSlot,
 } from "../../../sdk/host-mesh-frame";
-import { PACK_HOST_MESH_SLOT } from "../../../sdk/pack-host-mesh";
+import { PACK_HOST_MESH_SLOT, flushHostMeshSlotWrites, type VizWriteBatchReserve } from "../../../sdk/pack-host-mesh";
 import { RCS_BALL_BASE, RCS_CAR0, RCS_CAR_STRIDE, RCS_MAX_CARS } from "./pack";
 import { rcsCarWheelSpinRad } from "./match";
 
@@ -52,6 +52,7 @@ export function writeRcsHostMeshSlots(
   writeBuffer: (slot: number, data: number[] | Float32Array) => void,
   slot1: number[],
   carCount: number,
+  frameReserve: VizWriteBatchReserve = { messages: 0, bytes: 0 },
 ): void {
   const orange: CarInst[] = [];
   const blue: CarInst[] = [];
@@ -77,13 +78,18 @@ export function writeRcsHostMeshSlots(
     { assetIndex: 2, instances: [ballInst] },
   ];
 
-  let slot = PACK_HOST_MESH_SLOT;
+  const packets: number[][] = [];
   for (const batch of batches) {
     if (!batch.instances.length) continue;
     for (const part of chunk(batch.instances, perSlot)) {
-      if (slot >= PACK_HOST_MESH_SLOT + RCS_HOST_MESH_SLOT_COUNT) break;
-      writeBuffer(slot, encodeHostMeshSlotPacket(batch.assetIndex, part));
-      slot += 1;
+      packets.push(encodeHostMeshSlotPacket(batch.assetIndex, part));
     }
   }
+  flushHostMeshSlotWrites(
+    writeBuffer,
+    PACK_HOST_MESH_SLOT,
+    RCS_HOST_MESH_SLOT_COUNT,
+    packets,
+    frameReserve,
+  );
 }

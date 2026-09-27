@@ -11,7 +11,7 @@ import {
   type KoiPondOptions,
 } from "./koi-pond";
 import { PackModelSlotController } from "../../../sdk/pack-model-slot";
-import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
+import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets, hostMeshFrameReserveAfterSimWrites } from "../../../sdk/pack-host-mesh";
 import { writeKoiHostMeshSlots } from "./host-mesh-drive";
 
 declare const zoto: {
@@ -61,7 +61,8 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(1, buf1);
   zoto.writeBuffer(2, buf2);
   if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
-    writeKoiHostMeshSlots(zoto.writeBuffer, buf0, buf1, frame.t);
+    const reserve = hostMeshFrameReserveAfterSimWrites({ uniformCount: 4 });
+    writeKoiHostMeshSlots(zoto.writeBuffer, buf0, buf1, frame.t, reserve);
   }
   zoto.writeUniform("uBright", packed.bright);
   zoto.writeUniform("uAudio", frame.audio);

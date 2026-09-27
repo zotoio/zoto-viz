@@ -21,6 +21,34 @@ export type HostMeshInstanceFrame = {
 
 export const HOST_MESH_MAX_INSTANCES_DEFAULT = 48;
 
+/** Dispose GPU resources on a template or loaded glTF root (returns dispose call count). */
+export function disposeHostMeshObject3D(root: THREE.Object3D): number {
+  let disposes = 0;
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.isMesh) {
+      if (mesh.geometry) {
+        mesh.geometry.dispose();
+        disposes += 1;
+      }
+      const mat = mesh.material;
+      const mats = Array.isArray(mat) ? mat : mat ? [mat] : [];
+      for (const m of mats) {
+        for (const key of Object.keys(m)) {
+          const val = (m as unknown as Record<string, unknown>)[key];
+          if (val && typeof val === "object" && (val as THREE.Texture).isTexture) {
+            (val as THREE.Texture).dispose();
+            disposes += 1;
+          }
+        }
+        m.dispose();
+        disposes += 1;
+      }
+    }
+  });
+  return disposes;
+}
+
 const WHEEL_NODE_NAMES = [
   "wheel_front_left",
   "wheel_front_right",
@@ -47,6 +75,11 @@ type LiveSkinned = {
   animOffset: number;
   clipDuration: number;
 };
+
+function stopSkinnedMixer(row: LiveSkinned): void {
+  row.mixer.stopAllAction();
+  row.mixer.uncacheRoot(row.root);
+}
 
 let meshoptReady: Promise<void> | null = null;
 
@@ -100,6 +133,8 @@ export class HostMeshLane {
   private assetOrder: string[] = [];
   maxInstancesPerAsset = HOST_MESH_MAX_INSTANCES_DEFAULT;
   private clockSec = 0;
+  /** Bumped on {@link clear} so in-flight GLTF loads are discarded. */
+  private loadEpoch = 0;
 
   constructor() {
     this.group.name = "HostMeshLane";
@@ -132,18 +167,11 @@ export class HostMeshLane {
   }
 
   clear(): void {
+    this.loadEpoch += 1;
     this.clearLive();
     for (const t of this.templates.values()) {
       t.template.removeFromParent();
-      t.template.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.isMesh) {
-          m.geometry?.dispose();
-          const mat = m.material;
-          if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
-          else mat?.dispose();
-        }
-      });
+      disposeHostMeshObject3D(t.template);
     }
     this.templates.clear();
     this.pending.clear();
@@ -264,7 +292,7 @@ export class HostMeshLane {
     const skin = this.skinnedLive.get(assetId);
     if (skin) {
       for (const s of skin) {
-        s.mixer.stopAllAction();
+        stopSkinnedMixer(s);
         s.root.removeFromParent();
       }
       this.skinnedLive.delete(assetId);
@@ -294,9 +322,14 @@ export class HostMeshLane {
   }
 
   private async loadInner(packId: string, decl: HostMeshAssetDecl): Promise<LoadedTemplate | null> {
+    const epoch = this.loadEpoch;
     const url = this.assetUrl(packId, decl.path, decl.sha256);
     try {
       const gltf = await this.loader.loadAsync(url);
+      if (epoch !== this.loadEpoch) {
+        disposeHostMeshObject3D(gltf.scene);
+        return null;
+      }
       const template = gltf.scene;
       template.visible = false;
       template.updateMatrixWorld(true);

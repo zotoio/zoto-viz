@@ -3,7 +3,7 @@ import {
   hostMeshMatrixYawPos,
   maxHostMeshInstancesPerSlot,
 } from "../../../sdk/host-mesh-frame";
-import { PACK_HOST_MESH_SLOT } from "../../../sdk/pack-host-mesh";
+import { PACK_HOST_MESH_SLOT, flushHostMeshSlotWrites, type VizWriteBatchReserve } from "../../../sdk/pack-host-mesh";
 import { KOI_SLOT, unpackKoiMeta } from "./koi-pond";
 
 /** Must match plugin.yml `assets:` order. */
@@ -38,6 +38,7 @@ export function writeKoiHostMeshSlots(
   slot0: ArrayLike<number>,
   slot1: ArrayLike<number>,
   clock: number,
+  frameReserve: VizWriteBatchReserve = { messages: 0, bytes: 0 },
 ): void {
   const byAsset = new Map<number, { matrix: number[]; extras: { animTime: number; param1: number; param2: number; flags: number } }[]>();
 
@@ -65,12 +66,17 @@ export function writeKoiHostMeshSlots(
     push(assetIndex, hostMeshMatrixYawPos(x, 0.08 + wiggle, z, yaw), phase);
   }
 
-  let slot = PACK_HOST_MESH_SLOT;
+  const packets: number[][] = [];
   for (const [assetIndex, instances] of byAsset.entries()) {
     for (const part of chunkInstances(instances)) {
-      if (slot >= PACK_HOST_MESH_SLOT + KOI_HOST_MESH_SLOT_COUNT) return;
-      writeBuffer(slot, encodeHostMeshSlotPacket(assetIndex, part));
-      slot += 1;
+      packets.push(encodeHostMeshSlotPacket(assetIndex, part));
     }
   }
+  flushHostMeshSlotWrites(
+    writeBuffer,
+    PACK_HOST_MESH_SLOT,
+    KOI_HOST_MESH_SLOT_COUNT,
+    packets,
+    frameReserve,
+  );
 }

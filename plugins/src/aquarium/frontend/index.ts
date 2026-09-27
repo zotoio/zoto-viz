@@ -9,7 +9,7 @@ import {
   type AquariumOptions,
 } from "./aquarium";
 import { PackModelSlotController } from "../../../sdk/pack-model-slot";
-import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
+import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets, hostMeshFrameReserveAfterSimWrites } from "../../../sdk/pack-host-mesh";
 import { writeAquariumHostMeshSlots } from "./host-mesh-drive";
 
 type AquariumFrame = Pick<
@@ -81,7 +81,11 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(1, buf1);
   zoto.writeBuffer(2, buf2);
   if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
-    writeAquariumHostMeshSlots(zoto.writeBuffer, buf0, buf1, frame.t);
+    const reserve = hostMeshFrameReserveAfterSimWrites({
+      uniformCount: 4,
+      particleFloats: packed.particleCount > 0 ? packed.particleCount * 4 : 0,
+    });
+    writeAquariumHostMeshSlots(zoto.writeBuffer, buf0, buf1, frame.t, reserve);
   }
   if (packed.particleCount > 0) {
     zoto.writeParticles(

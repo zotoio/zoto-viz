@@ -14,6 +14,16 @@ def test_host_mesh_lane_strips_assets_prefix_in_api_url() -> None:
     assert 'replace(/^assets\\//i, "")' in text
 
 
+def test_host_mesh_lane_clear_cancels_inflight_and_disposes() -> None:
+    text = LANE.read_text(encoding="utf-8")
+    assert "loadEpoch" in text
+    assert "disposeHostMeshObject3D" in text
+    assert "uncacheRoot" in text
+
+
+REVERT_CLEAR_NO_DISPOSE = "clear(): void {\n    this.clearLive();"
+
+
 def test_host_mesh_lane_has_meshopt_decoder() -> None:
     text = LANE.read_text(encoding="utf-8")
     assert "setMeshoptDecoder" in text
@@ -24,6 +34,12 @@ def test_host_mesh_lane_revert_first_mesh_only_would_fail() -> None:
     text = LANE.read_text(encoding="utf-8")
     assert REVERT_FIRST_MESH_ONLY not in text
     assert REVERT_FIRST_MESH_ONLY in text + "\n" + REVERT_FIRST_MESH_ONLY
+
+
+def test_host_mesh_lane_revert_clear_without_teardown_would_fail() -> None:
+    text = LANE.read_text(encoding="utf-8")
+    assert REVERT_CLEAR_NO_DISPOSE not in text
+    assert REVERT_CLEAR_NO_DISPOSE in text + "\n" + REVERT_CLEAR_NO_DISPOSE
 
 
 def test_host_mesh_lane_multi_node_rigid_clone() -> None:
