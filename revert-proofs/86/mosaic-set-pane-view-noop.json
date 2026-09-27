@@ -3,5 +3,5 @@
   "testFile": "src/graph/mosaic-tile-id.test.ts",
   "testName": "^mosaic tile slot ids > treats duplicate slot suffix as noop for the same pack view$",
   "description": "Revert setPaneView noop guard (#86).",
-  "expectedRed": "expected false to be true // Object.is equality"
+  "expectedRed": "AssertionError: expected false to be true // Object.is equality"
 }

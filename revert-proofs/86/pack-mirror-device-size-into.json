@@ -3,5 +3,5 @@
   "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
   "testName": "^PackMirrorSession resource lifecycle > 300 frames / 2 tiles: one RT, one quad graph, reused mirror scratch rects$",
   "description": "renderPrimary must reuse devicePackSizeScratch via deviceSizeFromCssBoxInto, not allocate per frame. Patched vitest: expected 1 to be +0 // Object.is equality",
-  "expectedRed": "expected 1 to be +0 // Object.is equality"
+  "expectedRed": "AssertionError: expected 1 to be +0 // Object.is equality"
 }

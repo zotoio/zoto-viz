@@ -3,5 +3,5 @@
   "testFile": "src/app/mosaic-host-wiring.test.ts",
   "testName": "^mosaic host wiring > mosaicModeAlreadyOnWall treats duplicate pack slots as on-wall$",
   "description": "Revert on-wall detection to raw tile id includes (#86).",
-  "expectedRed": "expected false to be true // Object.is equality"
+  "expectedRed": "AssertionError: expected false to be true // Object.is equality"
 }

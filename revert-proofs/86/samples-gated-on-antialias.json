@@ -3,5 +3,5 @@
   "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
   "testName": "^PackMirrorSession resource lifecycle > samples=4 only when context antialias is true$",
   "description": "MSAA samples follow context antialias flag. Patched vitest: expected +0 to be 4 // Object.is equality",
-  "expectedRed": "expected +0 to be 4 // Object.is equality"
+  "expectedRed": "AssertionError: expected +0 to be 4 // Object.is equality"
 }

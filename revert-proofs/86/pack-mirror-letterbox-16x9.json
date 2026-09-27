@@ -3,5 +3,5 @@
   "testFile": "src/graph/pack-mirror-letterbox-16x9.test.ts",
   "testName": "^pack mirror 16:9 letterbox \\(production presenter\\) > 1:1 tile pr 1: centred inner GL viewport, first scene row offset, surface panel bar clear$",
   "description": "16:9 scene on a 1:1 mirror tile: centred inner GL viewport; revert stretches scene to fill the tile.",
-  "expectedRed": "expected { x: +0, y: +0, w: 100, h: 100 } to deeply equal { x: +0, y: 22, w: 100, h: 56 }"
+  "expectedRed": "AssertionError: expected { x: +0, y: +0, w: 100, h: 100 } to deeply equal { x: +0, y: 22, w: 100, h: 56 }"
 }
