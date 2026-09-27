@@ -107,7 +107,7 @@ describe("switchPaneView", () => {
       persistLayout: vi.fn(),
     });
     expect(result.ok).toBe(true);
-    expect(teardownView).not.toHaveBeenCalled();
+    expect(teardownView.mock.calls).toHaveLength(0);
   });
 
   it("applies only the latest rapid double-switch on the same pane", async () => {
