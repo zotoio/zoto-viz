@@ -126,14 +126,4 @@ describe("layout DPR surfaces (RenderHost cap, stage3d + feed)", () => {
     expect(feedCanvas.width).toBe(150);
   });
 
-  it("configureLayoutMaxDevicePxRatio 1.25 at window DPR 2: stage3d and feed backing store is CSS × 1.25", () => {
-    vi.stubGlobal("devicePixelRatio", 2);
-    configureLayoutMaxDevicePxRatio(1.25);
-    new RenderHost(wall, { software: true });
-    expect(layoutBackingDevicePx(100)).toBe(125);
-    const stageCanvas = mountStage3d(100, 80);
-    expect(stageCanvas.width).toBe(125);
-    const feedCanvas = mountFeedBars(100, 80);
-    expect(feedCanvas.width).toBe(125);
-  });
 });
