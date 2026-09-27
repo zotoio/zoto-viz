@@ -1,8 +1,0 @@
-{
-  "row": "Amendment 6a revert \u2014 drop k >= 2 gate shows every 1st frame",
-  "runner": "vitest",
-  "testFile": "web/src/ui/tile-hud-label.test.ts",
-  "testName": "^tile HUD LIMITED label \\(60 fps, per line\\) > Amendment 6a gate: k=1 \u2192 no label \\(revert shows every 1st frame\\)$",
-  "excerpt": "AssertionError: expected true to be false // Object.is equality",
-  "patchedAssertion": "AssertionError: expected true to be false // Object.is equality"
-}

@@ -1,9 +1,0 @@
-{
-  "row": "Real local wall Sydney 01:05 uses getHours not UTC",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/nixie-local-wall-tz-sydney.test.ts",
-  "testName": "^nixie real local wall \\(Australia/Sydney\\) > winter offset -600 and 01:05 local parts from Date fields$",
-  "vitestProject": "tz-sydney",
-  "patchedAssertion": "AssertionError: expected { h: 15, m: 5, s: +0 } to deeply equal { h: 1, m: 5, s: +0 }",
-  "excerpt": "AssertionError: expected { h: 15, m: 5, s: +0 } to deeply equal { h: 1, m: 5, s: +0 }"
-}

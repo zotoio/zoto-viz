@@ -1,8 +1,0 @@
-{
-  "row": "F4 rebuild revert tile release",
-  "runner": "vitest",
-  "testFile": "web/src/ui/viz-hud-f4.test.ts",
-  "testName": "^mosaic HUD lines and tile budgets F4 > F4: 1\u00d71 to 2\u00d72 rebuild creates 4; back to 1\u00d71 releases 3$",
-  "excerpt": "AssertionError: expected +0 to be 3 // Object.is equality",
-  "patchedAssertion": "AssertionError: expected +0 to be 3 // Object.is equality"
-}

@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-budget.test.ts",
-  "testName": "^tile frame budget rows > R2: 1x1 spike then cadence k=30 — 29 skips before next build$",
-  "description": "Removing debt cap yields 29 skips after spike",
-  "excerpt": "AssertionError: expected true to be false // Object.is equality",
-  "patchedAssertion": "AssertionError: expected true to be false // Object.is equality"
-}

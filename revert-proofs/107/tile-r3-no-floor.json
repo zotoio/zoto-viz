@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/dogfood-tile-budget.test.ts",
-  "testName": "^tile frame budget rows > R3: cadence — 4 ms then 20 ms then 4 ms all deliver$",
-  "description": "Removing debt floor eliminates the post-20ms skip",
-  "excerpt": "AssertionError: expected 2 to be 3 // Object.is equality",
-  "patchedAssertion": "AssertionError: expected 2 to be 3 // Object.is equality"
-}
