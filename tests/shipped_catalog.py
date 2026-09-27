@@ -24,6 +24,7 @@ PINNED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = (
     "gpu",
     "graph-fabric",
     "helix",
+    "host-mesh-demo",
     "hn-rain",
     "hn-term",
     "invaders",

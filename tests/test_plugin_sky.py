@@ -93,7 +93,7 @@ def test_sky_endpoint_requires_consent_and_bumps_hash(tmp_path: Path, monkeypatc
     assert rec["aurora-sky"]["shader_sha256"] == row["shader_sha256"]
     assert plugins.consent_hashes(row)["shader"] == row["shader_sha256"]
     assert plugins.consented_for(row, {"shader": row["shader_sha256"]}) is True
-    assert set(plugins.CONSENT_ARTEFACTS) == {"frontend", "backend", "collector", "shader"}
+    assert set(plugins.CONSENT_ARTEFACTS) == {"frontend", "backend", "collector", "shader", "assets"}
 
     fresh = plugins.scan(repo)["plugins"][0]
     assert fresh["sky_available"] is True
