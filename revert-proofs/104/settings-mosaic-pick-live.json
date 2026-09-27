@@ -12,5 +12,6 @@
       ]
     ]
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected [] to deeply equal [ [ 'plugin:topology', \u2026(1) ] ]"
 }

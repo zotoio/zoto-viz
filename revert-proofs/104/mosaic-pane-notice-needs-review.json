@@ -7,5 +7,6 @@
     "actual": null,
     "expected": "needs review"
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected undefined to be 'needs review' // Object.is equality"
 }
