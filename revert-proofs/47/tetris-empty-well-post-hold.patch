@@ -1,0 +1,22 @@
+diff --git a/web/src/arcade/tetris.ts b/web/src/arcade/tetris.ts
+index 63c29c3..9231de6 100644
+--- a/web/src/arcade/tetris.ts
++++ b/web/src/arcade/tetris.ts
+@@ -228,7 +228,7 @@ export class TetrisView extends Stage3D {
+       this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;
+       return;
+     }
+-    if (!this.active && this.queue.length) this.spawn(now, this.queue.shift()!);
++    if (!this.active && this.queue.length && this.lastHoldExpiredAt === 0) this.spawn(now, this.queue.shift()!);
+     this.autoplayStep(dt);
+     const aimed = this.active && this.plan
+       && this.active.x === this.plan.x
+@@ -239,7 +239,7 @@ export class TetrisView extends Stage3D {
+       this.dropAcc -= 1;
+       if (!this.tryMove(0, -1)) this.lock(now);
+     }
+-    if (!this.active && this.queue.length && !shouldHoldTopout(now, this.topoutHoldUntil)) {
++    if (!this.active && this.queue.length && !shouldHoldTopout(now, this.topoutHoldUntil) && this.lastHoldExpiredAt === 0) {
+       this.spawn(now, this.queue.shift()!);
+     }
+     this.camOrbit.theta = Math.PI / 2 + Math.sin(now * 0.18) * 0.18;

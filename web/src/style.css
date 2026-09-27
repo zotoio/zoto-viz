@@ -151,6 +151,27 @@ body[data-softgl] .brand::after {
 .arcade canvas { display: block; position: absolute; inset: 0; background: transparent; }
 .arcade canvas.look { z-index: 0; pointer-events: none; }
 .arcade canvas:not(.look) { z-index: 1; }
+.tetris-idle-label {
+  font: 600 11px/1.2 ui-monospace, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--accent) 85%, white);
+  padding: 2px 6px;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent);
+  border-radius: 4px;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  pointer-events: none;
+}
+.tetris-idle-label.is-visible {
+  opacity: 1;
+}
+.tetris-skip-hud {
+  margin-left: 6px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+  font-weight: 500;
+}
 #carousel .carousel-still {
   position: absolute;
   inset: var(--bar-h) 0 0 0;

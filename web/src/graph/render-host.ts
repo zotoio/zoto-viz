@@ -53,12 +53,14 @@ type PackMirrorViewMeta = HostedView & {
 function packMirrorMeta(view: HostedView): PackMirrorViewMeta {
   return view as PackMirrorViewMeta;
 }
+import { frameTsFromRaf } from "../core/time-ms";
+import type { FrameTs } from "../core/time-ms";
 
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
   readonly viewEl: HTMLElement;
   /** update and draw one frame; call `host.present(...)` from inside */
-  hostFrame(ts: number): void;
+  hostFrame(ts: FrameTs): void;
   hostContextLost(): void;
   hostContextRestored(): void;
   /** Canvas 2D fallback when `host.software` is set */
@@ -69,6 +71,15 @@ export interface HostedView {
 
 /** Framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
 export type Viewport = DeviceRect;
+
+/**
+ * Canvas backing-store pixels (`canvas.width` / `canvas.height`), not CSS layout.
+ * Sized from the wall viewport × devicePixelRatio, capped at 1.5× for stability.
+ */
+export interface DevicePixelSize {
+  w: number;
+  h: number;
+}
 
 /** The methods NetScene uses on the shared (or owned) GPU object. */
 export class SoftwareGpu {
@@ -144,6 +155,7 @@ export class RenderHost {
   private gpuTimedCamera: THREE.Camera | null = null;
   private gpuTimedClearHex = 0;
   private gpuTimedBox: SoftRect | null = null;
+  private readonly bufferPixels: DevicePixelSize = { w: 0, h: 0 };
 
   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean; antialias?: boolean } = {}) {
     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
@@ -212,7 +224,8 @@ export class RenderHost {
       harvestGpu();
       this.packMirrors.beginFrame();
       this.syncMirrorScopesIfNeeded();
-      for (const v of this.views) v.hostFrame(ts);
+      const frameTs = frameTsFromRaf(ts);
+      for (const v of this.views) v.hostFrame(frameTs);
       finishSandboxBitmapHostFrame();
     };
     this.raf = requestAnimationFrame(this.frame);
@@ -220,6 +233,13 @@ export class RenderHost {
 
   get pixelRatio(): number { return this.software ? this.pr : this.renderer.getPixelRatio(); }
   get viewCount(): number { return this.views.length; }
+
+  /** Same object every call; dimensions refreshed from the canvas backing store. */
+  bufferPixelSize(): Readonly<DevicePixelSize> {
+    this.bufferPixels.w = this.canvas.width;
+    this.bufferPixels.h = this.canvas.height;
+    return this.bufferPixels;
+  }
 
   /** WebGL2 context, or null when lost / unavailable. */
   get gl(): WebGL2RenderingContext | null {
@@ -652,5 +672,7 @@ export class RenderHost {
     this.canvas.height = Math.max(1, Math.round(this.h * pr));
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
+    this.bufferPixels.w = this.canvas.width;
+    this.bufferPixels.h = this.canvas.height;
   }
 }

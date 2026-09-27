@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/dogfood-tile-budget.test.ts",
+  "testName": "^tile frame budget rows > R6: 2x2 spike on one tile yields 13 share skips$",
+  "description": "Keeping debt across 2x2 scope sync breaks post-switch build"
+}

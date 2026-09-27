@@ -1,0 +1,7 @@
+{
+  "row": "F4 steady revert per-frame tile line allocations",
+  "runner": "vitest",
+  "testFile": "web/src/ui/viz-hud-f4.test.ts",
+  "testName": "^mosaic HUD lines and tile budgets F4 > F4: 600 steady frames → 0 budget/HUD line objects created$",
+  "excerpt": "AssertionError: expected 600 to be +0 // Object.is equality"
+}

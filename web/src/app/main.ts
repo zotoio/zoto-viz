@@ -38,6 +38,7 @@ import { HelixView } from "../arcade/helix";
 import { SkylineView } from "../arcade/skyline";
 import { PacmanView } from "../arcade/pacman";
 import { TetrisView } from "../arcade/tetris";
+import { bindTetrisStandaloneHost, unbindTetrisStandaloneHost } from "../arcade/tetris-standalone-host";
 import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
@@ -1127,8 +1128,13 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
   // standalone arcade, or NASA catalog views which share the contain-fit slideshow stage
   const next = arcadeSlotFor(m);
   document.body.classList.toggle("arcade", next !== null);
-  scene.setActive(true);
-  scene.setStageOnly(next !== null || skyStage);
+  unbindTetrisStandaloneHost(scene);
+  if (next === "tetris") {
+    bindTetrisStandaloneHost(scene, arcade.tetris.view as TetrisView);
+  } else {
+    scene.setActive(true);
+    scene.setStageOnly(next !== null || skyStage);
+  }
   if (activeArcade && activeArcade !== next) { arcade[activeArcade].view.stop(); arcade[activeArcade].el.hidden = true; }
   if (next && activeArcade !== next) { arcade[next].el.hidden = false; arcade[next].view.start(selectedIp); }
   if (next === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);

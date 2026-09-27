@@ -1,0 +1,6 @@
+{
+  "row": "N1 revert nixieOptsStableKey per-frame stringify",
+  "testName": "^nixie wall clock rows > N1: 600 frames — format at \\[0,60,…,540\\], one formatter, stable buffer$",
+  "excerpt": "AssertionError: expected \"spy\" to not be called at all, but actually been called",
+  "testFile": "web/src/plugins/nixie-wall-clock.test.ts"
+}

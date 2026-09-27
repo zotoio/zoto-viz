@@ -1,0 +1,13 @@
+diff --git a/web/src/core/viz-clock.ts b/web/src/core/viz-clock.ts
+index d751ab6..4812b19 100644
+--- a/web/src/core/viz-clock.ts
++++ b/web/src/core/viz-clock.ts
+@@ -19,7 +19,7 @@ export function vizClockMs(): MonoMs {
+ 
+ /** Wall epoch clock for display (`state.ts`, nixie digits). */
+ export function vizWallMs(): WallMs {
+-  return wallMs(wallEpochMs());
++  return wallEpochMs() as WallMs;
+ }
+ 
+ /** Wall epoch seconds for viz frames (`state.ts` when set). */

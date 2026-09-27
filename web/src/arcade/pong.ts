@@ -8,6 +8,7 @@ import { compileMatcher } from "../ui/settings";
 import { LookStage } from "../graph/look";
 import { fitText, isExchangeStart, noReplyExpected, portRole, roundRect } from "./arcade";
 import { markFrame, PaneFps } from "../core/fps";
+import { frameTsFromRaf } from "../core/time-ms";
 import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
 import { devicePxRatioNumber, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
@@ -774,7 +775,7 @@ export class PongView {
   private frame = (ts: number): void => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.frame);
-    markFrame(ts);
+    markFrame(frameTsFromRaf(ts));
     this.paneFps.tick(ts);
     const now = ts / 1000;
     const dt = Math.min(0.05, this.lastFrame ? now - this.lastFrame : 0.016);

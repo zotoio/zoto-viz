@@ -56,7 +56,7 @@ export function carouselSpinFor(i: number, n: number, turns = 2.15): number {
 export const CAROUSEL_PERIOD = 18;
 /** Seconds the outgoing and incoming stills overlap. */
 export const CAROUSEL_XFADE = 2.8;
-/** Extra cover scale at the end of a still. */
+/** Extra cover scale at the end of a still (1 → 1+zoom). */
 export const CAROUSEL_ZOOM = 0.16;
 /** Translate % at full aim (of the image box). */
 export const CAROUSEL_PAN = 5.5;
@@ -104,9 +104,10 @@ export function kenBurnsAim(id: string): { x: number; y: number } {
   return { x: Math.cos(ang) * mag, y: Math.sin(ang) * mag };
 }
 
-/** Linear zoom-in + pan from rest toward `aim`. `progress` is 0…1 through the still. */
+/** Eased zoom-in + pan from rest toward `aim`. `progress` is 0…1 through the still. */
 export function kenBurnsAt(progress: number, aim: { x: number; y: number }, zoom = CAROUSEL_ZOOM): KenBurns {
-  const t = clamp(progress, 0, 1);
+  const raw = clamp(progress, 0, 1);
+  const t = raw * raw * (3 - 2 * raw);
   return { scale: 1 + zoom * t, x: aim.x * t, y: aim.y * t };
 }
 

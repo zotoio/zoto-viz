@@ -1,0 +1,15 @@
+--- a/web/src/plugins/viz-tile-budget.ts
++++ b/web/src/plugins/viz-tile-budget.ts
+@@ -206,12 +206,6 @@ export class VizTileBudgetRegistry {
+         clearHudWindow(t);
+       }
+     }
+-    for (const id of [...this.tiles.keys()]) {
+-      if (!keep.has(id)) {
+-        this.tiles.delete(id);
+-        vizTileBudgetLifecycle.released++;
+-      }
+-    }
+   }
+ 
+   /** View pick inside one tile — must not change share or debt. */

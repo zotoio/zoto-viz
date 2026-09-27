@@ -1,0 +1,15 @@
+diff --git a/web/src/plugins/nixie-wall-clock.ts b/web/src/plugins/nixie-wall-clock.ts
+index d0d8d78..814c6e4 100644
+--- a/web/src/plugins/nixie-wall-clock.ts
++++ b/web/src/plugins/nixie-wall-clock.ts
+@@ -54,9 +54,7 @@ export function digitsFromParts(
+   hour12: boolean,
+ ): [number, number, number, number, number, number] {
+   const hour = hourForDisplay(h24, hour12);
+-  const h10 = hour12 && hour >= 1 && hour <= 9
+-    ? NIXIE_DIGIT_BLANK
+-    : Math.floor(hour / 10);
++  const h10 = Math.floor(hour / 10);
+   const h1 = hour % 10;
+   return [
+     h10, h1,

@@ -1,0 +1,11 @@
+diff --git a/web/src/arcade/tetris-idle-feed.ts b/web/src/arcade/tetris-idle-feed.ts
+index 8e872f4..9f3f0a4 100644
+--- a/web/src/arcade/tetris-idle-feed.ts
++++ b/web/src/arcade/tetris-idle-feed.ts
+@@ -15,5 +15,5 @@ export function tickTetrisIdleFeed(deps: TetrisIdleFeedDeps, usingIdleFeed: bool
+   if (!usingIdleFeed) return;
+   const due = deps.scheduler.tick(deps.clockMs());
+   if (!due.length) return;
+-  deps.enqueue(deps.budget.deliver(due));
++  deps.enqueue([]);
+ }

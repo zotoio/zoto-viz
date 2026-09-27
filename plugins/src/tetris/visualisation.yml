@@ -5,3 +5,5 @@ look:
   themeCycle: 'off'
 idle:
   fixture: host
+workBudget:
+  maxPacketsPerFrame: 8

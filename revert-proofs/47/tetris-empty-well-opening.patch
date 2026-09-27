@@ -1,0 +1,13 @@
+diff --git a/web/src/arcade/tetris.ts b/web/src/arcade/tetris.ts
+index 63c29c3..74b65d4 100644
+--- a/web/src/arcade/tetris.ts
++++ b/web/src/arcade/tetris.ts
+@@ -397,7 +397,7 @@ export class TetrisView extends Stage3D {
+     const kind = seededPieceKinds(1, this.idleSeed)[0] ?? "T";
+     this.queue.push({ kind, color: PROTO_COLOR.tcp ?? this.colorOf("10.0.0.1") });
+     this.openingIdleSeeded = true;
+-    if (!this.active && this.queue.length) this.spawn(nowSec, this.queue.shift()!);
++
+   }
+ 
+   private prefillTopoutDemoBoard(): void {

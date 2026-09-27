@@ -1,0 +1,9 @@
+{
+  "runner": "pnpm --dir web exec vitest run src/arcade/tetris-determinism.test.ts -t \"^TetrisView placement determinism > seed 0 replays the same idle board fingerprint$\"",
+  "testFile": "src/arcade/tetris-determinism.test.ts",
+  "testName": "^TetrisView placement determinism > seed 0 replays the same idle board fingerprint$",
+  "description": "Global call counter in seededPieceKinds so back-to-back fingerprints diverge.",
+  "passLine": "Tests  1 passed | 19 skipped (20)",
+  "passCheck": "\u2713 src/arcade/tetris-determinism.test.ts > TetrisView placement determinism > seed 0 replays the same idle board fingerprint 323ms",
+  "excerpt": "AssertionError: expected 'A:I@4,14,0|0,0|1,0|2,0|3,0|4,0|0,1|1,\u2026' to be 'A:I@3,14,0|0,0|1,0|2,0|3,0|0,1|1,1|2,\u2026' // Object.is equality"
+}

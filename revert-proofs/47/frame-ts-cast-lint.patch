@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 63e3faf..cf65259 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -149,7 +149,7 @@ export class RenderHost {
+       }
+       this.canvasRect = this.canvas.getBoundingClientRect();
+       harvestGpu();
+-      const frameTs = frameTsFromRaf(ts);
++      const frameTs = ts as FrameTs;
+       for (const v of this.views) v.hostFrame(frameTs);
+     };
+     this.raf = requestAnimationFrame(this.frame);

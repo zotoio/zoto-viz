@@ -66,6 +66,9 @@ jobs:
         id: chrome
         with:
           chrome-version: "148.0.7778.96"
+      - name: Brand cast lint (FrameTs guard)
+        working-directory: web
+        run: pnpm lint
       - name: Web tests and coverage
         working-directory: web
         env:

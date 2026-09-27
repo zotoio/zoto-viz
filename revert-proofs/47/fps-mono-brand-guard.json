@@ -1,0 +1,8 @@
+{
+  "runner": "pnpm --dir web exec tsc --noEmit",
+  "testFile": "src/core/fps-mono-guard.ts",
+  "testName": "tsc unused @ts-expect-error when markFrame accepts MonoMs",
+  "description": "Widen markFrame to MonoMs so bare MonoMs cast guard is unused.",
+  "passLine": "tsc clean",
+  "excerpt": "src/core/fps-mono-guard.ts(8,1): error TS2578: Unused '@ts-expect-error' directive."
+}

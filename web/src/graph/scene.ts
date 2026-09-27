@@ -36,6 +36,11 @@ import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
 import { claimPanelRaf, releasePanelView } from "./panel-view-lifecycle";
+import type { FrameTs } from "../core/time-ms";
+import { frameTsFromRaf } from "../core/time-ms";
+import type { MonoMs } from "../core/viz-time";
+import { vizClockMs } from "../core/viz-clock";
+import { vizClockStepSec } from "./scene-standalone";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import {
@@ -1125,8 +1130,11 @@ export class NetScene implements HostedView {
   /** allow/block predicate from the settings cog; hides matching devices (defaults to show-all) */
   private nodeFilter: (d: Device) => boolean = () => true;
   private lastInteraction = performance.now();
-  /** false while a standalone view (NetPong) owns the screen: the frame loop idles instead of rendering */
+  /** false while a standalone tile owns the screen: graph layout/render idles; host may still tick the tile */
   private active = true;
+  private standaloneTileTick: ((dtSec: number, presentTs: FrameTs) => void) | null = null;
+  private standaloneClock = { lastMs: 0 };
+  private graphRenderCount = 0;
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
   /** Duplicate mosaic tiles of the same pack: one tick/draw on primary, letterboxed mirrors. */
@@ -1557,13 +1565,15 @@ export class NetScene implements HostedView {
     });
     this.animate = this.animate.bind(this);
     // the host drives hosted scenes from its own loop
-    if (!this.host) this.raf = requestAnimationFrame(this.animate);
+    if (!this.host && this.active) {
+      this.raf = requestAnimationFrame((raw) => this.hostFrame(frameTsFromRaf(raw)));
+    }
   }
 
   // ------------------------------------------------------------------ HostedView
 
   get viewEl(): HTMLElement { return this.container; }
-  hostFrame(ts: number): void { this.animate(ts); }
+  hostFrame(ts: FrameTs): void { this.animate(ts); }
   noteFrameCost(ms: number): void { this.paneFps.noteGpu(ms); }
   hostContextLost(): void {
     this.lumaProbe.reset();
@@ -1619,7 +1629,8 @@ export class NetScene implements HostedView {
   }
 
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
-  private present(): void {
+  private present(countGraphRender = true): void {
+    if (countGraphRender) this.graphRenderCount++;
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
     this.backdrop.syncCamera(this.camera);
     if (this.host && this.packCoalesce?.role === "mirror") {
@@ -1655,7 +1666,7 @@ export class NetScene implements HostedView {
       if (gl) timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
       else draw();
     }
-    this.notePaneChange();
+    if (countGraphRender) this.notePaneChange();
   }
 
   /** Count a frame only when this pane's own pixels differ from the previous sample. */
@@ -1791,7 +1802,41 @@ export class NetScene implements HostedView {
   setActive(on: boolean): void {
     if (on && !this.active) this.lastFrameTs = 0; // drop the idle time so the first frame back is not a jump
     this.active = on;
+    if (on) {
+      this.standaloneTileTick = null;
+      this.standaloneClock.lastMs = 0;
+    }
     if (on && this.dreaming) this.captureDreamRest();
+  }
+
+  /** Host-only tick while {@link setActive}(false) — schedules the standalone 1×1 tile, no graph draw. */
+  setStandaloneTileTick(tick: ((dtSec: number, presentTs: FrameTs) => void) | null): void {
+    this.standaloneTileTick = tick;
+    this.standaloneClock.lastMs = 0;
+  }
+
+  /** TEST-ONLY: graph {@link present} calls while this scene is the main wall view. */
+  testGraphRenderCount(): number {
+    return this.graphRenderCount;
+  }
+
+  testResetGraphRenderCount(): void {
+    this.graphRenderCount = 0;
+  }
+
+  /** TEST-ONLY: one host present stamp + standalone tile tick (production idle path). */
+  testIdleHostFrame(ts: number): void {
+    if (this.active) return;
+    const present = frameTsFromRaf(ts);
+    markFrame(present);
+    this.idleFrame(present);
+  }
+
+  /** TEST-ONLY: authored far-field sky is active (lit shader path, not flat fill). */
+  testFarFieldLitSkyToken(): string {
+    const k = this.anim.backdrop;
+    if (k === "none" || k === "plugin") return `flat:${k}`;
+    return `lit:${k}`;
   }
 
   /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
@@ -3577,27 +3622,52 @@ export class NetScene implements HostedView {
 
   private lastFrameTs = 0;
 
-  private animate(ts: number): void {
-    if (!this.host) this.raf = requestAnimationFrame(this.animate);
-    markFrame(ts);
+  /** Host frame while inactive: standalone tile tick only (no graph draw). */
+  private idleFrame(presentTs: FrameTs): void {
+    this.paneFps.el.hidden = true;
+    if (this.standaloneTileTick) {
+      const dtSec = vizClockStepSec(this.standaloneClock, vizClockMs);
+      this.standaloneTileTick(dtSec, presentTs);
+    }
+    this.presentIdleFarField(presentTs);
+  }
+
+  /** Keep the mosaic far-field sky painted while a standalone tile owns the host loop. */
+  private presentIdleFarField(presentTs: FrameTs): void {
+    const wall = Number(presentTs);
+    this.backdrop.tick(wall);
+    this.backdrop.syncCamera(this.camera);
+    this.sampleFocus(0);
+    this.frameCamera(0);
+    this.controls.update();
+    this.present(false);
+  }
+
+  private animate(ts: FrameTs): void {
+    if (!this.host && this.active) {
+      this.raf = requestAnimationFrame((raw) => this.hostFrame(frameTsFromRaf(raw)));
+    }
+    const wallMs = Number(ts);
     if (!this.active) {
-      this.paneFps.el.hidden = true;
+      markFrame(ts);
+      this.idleFrame(ts);
       return;
     }
+    markFrame(ts);
     this.paneFps.el.hidden = false;
-    this.paneFps.tick(ts);
+    this.paneFps.tick(wallMs);
     if (this.satellite && this.satelliteCameraBroken()) {
       this.resize();
       this.recoverSatelliteCamera();
     }
-    const dt = this.lastFrameTs ? Math.min(0.05, (ts - this.lastFrameTs) / 1000) : 0;
-    this.lastFrameTs = ts;
+    const dt = this.lastFrameTs ? Math.min(0.05, (wallMs - this.lastFrameTs) / 1000) : 0;
+    this.lastFrameTs = wallMs;
     if (this.packCoalesce?.role === "mirror" && this.packCoalesce.primary && this.host) {
       this.present();
       return;
     }
     if (!this.satellite) {
-      tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
+      tickPerf(wallMs, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();
       this.paneFps.hint((s > 0.04
         ? (perfWant() > 0.5
@@ -3628,7 +3698,7 @@ export class NetScene implements HostedView {
     }
     this.lastTuneK = this.tune.k;
     this.easePhys(dt);
-    const wall = ts / 1000;
+    const wall = wallMs / 1000;
     this.backdrop.tick(wall);
     if (!this.satellite && this.anim.backdrop === "dynamic") ensureSkyRecipe(this.anim.skyAiMin * 60_000);
     this.applyLook(dt);

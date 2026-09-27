@@ -1,0 +1,8 @@
+{
+  "runner": "pnpm --dir web exec node --require ./eslint-ts6-resolver.cjs ./node_modules/eslint/bin/eslint.js src/core/viz-clock.ts",
+  "testFile": "src/core/viz-clock.ts",
+  "testName": "lint no-restricted-syntax on EpochSec cast in vizFrameEpochSec",
+  "description": "Reintroduce raw as EpochSec in frame epoch seconds helper.",
+  "passLine": "lint exit 0",
+  "excerpt": "/workspace/web/src/core/viz-clock.ts\n27:10  error  Do not cast to EpochSec; mint only via epochSec() in src/core/viz-time.ts  no-restricted-syntax"
+}
