@@ -2,6 +2,9 @@
   "runner": "vitest",
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "strict Vitest red from task.meta only > accepts revertProofAssertion meta",
-  "description": "Never classify a vitest failure as assertion red",
-  "red": "AssertionError: expected 'build break' to be 'assertion' // Object.is equality"
+  "description": "Never classify a vitest failure as an assertion",
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

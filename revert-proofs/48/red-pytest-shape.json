@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "sidecar red value > (5-red-shape) pytest red must be the rewritten assert source",
+  "description": "Drop the pytest { assert } shape check",
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
+}

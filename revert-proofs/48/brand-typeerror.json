@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof vitest runner through the overlay > (2) plain TypeError is not branded",
+  "description": "Runner accepts any thrown object without the brand check",
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
+}

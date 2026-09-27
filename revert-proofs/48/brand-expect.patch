@@ -1,0 +1,10 @@
+diff --git a/scripts/revert-proof-vitest-setup.ts b/scripts/revert-proof-vitest-setup.ts
+index 34e82e8..c076997 100644
+--- a/scripts/revert-proof-vitest-setup.ts
++++ b/scripts/revert-proof-vitest-setup.ts
+@@ -4,5 +4,3 @@
+  */
+ import { chai } from "vitest";
+ import { installRevertProofChaiBranding } from "./revert-proof-vitest-brand.mjs";
+-
+-installRevertProofChaiBranding(chai);

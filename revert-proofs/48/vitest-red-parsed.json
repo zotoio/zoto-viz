@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "vitest JSON report parsing > reads structured revertProofRed from task meta",
+  "description": "Drop revertProofRed when parsing the vitest JSON report",
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
+}

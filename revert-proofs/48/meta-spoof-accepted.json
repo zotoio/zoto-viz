@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "scripts/revert-proof.lib.test.ts",
-  "testName": "revert-proof vitest runner through the overlay > (meta-spoof) test-written task.meta.revertProofAssertion is overwritten",
-  "description": "Leave test-writable task.meta instead of a runner-owned frozen verdict",
-  "red": "AssertionError: meta body spoof: expected true to be false // Object.is equality"
-}

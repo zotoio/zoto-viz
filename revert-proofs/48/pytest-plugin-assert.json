@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof pytest plugin > (4-plugin) a failing rewritten assert records its source line as red",
+  "description": "Plugin treats traceback Source as str (INTERNALERROR, no report rows)",
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
+}

@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..25da73d 100644
+index a3ae968..6c86134 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -868,9 +868,6 @@ export function assertEditablePythonResolvesInWorktree(
+@@ -925,9 +925,6 @@ export function assertEditablePythonResolvesInWorktree(
  }
  
  export function rejectPatchedVitestGreen(kind, slug) {

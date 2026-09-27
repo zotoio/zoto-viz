@@ -1,0 +1,13 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index a3ae968..62f186b 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -65,7 +65,7 @@ export function validateRowMeta(meta, slug) {
+ /** Vitest: `{ actual, expected }`. Pytest: `{ assert: "assert …" }`. */
+ export function validateRedSidecar(meta, slug) {
+   const red = meta.red;
+-  if (!red || typeof red !== "object" || Array.isArray(red)) {
++  if (!red || Array.isArray(red)) {
+     throw new Error(`row ${slug}: sidecar JSON missing object field "red"`);
+   }
+   if (meta.runner === "vitest") {

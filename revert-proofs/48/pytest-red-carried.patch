@@ -1,0 +1,16 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index a3ae968..d64c62c 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -374,10 +374,7 @@ function normalizePytestPluginTest(t) {
+     nodeid: t?.nodeid,
+     outcome: t?.outcome,
+     revertProofAssertion: t?.revertProofAssertion === true,
+-    revertProofRed:
+-      red && typeof red === "object" && typeof red.assert === "string"
+-        ? { assert: red.assert }
+-        : null,
++    revertProofRed: null,
+   };
+ }
+ 

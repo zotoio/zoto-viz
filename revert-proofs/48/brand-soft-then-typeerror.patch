@@ -1,0 +1,21 @@
+diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
+index 4bef3f0..9da2864 100644
+--- a/scripts/revert-proof-vitest-runner.mjs
++++ b/scripts/revert-proof-vitest-runner.mjs
+@@ -41,13 +41,13 @@ export default class RevertProofVitestRunner extends TestRunner {
+       thrown = err;
+     }
+     const soft = takeSoftFailure(test);
+-    if (soft) {
+-      noteFailure(test, soft);
+-    }
+     if (threw) {
+       noteFailure(test, thrown);
+       throw thrown;
+     }
++    if (soft) {
++      noteFailure(test, soft);
++    }
+   }
+ 
+   onAfterRunTask(test) {
