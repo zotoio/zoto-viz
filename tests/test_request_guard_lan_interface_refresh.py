@@ -159,6 +159,7 @@ def test_dhcp_refresh_single_flight_fifty_concurrent_lookups(
     now = t0
     gate = stub_lan_os_interfaces["gate"]
     assert gate is not None
+    stub_lan_os_interfaces["second_query_extra_other"] = True
 
     def clock() -> float:
         return now
@@ -193,6 +194,7 @@ def test_dhcp_refresh_failure_keeps_last_good_set_and_retries(
 ) -> None:
     t0 = 1000.0
     now = t0
+    stub_lan_os_interfaces["second_query_extra_other"] = True
 
     def clock() -> float:
         return now

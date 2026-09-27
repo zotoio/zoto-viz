@@ -17,6 +17,7 @@ class LanOsStubState(TypedDict):
     gate: NotRequired[threading.Event]
     fail_refresh: NotRequired[bool]
     extra_ip: NotRequired[str]
+    second_query_extra_other: NotRequired[bool]
 
 
 @pytest.fixture
@@ -33,7 +34,7 @@ def stub_lan_os_interfaces(monkeypatch: pytest.MonkeyPatch) -> LanOsStubState:
         if g is not None:
             g.wait(timeout=30.0)
         addrs = [LAN_STUB_IFACE_IP, "10.0.0.5", "127.0.0.1"]
-        if state["query_calls"] > 1:
+        if state["query_calls"] > 1 and state.get("second_query_extra_other"):
             addrs.append(LAN_STUB_OTHER_IP)
         extra = state.get("extra_ip")
         if extra:
