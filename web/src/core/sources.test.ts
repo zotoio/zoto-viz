@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  countEligibleSourceHeadlines,
   FEED_HEADLINE_LIMIT,
   illustratedSourceBind,
   oneLineTitle,
