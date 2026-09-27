@@ -28,11 +28,10 @@ function expectPackStartConsentBlocked(opts: {
 }): void {
   expect(opts.mountView).toHaveBeenCalledTimes(0);
   if (opts.setPaneView) expect(opts.setPaneView).not.toHaveBeenCalled();
-  expect(opts.noticeText === HEAT_NOTICE).toBe(true);
-  expect(opts.noticeText === consentBlockMessage({ name: "Heat map" })).toBe(true);
-  if (opts.noticeText) {
-    expect(opts.noticeText.includes("\u2019")).toBe(false);
-  }
+  expect(opts.noticeText).toBe(HEAT_NOTICE);
+  expect(opts.noticeText).toBe(consentBlockMessage({ name: "Heat map" }));
+  expect(opts.noticeText?.includes("isn't approved yet")).toBe(true);
+  expect(opts.noticeText?.includes("\u2019")).toBe(false);
 }
 
 function host(over: Partial<SwitchPaneViewHost> & Pick<SwitchPaneViewHost, "tileIds">): SwitchPaneViewHost {
