@@ -1,7 +1,0 @@
-{
-  "row": "W1 revert wall dt",
-  "testName": "^clock split row W1 > W1: wall step-back does not change budget/HUD counts; dt stays >= 0$",
-  "excerpt": "AssertionError: expected false to be true // Object.is equality",
-  "testFile": "web/src/plugins/dogfood-clock-split.test.ts",
-  "patchedAssertion": "AssertionError: expected false to be true // Object.is equality"
-}
