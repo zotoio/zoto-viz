@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testFile": "tests/test_marble_run_pack.py",
-  "testName": "^test_marble_run_row_determinism$",
+  "testName": "test_marble_run_row_determinism",
   "description": "Revert marble-run production guard (row-determinism)",
   "red": "assert proc.returncode == 0, proc.stdout + proc.stderr"
 }

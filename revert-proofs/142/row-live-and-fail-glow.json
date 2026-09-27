@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testFile": "tests/test_marble_run_pack.py",
-  "testName": "^test_marble_run_row_live_and_fail_glow$",
+  "testName": "test_marble_run_row_live_and_fail_glow",
   "description": "Revert marble-run production guard (row-live-and-fail-glow)",
   "red": "assert proc.returncode == 0, proc.stdout + proc.stderr"
 }

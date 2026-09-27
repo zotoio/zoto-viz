@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testFile": "tests/test_marble_run_pack.py",
-  "testName": "^test_marble_run_row_work_budget_presets$",
+  "testName": "test_marble_run_row_work_budget_presets",
   "description": "Revert marble-run production guard (row-work-budget-presets)",
   "red": "assert proc.returncode == 0, proc.stdout + proc.stderr"
 }

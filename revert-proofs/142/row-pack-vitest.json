@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testFile": "tests/test_marble_run_pack.py",
-  "testName": "^test_marble_run_pack_vitest$",
+  "testName": "test_marble_run_pack_vitest",
   "description": "Revert marble-run production guard (row-pack-vitest)",
   "red": "assert proc.returncode == 0, proc.stdout + proc.stderr"
 }
