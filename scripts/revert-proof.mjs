@@ -16,6 +16,7 @@ import {
   assessVitestSelection,
   assertRedValue,
   assertVitestNodeAssertFailClosed,
+  gitApplyPatchStrict,
   buildPytestArgv,
   classifyPatchedPytest,
   classifyPatchedVitest,
@@ -587,8 +588,6 @@ function runTscCheck(wtRoot) {
   return { ok: r.status === 0, skipped: false, output };
 }
 
-const GIT_APPLY_OPTS = ["--whitespace=error"];
-
 function findPatchArtifactFiles(wtRoot) {
   const found = [];
   const skip = new Set([".git", "node_modules", "web/node_modules", ".venv"]);
@@ -623,20 +622,11 @@ function removePatchArtifactFiles(wtRoot) {
 
 function applyPatch(wtRoot, patchPath, patchText) {
   const applyInput = patchText ?? fs.readFileSync(patchPath, "utf8");
-  const tmpPatch = path.join(wtRoot, ".revert-proof-apply.patch");
-  fs.writeFileSync(tmpPatch, applyInput, "utf8");
-  const check = gitAt(wtRoot, ["apply", "--check", ...GIT_APPLY_OPTS, tmpPatch]);
-  if (check.status !== 0) {
-    fs.unlinkSync(tmpPatch);
-    throw new Error(
-      `git apply --check failed: ${check.stderr || check.stdout}`,
-    );
-  }
-  const apply = gitAt(wtRoot, ["apply", ...GIT_APPLY_OPTS, tmpPatch]);
-  fs.unlinkSync(tmpPatch);
-  if (apply.status !== 0) {
+  try {
+    gitApplyPatchStrict(wtRoot, applyInput);
+  } catch (err) {
     removePatchArtifactFiles(wtRoot);
-    throw new Error(`git apply failed: ${apply.stderr || apply.stdout}`);
+    throw err;
   }
   const artifacts = findPatchArtifactFiles(wtRoot);
   if (artifacts.length > 0) {
@@ -1019,3 +1009,5 @@ if (isMain) {
     process.exit(1);
   });
 }
+
+export { runRow };

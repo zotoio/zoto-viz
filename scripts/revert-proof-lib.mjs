@@ -947,3 +947,62 @@ export function assertVitestNodeAssertFailClosed(slug, target) {
     throw new Error(`row ${slug}: red is not from expect; node:assert is not supported`);
   }
 }
+
+const GIT_APPLY_OFFSET_FUZZ_RE = /\b(?:offset|fuzz)\b/i;
+
+/**
+ * Run `git apply --check -v` and reject any line mentioning offset or fuzz.
+ * @param {string} wtRoot
+ * @param {string} patchText
+ */
+export function assertGitApplyCheckStrict(wtRoot, patchText) {
+  const tmpPatch = path.join(wtRoot, ".revert-proof-apply.patch");
+  fs.writeFileSync(tmpPatch, patchText, "utf8");
+  try {
+    const check = spawnSync("git", ["apply", "--check", "-v", tmpPatch], {
+      cwd: wtRoot,
+      encoding: "utf8",
+    });
+    const verbose = `${check.stdout ?? ""}${check.stderr ?? ""}`;
+    if (check.status !== 0) {
+      throw new Error(`git apply --check failed: ${verbose.trim()}`);
+    }
+    for (const line of verbose.split("\n")) {
+      if (GIT_APPLY_OFFSET_FUZZ_RE.test(line)) {
+        throw new Error(`git apply --check reported offset or fuzz: ${line.trim()}`);
+      }
+    }
+  } finally {
+    try {
+      fs.unlinkSync(tmpPatch);
+    } catch {
+      /* best effort */
+    }
+  }
+}
+
+/**
+ * Apply a unified diff with strict `git apply --check -v` (no --recount, -C, or fuzz).
+ * @param {string} wtRoot
+ * @param {string} patchText
+ */
+export function gitApplyPatchStrict(wtRoot, patchText) {
+  assertGitApplyCheckStrict(wtRoot, patchText);
+  const tmpPatch = path.join(wtRoot, ".revert-proof-apply.patch");
+  fs.writeFileSync(tmpPatch, patchText, "utf8");
+  try {
+    const apply = spawnSync("git", ["apply", tmpPatch], {
+      cwd: wtRoot,
+      encoding: "utf8",
+    });
+    if (apply.status !== 0) {
+      throw new Error(`git apply failed: ${apply.stderr || apply.stdout}`);
+    }
+  } finally {
+    try {
+      fs.unlinkSync(tmpPatch);
+    } catch {
+      /* best effort */
+    }
+  }
+}

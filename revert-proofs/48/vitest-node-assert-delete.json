@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof runner wiring guards > (g) vitest runner clears nodeAssert at runTask start",
+  "description": "Stop clearing nodeAssert WeakMap at runTask start",
+  "red": {
+    "actual": true,
+    "expected": false
+  }
+}

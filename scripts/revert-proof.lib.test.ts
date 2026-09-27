@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import {
+  assertGitApplyCheckStrict,
   assertRedValue,
   assertVitestNodeAssertFailClosed,
   assessPytestSelection,
@@ -200,8 +201,8 @@ describe("revert-proof vitest runner through the overlay", () => {
     );
     expect(row.revertProofAssertion).toBe(false);
     expect(row.revertProofNodeAssert).toBe(true);
-    expect(() => assertVitestNodeAssertFailClosed("slug", row)).toThrow(
-      "row slug: red is not from expect; node:assert is not supported",
+    expect(() => assertVitestNodeAssertFailClosed("node-assert-not-branded", row)).toThrow(
+      "row node-assert-not-branded: red is not from expect; node:assert is not supported",
     );
   });
 
@@ -536,6 +537,85 @@ function thrownMessage(fn: () => unknown): string | undefined {
   }
   return undefined;
 }
+
+function initGitRepo(dir: string, files: Record<string, string>) {
+  for (const [rel, body] of Object.entries(files)) {
+    const abs = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, body);
+  }
+  const r1 = spawnSync("git", ["init", "-q"], { cwd: dir, encoding: "utf8" });
+  if (r1.status !== 0) throw new Error(r1.stderr || "git init failed");
+  spawnSync("git", ["add", "-A"], { cwd: dir, encoding: "utf8" });
+  const r2 = spawnSync("git", ["commit", "-q", "-m", "init", "--allow-empty"], {
+    cwd: dir,
+    encoding: "utf8",
+  });
+  if (r2.status !== 0) throw new Error(r2.stderr || "git commit failed");
+}
+
+describe("strict git apply in the runner", () => {
+  it("(strict) rejects patches that only apply at an offset", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rp-strict-apply-"));
+    try {
+      initGitRepo(dir, {
+        "demo.txt": "line1\nline2\nalpha\nbeta\ngamma\ndelta\n",
+      });
+      const stalePatch = `diff --git a/demo.txt b/demo.txt
+--- a/demo.txt
++++ b/demo.txt
+@@ -5,1 +5,1 @@
+-beta
++BETA
+`;
+      expect(thrownMessage(() => assertGitApplyCheckStrict(dir, stalePatch))).toMatch(
+        /offset or fuzz/i,
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("(strict) accepts a patch with exact context", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rp-strict-apply-"));
+    try {
+      initGitRepo(dir, { "demo.txt": "alpha\nbeta\ngamma\ndelta\n" });
+      const patch = `diff --git a/demo.txt b/demo.txt
+--- a/demo.txt
++++ b/demo.txt
+@@ -1,4 +1,4 @@
+ alpha
+-beta
++BETA
+ gamma
+ delta
+`;
+      expect(() => assertGitApplyCheckStrict(dir, patch)).not.toThrow();
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("revert-proof runner wiring guards", () => {
+  it("(f) revert-proof.mjs calls assertVitestNodeAssertFailClosed on unbranded failures", () => {
+    const src = fs.readFileSync(path.join(scriptsDir, "revert-proof.mjs"), "utf8");
+    expect(src).toContain("assertVitestNodeAssertFailClosed(slug, target)");
+  });
+
+  it("(f) revert-proof.mjs imports assertVitestNodeAssertFailClosed", () => {
+    const src = fs.readFileSync(path.join(scriptsDir, "revert-proof.mjs"), "utf8");
+    expect(src).toMatch(/assertVitestNodeAssertFailClosed,/);
+  });
+
+  it("(g) vitest runner clears nodeAssert at runTask start", () => {
+    const src = fs.readFileSync(
+      path.join(scriptsDir, "revert-proof-vitest-runner.mjs"),
+      "utf8",
+    );
+    expect(src).toMatch(/nodeAssert\.delete\(test\)/);
+  });
+});
 
 describe("sidecar red value", () => {
   const meta = {

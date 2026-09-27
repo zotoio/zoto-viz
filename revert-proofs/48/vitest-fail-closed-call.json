@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof runner wiring guards > (f) revert-proof.mjs calls assertVitestNodeAssertFailClosed on unbranded failures",
+  "description": "Stop calling assertVitestNodeAssertFailClosed in runRow",
+  "red": {
+    "actual": true,
+    "expected": false
+  }
+}
