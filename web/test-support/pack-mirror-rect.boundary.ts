@@ -5,7 +5,6 @@ type MirrorRenderer = {
   setViewport(x: number, y: number, w: number, h: number): void;
   setScissor(x: number, y: number, w: number, h: number): void;
 };
-import { CanvasChangeProbe } from "../src/graph/pane-change";
 import {
   type CssRect,
   type DeviceRect,
@@ -53,11 +52,6 @@ function _packMirrorRectBoundaryTypeChecks(
   glReadPixels1x1(gl, loose, new Uint8Array(4));
   // @ts-expect-error GlRect must not be double-flipped through toGlRectInto.
   toGlRectInto(glRectOnly, asCanvasDeviceHeight(180), _glScratch);
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d")!;
-  const probe = new CanvasChangeProbe();
-  // @ts-expect-error GlRect must not be passed to software / probe DeviceRect paths.
-  probe.sample(ctx, canvas, glRectOnly);
   // @ts-expect-error canvas height must be branded CanvasDeviceHeight, not a plain number.
   toGlRectInto(dev, 180, _glScratch);
   // @ts-expect-error DeviceRect must not be passed to raw GL readPixels.

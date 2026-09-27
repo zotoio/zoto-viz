@@ -1,6 +1,6 @@
 {
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-software-present.test.ts",
-  "testName": "^RenderHost software present > present returns a branded DeviceRect on the software path$",
-  "expectedRed": "AssertionError: expected false to be true // Object.is equality"
+  "runner": "tsc",
+  "kind": "tsc",
+  "tsconfig": "tsc",
+  "expectedRed": "src/graph/render-host.ts(307,7): error TS2322: Type '{ x: number; y: number; w: number; h: number; }' is not assignable to type 'Viewport'."
 }

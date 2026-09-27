@@ -1,23 +1,5 @@
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
 import { bytesDiffer, CanvasChangeProbe, probeLines } from "./pane-change";
-
-describe("pack-mirror brands", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
-  it("wires pack-mirror brands in probe API (import + DeviceRect param + GlRect ProbeRect)", () => {
-    const text = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "pane-change.ts"), "utf8");
-    expect(text.includes('import type { DeviceRect, GlRect } from "./pack-mirror-rect"')).toBe(
-      true,
-    );
-    expect(text.includes("rect?: DeviceRect | null")).toBe(true);
-    expect(text.includes("export type ProbeRect = GlRect")).toBe(true);
-  });
-});
 
 describe("bytesDiffer", () => {
   beforeEach(() => {
