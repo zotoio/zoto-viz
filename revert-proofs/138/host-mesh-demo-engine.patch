@@ -1,0 +1,10 @@
+diff --git a/plugins/src/host-mesh-demo/visualisation.yml b/plugins/src/host-mesh-demo/visualisation.yml
+index 09529e61..6b236631 100644
+--- a/plugins/src/host-mesh-demo/visualisation.yml
++++ b/plugins/src/host-mesh-demo/visualisation.yml
+@@ -1,4 +1,4 @@
+-engine: graph
++engine: topology
+ base: topology
+ look:
+   backdrop: plugin

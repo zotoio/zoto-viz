@@ -1,0 +1,13 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+index 6dc457f9..c0221a45 100644
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -113,7 +113,7 @@ def _lock_for_pack(pack_id: str) -> threading.Lock:
+ 
+ 
+ def pack_install_lock(pack_id: str) -> threading.Lock:
+-    return _lock_for_pack(pack_id)
++    return threading.Lock()
+ 
+ 
+ def drain_install_notices() -> list[dict[str, str]]:

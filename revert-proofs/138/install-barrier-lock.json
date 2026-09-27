@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_concurrent_install_same_pack_serializes_with_barriers",
+  "description": "Revert per-pack install lock singleton so concurrent installs are not serialized",
+  "red": "assert not pack_install_lock(pid).acquire(blocking=False)"
+}

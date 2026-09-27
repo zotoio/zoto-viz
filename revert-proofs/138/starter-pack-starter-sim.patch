@@ -1,0 +1,13 @@
+diff --git a/plugins/sdk/starter/frontend/sim.ts b/plugins/sdk/starter/frontend/sim.ts
+index e0abe3aa..a831a064 100644
+--- a/plugins/sdk/starter/frontend/sim.ts
++++ b/plugins/sdk/starter/frontend/sim.ts
+@@ -29,7 +29,7 @@ export type PackedFrame = {
+   smokeLuma: number;
+ };
+ 
+-export class StarterSim {
++export class StarterPackSim {
+   private opts: StarterOptions;
+   private simTime = 0;
+   private accumulator = 0;
