@@ -1,7 +1,8 @@
 diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+index 116265e3..b0c97ec9 100644
 --- a/web/src/plugins/plugin-ui.ts
 +++ b/web/src/plugins/plugin-ui.ts
-@@ -17,7 +17,7 @@ function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
+@@ -35,7 +35,7 @@ function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
      if (!el.querySelector(".field-edited-cue")) {
        const cue = document.createElement("span");
        cue.className = "field-edited-cue";

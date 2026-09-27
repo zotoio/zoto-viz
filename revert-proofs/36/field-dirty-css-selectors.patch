@@ -1,8 +1,8 @@
 diff --git a/web/src/style.css b/web/src/style.css
-index 22519bb1..38a8d4ff 100644
+index 84d9ea36..5926ac25 100644
 --- a/web/src/style.css
 +++ b/web/src/style.css
-@@ -586,10 +586,9 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
+@@ -655,10 +655,9 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
    outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(var(--accent-rgb), 0.25);
  }
  .field.select.dirty .field-btn { border-color: var(--warn); }
