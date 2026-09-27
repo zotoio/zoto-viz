@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/dogfood.test.ts",
-  "project": "web",
-  "testName": "fat-LAN live soak: termNow must not read wall clock",
-  "description": "Restoring performance.now() in hn-term frame seconds reads wall clock during soak",
-  "red": "AssertionError: expected \"now\" to be called +0 times, but got 120 times"
-}
