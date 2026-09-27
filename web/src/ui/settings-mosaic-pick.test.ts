@@ -31,6 +31,7 @@ describe("settings mosaic pane pickers", () => {
     sel!.value = "plugin:talkers";
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
     expect(pick.mock.calls.length).toBe(1);
+    expect(pick.mock.calls[0]).toEqual(["plugin:topology", "plugin:talkers"]);
   });
 
   it("reverts the dropdown when the live hook denies consent", async () => {
