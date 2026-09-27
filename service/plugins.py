@@ -31,6 +31,18 @@ from . import plugin_backend as pb
 from . import plugin_sky as psky
 from . import plugin_instances as pins
 from . import plugin_zip as pz
+from .pack_boundary import PackBundleBoundaryError, boundary_from_compile
+from .pack_sdk_contract import assert_pack_sdk_compatible, write_pack_sdk_manifest_cache
+from .pack_runtime import (
+    cached_zip_block,
+    catalog_boundary_error,
+    cleanup_staging,
+    materialize_zip_runtime,
+    remember_zip_block,
+    reset_zip_block_cache,
+    zip_block_cache_key,
+)
+from .plugin_install import InstallV2BlockedError
 import yaml
 from aiohttp import web
 
@@ -46,11 +58,11 @@ ALLOWED_CAPS = frozenset({
 MAX_BUNDLE = 256 * 1024
 DEFAULT_FRONTEND_ENTRY = "frontend/index.ts"
 _ESBUILD = REPO / "web" / "node_modules" / ".bin" / "esbuild"
-_PACK_BUNDLE_SCRIPT = REPO / "web" / "scripts" / "bundle-pack-entry.mjs"
 _SDK_ROOT = REPO / "plugins" / "sdk"
 # id -> (js sha256, bundle bytes, cache key, entry path, plugin sha256)
 _bundles: dict[str, tuple[str, bytes, str, Path, str]] = {}
 _compile_runs = 0
+_bundle_invocations = 0
 _scan_lock = threading.Lock()
 _scan_memo: dict[str, tuple[tuple[Any, ...], dict[str, Any]]] = {}
 _scan_builds = 0
@@ -169,14 +181,21 @@ def _cache_key(sha256: str, entry: Path) -> str:
 
 
 def compile_runs() -> int:
-    """How many times esbuild actually ran (cache misses). Tests use this."""
+    """How many times esbuild produced a bundle (cache misses). Tests use this."""
     return _compile_runs
 
 
+def bundle_invocations() -> int:
+    """How many times the esbuild subprocess was started (includes failed bundles)."""
+    return _bundle_invocations
+
+
 def reset_bundles() -> None:
-    global _compile_runs
+    global _compile_runs, _bundle_invocations
     _bundles.clear()
     _compile_runs = 0
+    _bundle_invocations = 0
+    reset_zip_block_cache()
     reset_scan_memo()
 
 
@@ -193,7 +212,41 @@ def scan_builds() -> int:
     return _scan_builds
 
 
-def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = None) -> dict[str, Any]:
+_PACK_BUNDLE_SCRIPT = REPO / "web" / "scripts" / "bundle-pack-entry.mjs"
+
+
+def _install_lint_block_from_compile(stderr: str) -> str | None:
+    import json
+
+    for line in stderr.splitlines():
+        text = line.strip()
+        if not text.startswith("{"):
+            continue
+        try:
+            raw = json.loads(text)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(raw, dict) and raw.get("type") == "pack-install-lint-block":
+            return str(raw.get("message") or "").strip() or None
+    return None
+
+
+def verify_pack_bundle_home(home: Path, doc: dict[str, Any], sha256: str | None = None) -> None:
+    """Run esbuild allowlist without updating the in-memory bundle cache."""
+    yml = home / "plugin.yml"
+    if not yml.is_file():
+        raise ValueError("missing plugin.yml")
+    compile_typescript(doc, yml, sha256=sha256, update_cache=False, install_lint=True)
+
+
+def compile_typescript(
+    doc: dict[str, Any],
+    path: Path,
+    sha256: str | None = None,
+    *,
+    update_cache: bool = True,
+    install_lint: bool = False,
+) -> dict[str, Any]:
     """Bundle frontend/ (or legacy entry.ts) with esbuild. Cache key is plugin sha256 + entry mtime."""
     home = _plugin_home(path)
     nested = path.name in ("plugin.yml", "plugin.yaml")
@@ -215,14 +268,18 @@ def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = Non
     digest_src = _plugin_sha(path, sha256)
     key = _cache_key(digest_src, entry)
     cached = _bundles.get(pid)
-    if cached and cached[2] == key:
+    if update_cache and cached and cached[2] == key:
         return {"hash": cached[0], "capabilities": caps, "bytes": len(cached[1]), "cached": True}
     if not _PACK_BUNDLE_SCRIPT.is_file():
         raise ValueError("pack bundle script missing (web/scripts/bundle-pack-entry.mjs)")
-    global _compile_runs
+    global _compile_runs, _bundle_invocations
+    home_resolved = home.resolve()
     from . import cursor_agent
 
-    home_resolved = home.resolve()
+    bundle_env = os.environ.copy()
+    bundle_env.setdefault("NODE_ENV", "production")
+    if install_lint:
+        bundle_env["ZOTO_PACK_INSTALL_LINT"] = "1"
     proc = subprocess.run(
         [
             cursor_agent.node_bin(),
@@ -236,15 +293,33 @@ def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = Non
         text=True,
         timeout=20,
         check=False,
+        env=bundle_env,
     )
+    _bundle_invocations += 1
     if proc.returncode != 0:
+        block = boundary_from_compile(doc, proc.stderr)
+        if block:
+            raise PackBundleBoundaryError(block)
+        lint_msg = _install_lint_block_from_compile(proc.stderr)
+        if lint_msg:
+            label = str(doc.get("name") or doc.get("id") or "Plugin")
+            raise ValueError(
+                f"{label} was blocked: {lint_msg} "
+                "Nothing was installed and the current wall is unchanged. "
+                "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
+            )
         raise ValueError(proc.stderr.strip() or "esbuild failed")
     js = proc.stdout.encode("utf-8")
     if len(js) > MAX_BUNDLE:
         raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")
     digest = hashlib.sha256(js).hexdigest()
     _compile_runs += 1
-    _bundles[pid] = (digest, js, key, entry, digest_src)
+    try:
+        write_pack_sdk_manifest_cache(home.parent, pid)
+    except OSError:
+        pass
+    if update_cache:
+        _bundles[pid] = (digest, js, key, entry, digest_src)
     return {"hash": digest, "capabilities": caps, "bytes": len(js)}
 
 
@@ -867,17 +942,97 @@ def _attach_runtime(
         home = _plugin_home(path)
         nested = path.name in ("plugin.yml", "plugin.yaml")
         flags = optional_part_flags(doc, home, parts, nested=nested)
+        compiled = compile_typescript(doc, path, sha256=sha256)
+        sdk_err = assert_pack_sdk_compatible(home, doc, rel, runtime_parent=home.parent)
+        if sdk_err is not None:
+            errors.append(sdk_err)
+            return None
         extra = {
             **flags,
-            **compile_typescript(doc, path, sha256=sha256),
+            **compiled,
             **service_meta(doc, path),
             **pb.artefacts(path),
             **psky.artefacts(path),
         }
+    except PackBundleBoundaryError as e:
+        errors.append(catalog_boundary_error(rel, e.block))
+        return None
     except ValueError as e:
         errors.append({"file": rel, "error": str(e)})
         return None
     return extra
+
+
+def _materialize_zip_plugin(
+    zip_path: Path,
+    runtime: Path,
+    errors: list[dict[str, str]],
+    rel: str,
+    *,
+    zip_version: str | int | None = None,
+    pack_id: str | None = None,
+) -> pz.UnpackResult | None:
+    from .pack_zip_blocks import catalog_row_for_block, zip_block_for_pack, zip_block_for_sha
+
+    zip_sha = pz.plugin_sha256(zip_path)
+    persisted = zip_block_for_sha(zip_sha)
+    if persisted is None and pack_id:
+        persisted = zip_block_for_pack(pack_id)
+    cache_key = zip_block_cache_key(zip_path)
+    if persisted is not None:
+        row = catalog_row_for_block(persisted, rel=rel)
+        remember_zip_block(cache_key, row)
+        errors.append(row)
+        return None
+    cached = cached_zip_block(cache_key)
+    if cached is not None:
+        errors.append(cached)
+        return None
+    try:
+        return materialize_zip_runtime(
+            zip_path,
+            runtime,
+            compile_bundle=compile_typescript,
+            verify_bundle=verify_pack_bundle_home,
+            load_doc=load_file,
+        )
+    except InstallV2BlockedError as e:
+        row = {
+            "file": rel,
+            "error": "pack_install_blocked",
+            "message": str(e),
+            "zip": rel,
+            **e.payload,
+        }
+        if "was blocked" in str(e):
+            row["error"] = "pack_boundary"
+        remember_zip_block(cache_key, row)
+        errors.append(row)
+        cleanup_staging(runtime)
+        return None
+    except PackBundleBoundaryError as e:
+        upgrade = runtime.exists()
+        row = catalog_boundary_error(rel, e.block, upgrade=upgrade, version=zip_version)
+        remember_zip_block(cache_key, row)
+        errors.append(row)
+        cleanup_staging(runtime)
+        return None
+    except ValueError as e:
+        text = str(e)
+        row: dict[str, str] = {"file": rel, "error": text, "zip": rel}
+        if "was blocked" in text:
+            row["error"] = "pack_boundary"
+            row["message"] = text
+        elif "v1 is still running" in text or "v1 was restored" in text:
+            row["error"] = "pack_install_blocked"
+            row["message"] = text
+        errors.append(row)
+        cleanup_staging(runtime)
+        return None
+    except OSError as e:
+        errors.append({"file": rel, "error": str(e)})
+        cleanup_staging(runtime)
+        return None
 
 
 def _catalog_row(
@@ -920,23 +1075,46 @@ def _scan_zips(
                 errors.append({"file": rel, "error": f"src catalog owns id {pid!r}"})
                 continue
             dest = runtime_dir / pid
-            unpacked = pz.unpack_zip(zip_path, dest)
-            yml = dest / "plugin.yml"
-            doc = load_file(yml)
         except (ValueError, OSError) as e:
             errors.append({"file": rel, "error": str(e)})
+            continue
+        zip_version = preview.get("version")
+        if origin != "src":
+            from .pack_zip_blocks import (
+                catalog_row_for_store_unreadable,
+                zip_blocks_store_dir_unreadable,
+            )
+
+            if zip_blocks_store_dir_unreadable():
+                errors.append(catalog_row_for_store_unreadable(rel=rel, pack_id=pid))
+                continue
+        unpacked = _materialize_zip_plugin(
+            zip_path, dest, errors, rel, zip_version=zip_version, pack_id=pid,
+        )
+        if dest.exists():
+            yml = dest / "plugin.yml"
+            doc = load_file(yml)
+        else:
             continue
         pid = str(doc["id"])
         if pid in seen:
             errors.append({"file": rel, "error": f"duplicate plugin id {pid!r}"})
             continue
         seen.add(pid)
-        extra = _attach_runtime(doc, yml, errors, rel, sha256=unpacked.sha256, parts=unpacked.parts)
+        if unpacked is None:
+            if not dest.exists():
+                continue
+            parts = tuple(pz.detect_parts(dest))
+            zip_sha = pz.plugin_sha256(zip_path)
+            extra = _attach_runtime(doc, yml, errors, rel, sha256=zip_sha, parts=parts)
+        else:
+            extra = _attach_runtime(doc, yml, errors, rel, sha256=unpacked.sha256, parts=unpacked.parts)
         if extra is None:
             continue
         plugins.append(_catalog_row(
             doc, extra, dest, errors, rel,
-            file=str(yml), zip=rel, sha256=unpacked.sha256, parts=list(unpacked.parts),
+            file=str(yml), zip=rel, sha256=unpacked.sha256 if unpacked else pz.plugin_sha256(zip_path),
+            parts=list(unpacked.parts) if unpacked else list(pz.detect_parts(dest)),
             origin=origin,
         ))
     return _scan_payload(zips_dir, plugins, errors)
@@ -1013,7 +1191,27 @@ def scan(root: Path | None = None) -> dict[str, Any]:
 
 def api_list(_: web.Request) -> web.Response:
     try:
-        return web.json_response(scan())
+        from .pack_install_catalog import drain_catalog_records
+        from .plugin_install import drain_install_notices
+
+        result = scan()
+        records = drain_catalog_records()
+        if records:
+            merged_errors = [dict(e) for e in (result.get("errors") or [])]
+            merged_errors.extend(records)
+            result = {**result, "errors": merged_errors}
+        notices = drain_install_notices()
+        from .pack_install_retry import format_unreadable_block_records_notice
+        from .pack_zip_blocks import unreadable_block_record_count
+
+        unreadable_n = unreadable_block_record_count()
+        if unreadable_n:
+            msg = format_unreadable_block_records_notice(unreadable_n)
+            if msg:
+                notices = [*notices, {"error": "pack_block_record_unreadable", "message": msg}]
+        if notices:
+            result = {**result, "installNotices": notices}
+        return web.json_response(result)
     except Exception as e:
         return web.json_response({"error": str(e)}, status=500)
 

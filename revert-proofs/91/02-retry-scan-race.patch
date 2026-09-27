@@ -1,8 +1,8 @@
 diff --git a/service/plugin_install.py b/service/plugin_install.py
-index bb969ef..4379c87 100644
+index f8c85eb..0270d23 100644
 --- a/service/plugin_install.py
 +++ b/service/plugin_install.py
-@@ -367,12 +367,6 @@ def install_zip_to_runtime(
+@@ -364,12 +364,6 @@ def install_zip_to_runtime(
  ) -> pz.UnpackResult:
      pid = str(doc["id"])
      incoming = sha256 or pz.plugin_sha256(zip_path)
@@ -16,12 +16,12 @@ index bb969ef..4379c87 100644
          return pz.unpack_zip(dest_zip, runtime)
      name = str(doc.get("name") or pid)
 diff --git a/service/plugin_local.py b/service/plugin_local.py
-index b4b9fab..2f89496 100644
+index a04e611..30dd066 100644
 --- a/service/plugin_local.py
 +++ b/service/plugin_local.py
-@@ -531,10 +531,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+@@ -528,10 +528,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
      """Re-run the blocked zip through the full install pipeline (sync, pack lock held)."""
-     from .pack_zip_blocks import forget_zip_block_cache_for_path
+     from .pack_runtime import forget_zip_block_cache_for_path
      from .pack_zip_blocks import clear_zip_block, zip_block_for_sha
 -    from .plugin_install import (
 -        _install_zip_to_runtime_locked,
@@ -31,7 +31,7 @@ index b4b9fab..2f89496 100644
  
      digest = sha256.strip().lower()
      row = zip_block_for_sha(digest)
-@@ -543,103 +540,67 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
+@@ -540,103 +537,67 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
      pid = str(row.get("id") or "")
      folder = paths.plugin_local_dir(create=True)
      dest = folder / f"{pid}.zip"

@@ -255,11 +255,8 @@ def _check_sdk_contract(ctx: InstallContext) -> None:
 def _check_bundle_allowlist(ctx: InstallContext) -> None:
     from . import plugins
 
-    yml = ctx.staging / "plugin.yml"
-    if not yml.is_file():
-        raise ValueError("missing plugin.yml")
     try:
-        plugins.compile_typescript(ctx.doc, yml, sha256=ctx.sha256)
+        plugins.verify_pack_bundle_home(ctx.staging, ctx.doc, sha256=ctx.sha256)
     except FileNotFoundError as e:
         raise InstallCheckUnavailableError(format_couldnt_check_message(str(ctx.doc.get("name") or ctx.doc.get("id")))) from e
     except OSError as e:

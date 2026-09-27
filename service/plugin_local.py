@@ -228,10 +228,7 @@ def _payload_bytes(args: dict[str, Any]) -> bytes:
 
 
 def _verify_pack_bundle(home: Path, doc: dict[str, Any], sha256: str | None = None) -> None:
-    yml = home / "plugin.yml"
-    if not yml.is_file():
-        raise ValueError("missing plugin.yml")
-    plugins.compile_typescript(doc, yml, sha256=sha256)
+    plugins.verify_pack_bundle_home(home, doc, sha256=sha256)
 
 
 def _install_result(
@@ -529,7 +526,7 @@ def _retry_zip_changed_response(
 
 def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str, Any]:
     """Re-run the blocked zip through the full install pipeline (sync, pack lock held)."""
-    from .pack_zip_blocks import forget_zip_block_cache_for_path
+    from .pack_runtime import forget_zip_block_cache_for_path
     from .pack_zip_blocks import clear_zip_block, zip_block_for_sha
     from .plugin_install import (
         _install_zip_to_runtime_locked,
