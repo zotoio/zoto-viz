@@ -91,6 +91,10 @@ def _pack_id_ok(pack_id: str) -> bool:
         return False
     if pack_id.startswith("."):
         return False
+    try:
+        pack_id.encode("ascii")
+    except UnicodeEncodeError:
+        return False
     return True
 
 
@@ -215,12 +219,11 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
     parsed = access.parse_pack_assets_path(request.path or "")
     if not parsed:
         return _pack_not_found()
-    if not access.pack_asset_token_ok(request):
-        return _pack_token_invalid()
-
     _token, pack_id, raw_tail = parsed
     if not _pack_id_ok(pack_id):
         return _pack_not_found()
+    if not access.pack_asset_token_ok(request):
+        return _pack_token_invalid()
     if _tail_forbidden_path(raw_tail):
         return _pack_path_forbidden()
     tail = _normalize_tail(raw_tail)

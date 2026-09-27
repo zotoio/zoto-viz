@@ -32,10 +32,20 @@ def test_encoding_ab_c_vs_a_bc() -> None:
     assert not pack_asset_tokens.verify_pack_asset_token(SECRET, "bc", tok, session_id="a", frame_live=True)
 
 
-def test_verify_rejects_non_ascii_token() -> None:
+def test_parse_rejects_frame_id_not_matching_uuid_regex() -> None:
+    """Token prefix must match UUID frame-id grammar before HMAC verify."""
+    junk = "not-a-uuid-frame-id." + mint("demo-pack", SESSION).split(".", 1)[1]
+    assert pack_asset_tokens.parse_pack_asset_token(junk) is None
+    assert not pack_asset_tokens.verify_pack_asset_token(
+        SECRET, "demo-pack", junk, session_id=SESSION, frame_live=True,
+    )
+
+
+def test_verify_rejects_non_ascii_pack_id() -> None:
     tok = mint("demo-pack", SESSION)
-    bad = tok + "\u00ff"
-    assert not pack_asset_tokens.verify_pack_asset_token(SECRET, "demo-pack", bad, session_id=SESSION, frame_live=True)
+    assert not pack_asset_tokens.verify_pack_asset_token(
+        SECRET, "dem\u00f6", tok, session_id=SESSION, frame_live=True,
+    )
 
 
 def test_revoked_frame_denied() -> None:

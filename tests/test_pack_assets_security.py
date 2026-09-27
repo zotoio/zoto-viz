@@ -167,6 +167,36 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
                 resp = await self.client.get(pack_url("demo-pack", "module.js", token=tok), headers=NULL)
         await assert_token_invalid(resp)
 
+    async def test_non_ascii_pack_id_in_path_rejected(self) -> None:
+        bad_id = "dem\u00f6-pack"
+        row = {"id": bad_id, "has_frontend": True}
+        tok = pack_asset_tokens.mint_pack_asset_token(SECRET, SESSION, bad_id, DEFAULT_FRAME)
+        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == bad_id else None):
+            with patch.object(plugins, "consented", lambda _doc: True):
+                with patch.object(plugins, "module_response", lambda _pid: web.Response(text="export {};", content_type="text/javascript")):
+                    resp = await self.client.get(
+                        pack_url_raw(bad_id, "module.js", token=tok),
+                        headers=NULL,
+                    )
+        assert resp.status == 404
+
+    async def test_pack_asset_accepts_csrf_cookie_without_header(self) -> None:
+        row = {"id": "demo-pack", "has_frontend": True}
+        tok = mint("demo-pack", SESSION)
+        cookie_headers = {
+            **HOST,
+            "Origin": "null",
+            "Cookie": f"{access.COOKIE}={SESSION}",
+        }
+        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None):
+            with patch.object(plugins, "consented", lambda _doc: True):
+                with patch.object(plugins, "module_response", lambda _pid: web.Response(text="export {};", content_type="text/javascript")):
+                    resp = await self.client.get(
+                        pack_url("demo-pack", "module.js", token=tok),
+                        headers=cookie_headers,
+                    )
+        assert resp.status == 200
+
     async def test_path_traversal_dotdot_and_encoded(self) -> None:
         home = Path(tempfile.mkdtemp())
         fe = home / "frontend"
