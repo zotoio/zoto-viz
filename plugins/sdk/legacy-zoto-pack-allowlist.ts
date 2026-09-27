@@ -5,23 +5,29 @@ import type { PackLintRule, PackLintViolation } from "./pack-lint-types";
  * Only ids on this list may carry baselined `inline-zoto-declare` rows; any other pack fails.
  */
 export const LEGACY_DECLARE_ZOTO_PACK_IDS: readonly string[] = [
+  "ant-colony",
+  "aquarium",
   "backrooms",
   "blob-mesh",
   "cypher-cic",
   "hn-rain",
   "hn-term",
   "kefrens-bars",
+  "koi-pond",
   "lan-pulse",
   "marble-run",
+  "metro-lines",
   "nixie-clock",
   "packet-tunnel",
   "pulse-ts",
   "rf-constellation",
+  "rocket-car-soccer",
   "roto-proto",
   "star-sines",
   "stereo-gram",
   "syscon",
   "talker-storm",
+  "voxel-world",
 ];
 
 /** Only `declare const zoto` is allowlisted (not `const zoto = getVizZoto()`). */

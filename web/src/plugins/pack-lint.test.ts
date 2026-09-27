@@ -330,7 +330,7 @@ describe("pack lint guardrails", () => {
   });
 
   it("off-allowlist inline zoto declare fails disallowedLegacyZoto guard", () => {
-    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toHaveLength(17);
+    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toHaveLength(23);
     expect(isLegacyDeclareZotoPackAllowed("not-on-legacy-allowlist")).toBe(false);
     const text = readFileSync(path.join(repoRoot, OFF_ALLOWLIST_ZOTO_FIXTURE), "utf8");
     const hits = scanPackLintFixture(OFF_ALLOWLIST_PACK_REPO_REL, text, "not-on-legacy-allowlist", repoRoot);
@@ -356,7 +356,7 @@ describe("pack lint guardrails", () => {
 
   it("reports baseline counts per pack and per rule (documentation)", () => {
     const baseline = loadBaseline(repoRoot);
-    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(17);
+    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(23);
     expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBe(0);
   });
 

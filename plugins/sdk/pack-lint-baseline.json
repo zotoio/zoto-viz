@@ -1,6 +1,26 @@
 {
   "violations": [
     {
+      "file": "plugins/src/ant-colony/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/ant-colony/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/aquarium/frontend/aquarium.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/aquarium/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
       "file": "plugins/src/backrooms/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
@@ -36,12 +56,52 @@
       "target": "declare-const-zoto"
     },
     {
+      "file": "plugins/src/koi-pond/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/koi-pond/frontend/index.test.ts",
+      "rule": "sandbox-escape",
+      "target": "parent."
+    },
+    {
+      "file": "plugins/src/koi-pond/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
       "file": "plugins/src/lan-pulse/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
     },
     {
       "file": "plugins/src/marble-run/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "node:fs"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
     },
@@ -69,6 +129,36 @@
       "file": "plugins/src/rf-constellation/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "node:child_process"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "node:fs"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
     },
     {
       "file": "plugins/src/roto-proto/frontend/index.ts",
@@ -99,6 +189,31 @@
       "file": "plugins/src/talker-storm/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/world.test.ts",
+      "rule": "host-import",
+      "target": "node:fs"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/world.test.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/world.test.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/world.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
     }
   ]
 }
