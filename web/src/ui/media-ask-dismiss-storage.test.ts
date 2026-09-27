@@ -98,9 +98,16 @@ describe("media ask dismiss sessionStorage", () => {
     await waitForDialog();
     clickNotNow();
     await expect(micPending).resolves.toBeNull();
+    expect(sessionStorage.getItem("zoto-viz.mediaDismiss")).toBe('{"mic":true}');
 
     const reloaded = await reloadMediaAsk();
     mockCapture(vi.fn(async () => ({ getTracks: () => [] })));
+    const micAgain = reloaded.askUserMedia({ audio: true, video: false }, "pulse microphone");
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-media-ask]") === null).toBe(true);
+    });
+    await expect(micAgain).resolves.toBeNull();
+
     const camLive = await import("../camera/livecam");
     camLive.liveCam.setPolicy("auto", false);
     const camPending = reloaded.askUserMedia(
