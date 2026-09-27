@@ -3,19 +3,19 @@ import {
   countEligibleSourceHeadlines,
   FEED_HEADLINE_LIMIT,
   illustratedSourceBind,
-  isFeedNewsSource,
+  oneLineTitle,
   sourceHeadlines,
   stripMarkup,
   type SourceLive,
 } from "./sources";
 
 describe("sourceHeadlines", () => {
-  it("keeps journal and files on the ticker and skips news stills", () => {
+  it("puts news, journal, and files on the ticker as one-line titles", () => {
     const sources: Record<string, SourceLive> = {
       hn: {
         id: "hn", kind: "rss", label: "HN", ok: true, feed: true,
         items: [
-          { title: "One", summary: "<p>First blurb</p>", image: "https://www.nasa.gov/iotd.jpg" },
+          { title: "One\nTwo  lines", summary: "<p>First blurb</p>", image: "https://www.nasa.gov/iotd.jpg" },
           { title: "Two" },
         ],
       },
@@ -33,23 +33,32 @@ describe("sourceHeadlines", () => {
       off: { id: "off", kind: "rss", label: "Off", ok: true, paused: true, items: [{ title: "Hidden" }] },
     };
     expect(sourceHeadlines(sources, 8)).toEqual([
+      {
+        id: "hn:0", label: "HN", text: "One Two lines", kind: "rss",
+        summary: "First blurb", image: "https://www.nasa.gov/iotd.jpg",
+      },
+      { id: "hn:1", label: "HN", text: "Two", kind: "rss" },
+      {
+        id: "nasa:0", label: "NASA image of the day", text: "Nebula", kind: "rss",
+        image: "https://www.nasa.gov/a.jpg",
+      },
+      { id: "guardian:0", label: "Guardian world", text: "World", kind: "rss" },
       { id: "quiet:0", label: "Notes", text: "hello", kind: "file" },
       { id: "quiet:1", label: "Notes", text: "world", kind: "file" },
       { id: "kmsg:0", label: "Kernel ring", text: "usb 1-1: new device", kind: "kmsg" },
     ]);
-    expect(isFeedNewsSource(sources.hn!)).toBe(true);
-    expect(isFeedNewsSource(sources.nasa!)).toBe(true);
-    expect(isFeedNewsSource(sources.quiet!)).toBe(false);
   });
 
-  it("walks HTTP JSON string leaves when a view binds that source", () => {
+  it("walks HTTP JSON string leaves on the ticker and when a view binds that source", () => {
     const sources: Record<string, SourceLive> = {
       api: {
         id: "api", kind: "http", label: "API", ok: true, feed: true,
         json: { title: "Roster", users: [{ name: "Ada" }] },
       },
     };
-    expect(sourceHeadlines(sources, 8)).toEqual([]);
+    expect(sourceHeadlines(sources, 8).map((h) => h.text)).toEqual(
+      expect.arrayContaining(["Roster", "Ada"]),
+    );
     expect(sourceHeadlines(sources, 8, { source: "api" }).map((h) => h.text)).toEqual(
       expect.arrayContaining(["Roster", "Ada"]),
     );
@@ -110,5 +119,16 @@ describe("sourceHeadlines", () => {
 
   it("strips HTML from article blurbs", () => {
     expect(stripMarkup("<p>Hello&nbsp;<b>world</b> &amp; news</p>")).toBe("Hello world & news");
+  });
+
+  it("mixes news sources on the unbound ticker instead of filling it with one feed", () => {
+    const nasaItems = Array.from({ length: 40 }, (_, i) => ({ title: `Shot ${i}` }));
+    const sources: Record<string, SourceLive> = {
+      nasa: { id: "nasa", kind: "rss", label: "NASA", ok: true, feed: true, items: nasaItems },
+      hn: { id: "hn", kind: "rss", label: "HN", ok: true, feed: true, items: [{ title: "Show HN" }] },
+    };
+    const texts = sourceHeadlines(sources, 64).map((h) => `${h.label}:${h.text}`);
+    expect(texts.filter((t) => t.startsWith("NASA:")).length).toBe(8);
+    expect(texts).toContain("HN:Show HN");
   });
 });

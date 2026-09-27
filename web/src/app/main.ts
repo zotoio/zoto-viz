@@ -601,6 +601,16 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   }
 }
 
+function hostTileConfig(): Record<string, string> {
+  const canvas = document.querySelector("canvas.render-host") as HTMLCanvasElement | null;
+  const w = canvas?.width ?? 0;
+  const h = canvas?.height ?? 0;
+  return {
+    hostTileW: String(w > 64 ? w : 1280),
+    hostTileH: String(h > 64 ? h : 800),
+  };
+}
+
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
@@ -648,8 +658,9 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
       packLabel,
       mosaicHost,
       async () => {
-      await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
-    });
+        await attachPluginFrontend(sandbox, spec, { ...loadPluginConfig(spec, spec.config), ...hostTileConfig() });
+      },
+    );
     markSandboxStartupOk(tileId);
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
@@ -1247,8 +1258,10 @@ settings.addAnimation((a) => {
     mosaic!.applyLooks(a, pin);
     mosaic!.setTheme(scene.currentTheme);
   } else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
-  const key = `${a.mosaic}:${a.hero}:${(a.mosaicTiles?.length ? a.mosaicTiles : []).join(",")}:${a.mosaicMaxId ?? ""}`;
-  if (key !== mosaic!.layoutKey) {
+  const tiles = a.mosaicTiles?.length ? a.mosaicTiles : [];
+  const key = `${a.mosaic}:${a.hero}:${tiles.join(",")}:${a.mosaicMaxId ?? ""}`;
+  const lostTiles = a.mosaic !== "off" && mosaic!.on && !tiles.length && mosaic!.tileIds.length > 0;
+  if (key !== mosaic!.layoutKey && !lostTiles) {
     if (a.mosaic !== "off" && activeArcade) {
       arcade[activeArcade].view.stop();
       arcade[activeArcade].el.hidden = true;

@@ -7,8 +7,9 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const esbuildBin = path.join(repoRoot, "web/node_modules/.bin/esbuild");
-const venvPython = path.join(repoRoot, ".venv/bin/python3");
-const pythonBin = existsSync(venvPython) ? venvPython : "python3";
+const pythonBin = existsSync(path.join(repoRoot, ".venv/bin/python3"))
+  ? path.join(repoRoot, ".venv/bin/python3")
+  : "python3";
 
 /** Packs migrated to `import type` from `plugins/sdk/viz-contract` (viz.read frontends). */
 const MIGRATED_VIZ_PACKS = [

@@ -127,20 +127,13 @@ function itemField(item: SourceItem, key: string): string {
 
 export const FEED_HEADLINE_LIMIT = 64;
 export const FEED_SLIDE_LIMIT = 48;
+/** Unbound ticker mix — one pictured feed must not fill the whole overlay. */
+export const FEED_TICKER_PER_SOURCE = 8;
 const MAX_IMAGE_HREF = 2000;
 
-/** Shipped news / stills — titles live on carousel, rain, and term views. */
-export const FEED_NEWS_IDS = new Set([
-  "hn", "nasa", "apod", "earth-iotd", "commons-potd", "met",
-  "lobsters", "guardian", "mastodon",
-]);
-
-/** RSS / HTTP news and pictured feeds stay off the packet ticker unless a view binds them. */
-export function isFeedNewsSource(live: Pick<SourceLive, "id" | "kind">): boolean {
-  const kind = (live.kind || "").toLowerCase();
-  if (kind === "journal" || kind === "kmsg" || kind === "file") return false;
-  if (kind === "rss" || kind === "http") return true;
-  return FEED_NEWS_IDS.has((live.id || "").toLowerCase());
+/** Collapse newlines and runs of space so ticker / cube titles stay one line. */
+export function oneLineTitle(text: string, max = 240): string {
+  return text.replace(/\s+/g, " ").trim().slice(0, max);
 }
 
 /** Count feed-eligible headlines without materializing the full list (viz decimation stats). */
@@ -170,21 +163,27 @@ export function countEligibleSourceHeadlines(
     if (!live || live.paused || live.ok === false) continue;
     if (want) {
       if (live.id !== want) continue;
-    } else if (!pictured) {
-      if (live.feed === false || isFeedNewsSource(live)) continue;
+    } else if (!pictured && live.feed === false) {
+      continue;
     }
     const kind = (live.kind || "").toLowerCase() || undefined;
+    const cap = want || pictured ? scanCap : FEED_TICKER_PER_SOURCE + 1;
+    let taken = 0;
     if (kind === "http" && live.json !== undefined && !(live.items && live.items.length)) {
-      for (const text of jsonStrings(live.json, scanCap - count)) {
+      for (const text of jsonStrings(live.json, cap - count)) {
+        if (taken >= cap - count) break;
         if (bump(text)) break;
+        taken++;
       }
       continue;
     }
     for (const item of live.items ?? []) {
+      if (taken >= cap - count) break;
       const title = itemField(item, titleKey) || item.title || stripMarkup(item.summary || "");
       const summary = itemField(item, captionKey) || item.summary;
       const image = itemField(item, imageKey) || item.image;
       if (bump(title, image)) break;
+      taken++;
     }
     if (count < scanCap && !live.items?.length && live.text) {
       for (const line of String(live.text).split(/\r?\n/)) {
@@ -208,7 +207,7 @@ export function sourceHeadlines(
   const pictured = (bind?.filter ?? "all") === "has-image" || bind?.filter === "image" || bind?.filter === "pictured";
   const out: SourceHeadline[] = [];
   const push = (id: string, label: string, text: string, kind?: string, summary?: string, image?: string): boolean => {
-    const t = text.trim();
+    const t = oneLineTitle(text);
     if (!t) return out.length >= limit;
     const href = (image || "").trim();
     if (pictured && !href.startsWith("https://")) return out.length >= limit;
@@ -223,27 +222,35 @@ export function sourceHeadlines(
     if (!live || live.paused || live.ok === false) continue;
     if (want) {
       if (live.id !== want) continue;
-    } else if (!pictured) {
-      if (live.feed === false || isFeedNewsSource(live)) continue;
+    } else if (!pictured && live.feed === false) {
+      continue;
     }
     const label = live.label || live.id;
     const kind = (live.kind || "").toLowerCase() || undefined;
+    const cap = want || pictured ? limit : FEED_TICKER_PER_SOURCE;
+    let taken = 0;
     if (kind === "http" && live.json !== undefined && !(live.items && live.items.length)) {
-      for (const [i, text] of jsonStrings(live.json, limit - out.length).entries()) {
+      for (const [i, text] of jsonStrings(live.json, cap).entries()) {
+        if (taken >= cap) break;
         if (push(`${live.id}:json:${i}`, label, text, kind)) return out;
+        taken++;
       }
       continue;
     }
     for (const [i, item] of (live.items ?? []).entries()) {
+      if (taken >= cap) break;
       const title = itemField(item, titleKey) || item.title || stripMarkup(item.summary || "");
       const summary = itemField(item, captionKey) || item.summary;
       const image = itemField(item, imageKey) || item.image;
       if (push(`${live.id}:${i}`, label, title, kind, summary, image)) return out;
+      taken++;
     }
     if (!live.items?.length && live.text) {
       const lines = String(live.text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
       for (const [i, line] of lines.entries()) {
+        if (taken >= cap) break;
         if (push(`${live.id}:${i}`, label, line, kind || "file")) return out;
+        taken++;
       }
     }
     if (out.length >= limit) break;

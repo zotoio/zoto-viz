@@ -17,6 +17,8 @@ let mesh = new MeshEngine();
 let skips = 0;
 let undoStack: VoxOptions[] = [];
 let lastT = -1;
+/** Session sim seconds — host `frame.t` is wall/unix and sends the fly camera to infinity. */
+let simT = 0;
 const FIXED_DT = 1 / 60;
 
 export function setVoxConfig(cfg: Record<string, string>): void {
@@ -80,6 +82,7 @@ export function disposeVoxelWorld(): void {
   mesh = new MeshEngine();
   skips = 0;
   lastT = -1;
+  simT = 0;
 }
 
 export interface VoxTickOut {
@@ -93,8 +96,11 @@ export interface VoxTickOut {
 
 export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = FIXED_DT): VoxTickOut {
   if (lastT >= 0 && frame.t <= lastT) skips++;
+  const step = Math.min(0.1, Math.max(0, dt));
+  if (lastT < 0) simT = 0;
+  else simT += step;
   lastT = frame.t;
-  const cam = voxelCamera(frame.t, opts, opts.reducedMotion);
+  const cam = voxelCamera(simT, opts, opts.reducedMotion);
   const live = applyLiveBindings(frame, opts, cam, dt);
   const meshStats = mesh.tick(cam.x, cam.z, opts.caps);
   if (meshStats.verticesUsed > opts.caps.vertexBudget) {
@@ -108,8 +114,8 @@ export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = F
   evictChunkMeshesExcept(chunkKeys);
   drawChunks();
   const gpu = gpuCounts();
-  const slot0 = packSlot0(frame.t, aspect, opts, live, meshStats, gpu.bytesAllocated, skips);
-  const slot1 = packSlot1Mobs(frame.t, opts, cam, live);
+  const slot0 = packSlot0(simT, aspect, opts, live, meshStats, gpu.bytesAllocated, skips);
+  const slot1 = packSlot1Mobs(simT, opts, cam, live);
   const bright = Math.max(0.55, 1.05 - live.failStrength * 0.35);
   const accent: [number, number, number] = live.failStrength > 0.35
     ? [0.95, 0.18, 0.22]

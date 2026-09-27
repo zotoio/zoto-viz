@@ -79,8 +79,9 @@ export function catalogWalls(looks: Iterable<[string, PluginLook | undefined]>):
 /**
  * Entering a wall view (Syscon) pins that mosaic. An explicit view change
  * replaces a wall or wall remnant — including when the new view is one of
- * the wall's own tiles. Re-applying the same mode (boot / profile) keeps a
- * persisted remnant. Tile look / max passes keepLayout.
+ * the wall's own tiles. Re-applying the same mode (boot / profile / persist)
+ * keeps a persisted remnant and operator pane picks on that wall. Tile look /
+ * max passes keepLayout.
  */
 export function resolvePluginWall(input: {
   modeId: string;
@@ -109,6 +110,11 @@ export function resolvePluginWall(input: {
     const remnant = isWallRemnant(anim.mosaicTiles, walls);
     const nextRestore = owner === modeId || remnant ? restore : snapWall(anim);
     if (wallMatches(anim, wall)) return { anim: null, state: { owner: modeId, restore: nextRestore } };
+    // Re-applying the same wall view (persist echo, profile, pane pick) must not
+    // wipe tiles the operator already changed on the wall.
+    if (prevModeId === modeId) {
+      return { anim: null, state: { owner: modeId, restore: nextRestore } };
+    }
     return {
       anim: {
         mosaic: wall.mosaic,

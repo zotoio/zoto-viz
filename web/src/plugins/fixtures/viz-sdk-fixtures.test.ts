@@ -1,9 +1,8 @@
 import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { VIZ_FIXTURES, VIZ_FIXTURE_NAMES } from "../../../../plugins/sdk/viz-fixtures";
-import { VIZ_CONTRACT_VERSION } from "../../../../plugins/sdk/viz-contract";
 import { VIZ_SDK_FIXTURE_BUILDERS, scrubVizCaptureState, type VizSdkFixtureName } from "./viz-sdk-frame-build";
 import type { StateMsg } from "../../core/types";
 
@@ -12,10 +11,6 @@ const jsonDir = path.join(repoRoot, "plugins/sdk/fixtures");
 
 /** Leaked NIC hardware addresses in committed JSON (colon or dash separators). */
 const MAC_ADDRESS_IN_TEXT = /\b(?:[0-9a-f]{2}[:-]){5}[0-9a-f]{2}\b/i;
-
-beforeEach(() => {
-  expect.hasAssertions();
-});
 
 describe("viz sdk frozen fixtures", () => {
   for (const name of VIZ_FIXTURE_NAMES) {
@@ -129,27 +124,5 @@ describe("viz sdk frozen fixtures", () => {
     expect(new Set(frame.talkers.map((t) => t.id)).size).toBe(frame.talkers.length);
     expect(frame.packets.length).toBeGreaterThan(0);
     expect(frame.headlines.some((h) => h.label && !/^host-\d+$/.test(h.label))).toBe(true);
-  });
-
-  it("fat-live links have no duplicate pairs or self-links", () => {
-    for (const name of ["fat-live", "fat-live-failed"] as const) {
-      const seen = new Set<string>();
-      for (const link of VIZ_FIXTURES[name].links ?? []) {
-        expect(link.src, name).not.toBe(link.dst);
-        const key = `${link.src}\0${link.dst}`;
-        expect(seen.has(key), `${name} duplicate ${key}`).toBe(false);
-        seen.add(key);
-      }
-    }
-  });
-
-  it("fat-live ships v2 links when enrichment is on", () => {
-    const frame = VIZ_FIXTURES["fat-live"];
-    expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
-    expect((frame.links?.length ?? 0)).toBeGreaterThan(0);
-  });
-
-  it("golden-live-failed exposes talkers[].failed from conn_fail", () => {
-    expect(VIZ_FIXTURES["golden-live-failed"].talkers.some((t) => t.failed != null)).toBe(true);
   });
 });

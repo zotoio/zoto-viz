@@ -12,7 +12,7 @@ out vec4 fragColor;
 const vec3 ZOTO_FAIL = vec3(0.93, 0.12, 0.35);
 
 float slotF(int slot, int fi) {
-  int base = slot * 16 + fi;
+  int base = slot * 64 + fi;
   int q = base >> 2;
   int r = base & 3;
   vec4 v = zotoVizSlots[q];
@@ -26,11 +26,9 @@ float hash11(float p) {
   return fract(sin(p * 127.1) * 43758.5453);
 }
 
-vec2 mapUv(vec2 uv) {
-  float aspect = max(0.5, slotF(0, 1));
-  vec2 p = uv;
-  p.x *= aspect;
-  return p;
+vec2 mapUv(vec3 dir) {
+  vec3 d = normalize(dir);
+  return d.xy / max(0.2, abs(d.z));
 }
 
 vec3 palette(float hue, float pal) {
@@ -88,14 +86,12 @@ float drawLabel(vec2 p, vec2 anchor, int idx, float density) {
 }
 
 void main() {
-  vec2 uv = normalize(vDir).xy / max(0.2, abs(normalize(vDir).z));
-  uv = mapUv(uv);
-  vec2 p = uv;
+  vec2 p = mapUv(vDir);
 
   float night = slotF(0, 2);
   float tilt = slotF(0, 3);
   float labelDensity = slotF(0, 4);
-  float lineW = slotF(0, 5) * 0.012;
+  float lineW = max(slotF(0, 5), 0.35) * 0.028;
   float demo = slotF(0, 8);
   float disruptions = slotF(0, 9);
   int nSta = int(slotF(0, 11));
@@ -119,8 +115,8 @@ void main() {
 
   for (int e = 0; e < 16; e++) {
     if (e >= nEdge) break;
-    int a = int(slotF(2, e * 4) * 16.0 + 0.5);
-    int b = int(slotF(2, e * 4 + 1) * 16.0 + 0.5);
+    int a = int(clamp(slotF(2, e * 4) * 16.0 + 0.5, 0.0, 15.0));
+    int b = int(clamp(slotF(2, e * 4 + 1) * 16.0 + 0.5, 0.0, 15.0));
     float hue = slotF(2, e * 4 + 2);
     float weight = slotF(2, e * 4 + 3);
     vec2 pa = vec2(slotF(1, a * 4), slotF(1, a * 4 + 1));
@@ -142,14 +138,14 @@ void main() {
     float u = slotF(6, t * 4 + 1);
     float len = slotF(6, t * 4 + 2);
     float protoHue = slotF(6, t * 4 + 3);
-    int a = int(slotF(2, ei * 4) * 16.0 + 0.5);
-    int b = int(slotF(2, ei * 4 + 1) * 16.0 + 0.5);
+    int a = int(clamp(slotF(2, ei * 4) * 16.0 + 0.5, 0.0, 15.0));
+    int b = int(clamp(slotF(2, ei * 4 + 1) * 16.0 + 0.5, 0.0, 15.0));
     vec2 pa = vec2(slotF(1, a * 4), slotF(1, a * 4 + 1));
     vec2 pb = vec2(slotF(1, b * 4), slotF(1, b * 4 + 1));
     vec2 mid = vec2(pb.x, pa.y);
-    float half = len * 0.5;
-    float u0 = clamp(u - half, 0.0, 1.0);
-    float u1 = clamp(u + half, 0.0, 1.0);
+    float halfLen = len * 0.5;
+    float u0 = clamp(u - halfLen, 0.0, 1.0);
+    float u1 = clamp(u + halfLen, 0.0, 1.0);
     vec2 ta = mix(pa, mid, u0);
     vec2 tb = mix(pa, mid, u1);
     float d = min(seg2(p, ta, tb), seg2(p, mix(mid, pb, u0), mix(mid, pb, u1)));
@@ -163,7 +159,7 @@ void main() {
     if (s >= nSta) break;
     vec2 c = vec2(slotF(1, s * 4), slotF(1, s * 4 + 1));
     float rate = slotF(1, s * 4 + 3);
-    float r = 0.018 + 0.012 * rate;
+    float r = 0.032 + 0.02 * rate;
     float ring = stationDisk(p, c, r * 1.55) * 0.35;
     float core = stationDisk(p, c, r);
     vec3 sc = vec3(0.12, 0.14, 0.18);

@@ -1,4 +1,6 @@
-/** Voxel World — config.read only; drives sky slots + GPU mesh stats from viz frames. */
+/** Voxel World — config.read only; drives sky slots + GPU mesh stats from viz frames.
+ * Sim clock is accumulated dt in engine.ts (host frame.t is wall time).
+ */
 
 import {
   disposeVoxelWorld,

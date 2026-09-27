@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setPackAssetTokenForTests } from "../core/http";
 import * as packAssetFrame from "./pack-asset-frame";
@@ -12,6 +15,8 @@ import {
   setTsPluginsAllowed,
   tsPluginsAllowed,
 } from "./host";
+
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 describe("hash consent and TypeScript allow", () => {
   afterEach(() => {
@@ -52,6 +57,15 @@ describe("hash consent and TypeScript allow", () => {
   it("allows tile-heal sandbox messages without extra caps", () => {
     expect(hostAllows("drawState", [])).toBe(true);
     expect(hostAllows("loseHostContext", ["viz.read"])).toBe(true);
+  });
+});
+
+describe("page CSP", () => {
+  it("allows inline scripts so sandboxed plugin srcdoc can run", () => {
+    const html = readFileSync(path.join(webRoot, "index.html"), "utf8");
+    const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] ?? "";
+    expect(csp).toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(csp).toMatch(/script-src[^;]*blob:/);
   });
 });
 

@@ -201,6 +201,23 @@ export function movePaneTileView(ids: string[], fromSlot: string, otherSlot: str
   return next;
 }
 
+/** Pane ids whose view changed between two tile lists (replacement or swap). */
+export function mosaicPaneIdsWithViewChange(prev: string[], next: string[]): string[] {
+  const out = new Set<string>();
+  const prevSet = new Set(prev);
+  const nextSet = new Set(next);
+  for (const id of prev) if (!nextSet.has(id)) out.add(id);
+  for (const id of next) if (!prevSet.has(id)) out.add(id);
+  const n = Math.max(prev.length, next.length);
+  for (let i = 0; i < n; i++) {
+    if (prev[i] !== next[i]) {
+      if (prev[i]) out.add(prev[i]);
+      if (next[i]) out.add(next[i]);
+    }
+  }
+  return [...out];
+}
+
 /** Set one pane to a view id, allocating a new tile slot when needed. */
 export function placePaneTileView(ids: string[], fromSlot: string, viewId: string): string[] {
   const i = ids.indexOf(fromSlot);

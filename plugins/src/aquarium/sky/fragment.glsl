@@ -252,7 +252,7 @@ void main() {
   }
 
   vec3 pFloor = ro + dir * 2.1;
-  float caust = noise3(pFloor * vec3(2.0, 0.2, 2.0) + sun.xy * simTime * 0.4);
+  float caust = noise3(pFloor * vec3(2.0, 0.2, 2.0) + vec3(sun.xy * simTime * 0.4, 0.0));
   col += vec3(0.35, 0.75, 0.95) * caust * 0.12 * day * (1.0 - murk);
 
   float beam = pow(max(0.0, dot(dir, sun)), 6.0) * (0.25 + day * 0.35);

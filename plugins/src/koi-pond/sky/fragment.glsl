@@ -51,7 +51,7 @@ vec3 koiPatternCol(float sp, float vig) {
 }
 
 vec3 pondWater(vec2 xz, float clarity, float murk, float tint, float simTime) {
-  float rip = noise3(vec3(xz * 3.5, simTime * 0.35, 0.0));
+  float rip = noise3(vec3(xz * 3.5, simTime * 0.35));
   vec3 deep = mix(vec3(0.02, 0.18, 0.22), vec3(0.05, 0.28, 0.32), tint);
   vec3 shallow = mix(vec3(0.08, 0.42, 0.38), vec3(0.12, 0.55, 0.48), tint);
   vec3 base = mix(deep, shallow, clarity * 0.85 + rip * 0.15);
@@ -114,7 +114,7 @@ void main() {
   vec3 col = mix(skyHor, skyTop, clamp(dir.y * 0.5 + 0.5, 0.0, 1.0));
 
   vec3 water = pondWater(xz, clarity, murk, waterTint, simTime);
-  float caust = noise3(vec3(xz * 4.0, simTime * 0.5, 1.0));
+  float caust = noise3(vec3(xz * 4.0, simTime * 0.5 + 1.0));
   if (caustOn > 0.5) water += vec3(0.35, 0.75, 0.65) * caust * caustStr * 0.18 * (1.0 - murk);
 
   int nKoi = int(clamp(slotF(0, 24.0), 0.0, 16.0));
@@ -184,7 +184,7 @@ void main() {
   }
 
   if (rainOn > 0.5) {
-    float rain = noise3(vec3(xz * 8.0, simTime * 4.0, 2.0));
+    float rain = noise3(vec3(xz * 8.0, simTime * 4.0 + 2.0));
     water = mix(water, water * 0.92, rain * 0.15);
   }
 

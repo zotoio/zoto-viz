@@ -55,7 +55,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://hnrss.org/frontpage",
         "interval": 300,
         "enabled": True,
-        "feed": False,
+        "feed": True,
     },
     {
         "id": "nasa",
@@ -64,7 +64,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://www.nasa.gov/feeds/iotd-feed",
         "interval": 3600,
         "enabled": True,
-        "feed": False,
+        "feed": True,
     },
     {
         "id": "apod",
@@ -73,7 +73,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY",
         "interval": 3600,
         "enabled": True,
-        "feed": False,
+        "feed": True,
         "fields": {
             "title": "title",
             "caption": "explanation",
@@ -90,7 +90,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://science.nasa.gov/feed/earth-observatory/image-of-the-day",
         "interval": 3600,
         "enabled": True,
-        "feed": False,
+        "feed": True,
     },
     {
         "id": "commons-potd",
@@ -99,7 +99,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://commons.wikimedia.org/w/api.php?action=featuredfeed&feed=potd&feedformat=atom",
         "interval": 3600,
         "enabled": True,
-        "feed": False,
+        "feed": True,
     },
     {
         "id": "met",
@@ -108,7 +108,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://collectionapi.metmuseum.org/public/collection/v1/search?isHighlight=true&hasImages=true&q=art",
         "interval": 3600,
         "enabled": True,
-        "feed": False,
+        "feed": True,
         "fields": {
             "list": "objectIDs",
             "expand": "https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}",
@@ -127,7 +127,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://lobste.rs/rss",
         "interval": 300,
         "enabled": True,
-        "feed": False,
+        "feed": True,
     },
     {
         "id": "guardian",
@@ -136,7 +136,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://www.theguardian.com/world/rss",
         "interval": 600,
         "enabled": True,
-        "feed": False,
+        "feed": True,
     },
     {
         "id": "mastodon",
@@ -145,7 +145,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "url": "https://mastodon.social/tags/space.rss",
         "interval": 300,
         "enabled": True,
-        "feed": False,
+        "feed": True,
     },
     {
         "id": "journal",
@@ -164,8 +164,7 @@ DEFAULT_SOURCES: list[dict[str, Any]] = [
         "feed": True,
     },
 ]
-# Re-add these ids on registries that predate them. hn / nasa stay operator-owned
-# except the ticker flag (news/stills stay off the packet feed).
+# Re-add these ids on registries that predate them. hn / nasa stay operator-owned.
 SEED_SOURCE_IDS = frozenset({
     "journal", "kmsg",
     "apod", "earth-iotd", "commons-potd", "met", "lobsters", "guardian", "mastodon",
@@ -411,8 +410,8 @@ def _refresh_shipped(rows: list[dict[str, Any]]) -> bool:
             row["url"] = "https://www.theguardian.com/world/rss"
             row.pop("fields", None)
             changed = True
-        if sid in TICKER_NEWS_IDS and row.get("feed") is not False:
-            row["feed"] = False
+        if sid in TICKER_NEWS_IDS and row.get("feed") is False:
+            row["feed"] = True
             changed = True
     return changed
 
@@ -1047,7 +1046,7 @@ def headlines(limit: int = HEADLINE_LIMIT) -> list[dict[str, str]]:
             continue
         label = str(live.get("label") or row["label"])
         for item in live.get("items") or []:
-            title = str(item.get("title") or "").strip()
+            title = " ".join(str(item.get("title") or "").split())
             if not title:
                 continue
             line = {

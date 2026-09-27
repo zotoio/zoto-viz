@@ -16,6 +16,13 @@ describe("feed title cube", () => {
     ]);
   });
 
+  it("collapses a wrapped title onto one cube face line", () => {
+    expect(uniqueFeedTitles(["A\nlong\nNASA title", "A long NASA title", "Next"])).toEqual([
+      "A long NASA title",
+      "Next",
+    ]);
+  });
+
   it("drifts across the screen and stays inside it", () => {
     const box = { w: 1600, h: 900, top: 76, cube: 280 };
     const a = cubeDrift(0, box);

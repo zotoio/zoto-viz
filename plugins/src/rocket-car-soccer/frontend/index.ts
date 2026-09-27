@@ -18,6 +18,9 @@ let mergedCfg: Record<string, string> = {};
 let lastHostSnapshot: Record<string, string> = {};
 let lastCfgRef: Record<string, string> | undefined;
 let mounted = false;
+/** Host `frame.t` is wall/unix; orbit/ball cameras cannot use it as sim seconds. */
+let simClock = 0;
+let simStarted = false;
 
 function mergeHostDelta(cfg: Record<string, string>): void {
   for (const key of Object.keys(cfg)) {
@@ -69,7 +72,13 @@ zoto.onFrame = (frame) => {
   pollHostConfig();
   const feedDt = frame.dt > 0 && frame.dt < 0.2 ? frame.dt : frame.dt >= 0.25 ? frame.dt : 1 / 60;
   const aspect = 16 / 9;
-  const out = rcsTick(frame, frame.t, feedDt, aspect);
+  if (!simStarted) {
+    simClock = 0;
+    simStarted = true;
+  } else {
+    simClock += feedDt;
+  }
+  const out = rcsTick(frame, simClock, feedDt, aspect);
   zoto.writeBuffer(0, out.slot0);
   zoto.writeBuffer(1, out.slot1);
   zoto.writeBuffer(2, out.slot2);
@@ -90,6 +99,8 @@ if (bootCfg) {
 /** Test hook: simulate pack teardown when the view unmounts. */
 export function rcsFrontendTeardown(): ReturnType<typeof rcsUnmount> {
   mounted = false;
+  simClock = 0;
+  simStarted = false;
   return rcsUnmount();
 }
 
@@ -105,6 +116,8 @@ export function rcsTestResetDriverStateForTest(): void {
   mergedCfg = {};
   lastHostSnapshot = {};
   lastCfgRef = undefined;
+  simClock = 0;
+  simStarted = false;
 }
 
 export function rcsTestApplyHostConfigForTest(cfg: Record<string, string>): void {

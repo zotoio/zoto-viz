@@ -96,6 +96,7 @@ describe("plugin sky contract", () => {
     expect("frag" in wrapped && wrapped.frag.includes("binding")).toBe(false);
     expect(pluginShaderError("layout(std140, binding = 0) uniform ZotoVizData { vec4 zotoVizSlots[128]; };\nvoid main() {}"))
       .toMatch(/UBO|binding/);
+    expect(pluginShaderError("void main() { float half = 0.5; }")).toMatch(/half/);
   });
 
   it("releases the compile-probe context", () => {

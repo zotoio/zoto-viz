@@ -695,6 +695,10 @@ export function pluginShaderError(src: string): string | null {
     if (!PLUGIN_ALLOWED.has(n)) return `non-whitelisted uniform ${n}`;
   }
   if (!/\bvoid\s+main\s*\(/.test(src)) return "shader needs void main()";
+  const reserved = src.match(
+    /\b(?:float|int|uint|bool|vec[234]|ivec[234]|bvec[234]|uvec[234]|mat[234])\s+(half|fixed|double|short|long|unsigned)\b/,
+  );
+  if (reserved) return `reserved identifier ${reserved[1]}`;
   return null;
 }
 

@@ -26,12 +26,12 @@
   ],
   "rf": [
     {
-      "ssid": "host-05",
+      "ssid": "host-04",
       "rssi": 0.55,
       "channel": 36
     },
     {
-      "ssid": "host-06",
+      "ssid": "host-05",
       "rssi": 0.42,
       "channel": 6
     }
@@ -51,461 +51,498 @@
       "id": "host-03",
       "rate": 64,
       "role": "internet"
-    },
-    {
-      "id": "host-04",
-      "rate": 40,
-      "role": "lan"
     }
   ],
   "headlines": [
     {
-      "id": "kmsg:0",
-      "label": "Kernel ring",
-      "text": "HOME=/",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "hn:0",
+      "label": "Hacker News",
+      "text": "Earth is tearing apart beneath the Pacific Northwest",
+      "kind": "rss",
+      "summary": "Article URL: https://www.sciencedaily.com/releases/2026/09/260924231343.htm Comments URL: https://news.ycombinator.com/item?id=49856971 Points: 3 # Comments: 0"
     },
     {
-      "id": "kmsg:1",
-      "label": "Kernel ring",
-      "text": "TERM=linux",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "hn:1",
+      "label": "Hacker News",
+      "text": "Understanding the Impact of LLM Watermarking on AI Agent Behavior",
+      "kind": "rss",
+      "summary": "Article URL: https://www.lasso.security/blog/the-provenance-tax-understanding-the-impact-of-llm-watermarking-on-ai-agent-behavior Comments URL: https://news.ycombinator.com/item?id=49856149 Points: 43 # Comments: 26"
     },
     {
-      "id": "kmsg:2",
-      "label": "Kernel ring",
-      "text": "systemd[1]: systemd 252.39-1~deb12u2 running in system mode (+PAM +AUDIT +SELINUX +APPARMOR +IMA +SMACK +SECCOMP +GCRYPT -GNUTLS +OPENSSL +ACL +BLKID +CURL +ELFUTILS +FIDO2 +IDN2 -IDN +IPTC +KMOD +LIBCRYPTSETUP +LIBFDISK +PCRE2 -PWQUALITY +",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "hn:2",
+      "label": "Hacker News",
+      "text": "Breaking Up with Google Play: Why Conversations Is Now Free",
+      "kind": "rss",
+      "summary": "Article URL: https://gultsch.de/posts/breaking-up-with-google-play/ Comments URL: https://news.ycombinator.com/item?id=49855315 Points: 277 # Comments: 111"
     },
     {
-      "id": "kmsg:3",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Detected virtualization kvm.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "hn:3",
+      "label": "Hacker News",
+      "text": "One Month Without AI",
+      "kind": "rss",
+      "summary": "Article URL: https://blog.bustikiller.com/2026/09/25/one-month-without-ai.html Comments URL: https://news.ycombinator.com/item?id=49855018 Points: 123 # Comments: 129"
     },
     {
-      "id": "kmsg:4",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Detected architecture x86-64.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "hn:4",
+      "label": "Hacker News",
+      "text": "The Copilot+ PC brand is dead",
+      "kind": "rss",
+      "summary": "Article URL: https://www.windowscentral.com/microsoft/windows-11/the-copilot-pc-brand-is-dead-microsoft-and-pc-makers-quietly-pull-back-on-tarnished-windows-11-ai-pc-branding Comments URL: https://news.ycombinator.com/item?id=49854945 Points: 43 # Comments: 25"
     },
     {
-      "id": "kmsg:5",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Hostname set to <localhost>.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "hn:5",
+      "label": "Hacker News",
+      "text": "Fifteen years later, the Apple Cards origin story",
+      "kind": "rss",
+      "summary": "Article URL: https://lexontech.org/fifteen-years-later-the-apple-cards-origin-story Comments URL: https://news.ycombinator.com/item?id=49854693 Points: 152 # Comments: 18"
     },
     {
-      "id": "kmsg:6",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Initializing machine ID from random generator.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "hn:6",
+      "label": "Hacker News",
+      "text": "Floci: Locally emulating any cloud service",
+      "kind": "rss",
+      "summary": "Article URL: https://floci.io Comments URL: https://news.ycombinator.com/item?id=49854416 Points: 78 # Comments: 11"
     },
     {
-      "id": "kmsg:7",
-      "label": "Kernel ring",
-      "text": "systemd[1]: /etc/systemd/system/docker-socat.service:13: Failed to parse output specifier, ignoring: console",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "hn:7",
+      "label": "Hacker News",
+      "text": "The far side of the Moon provides clues to a previous magnetic field",
+      "kind": "rss",
+      "summary": "Article URL: https://ethz.ch/en/news-and-events/eth-news/news/2026/09/the-far-side-of-the-moon-provides-clues-to-a-previous-magnetic-field.html Comments URL: https://news.ycombinator.com/item?id=49854216 Points: 17 # Comments: 1"
     },
     {
-      "id": "kmsg:8",
-      "label": "Kernel ring",
-      "text": "systemd[1]: /etc/systemd/system/docker-socat.service:14: Failed to parse output specifier, ignoring: console",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "nasa:0",
+      "label": "NASA image of the day",
+      "text": "Hubble Spots Chaotic Secret in Galaxy",
+      "kind": "rss",
+      "summary": "Though the spiral galaxy in this ESA/Hubble Picture of the Month seems serene, it hides a chaotic secret.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55534741297-34e5a9d414-o.jpg"
     },
     {
-      "id": "kmsg:9",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Queued start job for default target multi-user.target.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "nasa:1",
+      "label": "NASA image of the day",
+      "text": "Practicing for Safe Landings on the Moon and Beyond",
+      "kind": "rss",
+      "summary": "An Alta-X drone flies an advanced guidance and navigation system known as the Safe and Precise Landing – Integrated Capabilities Evolution (SPLICE) experiment near NASA’s Armstrong Flight Research Center in Edwards, California, on Thursday, Aug. 27, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/afrc2026-0179-18orig.jpg"
     },
     {
-      "id": "kmsg:10",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Created slice system-getty.slice - Slice /system/getty.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "nasa:2",
+      "label": "NASA image of the day",
+      "text": "NASA's Hubble Telescope Reaches Milestone, Looks for Elusive Supernova",
+      "kind": "rss",
+      "summary": "An image from NASA's Hubble Space Telescope of galaxy cluster MACS J0417 is part of repeated observations to monitor for the reappearance of supernova Athena, which can help astronomers measure the expansion rate of the universe.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/stsci-h-p26023a-m-2000x1207-1.jpg"
     },
     {
-      "id": "kmsg:11",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Created slice system-modprobe.slice - Slice /system/modprobe.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "nasa:3",
+      "label": "NASA image of the day",
+      "text": "NASA's Chandra Finds Unusual Objects in Pinwheel Galaxy",
+      "kind": "rss",
+      "summary": "Using NASA’s Chandra X-ray Observatory, scientists have discovered a new class of objects behaving unlike any they have seen before.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/m101-lg.jpg"
     },
     {
-      "id": "kmsg:12",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Created slice system-serial\\x5cx2dgetty.slice - Slice /system/serial-getty.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "nasa:4",
+      "label": "NASA image of the day",
+      "text": "NASA Astronaut Reid Wiseman Attends Ravens vs. Saints Game",
+      "kind": "rss",
+      "summary": "NASA astronaut and commander of the agency’s Artemis II mission, Reid Wiseman, a Baltimore native, takes a selfie with fans at an NFL game between the New Orleans Saints and the Baltimore Ravens at M&T Bank Stadium, Sunday, Sept. 20, 2026, in Baltimore.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55540215826-eb77fe7409-o.jpg"
     },
     {
-      "id": "kmsg:13",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Created slice user.slice - User and Session Slice.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "nasa:5",
+      "label": "NASA image of the day",
+      "text": "COSI Telescope Comes Together",
+      "kind": "rss",
+      "summary": "UC Berkeley engineers and managers watch as the COSI (Compton Spectrometer and Imager) detector assembly is slowly raised from a table in this July 8, 2026, image.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/cosi-2026july-01.jpg"
     },
     {
-      "id": "kmsg:14",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Started systemd-ask-password-console.path - Dispatch Password Requests to Console Directory Watch.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "nasa:6",
+      "label": "NASA image of the day",
+      "text": "NASA Unveils Enterprise, the First Space Shuttle",
+      "kind": "rss",
+      "summary": "The rollout ceremony for NASA’s first space shuttle, OV-101, coincided with Constitution Day of the nation’s bicentennial on Sept.17, 1976. Although the orbiter was originally planned to be named Constitution, Star Trek fans successfully convinced President Gerald Ford to name it Enterprise after the series’ fictional starship.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/9467279838-faa6134db8-o.jpg"
     },
     {
-      "id": "kmsg:15",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Started systemd-ask-password-wall.path - Forward Password Requests to Wall Directory Watch.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "nasa:7",
+      "label": "NASA image of the day",
+      "text": "Indonesia's Anak Krakatau",
+      "kind": "rss",
+      "summary": "Anak Krakatau erupts ash and volcanic gases in this image acquired with the OLI (Operational Land Imager) on Landsat 8 on Sept. 5, 2026.",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/krakatau-oli-20260905-lrg.jpg"
     },
     {
-      "id": "kmsg:16",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Set up automount proc-sys-fs-binfmt_misc.automount - Arbitrary Executable File Formats File System Automount Point.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "apod:0",
+      "label": "Astronomy Picture of the Day",
+      "text": "A Zodiacal Night",
+      "kind": "http",
+      "summary": "Also known as the false dawn, a luminous band of zodiacal light is captured in this dark night skyscape. The serene view was recorded just before the beginning of astronomical twilight during September's star party at the remote Hanle Dark Sky Reserve, Ladakh, India, planet Earth. At about 4,500 meters altitude, the dark sky reserve presents a haven for hardy stargazing and astrophotography enthus",
+      "image": "https://apod.nasa.gov/apod/image/2609/2026-09-09ZodiacalLightHSP.jpg"
     },
     {
-      "id": "kmsg:17",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Expecting device dev-ttyS0.device - /dev/ttyS0...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "apod:1",
+      "label": "Astronomy Picture of the Day",
+      "text": "Analemma over the Callanish Stones",
+      "kind": "http",
+      "summary": "If you went outside at the same time every day and took a picture that included the Sun, how would the Sun's position change? A visual answer to that question is an analemma, a composite image taken from the same spot at the same time over the course of a year. The featured analemma was composed from images taken every few days at noon near the village of Callanish in the Outer Hebrides in Scotlan",
+      "image": "https://apod.nasa.gov/apod/image/2609/CallanishAnalemma_Petricca_1280.jpg"
     },
     {
-      "id": "kmsg:18",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Reached target cryptsetup.target - Local Encrypted Volumes.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "apod:2",
+      "label": "Astronomy Picture of the Day",
+      "text": "Cocoon Nebula Wide Field",
+      "kind": "http",
+      "summary": "When does a nebula look like a comet? In this crowded starfield covering over two degrees within the high-flying constellation of the Swan (Cygnus), the eye is drawn to the Cocoon Nebula. A compact star forming region, the cosmic Cocoon punctuates a nebula bright in emission and reflection on the lower right, with a long trail of interstellar dust clouds to the left, making the entire complex appe",
+      "image": "https://apod.nasa.gov/apod/image/2609/Cocoon_Czerski_3000.jpg"
     },
     {
-      "id": "kmsg:19",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Reached target integritysetup.target - Local Integrity Protected Volumes.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "apod:3",
+      "label": "Astronomy Picture of the Day",
+      "text": "Chance Triple Alignment: Plane, Space Station, Sun",
+      "kind": "http",
+      "summary": "This shot captured an unexpected silhouette. Which is it? It isn't the sunspots, the small dark regions caused by concentrated magnetic fields visible around the Sun's bright disk. Sunspots typically last for weeks and were expected, since these spots were seen previously. It isn’t the International Space Station (ISS), the small dark structure on the middle left. This is because the featured pict",
+      "image": "https://apod.nasa.gov/apod/image/2609/PlaneIssSpots_Horalek_1500.jpg"
     },
     {
-      "id": "kmsg:20",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Reached target network-online.target - Network is Online.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "apod:4",
+      "label": "Astronomy Picture of the Day",
+      "text": "A New Lunar Crater: McGetchin",
+      "kind": "http",
+      "summary": "A once-in-a-lifetime crater has appeared on the Moon! A comet or asteroid roughly the size of a humpback whale (approximately 10-20 meters, 30-60 feet) crashed into the Moon sometime between April and May of 2024. The Lunar Reconnaissance Orbiter (LRO), with its monthly monitoring of the Moon, captured today’s images of the lunar surface before and after the event. The resulting crater, named afte",
+      "image": "https://apod.nasa.gov/apod/image/2609/mcgetchin_after.jpg"
     },
     {
-      "id": "kmsg:21",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Reached target paths.target - Path Units.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "apod:5",
+      "label": "Astronomy Picture of the Day",
+      "text": "The Ghosts of Five Supernovas",
+      "kind": "http",
+      "summary": "The ghosts of five supernovas haunt this extraordinary image. It was acquired at Oukaïmeden Observatory in Morocco with approximately 200 hours of observations and shows a large patch of the sky, equivalent to the area of one thousand full moons tiled together, in the constellation of Auriga (the Charioteer). From left to right, the five supernova remnants visible across the field are G181.1+9.5,",
+      "image": "https://apod.nasa.gov/apod/image/2609/5SNR_Auriga_2000.jpg"
     },
     {
-      "id": "kmsg:22",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Reached target remote-fs.target - Remote File Systems.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "apod:6",
+      "label": "Astronomy Picture of the Day",
+      "text": "Globular Cluster Omega Centauri",
+      "kind": "http",
+      "summary": "Globular star cluster Omega Centauri packs about 10 million stars much older than the Sun into a volume some 150 light-years in diameter. Also known as NGC 5139, at a distance of 15,000 light-years it's the largest and brightest of 200 or so known globular clusters that roam the halo of our Milky Way galaxy. Though most star clusters consist of stars with the same age and composition, the enigmati",
+      "image": "https://apod.nasa.gov/apod/image/2609/NGC5139CadenasParra.jpg"
     },
     {
-      "id": "kmsg:23",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Reached target slices.target - Slice Units.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "apod:7",
+      "label": "Astronomy Picture of the Day",
+      "text": "Mirrored Meteor and Milky Way",
+      "kind": "http",
+      "summary": "On August 15, this perseid meteor streaked through night skies over the Observatorio del Roque de los Muchachos at La Palma, Canary Islands, Spain. The bright and colorful meteor trail was captured next to the central Milky Way, whose dark interstellar dust clouds and luminous starlight reach above the horizon. In the foreground of this tantalizing celestial scene is the 23 meter diameter mirror o",
+      "image": "https://apod.nasa.gov/apod/image/2609/MilkyWayMeteorLSTJeffDai.jpg"
     },
     {
-      "id": "kmsg:24",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Reached target swap.target - Swaps.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "earth-iotd:0",
+      "label": "Earth Observatory",
+      "text": "Explosive Intensification for Hurricane Polo",
+      "kind": "rss",
+      "summary": "Several ingredients came together off the Pacific coast of Mexico to generate one of the strongest storms the eastern Pacific basin has ever seen. The post Explosive Intensification for Hurricane Polo appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "kmsg:25",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Reached target veritysetup.target - Local Verity Protected Volumes.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "earth-iotd:1",
+      "label": "Earth Observatory",
+      "text": "Cloudy Cloak Over the Northwest",
+      "kind": "rss",
+      "summary": "A low-lying cloud layer brought autumn ambience to western Washington and Oregon, while mountainous areas near the coast remained above the pall. The post Cloudy Cloak Over the Northwest appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "kmsg:26",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Listening on systemd-initctl.socket - initctl Compatibility Named Pipe.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "earth-iotd:2",
+      "label": "Earth Observatory",
+      "text": "Boom Year for Desert Blooms",
+      "kind": "rss",
+      "summary": "Carpets of wildflowers burst from arid, ochre-colored land in Western Australia following winter rains. The post Boom Year for Desert Blooms appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "kmsg:27",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Listening on systemd-journald-audit.socket - Journal Audit Socket.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "earth-iotd:3",
+      "label": "Earth Observatory",
+      "text": "An Epic View of the Seasons",
+      "kind": "rss",
+      "summary": "The tilt in Earth's axis of rotation makes the apparent position of continents shift with the seasons in imagery from a NASA camera in deep space. The post An Epic View of the Seasons appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "kmsg:28",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Listening on systemd-journald-dev-log.socket - Journal Socket (/dev/log).",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "earth-iotd:4",
+      "label": "Earth Observatory",
+      "text": "Perseverance’s View of ‘Turquoise Bay’",
+      "kind": "rss",
+      "summary": "Description NASA’s Perseverance Mars rover used its Mastcam-Z camera to capture this 360-degree panorama of “Turquoise Bay,” a geologic area of interest in the “Margin Unit.” The 818 images used to create the natural-color panorama were captured between Oct. 5 and Oct. 16, 2023, the 933rd to 944th Martian days, or sols, of the mission. […] The post Perseverance’s View of ‘Turquoise Bay’ appeared f",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/psd/photojournal/pia/pia25/pia25691/PIA25691.jpg?w=2000&h=1124&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "kmsg:29",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Listening on systemd-journald.socket - Journal Socket.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "earth-iotd:5",
+      "label": "Earth Observatory",
+      "text": "Arctic Melt Season Length Levels Off",
+      "kind": "rss",
+      "summary": "While the sea ice melt season has lengthened dramatically in most of the satellite era, the trend unexpectedly stabilized around 2010. The post Arctic Melt Season Length Levels Off appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "kmsg:30",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Listening on systemd-udevd-control.socket - udev Control Socket.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "earth-iotd:6",
+      "label": "Earth Observatory",
+      "text": "Lake Powell Drops to Record-Low Levels",
+      "kind": "rss",
+      "summary": "Snow drought and unusually warm temperatures in the Colorado Basin in 2026 helped drive down reservoir water storage in the U.S. West. The post Lake Powell Drops to Record-Low Levels appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "kmsg:31",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Listening on systemd-udevd-kernel.socket - udev Kernel Socket.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "earth-iotd:7",
+      "label": "Earth Observatory",
+      "text": "Summer Goes Out With a Heat Dome",
+      "kind": "rss",
+      "summary": "Temperature records toppled across the central and southern U.S. as the autumnal equinox approached. The post Summer Goes Out With a Heat Dome appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "kmsg:32",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Mounting dev-hugepages.mount - Huge Pages File System...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "commons-potd:0",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 17",
+      "kind": "rss",
+      "summary": "Picture of the day A group of newly ordained Buddhist śramaṇas performing the traditional lamp-lighting ritual on Prabarana Purnima , Bangladesh .",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/%E0%A6%AA%E0%A7%8D%E0%A6%B0%E0%A6%AC%E0%A6%BE%E0%A6%B0%E0%A6%A3%E0%A6%BE_%E0%A6%AA%E0%A7%82%E0%A6%B0%E0%A7%8D%E0%A6%A3%E0%A6%BF%E0%A6%AE%E0%A6%BE%E0%A6%AF%E0%A6%BC_%E0%A6%86%E0%A6%B2%E0%A7%8B%E0%A6%95%E0%A6%B0%E0%A6%B6%E0%A7%8D%E0%A6%AE%E0%A6%BF_%E0%A6%B6%E0%A6%BE%E0%A6%A8%E0%A7%8D%E0%A6%A4%E0%A6%BF%E0%A6%B0_%E0%A6%AA%E0%A7%8D%E0%A6%B0%E0%A6%BE%E0%A6%B0%E0%A7%8D%E0%A6%A5%E0%A6%A8%E0%A6%BE%E0%A6%AF%E0%A6%BC_%E0%A6%AE%E0%A6%97%E0%A7%8D%E0%A6%A8_%E0%A6%B6%E0%A7%8D%E0%A6%B0%E0%A6%AE%E0%A6%A3%E0%A6%97%E0%A6%A3_%2800001957%29.jpg/960px-thumbnail.jpg"
     },
     {
-      "id": "kmsg:33",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Mounting dev-mqueue.mount - POSIX Message Queue File System...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "commons-potd:1",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 18",
+      "kind": "rss",
+      "summary": "Picture of the day Street lights on the promenade , Norderney , Lower Saxony, Germany",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f4/Norderney%2C_Promenade%2C_Wegbeleuchtung_--_2025_--_9015.jpg/960px-Norderney%2C_Promenade%2C_Wegbeleuchtung_--_2025_--_9015.jpg"
     },
     {
-      "id": "kmsg:34",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Mounting sys-kernel-debug.mount - Kernel Debug File System...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "commons-potd:2",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 19",
+      "kind": "rss",
+      "summary": "Picture of the day A fan-tailed warbler ( Zitting cisticola ) in Bhigwan , Maharashtra, India.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/Zitting_Cisticola_in_Bhigwan_August_2025_by_Tisha_Mukherjee_01.jpg/960px-Zitting_Cisticola_in_Bhigwan_August_2025_by_Tisha_Mukherjee_01.jpg"
     },
     {
-      "id": "kmsg:35",
-      "label": "Kernel ring",
-      "text": "systemd[1]: sys-kernel-tracing.mount - Kernel Trace File System was skipped because of an unmet condition check (ConditionPathExists=/sys/kernel/tracing).",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "commons-potd:3",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 20",
+      "kind": "rss",
+      "summary": "Picture of the day Inflorescence of a Rostrinucula dependens . This subshrub is native to China and blooms from August to October. Focus stack of 54 photos.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/80/Bloeiwijze_van_een_Rostrinucula_dependens._11-10-2025._%28d.j.b%29.jpg/960px-Bloeiwijze_van_een_Rostrinucula_dependens._11-10-2025._%28d.j.b%29.jpg"
     },
     {
-      "id": "kmsg:36",
-      "label": "Kernel ring",
-      "text": "systemd[1]: kmod-static-nodes.service - Create List of Static Device Nodes was skipped because of an unmet condition check (ConditionFileNotEmpty=/lib/modules/6.12.94+/modules.devname).",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "commons-potd:4",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 21",
+      "kind": "rss",
+      "summary": "Picture of the day Chief Joseph of the Wallowa band of Nez Perce , an American Native American tribe in the Pacific Northwest . This photo was taken by Edward Sheriff Curtis . Chief Joseph died on this day in 1904.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Chief_Joseph_by_Edward_Sheriff_Curtis.jpg/960px-Chief_Joseph_by_Edward_Sheriff_Curtis.jpg"
     },
     {
-      "id": "kmsg:37",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting modprobe@configfs.service - Load Kernel Module configfs...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "commons-potd:5",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 22",
+      "kind": "rss",
+      "summary": "Picture of the day Beach of Cape Fiolent during the storm at sea. Cape Fiolent in Crimea is of ancient Jurassic origin. Upper Miocene lava and carbonate intrusions on heavily eroded Jurassic foundation.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Beach_of_Cape_Fiolent%2C_Crimea.jpg/960px-Beach_of_Cape_Fiolent%2C_Crimea.jpg"
     },
     {
-      "id": "kmsg:38",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting modprobe@dm_mod.service - Load Kernel Module dm_mod...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "commons-potd:6",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 23",
+      "kind": "rss",
+      "summary": "Picture of the day Paraskevi of Iconium church in Kwiatoń, Southern Poland.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d9/Zabytkowa_cerkiew_wpisana_na_list%C4%99_UNESCO.jpg/960px-Zabytkowa_cerkiew_wpisana_na_list%C4%99_UNESCO.jpg"
     },
     {
-      "id": "kmsg:39",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting modprobe@drm.service - Load Kernel Module drm...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "commons-potd:7",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 24",
+      "kind": "rss",
+      "summary": "Picture of the day Female violet-backed starling ( Cinnyricinclus leucogaster verreauxi ), Damaraland , Namibia .",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/Violet-backed_starling_%28Cinnyricinclus_leucogaster_verreauxi%29_female.jpg/960px-Violet-backed_starling_%28Cinnyricinclus_leucogaster_verreauxi%29_female.jpg"
     },
     {
-      "id": "kmsg:40",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting modprobe@efi_pstore.service - Load Kernel Module efi_pstore...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "met:0",
+      "label": "Met highlights",
+      "text": "Statuette of a hippo goddess, probably Taweret",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP243443.jpg"
     },
     {
-      "id": "kmsg:41",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting modprobe@fuse.service - Load Kernel Module fuse...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "met:1",
+      "label": "Met highlights",
+      "text": "Stela of the royal scribe Amunnakht praising the divine barque of Amun-Re, Lord of the Thrones of the Two Lands",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP234728.jpg"
     },
     {
-      "id": "kmsg:42",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting modprobe@loop.service - Load Kernel Module loop...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "met:2",
+      "label": "Met highlights",
+      "text": "Satire on Art Criticism",
+      "kind": "http",
+      "summary": "Rembrandt (Rembrandt van Rijn)",
+      "image": "https://images.metmuseum.org/CRDImages/rl/original/DP359033.jpg"
     },
     {
-      "id": "kmsg:43",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting systemd-journald.service - Journal Service...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "met:3",
+      "label": "Met highlights",
+      "text": "Statue of the God Ptah",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP216330.jpg"
     },
     {
-      "id": "kmsg:44",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting systemd-modules-load.service - Load Kernel Modules...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "met:4",
+      "label": "Met highlights",
+      "text": "Statuette of Isis with the infant Horus",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP241036.jpg"
     },
     {
-      "id": "kmsg:45",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting systemd-remount-fs.service - Remount Root and Kernel File Systems...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "met:5",
+      "label": "Met highlights",
+      "text": "The Love Song",
+      "kind": "http",
+      "summary": "Sir Edward Burne-Jones",
+      "image": "https://images.metmuseum.org/CRDImages/ep/original/DP323394.jpg"
     },
     {
-      "id": "kmsg:46",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Starting systemd-udev-trigger.service - Coldplug All udev Devices...",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "met:6",
+      "label": "Met highlights",
+      "text": "Saber",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/aa/original/DP160333.jpg"
     },
     {
-      "id": "kmsg:47",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Mounted dev-hugepages.mount - Huge Pages File System.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "met:7",
+      "label": "Met highlights",
+      "text": "Statue of a kneeling Kushite king",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP-38848-005.jpg"
     },
     {
-      "id": "kmsg:48",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Mounted dev-mqueue.mount - POSIX Message Queue File System.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "lobsters:0",
+      "label": "Lobsters",
+      "text": "Commodified Intelligence",
+      "kind": "rss",
+      "summary": "Comments"
     },
     {
-      "id": "kmsg:49",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Mounted sys-kernel-debug.mount - Kernel Debug File System.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "lobsters:1",
+      "label": "Lobsters",
+      "text": "What About Rails?",
+      "kind": "rss",
+      "summary": "Comments"
     },
     {
-      "id": "kmsg:50",
-      "label": "Kernel ring",
-      "text": "systemd[1]: modprobe@configfs.service: Deactivated successfully.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "lobsters:2",
+      "label": "Lobsters",
+      "text": "The state of SIMD in Rust in 2026",
+      "kind": "rss",
+      "summary": "Comments"
     },
     {
-      "id": "kmsg:51",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Finished modprobe@configfs.service - Load Kernel Module configfs.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "lobsters:3",
+      "label": "Lobsters",
+      "text": "If we do not stop to help each other, what do we become?",
+      "kind": "rss",
+      "summary": "Comments"
     },
     {
-      "id": "kmsg:52",
-      "label": "Kernel ring",
-      "text": "systemd[1]: modprobe@dm_mod.service: Deactivated successfully.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "lobsters:4",
+      "label": "Lobsters",
+      "text": "Infecting the Steam Link with NixOS",
+      "kind": "rss",
+      "summary": "Comments"
     },
     {
-      "id": "kmsg:53",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Finished modprobe@dm_mod.service - Load Kernel Module dm_mod.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "lobsters:5",
+      "label": "Lobsters",
+      "text": "Go concurrency distilled",
+      "kind": "rss",
+      "summary": "Comments"
     },
     {
-      "id": "kmsg:54",
-      "label": "Kernel ring",
-      "text": "systemd[1]: modprobe@drm.service: Deactivated successfully.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "lobsters:6",
+      "label": "Lobsters",
+      "text": "Goodbye Google",
+      "kind": "rss",
+      "summary": "Comments"
     },
     {
-      "id": "kmsg:55",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Finished modprobe@drm.service - Load Kernel Module drm.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "lobsters:7",
+      "label": "Lobsters",
+      "text": "NetBSD Playing with disklabels",
+      "kind": "rss",
+      "summary": "Comments"
     },
     {
-      "id": "kmsg:56",
-      "label": "Kernel ring",
-      "text": "systemd[1]: modprobe@efi_pstore.service: Deactivated successfully.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "guardian:0",
+      "label": "Guardian world",
+      "text": "Rebel offensive against Ethiopian army stokes fears of return to civil war",
+      "kind": "rss",
+      "summary": "Fighting escalates after Tigrayan rebels form new coalition aimed at overthrowing Abiy Ahmed government There are growing fears of a return to civil war in Ethiopia after an offensive by fighters from Tigray into the neighbouring states of Afar and Amhara and the formation of a new rebel alliance aimed at overthrowing the government of the prime minister, Abiy Ahmed. About 600,000 people died betw",
+      "image": "https://i.guim.co.uk/img/media/02fbbbb2097252c71e2c812c2af983be2d3c8e5e/39_0_1695_1356/master/1695.jpg?width=700&quality=85&auto=format&fit=max&s=4f0b8a25fe884f51811b79222829581c"
     },
     {
-      "id": "kmsg:57",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Finished modprobe@efi_pstore.service - Load Kernel Module efi_pstore.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "guardian:1",
+      "label": "Guardian world",
+      "text": "Indian billionaire’s payments firm plots biggest London flotation in years",
+      "kind": "rss",
+      "summary": "Sunil Bharti Mittal’s Airtel Money targets $9bn IPO in boost for ailing UK stock market Nils Pratley: Does this mark the end of London’s listing drought? Not yet A payments business that operates across Africa and is ultimately controlled by an Indian billionaire has announced its intention to float on the struggling London Stock Exchange . Airtel Money, the mobile money arm of Airtel Africa, is p",
+      "image": "https://i.guim.co.uk/img/media/0cb421007ba094b5dcf6229414bc0d79c7772fbc/473_554_4258_3408/master/4258.jpg?width=700&quality=85&auto=format&fit=max&s=fddec29ce1573cdeb876ad8dab21042b"
     },
     {
-      "id": "kmsg:58",
-      "label": "Kernel ring",
-      "text": "systemd[1]: modprobe@fuse.service: Deactivated successfully.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "guardian:2",
+      "label": "Guardian world",
+      "text": "Top South African police officer charged with raping woman, 18, and grooming 16-year-old girl",
+      "kind": "rss",
+      "summary": "Arrest of Shadrack Sibiya comes as country reels from cases of femicide and alleged police corruption and criminality One of South Africa’s most senior police officers has been charged with raping an 18-year-old woman and grooming a 16-year-old girl, as the country’s police face allegations of corruption and failing to tackle violence against women and girls. Shadrack Sibiya, who was already suspe",
+      "image": "https://i.guim.co.uk/img/media/6125f75bf9594fe29706d1d7aa5be8821c41d620/476_0_4760_3808/master/4760.jpg?width=700&quality=85&auto=format&fit=max&s=70d0cfad75c9ee632e5649954b2be396"
     },
     {
-      "id": "kmsg:59",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Finished modprobe@fuse.service - Load Kernel Module fuse.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "guardian:3",
+      "label": "Guardian world",
+      "text": "Healthcare in Africa ‘under growing strain’ after US withdrawal from aid programs, report warns",
+      "kind": "rss",
+      "summary": "Accra Reset’s report states countries in the region and global south should take greater control of their health development after USAID debacle The United States’ withdrawal from key aid programs has put healthcare in Africa and the global south “under growing strain” a new report warns. The report says the Trump administration’s cuts to programs such as US Agency for International Development (U",
+      "image": "https://i.guim.co.uk/img/media/63ea0238588856f02ee6eb9c01d9cff32fba4bec/234_0_6828_5464/master/6828.jpg?width=700&quality=85&auto=format&fit=max&s=abd2cc1320c9f6248e3642766c05a382"
     },
     {
-      "id": "kmsg:60",
-      "label": "Kernel ring",
-      "text": "systemd[1]: modprobe@loop.service: Deactivated successfully.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "guardian:4",
+      "label": "Guardian world",
+      "text": "Banished to alien lands: Trump’s secret deportation deals",
+      "kind": "rss",
+      "summary": "After a plane journey in shackles, an Iranian woman found herself in the middle of Africa in a country she did not know existed. She is one of thousands deported from the US on the back of shadowy deals made with dozens of countries. An in-depth investigation reveals the ‘show of force’ costing American taxpayers millions No one would tell the shackled detainees onboard the US immigration plane wh",
+      "image": "https://i.guim.co.uk/img/media/8a1111af32b508c7aedf458e07ae1af37f330f83/1_0_4998_4000/master/4998.jpg?width=700&quality=85&auto=format&fit=max&s=fd7905b6d9e7859ac64535072d6b0157"
     },
     {
-      "id": "kmsg:61",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Finished modprobe@loop.service - Load Kernel Module loop.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "guardian:5",
+      "label": "Guardian world",
+      "text": "Lula bans fixed-odds sports betting a week before Brazilian elections",
+      "kind": "rss",
+      "summary": "President’s ‘hard, drastic and necessary measure’, likely to attract widespread public support, polls suggest The Brazilian president, Luiz Inácio Lula da Silva, has signed an order banning fixed-odds sports betting just over a week before the first round of the presidential election, in a move he said was designed to tackle the pervasive problem of families falling into debt. The decision ends th",
+      "image": "https://i.guim.co.uk/img/media/eceeefa44a1787bb7b50cb799ecc2d363a0fdbd6/516_0_5160_4128/master/5160.jpg?width=700&quality=85&auto=format&fit=max&s=afa8c8a1b5b5c91ecb1443da81ce92ee"
     },
     {
-      "id": "kmsg:62",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Finished systemd-modules-load.service - Load Kernel Modules.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "guardian:6",
+      "label": "Guardian world",
+      "text": "Michigan CEO loses job after posting AI-made image of her family in ‘Lake America’ sweaters",
+      "kind": "rss",
+      "summary": "Jane Smith reportedly used ChatGPT to edit photo to show name Trump ordered US agencies to use for Lake Ontario amid trade war with Canada The CEO of a Michigan credit union is no longer employed there, according to the organization, after she posted on social media what appeared to be an AI-generated image of her and her family wearing sweaters emblazoned with the Donald Trump-associated words “",
+      "image": "https://i.guim.co.uk/img/media/e44905997f5cadb38f09f93a87fc8f2f8d371861/74_0_4006_3207/master/4006.jpg?width=700&quality=85&auto=format&fit=max&s=ad47b5940cfb88e31fde9f81070e3c8c"
     },
     {
-      "id": "kmsg:63",
-      "label": "Kernel ring",
-      "text": "systemd[1]: Finished systemd-remount-fs.service - Remount Root and Kernel File Systems.",
-      "kind": "kmsg",
-      "summary": "kern"
+      "id": "guardian:7",
+      "label": "Guardian world",
+      "text": "Alberta’s self-image as world’s only rat-free region shattered by discovery of rat",
+      "kind": "rss",
+      "summary": "Province’s rat patrol called in to investigate as town of Bowden announces discovery of dead vermin For more than seven decades, residents of Alberta have shared something in common with Antarctica and the high Arctic: all locations are officially free of rats. But on Thursday the Canadian province’s reputation as a firewall against rodent infestation took a hit when the town of Bowden announced t",
+      "image": "https://i.guim.co.uk/img/media/52db2db2049a51aa93fcbdf2fe20ab530a817b5a/912_0_4560_3648/master/4560.jpg?width=700&quality=85&auto=format&fit=max&s=cd1762d4775a9233fe62907f81a9615e"
     }
   ],
   "sys": {
@@ -525,6 +562,5 @@
     "packets": true,
     "rf": true,
     "talkers": true
-  },
-  "contract": 1
+  }
 }
