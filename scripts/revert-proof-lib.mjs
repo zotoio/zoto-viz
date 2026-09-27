@@ -226,10 +226,10 @@ export function resolveVitestProject(wtRoot, meta) {
   if (project === "web") {
     const cwd = path.join(wtRoot, "web");
     const configCandidates = [
-      "vite.config.ts",
-      "vitest.config.ts",
       "vitest.config.mjs",
+      "vitest.config.ts",
       "vitest.config.js",
+      "vite.config.ts",
     ];
     let config = null;
     for (const name of configCandidates) {
