@@ -1231,8 +1231,10 @@ settings.addAnimation((a) => {
     mosaic!.applyLooks(a, pin);
     mosaic!.setTheme(scene.currentTheme);
   } else scene.setAnim(mergeLook(a, pin ? lookForMode(modeSel.value) : undefined));
-  const key = `${a.mosaic}:${a.hero}:${(a.mosaicTiles?.length ? a.mosaicTiles : []).join(",")}:${a.mosaicMaxId ?? ""}`;
-  if (key !== mosaic!.layoutKey) {
+  const tiles = a.mosaicTiles?.length ? a.mosaicTiles : [];
+  const key = `${a.mosaic}:${a.hero}:${tiles.join(",")}:${a.mosaicMaxId ?? ""}`;
+  const lostTiles = a.mosaic !== "off" && mosaic!.on && !tiles.length && mosaic!.tileIds.length > 0;
+  if (key !== mosaic!.layoutKey && !lostTiles) {
     if (a.mosaic !== "off" && activeArcade) {
       arcade[activeArcade].view.stop();
       arcade[activeArcade].el.hidden = true;

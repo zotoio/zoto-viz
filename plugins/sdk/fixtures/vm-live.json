@@ -111,90 +111,6 @@
       "summary": "Article URL: https://ethz.ch/en/news-and-events/eth-news/news/2026/09/the-far-side-of-the-moon-provides-clues-to-a-previous-magnetic-field.html Comments URL: https://news.ycombinator.com/item?id=49854216 Points: 17 # Comments: 1"
     },
     {
-      "id": "hn:8",
-      "label": "Hacker News",
-      "text": "Is your Postgres migration safe or not safe?",
-      "kind": "rss",
-      "summary": "Article URL: https://safenotsafe.dev/ Comments URL: https://news.ycombinator.com/item?id=49854161 Points: 73 # Comments: 21"
-    },
-    {
-      "id": "hn:9",
-      "label": "Hacker News",
-      "text": "A single function Jev-like wrapper for LLMs, including vision models",
-      "kind": "rss",
-      "summary": "Article URL: http://allanrbo.blogspot.com/2026/09/a-jev-like-wrapper-for-llms-including.html Comments URL: https://news.ycombinator.com/item?id=49853175 Points: 107 # Comments: 30"
-    },
-    {
-      "id": "hn:10",
-      "label": "Hacker News",
-      "text": "We're gonna need a lot more mathematicians",
-      "kind": "rss",
-      "summary": "Article URL: https://terrytao.wordpress.com/2026/09/24/were-gonna-need-a-lot-more-mathematicians/ Comments URL: https://news.ycombinator.com/item?id=49852717 Points: 213 # Comments: 296"
-    },
-    {
-      "id": "hn:11",
-      "label": "Hacker News",
-      "text": "Jury finds Facebook liable for deceiving users in Cambridge Analytica case",
-      "kind": "rss",
-      "summary": "Article URL: https://www.cbsnews.com/news/facebook-liable-deceiving-users-cambridge-analytica/ Comments URL: https://news.ycombinator.com/item?id=49852302 Points: 312 # Comments: 81"
-    },
-    {
-      "id": "hn:12",
-      "label": "Hacker News",
-      "text": "What even is an OS now?",
-      "kind": "rss",
-      "summary": "Article URL: https://sockpuppet.org/blog/2026/09/25/what-even-is-an-os-now/ Comments URL: https://news.ycombinator.com/item?id=49850305 Points: 227 # Comments: 330"
-    },
-    {
-      "id": "hn:13",
-      "label": "Hacker News",
-      "text": "Revealing the details of how OpenAI agents hacked Hugging Face",
-      "kind": "rss",
-      "summary": "Article URL: https://swarmtraces.org/ Comments URL: https://news.ycombinator.com/item?id=49849985 Points: 569 # Comments: 363"
-    },
-    {
-      "id": "hn:14",
-      "label": "Hacker News",
-      "text": "Excel now supports multiple values in a single cell",
-      "kind": "rss",
-      "summary": "Related: https://techcommunity.microsoft.com/blog/excelblog/excel-now... Comments URL: https://news.ycombinator.com/item?id=49849832 Points: 220 # Comments: 153"
-    },
-    {
-      "id": "hn:15",
-      "label": "Hacker News",
-      "text": "Ask HN: Who's still keeping a DOS machine up because the business depends on it?",
-      "kind": "rss",
-      "summary": "Do you currently work with or know anyone who is still using: * dBase/Clipper/CLARION/Paradox/other DOS RAD environments on period hardware to run business processes? * CNC mills/spectrometers/microscopes/other industrial instruments controlled by ISA cards (either bespoke or standards like GPIB)? * Anything with a parallel port dongle? If so, I'd be very interested in hearing your experience here"
-    },
-    {
-      "id": "hn:16",
-      "label": "Hacker News",
-      "text": "Ollaya – Ollama for open-source, Jev-style decision models",
-      "kind": "rss",
-      "summary": "Article URL: https://ollaya.dev/ Comments URL: https://news.ycombinator.com/item?id=49848269 Points: 515 # Comments: 126"
-    },
-    {
-      "id": "hn:17",
-      "label": "Hacker News",
-      "text": "Gravity seems holographic. What does that mean for reality?",
-      "kind": "rss",
-      "summary": "Article URL: https://www.quantamagazine.org/gravity-seems-holographic-what-does-that-mean-for-reality-20260925/ Comments URL: https://news.ycombinator.com/item?id=49845998 Points: 237 # Comments: 186"
-    },
-    {
-      "id": "hn:18",
-      "label": "Hacker News",
-      "text": "Show HN: Jev Plays Pokémon Red",
-      "kind": "rss",
-      "summary": "Hey HN! Wanted to share a fun project I've been hacking on. Given Jev can make decisions really fast (but not fast enough to play Doom yet sadly), I wanted to try and push it to play a more complex game than Tetris. So I went with Pokémon. I've spent endless hours playing this game as a child so building this was a ton of fun. I open sourced everything in case you want to hack on it yourself here:"
-    },
-    {
-      "id": "hn:19",
-      "label": "Hacker News",
-      "text": "Plan mode is dead",
-      "kind": "rss",
-      "summary": "Article URL: https://www.aymannadeem.com/artificial/intelligence,/developer/tools/2026/09/24/plan-mode-is-dead.html Comments URL: https://news.ycombinator.com/item?id=49840054 Points: 412 # Comments: 376"
-    },
-    {
       "id": "nasa:0",
       "label": "NASA image of the day",
       "text": "Hubble Spots Chaotic Secret in Galaxy",
@@ -259,292 +175,374 @@
       "image": "https://www.nasa.gov/wp-content/uploads/2026/09/krakatau-oli-20260905-lrg.jpg"
     },
     {
-      "id": "nasa:8",
-      "label": "NASA image of the day",
-      "text": "Artemis III Crew Visits NASA Kennedy's Vehicle Assembly Building",
-      "kind": "rss",
-      "summary": "NASA astronaut Randy Bresnik (left) and ESA (European Space Agency) astronaut Luca Parmitano view progress on the solid rocket booster integration in High Bay 3 inside the Vehicle Assembly Building at NASA's Kennedy Space Center in Florida on Wednesday, Sept. 2, 2026.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/ksc-20260902-ph-kls01-0023orig-rotated.jpg"
+      "id": "apod:0",
+      "label": "Astronomy Picture of the Day",
+      "text": "A Zodiacal Night",
+      "kind": "http",
+      "summary": "Also known as the false dawn, a luminous band of zodiacal light is captured in this dark night skyscape. The serene view was recorded just before the beginning of astronomical twilight during September's star party at the remote Hanle Dark Sky Reserve, Ladakh, India, planet Earth. At about 4,500 meters altitude, the dark sky reserve presents a haven for hardy stargazing and astrophotography enthus",
+      "image": "https://apod.nasa.gov/apod/image/2609/2026-09-09ZodiacalLightHSP.jpg"
     },
     {
-      "id": "nasa:9",
-      "label": "NASA image of the day",
-      "text": "NASA Kicks Off Inspiration Tour with Steelers vs. Falcons Game",
-      "kind": "rss",
-      "summary": "Fans pose for a photo with an astronaut in the NASA Experience Zone at an NFL game between the Pittsburgh Steelers and the Atlanta Falcons at Acrisure Stadium, Sunday, Sept. 13, 2026, in Pittsburgh, Pennsylvania.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55527488950-2ce6740658-o.jpg"
+      "id": "apod:1",
+      "label": "Astronomy Picture of the Day",
+      "text": "Analemma over the Callanish Stones",
+      "kind": "http",
+      "summary": "If you went outside at the same time every day and took a picture that included the Sun, how would the Sun's position change? A visual answer to that question is an analemma, a composite image taken from the same spot at the same time over the course of a year. The featured analemma was composed from images taken every few days at noon near the village of Callanish in the Outer Hebrides in Scotlan",
+      "image": "https://apod.nasa.gov/apod/image/2609/CallanishAnalemma_Petricca_1280.jpg"
     },
     {
-      "id": "nasa:10",
-      "label": "NASA image of the day",
-      "text": "NASA's Chandra Spots Galactic Gem",
-      "kind": "rss",
-      "summary": "Galaxies are like cosmic gems, each with characteristics including size and shape that make them distinct. A gallery from NASA’s Chandra X-ray Observatory and other telescopes displays a collection of galactic images that showcase this variety.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/galaxies-iizw096.jpg"
+      "id": "apod:2",
+      "label": "Astronomy Picture of the Day",
+      "text": "Cocoon Nebula Wide Field",
+      "kind": "http",
+      "summary": "When does a nebula look like a comet? In this crowded starfield covering over two degrees within the high-flying constellation of the Swan (Cygnus), the eye is drawn to the Cocoon Nebula. A compact star forming region, the cosmic Cocoon punctuates a nebula bright in emission and reflection on the lower right, with a long trail of interstellar dust clouds to the left, making the entire complex appe",
+      "image": "https://apod.nasa.gov/apod/image/2609/Cocoon_Czerski_3000.jpg"
     },
     {
-      "id": "nasa:11",
-      "label": "NASA image of the day",
-      "text": "Dust and Water in Sagittarius A*",
-      "kind": "rss",
-      "summary": "Using the James Webb Space Telescope, an international team of astronomers have discovered that dust and water can form and survive surprisingly close to the supermassive black hole at the center of our Milky Way galaxy.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55459350878-2e1468b664-o.png"
+      "id": "apod:3",
+      "label": "Astronomy Picture of the Day",
+      "text": "Chance Triple Alignment: Plane, Space Station, Sun",
+      "kind": "http",
+      "summary": "This shot captured an unexpected silhouette. Which is it? It isn't the sunspots, the small dark regions caused by concentrated magnetic fields visible around the Sun's bright disk. Sunspots typically last for weeks and were expected, since these spots were seen previously. It isn’t the International Space Station (ISS), the small dark structure on the middle left. This is because the featured pict",
+      "image": "https://apod.nasa.gov/apod/image/2609/PlaneIssSpots_Horalek_1500.jpg"
     },
     {
-      "id": "nasa:12",
-      "label": "NASA image of the day",
-      "text": "Artemis II Crew at NASA Marshall",
-      "kind": "rss",
-      "summary": "The crew of NASA’s Artemis II mission visited NASA’s Marshall Space Flight Center in Huntsville, Alabama on Sept. 1, 2026.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/msfc-09012026-artemis-ii-crew-visit-at-msfc-1orig.jpg"
+      "id": "apod:4",
+      "label": "Astronomy Picture of the Day",
+      "text": "A New Lunar Crater: McGetchin",
+      "kind": "http",
+      "summary": "A once-in-a-lifetime crater has appeared on the Moon! A comet or asteroid roughly the size of a humpback whale (approximately 10-20 meters, 30-60 feet) crashed into the Moon sometime between April and May of 2024. The Lunar Reconnaissance Orbiter (LRO), with its monthly monitoring of the Moon, captured today’s images of the lunar surface before and after the event. The resulting crater, named afte",
+      "image": "https://apod.nasa.gov/apod/image/2609/mcgetchin_after.jpg"
     },
     {
-      "id": "nasa:13",
-      "label": "NASA image of the day",
-      "text": "Superbubble in the Large Magellanic Cloud",
-      "kind": "rss",
-      "summary": "N44 is a complex nebula filled with glowing hydrogen gas, dark lanes of dust, massive stars, and many populations of stars of different ages. One of its most distinctive features, however, is the dark, starry gap called a “superbubble,” visible in this Hubble Space Telescope image in the upper central region.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/hubble-n44-wfc3-large.jpg"
+      "id": "apod:5",
+      "label": "Astronomy Picture of the Day",
+      "text": "The Ghosts of Five Supernovas",
+      "kind": "http",
+      "summary": "The ghosts of five supernovas haunt this extraordinary image. It was acquired at Oukaïmeden Observatory in Morocco with approximately 200 hours of observations and shows a large patch of the sky, equivalent to the area of one thousand full moons tiled together, in the constellation of Auriga (the Charioteer). From left to right, the five supernova remnants visible across the field are G181.1+9.5,",
+      "image": "https://apod.nasa.gov/apod/image/2609/5SNR_Auriga_2000.jpg"
     },
     {
-      "id": "nasa:14",
-      "label": "NASA image of the day",
-      "text": "Lunar Occultation of Venus",
-      "kind": "rss",
-      "summary": "On Wednesday, June 17, skywatchers across the United States—and parts of Canada—enjoyed a rare event: a daytime lunar occultation of Venus. A lunar occultation occurs when the Moon moves directly in front of another celestial object from our viewpoint on Earth, briefly hiding it from sight.",
-      "image": "https://images-assets.nasa.gov/image/NHQ202606170001/NHQ202606170001~large.jpg"
+      "id": "apod:6",
+      "label": "Astronomy Picture of the Day",
+      "text": "Globular Cluster Omega Centauri",
+      "kind": "http",
+      "summary": "Globular star cluster Omega Centauri packs about 10 million stars much older than the Sun into a volume some 150 light-years in diameter. Also known as NGC 5139, at a distance of 15,000 light-years it's the largest and brightest of 200 or so known globular clusters that roam the halo of our Milky Way galaxy. Though most star clusters consist of stars with the same age and composition, the enigmati",
+      "image": "https://apod.nasa.gov/apod/image/2609/NGC5139CadenasParra.jpg"
     },
     {
-      "id": "nasa:15",
-      "label": "NASA image of the day",
-      "text": "Igniting Roman's Journey",
-      "kind": "rss",
-      "summary": "Now on a three-month, million-mile journey to its final orbit, NASA’s Nancy Grace Roman Space Telescope will soon reveal the universe’s darkest secrets. The mission launched at 7:26 a.m. EDT on Aug. 30 aboard a SpaceX Falcon Heavy rocket from Launch Complex 39A at the agency’s Kennedy Space Center in Florida.",
-      "image": "https://images-assets.nasa.gov/image/NHQ202608300037/NHQ202608300037~large.jpg"
+      "id": "apod:7",
+      "label": "Astronomy Picture of the Day",
+      "text": "Mirrored Meteor and Milky Way",
+      "kind": "http",
+      "summary": "On August 15, this perseid meteor streaked through night skies over the Observatorio del Roque de los Muchachos at La Palma, Canary Islands, Spain. The bright and colorful meteor trail was captured next to the central Milky Way, whose dark interstellar dust clouds and luminous starlight reach above the horizon. In the foreground of this tantalizing celestial scene is the 23 meter diameter mirror o",
+      "image": "https://apod.nasa.gov/apod/image/2609/MilkyWayMeteorLSTJeffDai.jpg"
     },
     {
-      "id": "nasa:16",
-      "label": "NASA image of the day",
-      "text": "August Lunar Eclipse Rises Over Louisiana",
+      "id": "earth-iotd:0",
+      "label": "Earth Observatory",
+      "text": "Explosive Intensification for Hurricane Polo",
       "kind": "rss",
-      "summary": "A lunar eclipse is visible over southern Louisiana. The lunar eclipse was visible throughout much of North and South America and part of Europe and Africa between Aug. 27-28. The Full Moon slipped through Earth’s shadow on Aug. 27, continuing into Aug. 28 for some parts of the world, resulting in the lunar eclipse. At maximum eclipse, the Moon takes on a dramatic dark, ruddy or coppery tint along",
-      "image": "https://images-assets.nasa.gov/image/MAF_20260827_LunarEclipse_01/MAF_20260827_LunarEclipse_01~large.jpg"
+      "summary": "Several ingredients came together off the Pacific coast of Mexico to generate one of the strongest storms the eastern Pacific basin has ever seen. The post Explosive Intensification for Hurricane Polo appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "nasa:17",
-      "label": "NASA image of the day",
-      "text": "Artemis III RS-25 Engine Processing: #3 Lift",
+      "id": "earth-iotd:1",
+      "label": "Earth Observatory",
+      "text": "Cloudy Cloak Over the Northwest",
       "kind": "rss",
-      "summary": "Technicians prepare to transfer the #2 RS-25 SLS (Space Launch System) rocket engine (front) to the work stand with the #3 engine (back) for integration with the Artemis III core stage rocket on Tuesday, Aug. 25, 2026, inside the Vehicle Assembly Building at NASA’s Kennedy Space Center in Florida. During Artemis III, the four RS‑25 engines will launch the Orion spacecraft and its crew of four into",
-      "image": "https://images-assets.nasa.gov/image/KSC-20260825-PH-RCR01_0045/KSC-20260825-PH-RCR01_0045~large.jpg"
+      "summary": "A low-lying cloud layer brought autumn ambience to western Washington and Oregon, while mountainous areas near the coast remained above the pall. The post Cloudy Cloak Over the Northwest appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "nasa:18",
-      "label": "NASA image of the day",
-      "text": "NASA's Nancy Grace Roman Space Telescope Launches",
+      "id": "earth-iotd:2",
+      "label": "Earth Observatory",
+      "text": "Boom Year for Desert Blooms",
       "kind": "rss",
-      "summary": "A SpaceX Falcon Heavy rocket with NASA’s Nancy Grace Roman Telescope on board is seen transiting the sun during launch from Launch Complex 39A, Sunday, Aug. 30, 2026, at NASA’s Kennedy Space Center in Florida.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/nhq20260830-admin-0001orig.jpg"
+      "summary": "Carpets of wildflowers burst from arid, ochre-colored land in Western Australia following winter rains. The post Boom Year for Desert Blooms appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "nasa:19",
-      "label": "NASA image of the day",
-      "text": "NASA's Artemis II Crew Receives Congressional Space Medal of Honor",
+      "id": "earth-iotd:3",
+      "label": "Earth Observatory",
+      "text": "An Epic View of the Seasons",
       "kind": "rss",
-      "summary": "President Donald J. Trump awarded NASA astronauts Victor Glover and Christina Koch, CSA (Canadian Space Agency) astronaut Jeremy Hansen, and NASA astronaut Reid Wiseman with the Congressional Space Medal of Honor on Aug. 28, 2026, at NASA’s Johnson Space Center in Houston.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/20260828-120552-jk1-3999-1.jpg"
+      "summary": "The tilt in Earth's axis of rotation makes the apparent position of continents shift with the seasons in imagery from a NASA camera in deep space. The post An Epic View of the Seasons appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "nasa:20",
-      "label": "NASA image of the day",
-      "text": "Civil Servants Sworn in at NASA Ames",
+      "id": "earth-iotd:4",
+      "label": "Earth Observatory",
+      "text": "Perseverance’s View of ‘Turquoise Bay’",
       "kind": "rss",
-      "summary": "New civil servants and guests pose for a group photo with NASA and Center leadership in the National Full-Scale Aerodynamics Complex (NFAC) 80-by-120-foot test section, N221.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/acd26-0108-042orig.jpg"
+      "summary": "Description NASA’s Perseverance Mars rover used its Mastcam-Z camera to capture this 360-degree panorama of “Turquoise Bay,” a geologic area of interest in the “Margin Unit.” The 818 images used to create the natural-color panorama were captured between Oct. 5 and Oct. 16, 2023, the 933rd to 944th Martian days, or sols, of the mission. […] The post Perseverance’s View of ‘Turquoise Bay’ appeared f",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/psd/photojournal/pia/pia25/pia25691/PIA25691.jpg?w=2000&h=1124&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "nasa:21",
-      "label": "NASA image of the day",
-      "text": "Roman Space Telescope Travels to SpaceX Hangar",
+      "id": "earth-iotd:5",
+      "label": "Earth Observatory",
+      "text": "Arctic Melt Season Length Levels Off",
       "kind": "rss",
-      "summary": "NASA’s Nancy Grace Roman Space Telescope, encapsulated in its payload fairing, travels to the SpaceX hangar at Launch Complex 39A at NASA’s Kennedy Space Center on Tuesday, Aug. 25, 2026.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ksc-20260825-ph-ser01-0001orig.jpg"
+      "summary": "While the sea ice melt season has lengthened dramatically in most of the satellite era, the trend unexpectedly stabilized around 2010. The post Arctic Melt Season Length Levels Off appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "nasa:22",
-      "label": "NASA image of the day",
-      "text": "Astronauts Anil Menon and Sophie Adenot on Spacewalk",
+      "id": "earth-iotd:6",
+      "label": "Earth Observatory",
+      "text": "Lake Powell Drops to Record-Low Levels",
       "kind": "rss",
-      "summary": "From left, Expedition 75 flight engineers Anil Menon of NASA (partially obscured and wearing the spacesuit with a red stripe on the legs) and Sophie Adenot of ESA (European Space Agency) work together during a six‑hour and 23‑minute spacewalk outside the International Space Station.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55474999794-5b0f1a2c92-o.jpg"
+      "summary": "Snow drought and unusually warm temperatures in the Colorado Basin in 2026 helped drive down reservoir water storage in the U.S. West. The post Lake Powell Drops to Record-Low Levels appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "nasa:23",
-      "label": "NASA image of the day",
-      "text": "NASA Astronaut Reid Wiseman at Freedom 250 Grand Prix",
+      "id": "earth-iotd:7",
+      "label": "Earth Observatory",
+      "text": "Summer Goes Out With a Heat Dome",
       "kind": "rss",
-      "summary": "NASA astronaut Reid Wiseman, Artemis II commander, is seen in the two-seat IndyCar as he prepares for driver Conor Daly to take him on a lap in the fastest seat in sport ahead of the start of the Freedom 250 Grand Prix, Sunday, Aug. 23, 2026, in Washington, D.C. Photo Credit: (NASA/Joel Kowsky)",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55483612275-859663d405-o.jpg"
+      "summary": "Temperature records toppled across the central and southern U.S. as the autumnal equinox approached. The post Summer Goes Out With a Heat Dome appeared first on NASA Science .",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/iotd-banner.jpg?w=2000&h=1126&fit=crop&crop=faces%2Cfocalpoint"
     },
     {
-      "id": "nasa:24",
-      "label": "NASA image of the day",
-      "text": "Webb Opens Treasure Chest",
+      "id": "commons-potd:0",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 17",
       "kind": "rss",
-      "summary": "This NASA/ESA/CSA James Webb Space Telescope Picture of the Month takes us to a fantastical realm within our home galaxy, where piercing starlight and billowing winds sculpt dust clouds into inventive shapes. This scene is from the Carina Nebula, which lies just 7500 light-years away in the constellation Carina (the Keel).",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55457472091-12a8c7edb0-o.jpg"
+      "summary": "Picture of the day A group of newly ordained Buddhist śramaṇas performing the traditional lamp-lighting ritual on Prabarana Purnima , Bangladesh .",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/44/%E0%A6%AA%E0%A7%8D%E0%A6%B0%E0%A6%AC%E0%A6%BE%E0%A6%B0%E0%A6%A3%E0%A6%BE_%E0%A6%AA%E0%A7%82%E0%A6%B0%E0%A7%8D%E0%A6%A3%E0%A6%BF%E0%A6%AE%E0%A6%BE%E0%A6%AF%E0%A6%BC_%E0%A6%86%E0%A6%B2%E0%A7%8B%E0%A6%95%E0%A6%B0%E0%A6%B6%E0%A7%8D%E0%A6%AE%E0%A6%BF_%E0%A6%B6%E0%A6%BE%E0%A6%A8%E0%A7%8D%E0%A6%A4%E0%A6%BF%E0%A6%B0_%E0%A6%AA%E0%A7%8D%E0%A6%B0%E0%A6%BE%E0%A6%B0%E0%A7%8D%E0%A6%A5%E0%A6%A8%E0%A6%BE%E0%A6%AF%E0%A6%BC_%E0%A6%AE%E0%A6%97%E0%A7%8D%E0%A6%A8_%E0%A6%B6%E0%A7%8D%E0%A6%B0%E0%A6%AE%E0%A6%A3%E0%A6%97%E0%A6%A3_%2800001957%29.jpg/960px-thumbnail.jpg"
     },
     {
-      "id": "nasa:25",
-      "label": "NASA image of the day",
-      "text": "Artemis Mission Patches",
+      "id": "commons-potd:1",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 18",
       "kind": "rss",
-      "summary": "A NASA jacket containing Artemis I and II mission patches, along with other NASA patches hangs on the back of a chair on Thursday, Aug. 6, 2026, inside Firing Room 1 of the Rocco A. Petrone Launch Control Center at NASA’s Kennedy Space Center in Florida during a terminal countdown simulation for the Artemis III mission.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ksc-20260806-ph-rcr01-0010orig.jpg"
+      "summary": "Picture of the day Street lights on the promenade , Norderney , Lower Saxony, Germany",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/f/f4/Norderney%2C_Promenade%2C_Wegbeleuchtung_--_2025_--_9015.jpg/960px-Norderney%2C_Promenade%2C_Wegbeleuchtung_--_2025_--_9015.jpg"
     },
     {
-      "id": "nasa:26",
-      "label": "NASA image of the day",
-      "text": "Ancient Milky Way Merger",
+      "id": "commons-potd:2",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 19",
       "kind": "rss",
-      "summary": "About 12 billion years ago, a dwarf galaxy known as LKH collided with a young Milky Way and merged with it. This artist’s concept portrays that collision. NASA’s Hubble Space Telescope uncovered definitive evidence of this collision by studying globular star clusters.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/stsci-01kz4n4d8g9ak26cf28hd5nt5n-d2d764.png"
+      "summary": "Picture of the day A fan-tailed warbler ( Zitting cisticola ) in Bhigwan , Maharashtra, India.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/0/0e/Zitting_Cisticola_in_Bhigwan_August_2025_by_Tisha_Mukherjee_01.jpg/960px-Zitting_Cisticola_in_Bhigwan_August_2025_by_Tisha_Mukherjee_01.jpg"
     },
     {
-      "id": "nasa:27",
-      "label": "NASA image of the day",
-      "text": "NASA's B777 Gets New Coat of Paint",
+      "id": "commons-potd:3",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 20",
       "kind": "rss",
-      "summary": "NASA's Boeing 777 returns to the agency's Langley Research Center after receiving a new paint scheme.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/jsc2026e407303.jpg"
+      "summary": "Picture of the day Inflorescence of a Rostrinucula dependens . This subshrub is native to China and blooms from August to October. Focus stack of 54 photos.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/80/Bloeiwijze_van_een_Rostrinucula_dependens._11-10-2025._%28d.j.b%29.jpg/960px-Bloeiwijze_van_een_Rostrinucula_dependens._11-10-2025._%28d.j.b%29.jpg"
     },
     {
-      "id": "nasa:28",
-      "label": "NASA image of the day",
-      "text": "Colorful Collage of Tarantula Nebula",
+      "id": "commons-potd:4",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 21",
       "kind": "rss",
-      "summary": "Like a collage made of layered sheets of colored cellophane, a vibrant new image layers observations of a famous star-forming nebula from NASA space telescopes. The resulting cosmic “craft” reveals new details about the star formation region known as 30 Doradus, or the Tarantula Nebula.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/30dor-crop.jpg"
+      "summary": "Picture of the day Chief Joseph of the Wallowa band of Nez Perce , an American Native American tribe in the Pacific Northwest . This photo was taken by Edward Sheriff Curtis . Chief Joseph died on this day in 1904.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Chief_Joseph_by_Edward_Sheriff_Curtis.jpg/960px-Chief_Joseph_by_Edward_Sheriff_Curtis.jpg"
     },
     {
-      "id": "nasa:29",
-      "label": "NASA image of the day",
-      "text": "Total Solar Eclipse in Sunflower Field",
+      "id": "commons-potd:5",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 22",
       "kind": "rss",
-      "summary": "This composite image shows the progression of a total solar eclipse over San Millán de los Caballeros, Spain on, Wednesday, Aug. 12, 2026.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55460226954-564d105934-o.jpg"
+      "summary": "Picture of the day Beach of Cape Fiolent during the storm at sea. Cape Fiolent in Crimea is of ancient Jurassic origin. Upper Miocene lava and carbonate intrusions on heavily eroded Jurassic foundation.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Beach_of_Cape_Fiolent%2C_Crimea.jpg/960px-Beach_of_Cape_Fiolent%2C_Crimea.jpg"
     },
     {
-      "id": "nasa:30",
-      "label": "NASA image of the day",
-      "text": "Perseids Meteor Shower",
+      "id": "commons-potd:6",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 23",
       "kind": "rss",
-      "summary": "The constellation Orion is framed by two Perseid meteors on Aug. 12, 2018, in Cedar Breaks National Monument, Utah.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/perseidsorion.webp"
+      "summary": "Picture of the day Paraskevi of Iconium church in Kwiatoń, Southern Poland.",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d9/Zabytkowa_cerkiew_wpisana_na_list%C4%99_UNESCO.jpg/960px-Zabytkowa_cerkiew_wpisana_na_list%C4%99_UNESCO.jpg"
     },
     {
-      "id": "nasa:31",
-      "label": "NASA image of the day",
-      "text": "2026 Total Solar Eclipse in Spain",
+      "id": "commons-potd:7",
+      "label": "Commons picture of the day",
+      "text": "Wikimedia Commons picture of the day for September 24",
       "kind": "rss",
-      "summary": "A total solar eclipse is seen from San Millán de los Caballeros, Spain, Wednesday, Aug. 12, 2026.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55459753868-458217b2c9-o.jpg"
+      "summary": "Picture of the day Female violet-backed starling ( Cinnyricinclus leucogaster verreauxi ), Damaraland , Namibia .",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/Violet-backed_starling_%28Cinnyricinclus_leucogaster_verreauxi%29_female.jpg/960px-Violet-backed_starling_%28Cinnyricinclus_leucogaster_verreauxi%29_female.jpg"
     },
     {
-      "id": "nasa:32",
-      "label": "NASA image of the day",
-      "text": "Lion Nebula Roars in Webb's Sights",
-      "kind": "rss",
-      "summary": "NASA’s James Webb Space Telescope imaged the planetary nebula NGC 2392, the Lion Nebula, using the observatory’s NIRCam and MIRI instruments. The central star’s remains are responsible for the nebula’s structure, including a lion face-shaped bubble of ionized gas and dust “mane.”",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/stsci-01kx6d0xbhsyp7q1em5qtc43rp.png"
+      "id": "met:0",
+      "label": "Met highlights",
+      "text": "Statuette of a hippo goddess, probably Taweret",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP243443.jpg"
     },
     {
-      "id": "nasa:33",
-      "label": "NASA image of the day",
-      "text": "NASA Astronaut Jessica Meir Uses VR Goggles",
-      "kind": "rss",
-      "summary": "NASA astronaut and Expedition 75 commander Jessica Meir wears a set of virtual reality goggles, also called the Nevada Screening Vision System, for a test that measures visual function using a series of vision screening apps testing visual acuity, contrast sensitivity, and more.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/iss075e0000191orig.jpg"
+      "id": "met:1",
+      "label": "Met highlights",
+      "text": "Stela of the royal scribe Amunnakht praising the divine barque of Amun-Re, Lord of the Thrones of the Two Lands",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP234728.jpg"
     },
     {
-      "id": "nasa:34",
-      "label": "NASA image of the day",
-      "text": "NASA's IXPE Studies Magnetar",
-      "kind": "rss",
-      "summary": "A first of its kind measurement of a magnetar may have captured empty space behaving in a way physicists have predicted for 90 years, but never directly observed. The results published Wednesday in Nature.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ixpemagnetarartistsconcept-web.png"
+      "id": "met:2",
+      "label": "Met highlights",
+      "text": "Satire on Art Criticism",
+      "kind": "http",
+      "summary": "Rembrandt (Rembrandt van Rijn)",
+      "image": "https://images.metmuseum.org/CRDImages/rl/original/DP359033.jpg"
     },
     {
-      "id": "nasa:35",
-      "label": "NASA image of the day",
-      "text": "Taking Flight to Prepare for Space",
-      "kind": "rss",
-      "summary": "NASA astronaut candidate Adam Fuhrmann prepares for a training flight aboard NASA’s WB-57 aircraft.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/55412014375-711b8f02f7-o.jpg"
+      "id": "met:3",
+      "label": "Met highlights",
+      "text": "Statue of the God Ptah",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP216330.jpg"
     },
     {
-      "id": "nasa:36",
-      "label": "NASA image of the day",
-      "text": "Artemis III Orion Crew and Service Modules Joined",
-      "kind": "rss",
-      "summary": "Engineers connect the Orion crew and service modules for the Artemis III mission inside the Neil A. Armstrong Operations and Checkout Building at NASA’s Kennedy Space Center in Florida.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ksc-20260730-ph-as01-6583.webp"
+      "id": "met:4",
+      "label": "Met highlights",
+      "text": "Statuette of Isis with the infant Horus",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP241036.jpg"
     },
     {
-      "id": "nasa:37",
-      "label": "NASA image of the day",
-      "text": "Roman Space Telescope Plaque Install",
-      "kind": "rss",
-      "summary": "Technicians inside the Payload Hazardous Servicing Facility at NASA’s Kennedy Space Center complete installation of a commemorative plaque on the agency’s Nancy Grace Roman Space Telescope, as photographed on Tuesday, July 28, 2026.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/ksc-20260728-ph-jmt01-0003orig.jpg"
+      "id": "met:5",
+      "label": "Met highlights",
+      "text": "The Love Song",
+      "kind": "http",
+      "summary": "Sir Edward Burne-Jones",
+      "image": "https://images.metmuseum.org/CRDImages/ep/original/DP323394.jpg"
     },
     {
-      "id": "nasa:38",
-      "label": "NASA image of the day",
-      "text": "Guinea-Bissau Tidal Waters",
-      "kind": "rss",
-      "summary": "Relatively low tidal waters expose sandflats and mudflats in the Bijagós Archipelago of Guinea-Bissau in this image acquired on November 28, 2025, with the OLI (Operational Land Imager) on Landsat 8. These coastal landforms support an array of invertebrates, making the archipelago a popular stopover for migratory shorebirds.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/08/bijagosarchipelago-oli-20251128-lrg.jpg"
+      "id": "met:6",
+      "label": "Met highlights",
+      "text": "Saber",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/aa/original/DP160333.jpg"
     },
     {
-      "id": "nasa:39",
-      "label": "NASA image of the day",
-      "text": "NASA's Newest Wind Tunnel Opens at NASA Langley",
-      "kind": "rss",
-      "summary": "NASA opened its newest wind tunnel, the Flight Dynamics Research Facility at NASA’s Langley Research Center in Hampton, Virginia, on Friday, providing a critical resource for the agency and its partners to test the safety and performance of future generations of aircraft, rockets, and space exploration vehicles.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/55433508350-2d4abff2f1-o.jpg"
+      "id": "met:7",
+      "label": "Met highlights",
+      "text": "Statue of a kneeling Kushite king",
+      "kind": "http",
+      "image": "https://images.metmuseum.org/CRDImages/eg/original/DP-38848-005.jpg"
     },
     {
-      "id": "nasa:40",
-      "label": "NASA image of the day",
-      "text": "Starburst Galaxy Centaurus A",
+      "id": "lobsters:0",
+      "label": "Lobsters",
+      "text": "Commodified Intelligence",
       "kind": "rss",
-      "summary": "NASA’s James Webb Space Telescope’s Mid-Infrared Instrument (MIRI) reveals the nearby galaxy Centaurus A, exposing the dusty structures and hidden activity that shape this unusual system.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/stsci-01kvt4gqmq5mxv6xdpfpzmxg65-30d932.png"
+      "summary": "Comments"
     },
     {
-      "id": "nasa:41",
-      "label": "NASA image of the day",
-      "text": "Understanding How Martian Auroras Are Made",
+      "id": "lobsters:1",
+      "label": "Lobsters",
+      "text": "What About Rails?",
       "kind": "rss",
-      "summary": "This illustration depicts charged particles from a solar storm stripping away charged particles of Mars' atmosphere, one of the processes of Martian atmosphere loss studied by NASA's MAVEN mission.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/pia22076.jpg"
+      "summary": "Comments"
     },
     {
-      "id": "nasa:42",
-      "label": "NASA image of the day",
-      "text": "NASA Astronaut Chris Williams Returns to Earth",
+      "id": "lobsters:2",
+      "label": "Lobsters",
+      "text": "The state of SIMD in Rust in 2026",
       "kind": "rss",
-      "summary": "NASA astronaut Chris Williams is seen outside the Soyuz MS-28 spacecraft after he landed with Expedition 74 Roscosmos cosmonauts Sergey Kud-Sverchkov, and Sergei Mikaev in a remote area near the town of Zhezkazgan, Kazakhstan on Sunday, July 26, 2026. The trio returned to Earth after logging 241 days in space as a members of Expeditions 73 and 74 aboard the International Space Station.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/55419246867-809993deb3-o.jpg"
+      "summary": "Comments"
     },
     {
-      "id": "nasa:43",
-      "label": "NASA image of the day",
-      "text": "New Crew Members Welcomed to International Space Station",
+      "id": "lobsters:3",
+      "label": "Lobsters",
+      "text": "If we do not stop to help each other, what do we become?",
       "kind": "rss",
-      "summary": "From left, Expedition 74 flight engineers Anna Kikina and Pyotr Dubrov of Roscosmos, and Anil Menon of NASA pose for a portrait while holding a cake celebrating their recent arrival aboard the International Space Station.",
-      "image": "https://www.nasa.gov/wp-content/uploads/2026/07/iss074e0814792orig.jpg"
+      "summary": "Comments"
+    },
+    {
+      "id": "lobsters:4",
+      "label": "Lobsters",
+      "text": "Infecting the Steam Link with NixOS",
+      "kind": "rss",
+      "summary": "Comments"
+    },
+    {
+      "id": "lobsters:5",
+      "label": "Lobsters",
+      "text": "Go concurrency distilled",
+      "kind": "rss",
+      "summary": "Comments"
+    },
+    {
+      "id": "lobsters:6",
+      "label": "Lobsters",
+      "text": "Goodbye Google",
+      "kind": "rss",
+      "summary": "Comments"
+    },
+    {
+      "id": "lobsters:7",
+      "label": "Lobsters",
+      "text": "NetBSD Playing with disklabels",
+      "kind": "rss",
+      "summary": "Comments"
+    },
+    {
+      "id": "guardian:0",
+      "label": "Guardian world",
+      "text": "Rebel offensive against Ethiopian army stokes fears of return to civil war",
+      "kind": "rss",
+      "summary": "Fighting escalates after Tigrayan rebels form new coalition aimed at overthrowing Abiy Ahmed government There are growing fears of a return to civil war in Ethiopia after an offensive by fighters from Tigray into the neighbouring states of Afar and Amhara and the formation of a new rebel alliance aimed at overthrowing the government of the prime minister, Abiy Ahmed. About 600,000 people died betw",
+      "image": "https://i.guim.co.uk/img/media/02fbbbb2097252c71e2c812c2af983be2d3c8e5e/39_0_1695_1356/master/1695.jpg?width=700&quality=85&auto=format&fit=max&s=4f0b8a25fe884f51811b79222829581c"
+    },
+    {
+      "id": "guardian:1",
+      "label": "Guardian world",
+      "text": "Indian billionaire’s payments firm plots biggest London flotation in years",
+      "kind": "rss",
+      "summary": "Sunil Bharti Mittal’s Airtel Money targets $9bn IPO in boost for ailing UK stock market Nils Pratley: Does this mark the end of London’s listing drought? Not yet A payments business that operates across Africa and is ultimately controlled by an Indian billionaire has announced its intention to float on the struggling London Stock Exchange . Airtel Money, the mobile money arm of Airtel Africa, is p",
+      "image": "https://i.guim.co.uk/img/media/0cb421007ba094b5dcf6229414bc0d79c7772fbc/473_554_4258_3408/master/4258.jpg?width=700&quality=85&auto=format&fit=max&s=fddec29ce1573cdeb876ad8dab21042b"
+    },
+    {
+      "id": "guardian:2",
+      "label": "Guardian world",
+      "text": "Top South African police officer charged with raping woman, 18, and grooming 16-year-old girl",
+      "kind": "rss",
+      "summary": "Arrest of Shadrack Sibiya comes as country reels from cases of femicide and alleged police corruption and criminality One of South Africa’s most senior police officers has been charged with raping an 18-year-old woman and grooming a 16-year-old girl, as the country’s police face allegations of corruption and failing to tackle violence against women and girls. Shadrack Sibiya, who was already suspe",
+      "image": "https://i.guim.co.uk/img/media/6125f75bf9594fe29706d1d7aa5be8821c41d620/476_0_4760_3808/master/4760.jpg?width=700&quality=85&auto=format&fit=max&s=70d0cfad75c9ee632e5649954b2be396"
+    },
+    {
+      "id": "guardian:3",
+      "label": "Guardian world",
+      "text": "Healthcare in Africa ‘under growing strain’ after US withdrawal from aid programs, report warns",
+      "kind": "rss",
+      "summary": "Accra Reset’s report states countries in the region and global south should take greater control of their health development after USAID debacle The United States’ withdrawal from key aid programs has put healthcare in Africa and the global south “under growing strain” a new report warns. The report says the Trump administration’s cuts to programs such as US Agency for International Development (U",
+      "image": "https://i.guim.co.uk/img/media/63ea0238588856f02ee6eb9c01d9cff32fba4bec/234_0_6828_5464/master/6828.jpg?width=700&quality=85&auto=format&fit=max&s=abd2cc1320c9f6248e3642766c05a382"
+    },
+    {
+      "id": "guardian:4",
+      "label": "Guardian world",
+      "text": "Banished to alien lands: Trump’s secret deportation deals",
+      "kind": "rss",
+      "summary": "After a plane journey in shackles, an Iranian woman found herself in the middle of Africa in a country she did not know existed. She is one of thousands deported from the US on the back of shadowy deals made with dozens of countries. An in-depth investigation reveals the ‘show of force’ costing American taxpayers millions No one would tell the shackled detainees onboard the US immigration plane wh",
+      "image": "https://i.guim.co.uk/img/media/8a1111af32b508c7aedf458e07ae1af37f330f83/1_0_4998_4000/master/4998.jpg?width=700&quality=85&auto=format&fit=max&s=fd7905b6d9e7859ac64535072d6b0157"
+    },
+    {
+      "id": "guardian:5",
+      "label": "Guardian world",
+      "text": "Lula bans fixed-odds sports betting a week before Brazilian elections",
+      "kind": "rss",
+      "summary": "President’s ‘hard, drastic and necessary measure’, likely to attract widespread public support, polls suggest The Brazilian president, Luiz Inácio Lula da Silva, has signed an order banning fixed-odds sports betting just over a week before the first round of the presidential election, in a move he said was designed to tackle the pervasive problem of families falling into debt. The decision ends th",
+      "image": "https://i.guim.co.uk/img/media/eceeefa44a1787bb7b50cb799ecc2d363a0fdbd6/516_0_5160_4128/master/5160.jpg?width=700&quality=85&auto=format&fit=max&s=afa8c8a1b5b5c91ecb1443da81ce92ee"
+    },
+    {
+      "id": "guardian:6",
+      "label": "Guardian world",
+      "text": "Michigan CEO loses job after posting AI-made image of her family in ‘Lake America’ sweaters",
+      "kind": "rss",
+      "summary": "Jane Smith reportedly used ChatGPT to edit photo to show name Trump ordered US agencies to use for Lake Ontario amid trade war with Canada The CEO of a Michigan credit union is no longer employed there, according to the organization, after she posted on social media what appeared to be an AI-generated image of her and her family wearing sweaters emblazoned with the Donald Trump-associated words “",
+      "image": "https://i.guim.co.uk/img/media/e44905997f5cadb38f09f93a87fc8f2f8d371861/74_0_4006_3207/master/4006.jpg?width=700&quality=85&auto=format&fit=max&s=ad47b5940cfb88e31fde9f81070e3c8c"
+    },
+    {
+      "id": "guardian:7",
+      "label": "Guardian world",
+      "text": "Alberta’s self-image as world’s only rat-free region shattered by discovery of rat",
+      "kind": "rss",
+      "summary": "Province’s rat patrol called in to investigate as town of Bowden announces discovery of dead vermin For more than seven decades, residents of Alberta have shared something in common with Antarctica and the high Arctic: all locations are officially free of rats. But on Thursday the Canadian province’s reputation as a firewall against rodent infestation took a hit when the town of Bowden announced t",
+      "image": "https://i.guim.co.uk/img/media/52db2db2049a51aa93fcbdf2fe20ab530a817b5a/912_0_4560_3648/master/4560.jpg?width=700&quality=85&auto=format&fit=max&s=cd1762d4775a9233fe62907f81a9615e"
     }
   ],
   "sys": {

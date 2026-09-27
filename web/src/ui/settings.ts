@@ -1344,7 +1344,7 @@ export class Settings {
       <div class="sec-hint">RSS, public HTTPS JSON/text, local files under $HOME / ~/.zoto-viz, the user journal, and the kernel ring (/dev/kmsg). HTTP JSON can map list / title / caption / image fields. Views (carousel, rain, term) are instances of one plugin pointed at a source — do not fork a tree per feed. Sources that need a key show the signup link here and stay out of dice until they work.</div>`;
     const include = new Toggle({
       label: "headlines on feed",
-      title: "show journal, kernel ring, and local-file titles on the live feed ticker. News and stills (HN, NASA, Guardian, …) stay on their plugin views.",
+      title: "show RSS, HTTP, journal, kernel, and local-file titles on the live feed ticker. Each title stays on one line.",
       checked: this.feed.includeSources !== false,
       onChange: (v) => { this.feed.includeSources = v; this.persistFeed(); },
     });
@@ -1619,7 +1619,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded packets beside the graph. Journal, kernel, and local-file lines can ride the ticker. News and stills stay on carousel / rain / term views. Chat is a separate panel (header chat / C). Header feed / F shows or hides this overlay.</div>`;
+      <div class="sec-hint">Decoded packets beside the graph. RSS, HTTP, journal, kernel, and local-file titles ride the ticker as one line each. Chat is a separate panel (header chat / C). Header feed / F shows or hides this overlay.</div>`;
     const on = new Toggle({
       label: "show feed",
       title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",

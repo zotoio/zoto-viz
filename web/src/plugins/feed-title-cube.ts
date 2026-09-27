@@ -27,7 +27,7 @@ export function uniqueFeedTitles(titles: string[], cap = FEED_CUBE_TITLE_CAP): s
   const out: string[] = [];
   const seen = new Set<string>();
   for (const raw of titles) {
-    const text = raw.trim().slice(0, 240);
+    const text = raw.replace(/\s+/g, " ").trim().slice(0, 240);
     if (!text || seen.has(text)) continue;
     seen.add(text);
     out.push(text);

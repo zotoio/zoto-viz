@@ -158,7 +158,8 @@ under **This view → View**. A mosaic wall is **This view → Wall**.
 
 Content plugins are **instances**, not copies. `plugin.yml` `instances:` (and `~/.zoto-viz/plugin-instances.yml`) add catalog rows that reuse the same tree with a host `source` and title / caption / image / filter defaults. View id is `plugin:<id>` when the instance id matches the plugin, otherwise `plugin:<id>:<instance>`. Carousel ships NASA IOTD plus APOD / Earth Observatory / Commons POTD / Met; HN Rain ships HN plus Lobsters / Guardian / Mastodon.
 The cog next to the header view menu opens that tab on a single view. A mosaic
-wall hides the header view menu; use the corner cog on the pane. Network and
+wall hides the header view menu; use the corner cog on the pane. Picking a
+view in a pane loads that pack (consent, sky, frontend) into the tile. Network and
 system visibility live under **Graph**. Host and subnet filters live under **Privacy**.
 
 Examples: `plugins/src/lan-pulse/`, `plugins/src/pulse-ts/`, `plugins/src/doom/`, `plugins/src/hn-term/`, `plugins/src/stereo-gram/`.

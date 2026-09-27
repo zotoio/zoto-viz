@@ -136,6 +136,29 @@ describe("resolvePluginWall", () => {
     expect(out.state.owner).toBe("plugin:syscon");
   });
 
+  it("keeps operator pane picks when re-applying the same wall view", () => {
+    const picked = {
+      mosaic: "8" as const,
+      hero: "off" as const,
+      mosaicTiles: ["plugin:cores", "plugin:memory", "plugin:disk", "plugin:gpu", "plugin:sockets", "plugin:cgroups", "plugin:talkers", "plugin:backrooms"],
+      mosaicTree: null,
+      mosaicMaxId: "",
+      mosaicSharedTheme: true,
+    };
+    const out = resolvePluginWall({
+      modeId: "plugin:syscon",
+      prevModeId: "plugin:syscon",
+      keepLayout: false,
+      anim: picked,
+      wall: syscon,
+      walls,
+      owner: "plugin:syscon",
+      restore: snapWall(custom),
+    });
+    expect(out.anim).toBeNull();
+    expect(out.state.owner).toBe("plugin:syscon");
+  });
+
   it("leaves the wall alone when layout is locked", () => {
     const out = resolvePluginWall({
       modeId: "plugin:topology",

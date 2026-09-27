@@ -161,7 +161,7 @@ def test_seed_defaults_and_crud() -> None:
     assert isinstance(lines, list)
     for sid in ("hn", "nasa", "apod", "guardian"):
         row = next(r for r in rows if r["id"] == sid)
-        assert row["feed"] is False
+        assert row["feed"] is True
     journal = next(r for r in rows if r["id"] == "journal")
     assert journal["feed"] is True
 
@@ -223,26 +223,26 @@ def test_refresh_shipped_stale_defaults() -> None:
     assert rows["guardian"]["url"] == "https://www.theguardian.com/world/rss"
 
 
-def test_refresh_shipped_drops_news_from_ticker() -> None:
+def test_refresh_shipped_puts_news_on_ticker() -> None:
     sources.save([
         sources.normalize({
             "id": "hn",
             "type": "rss",
             "url": "https://hnrss.org/frontpage",
-            "feed": True,
+            "feed": False,
         }),
         sources.normalize({
             "id": "nasa",
             "type": "rss",
             "url": "https://www.nasa.gov/feeds/iotd-feed",
-            "feed": True,
+            "feed": False,
         }),
         sources.normalize({"id": "journal", "type": "journal", "feed": True}),
     ])
     sources.reset_for_tests()
     rows = {r["id"]: r for r in sources.load()}
-    assert rows["hn"]["feed"] is False
-    assert rows["nasa"]["feed"] is False
+    assert rows["hn"]["feed"] is True
+    assert rows["nasa"]["feed"] is True
     assert rows["journal"]["feed"] is True
 
 

@@ -1,5 +1,5 @@
 import { isSysBase } from "../core/modes";
-import type { SourceHeadline } from "../core/sources";
+import { oneLineTitle, type SourceHeadline } from "../core/sources";
 import { decodePacket, type FeedKind } from "../inspect/decode";
 import { idsOf, type Packet, type TrafficMsg } from "../core/types";
 import type { NetScene } from "../graph/scene";
@@ -101,10 +101,10 @@ type Bucket = Record<FeedKind, number>;
 const KINDS: FeedKind[] = ["tls", "quic", "dns", "mdns", "http", "media", "ssdp", "dhcp", "remote", "plain", "wifi", "bt", "other"];
 
 /**
- * Right-hand live overlay: decoded capture headlines plus journal / kernel / file
- * lines. News and stills stay on plugin views. Chat lives on `#livechat`. Every
- * source appends at the bottom so older lines scroll up; new rows queue below
- * the viewport and the ticker scrolls until it catches up.
+ * Right-hand live overlay: decoded capture headlines plus RSS / HTTP / journal /
+ * kernel / file lines. Chat lives on `#livechat`. Every source appends at the
+ * bottom so older lines scroll up; new rows queue below the viewport and the
+ * ticker scrolls until it catches up. Each title is one line.
  */
 export class LiveFeed {
   readonly el: HTMLElement;
@@ -173,16 +173,17 @@ export class LiveFeed {
     let added = false;
     for (const row of want) {
       const key = `src:${row.id}`;
+      const text = oneLineTitle(row.text);
       const existing = this.lines.find((l) => l.key === key);
       if (existing) {
-        if (existing.text !== row.text) {
-          existing.text = row.text;
+        if (existing.text !== text) {
+          existing.text = text;
           existing.label = row.label;
-          existing.el.title = row.text;
+          existing.el.title = text;
           const k = existing.el.querySelector(".k");
           const tx = existing.el.querySelector(".tx");
           if (k) k.textContent = row.label;
-          if (tx) tx.textContent = row.text;
+          if (tx) tx.textContent = text;
         }
         continue;
       }
@@ -191,7 +192,7 @@ export class LiveFeed {
         t: Date.now() / 1000,
         color: "#8cb4ff",
         label: row.label,
-        text: row.text,
+        text,
         count: 1,
       });
       this.lines.push(line);
@@ -367,7 +368,7 @@ export class LiveFeed {
   }
 
   private makeLine(init: Omit<Line, "el" | "nEl">): Line {
-    const text = init.text.slice(0, LINE_CAP);
+    const text = oneLineTitle(init.text, LINE_CAP);
     const el = document.createElement("div");
     el.className = "row";
     el.dataset.host = init.host ?? "";

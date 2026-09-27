@@ -7,6 +7,9 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const esbuildBin = path.join(repoRoot, "web/node_modules/.bin/esbuild");
+const pythonBin = existsSync(path.join(repoRoot, ".venv/bin/python3"))
+  ? path.join(repoRoot, ".venv/bin/python3")
+  : "python3";
 
 /** Packs migrated to `import type` from `plugins/sdk/viz-contract` (viz.read frontends). */
 const MIGRATED_VIZ_PACKS = [
@@ -99,7 +102,7 @@ doc = yaml.safe_load((runtime / "plugin.yml").read_text(encoding="utf-8"))
 out = plugins.compile_typescript(doc, runtime / "plugin.yml")
 assert out.get("hash"), out
 `;
-        execFileSync("python3", ["-c", script], {
+        execFileSync(pythonBin, ["-c", script], {
           cwd: repoRoot,
           encoding: "utf8",
           env: { ...process.env, ZOTO_VIZ_HOME: zotoHome, PYTHONPATH: repoRoot },

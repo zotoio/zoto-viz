@@ -289,11 +289,14 @@ body.stage-only .overlay { display: none !important; }
 #feed-title-cube .face span {
   position: absolute;
   inset: 10px;
-  display: grid;
-  place-items: center;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-align: center;
   color: #e8ffe8;
-  font: 600 13px/1.25 ui-sans-serif, system-ui, sans-serif;
+  font: 600 13px ui-sans-serif, system-ui, sans-serif;
+  line-height: calc(var(--cube) - 20px);
   text-shadow: 0 1px 2px #021208;
 }
 @keyframes feed-cube-spin {
@@ -1427,7 +1430,7 @@ body.feed-open.chat-open #livechat:not(.floated) {
   flex: 1 0 0;
 }
 .livefeed .row {
-  display: grid; grid-template-columns: 44px 1fr auto; gap: 6px; align-items: start;
+  display: grid; grid-template-columns: 44px minmax(0, 1fr) auto; gap: 6px; align-items: center;
   flex: 0 0 auto;
   padding: 2px 4px; border-radius: 4px; cursor: pointer;
 }
@@ -1435,10 +1438,10 @@ body.feed-open.chat-open #livechat:not(.floated) {
 .livefeed .k {
   font-size: 0.82em; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--c, var(--accent));
-  padding-top: 1px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 .livefeed .tx {
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--label-fg, var(--fg));
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--label-fg, var(--fg));
 }
 .livefeed .row.chat { cursor: default; grid-template-columns: 48px 1fr auto; }
 .livefeed .row.chat .tx {

@@ -8,7 +8,7 @@ import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
 import {
-  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, nextPaneTiles, parseMosaicNode,
+  assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
@@ -462,17 +462,21 @@ export class Mosaic {
   assignViews(tiles: string[]): void {
     if (!this.tree) return;
     const want = parseMosaicTiles(tiles);
-    if (want.join("\0") === this.tileIds.join("\0")) return;
+    const prev = this.tileIds;
+    if (want.join("\0") === prev.join("\0")) return;
     this.tree = assignTiles(this.tree, want);
-    this.rematchTried.clear();
-    this.rematchQueued.clear();
+    const changed = mosaicPaneIdsWithViewChange(prev, this.tileIds);
+    for (const id of changed) {
+      this.rematchTried.delete(id);
+      this.rematchQueued.delete(id);
+    }
     this.syncPanes(this.tileIds);
     this.placeTree();
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
     this.refreshPaneModes();
     this.holdPluginSkies();
-    this.auditPanes("bind");
+    this.auditPanes("bind", changed);
     this.relayoutAll();
     this.emitLayout();
   }
@@ -604,8 +608,10 @@ export class Mosaic {
     }
   }
 
-  private auditPanes(phase: "bind" | "settle"): void {
-    for (const id of [...this.tileIds]) this.auditPane(id, phase);
+  private auditPanes(phase: "bind" | "settle", ids: string[] = this.tileIds): void {
+    for (const id of ids) {
+      if (this.tileIds.includes(id)) this.auditPane(id, phase);
+    }
   }
 
   private paneSnap(id: string) {

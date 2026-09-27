@@ -128,4 +128,14 @@ describe("traffic overlay", () => {
     expect(top).toBeGreaterThan(180);
     expect(top).toBeLessThan(320);
   });
+
+  it("renders each source title as one line", () => {
+    const feed = overlay("traffic");
+    feed.setSourceHeadlines([
+      { id: "hn:0", label: "HN", text: "A\nvery long NASA image of the day title" },
+    ]);
+    const tx = feed.el.querySelector(".row .tx") as HTMLSpanElement;
+    expect(tx.textContent).toBe("A very long NASA image of the day title");
+    expect(tx.textContent).not.toMatch(/\n/);
+  });
 });
