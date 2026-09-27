@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-readback-renderer-dpr.test.ts",
-  "testName": "pack mirror readback renderer DPR boundary > 100% zoom (windowDpr=1 rendererDpr=1)",
-  "description": "Revert packMirrorReadbackViteServerOptions hmr:false (port 24678 flake)",
-  "project": "web",
-  "red": "Error: Error: WebSocket closed without opened."
-}

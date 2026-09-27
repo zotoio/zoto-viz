@@ -1,7 +1,4 @@
-import { packMirrorReadbackViteServerOptions } from "../graph/pack-mirror-readback-vite-server";
 import { AUDIO_DRIVES, NetScene, escapeHtml, type DreamAnim, type Filters } from "../graph/scene";
-
-void packMirrorReadbackViteServerOptions;
 import { Panel } from "../ui/panel";
 import { allModes, arcadeSlotFor, defaultCatalogMode, defaultOpts, graphModes, modeById, type ViewMode } from "../core/modes";
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";

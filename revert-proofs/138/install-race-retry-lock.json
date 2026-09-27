@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_install.py",
-  "testName": "test_retry_and_scan_race_single_install_20_of_20",
-  "description": "Revert retry_blocked_zip_install pack lock so scan+retry can double-install",
-  "red": "assert install_calls == 1"
-}

@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/starter-pack-ci.test.ts",
-  "testName": "pack starter template CI > zips, compiles through service esbuild with SDK inlined in module.js",
-  "description": "Revert STARTER_TEMPLATE_SIM_CLASS so bundle no longer contains StarterSim",
-  "project": "web",
-  "red": "AssertionError: expected \"// plugins/sdk/viz-zoto.ts\\nvar VIZ_ZOTO_VERSION\" to contain \"StarterPackSim\""
-}

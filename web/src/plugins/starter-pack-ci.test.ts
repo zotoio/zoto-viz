@@ -7,7 +7,6 @@ import { afterAll, describe, expect, it } from "vitest";
 import type { VizDataFrame } from "../../../plugins/sdk/viz-contract";
 import { VIZ_FIXTURE_IDLE } from "../../../plugins/sdk/viz-fixtures";
 import { formatViolationMessage, scanPackDirectory } from "../../../plugins/sdk/pack-lint";
-import { STARTER_TEMPLATE_SIM_CLASS } from "./plugin";
 import { StarterSim } from "../../../plugins/sdk/starter/frontend/sim";
 import { closePluginSkySmokeBrowser } from "./plugin-sky-smoke-render";
 import {
@@ -77,7 +76,7 @@ describe("pack starter template CI", () => {
         assertStarterBundleInlinesSdk(bundleJs);
         expect(bundleJs).not.toMatch(/\bdeclare\s+const\s+zoto\s*:/);
         expect(bundleJs).toContain("getVizZoto");
-        expect(bundleJs).toContain(STARTER_TEMPLATE_SIM_CLASS);
+        expect(bundleJs).toContain("StarterSim");
         expect(bundleJs).not.toMatch(/from\s+["']\.\.\/\.\.\//);
         const pluginYml = readFileSync(path.join(runtimeDir, "plugin.yml"), "utf8");
         expect(pluginYml).toContain(`id: ${STARTER_CI_PACK_ID}`);
