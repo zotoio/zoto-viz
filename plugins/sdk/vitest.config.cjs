@@ -4,7 +4,7 @@ module.exports = {
   root: __dirname,
   test: {
     environment: "node",
-    include: ["pack-model-slot.test.ts"],
+    include: ["pack-model-slot.test.ts", "pack-host-mesh.test.ts"],
   },
   esbuild: {
     target: "es2022",

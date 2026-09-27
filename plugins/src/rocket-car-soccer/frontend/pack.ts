@@ -10,6 +10,9 @@ export const RCS_CAPS = {
   maxPhysicsSubsteps: 6,
 } as const;
 
+/** Set when plugin.yml lists `assets:` for host mesh lane (see sdk/pack-host-mesh.ts). */
+export const PACK_HOST_MESH_ASSET: { id: string; path: string } | undefined = undefined;
+
 export const RCS_MAX_CARS = RCS_CAPS.maxCars;
 export const RCS_MAX_TEAM = RCS_CAPS.maxTeam;
 export const RCS_MAX_PARTICLES = RCS_CAPS.maxParticles;

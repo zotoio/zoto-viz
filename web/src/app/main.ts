@@ -211,7 +211,7 @@ import {
   packPerfEnabled,
 } from "../core/pack-host-perf";
 import { maybeReportPackHostPerf } from "./pack-perf-report";
-import { createHostMeshBridge } from "./host-mesh-bridge";
+import { createHostMeshBridge, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { showPluginSkyConsentNotice, warnPluginSkyConsent } from "./plugin-sky-consent-notice";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
@@ -599,8 +599,13 @@ sandbox.handlers = {
   writeBuffer: (slot, data) => {
     if (vizWriter?.writeBuffer(slot, data).ok) {
       broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
-      const asset = activePluginSpec?.assets?.[0];
-      if (asset && slot === 2) hostMeshBridge.applySlot(slot, data, asset.id);
+      tryApplyHostMeshBridge(
+        hostMeshBridge,
+        activePluginSpec,
+        vizContractFor(activePluginSpec),
+        slot,
+        data,
+      );
     }
   },
   writeUniform: (name, value) => {
@@ -609,10 +614,14 @@ sandbox.handlers = {
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
   writeBatch: (batch) => {
     if (!vizWriter) return;
+    const contract = vizContractFor(activePluginSpec);
     applyVizWriteBatch(vizWriter, batch, {
       onBuffer: () => broadcastPluginUbo(scene, vizWriter!.ubo, mosaic?.on ? mosaic : null),
       onUniform: (name, value) => scene.setPluginUniform(name, value),
     });
+    for (const b of batch.buffers) {
+      tryApplyHostMeshBridge(hostMeshBridge, activePluginSpec, contract, b.slot, b.data);
+    }
   },
 };
 const agent = new AgentPanel();

@@ -104,14 +104,18 @@ export class PackModelSlotController {
     this.state = initialPackModelSlotState(cfg);
   }
 
-  /** Test hook — inject bytes without host fetch. */
+  /** Test hook — inject bytes without host mesh lane (procedural fallback checks). */
   injectBytesForTest(bytes: ArrayBuffer | null): void {
     this.state = applyPackModelBytes(this.state, bytes);
   }
 
-  /** Host or pack bridge calls this when GLB bytes arrive (see fetchPackAsset on the host). */
-  noteAssetBytes(bytes: ArrayBuffer | null): void {
-    this.state = applyPackModelBytes(this.state, bytes);
+  /** Host mesh lane confirmed a declared plugin.yml asset for `modelGlb`. */
+  setHostMeshReady(): void {
+    if (!this.state.path) return;
+    this.state = {
+      ...this.state,
+      flags: PACK_MODEL_FLAG_LOADED | PACK_MODEL_FLAG_CONFIGURED,
+    };
   }
 
   dispose(): void {

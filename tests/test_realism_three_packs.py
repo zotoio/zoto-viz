@@ -44,6 +44,13 @@ def test_realism_koi_aquarium_model_slot_indices() -> None:
     assert "MAX_PARTICLES = 24" in aqu
 
 
+def test_realism_packs_use_host_mesh_slot_three() -> None:
+    for pid in PACKS:
+        yml = (PACKS[pid] / "plugin.yml").read_text(encoding="utf-8")
+        assert "hostMeshSlot: 3" in yml, pid
+        assert "maxBuffers: 4" in yml, pid
+
+
 # Revert row: remove damped ball camera (restore fixed broadcast angles only).
 RCS_FIXED_BALLCAM_BUG = "const h = st.cars[0]!;\n    yaw = h.yaw + Math.PI;"
 

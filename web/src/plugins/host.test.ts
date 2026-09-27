@@ -57,8 +57,6 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("publishBitmap", ["viz.write"])).toBe(true);
     expect(hostAllows("publishBitmap", ["viz.read"])).toBe(false);
     expect(hostAllows("publishBitmapFailed", ["viz.write"])).toBe(true);
-    expect(hostAllows("fetchPackAsset", ["viz.read"])).toBe(true);
-    expect(hostAllows("fetchPackAsset", ["viz.write"])).toBe(false);
   });
 
   it("allows tile-heal sandbox messages without extra caps", () => {

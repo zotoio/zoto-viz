@@ -16,8 +16,9 @@ viz:
   graphWalk: false
   idle:
     fixture: host
-  maxBuffers: 3
+  maxBuffers: 4
   maxBufferFloats: 64
+  hostMeshSlot: 3
   maxParticles: 192
   uniforms:
     - uTime

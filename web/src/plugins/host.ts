@@ -128,7 +128,6 @@ export function hostAllows(type: string, caps: string[]): boolean {
   ) {
     return caps.includes("viz.write");
   }
-  if (type === "fetchPackAsset") return caps.includes("viz.read");
   return false;
 }
 
@@ -151,8 +150,7 @@ export type HostMsg =
   }
   | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap } }
   | { source: "zoto-viz-plugin"; type: "publishBitmapFailed"; payload: Record<string, never> }
-  | { source: "zoto-viz-plugin"; type: "log"; payload: string }
-  | { source: "zoto-viz-plugin"; type: "fetchPackAsset"; payload: { reqId: number; path: string } };
+  | { source: "zoto-viz-plugin"; type: "log"; payload: string };
 
 export type ParentPortMsg =
   | {
@@ -569,34 +567,6 @@ export class PluginSandbox {
     }
     if (d.type === "publishBitmapFailed") {
       this.handlers.publishBitmapFailed?.(this.activePackId);
-    }
-    if (d.type === "fetchPackAsset") {
-      void this.replyPackAsset(evSource, d.payload.reqId, d.payload.path);
-    }
-  }
-
-  private async replyPackAsset(
-    evSource: MessageEventSource | null,
-    reqId: number,
-    relPath: string,
-  ): Promise<void> {
-    const target = this.iframe?.contentWindow;
-    if (!target || evSource !== target || !this.activePackId) return;
-    const path = relPath.replace(/^\/+/, "").replace(/\.\./g, "");
-    const url = `${location.origin}/api/plugins/${encodeURIComponent(this.activePackId)}/asset/${path}`;
-    try {
-      const res = await fetch(url);
-      if (!res.ok) throw new Error(String(res.status));
-      const bytes = await res.arrayBuffer();
-      target.postMessage(
-        { source: HOST_SOURCE, type: "packAsset", payload: { reqId, ok: true, bytes } },
-        location.origin,
-      );
-    } catch {
-      target.postMessage(
-        { source: HOST_SOURCE, type: "packAsset", payload: { reqId, ok: false } },
-        location.origin,
-      );
     }
   }
 

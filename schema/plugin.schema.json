@@ -1125,6 +1125,13 @@
           "default": false,
           "description": "When true with viz.write, the host delivers rAF present timestamps to the sandbox so the pack can advance simulation on its own clock."
         },
+        "hostMeshSlot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "default": 2,
+          "description": "Sandbox buffer slot carrying column-major 4×4 matrices for host-owned GLTF instancing (see HostMeshLane). Sim data may use other slots when this is not 2."
+        },
         "uniforms": {
           "type": "array",
           "maxItems": 6,

@@ -89,6 +89,8 @@ export interface VizPluginContract {
   idle: VizIdleConfig;
   /** When true, host delivers {@link VizPresentTick} once per sandbox per display frame. */
   presentTick?: boolean;
+  /** Sandbox buffer slot carrying column-major 4×4 host mesh matrices (default 2). */
+  hostMeshSlot?: number;
 }
 
 export type {
@@ -358,6 +360,11 @@ export function parseVizContractResult(raw: unknown): VizContractParseResult | u
   const maxBufferFloats = clampInt(doc.maxBufferFloats, 4, VIZ_UBO.slotFloats, VIZ_DEFAULT_MAX_BUFFER_FLOATS);
   const maxParticles = clampInt(doc.maxParticles, 0, 8192, 0);
   const presentTick = doc.presentTick === true;
+  const hostMeshSlotRaw = doc.hostMeshSlot;
+  const hostMeshSlot =
+    hostMeshSlotRaw === undefined || hostMeshSlotRaw === null
+      ? undefined
+      : clampInt(hostMeshSlotRaw, 0, VIZ_UBO.slotCount - 1, 2);
   return {
     state: "ready",
     contract: {
@@ -370,6 +377,7 @@ export function parseVizContractResult(raw: unknown): VizContractParseResult | u
       ubo: VIZ_UBO,
       idle,
       presentTick,
+      hostMeshSlot,
     },
   };
 }

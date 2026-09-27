@@ -81,6 +81,9 @@ export const AQUARIUM_WORK_BUDGET = {
   glContextsOn4x4Wall: 0,
 } as const;
 
+/** Set when plugin.yml lists `assets:` for host mesh lane (see sdk/pack-host-mesh.ts). */
+export const PACK_HOST_MESH_ASSET: { id: string; path: string } | undefined = undefined;
+
 /** Every visualisation.yml config key (config.read). */
 export const CONFIG_KEYS = [
   "preset", "randomise", "undoRandom", "resetSettings",

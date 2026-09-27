@@ -1,9 +1,16 @@
 /** Rocket Car Soccer — sandbox driver (pack clock via viz frame time). */
 
-import { hexToRgb, parseRcsOptions, themeBgAccent, RCS_SLOT, type RcsOptions } from "./pack";
+import { hexToRgb, parseRcsOptions, themeBgAccent, RCS_SLOT, PACK_HOST_MESH_ASSET, type RcsOptions } from "./pack";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { rcsMount, rcsTick, rcsUnmount, setRcsOptions } from "./match";
 import { PackModelSlotController } from "../../../sdk/pack-model-slot";
+import {
+  PACK_HOST_MESH_SLOT,
+  hostMeshMatrixYSpin,
+  shouldWriteHostMeshMatrix,
+  syncPackModelHostMesh,
+  writeHostMeshMatrixSlot,
+} from "../../../sdk/pack-host-mesh";
 
 declare const zoto: {
   onFrame: ((frame: VizDataFrame) => void) | null;
@@ -45,6 +52,7 @@ function applyConfig(cfg: Record<string, string>): void {
   mergeHostDelta(cfg);
   opts = setRcsOptions(mergedCfg);
   modelSlot.setConfig(mergedCfg);
+  syncPackModelHostMesh(modelSlot, mergedCfg, PACK_HOST_MESH_ASSET);
   const theme = themeBgAccent(opts.theme);
   const orange = hexToRgb(opts.teamOrange);
   const blue = hexToRgb(opts.teamBlue);
@@ -86,6 +94,13 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(0, out.slot0);
   zoto.writeBuffer(1, out.slot1);
   zoto.writeBuffer(2, out.slot2);
+  if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
+    writeHostMeshMatrixSlot(
+      zoto.writeBuffer,
+      PACK_HOST_MESH_SLOT,
+      hostMeshMatrixYSpin(simClock),
+    );
+  }
   if (out.budget.particles > 0) {
     zoto.writeParticles(out.particles, 4);
   }

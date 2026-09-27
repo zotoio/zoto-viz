@@ -98,6 +98,9 @@ export const KOI_WORK_BUDGET = {
   glContextsOn4x4Wall: 0,
 } as const;
 
+/** Set when plugin.yml lists `assets:` for host mesh lane (see sdk/pack-host-mesh.ts). */
+export const PACK_HOST_MESH_ASSET: { id: string; path: string } | undefined = undefined;
+
 export const PRESET_IDS: KoiPresetId[] = [
   "zen_garden",
   "moonlit_lotus",
