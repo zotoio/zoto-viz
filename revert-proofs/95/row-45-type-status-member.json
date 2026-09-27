@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-45-type-status-member)",
+  "runner": "command",
+  "command": "pnpm typecheck",
+  "cwd": "web",
+  "red": "typecheck/wall-notice-region.typecheck.ts(4,56): error TS2322: Type 'number' is not assignable to type 'undefined'."
+}

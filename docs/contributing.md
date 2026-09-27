@@ -31,4 +31,10 @@ Schema: `schema/plugin.schema.json`. Frontend sandbox: [TypeScript plugins](/plu
 
 ## Regression tests
 
-Each regression test must prove it catches its bug: the PR body shows the test red with the fix reverted and green with it applied. Do not add `revert-proofs/` trees on pack PRs; pack-boundary rejects that path.
+Each regression test must prove it catches its bug: the PR body shows the test red with the fix reverted and green with it applied.
+
+Land `revert-proofs/<PR>/` on `main` with your change (patch + JSON sidecars, `node scripts/revert-proof.mjs <PR> --prove` / `--replay` as needed). Pack PRs may only touch `revert-proofs/<their PR>/` (`scripts/check_pack_pr_boundary.py`).
+
+Catch-up PRs merged via [#128](https://github.com/zotoio/zoto-viz/pull/128) did **not** keep per-PR proof trees on `main` — see [revert-proofs archive](./revert-proofs-archive.md) for `refs/pull/<N>/head` and proven commit SHAs.
+
+CI runs `bash scripts/revert-proof-ci-selftest.sh` (vitest bundle under `scripts/`). Those tests build temp git fixtures and never read `revert-proofs/` from the checkout.

@@ -313,7 +313,7 @@ def test_name_status_includes_rename_source_and_dest() -> None:
     ]
 
 
-def test_pack_pr_rejects_revert_proofs_tree() -> None:
+def test_pack_pr_rejects_foreign_revert_proofs_folder_112() -> None:
     pack = "nixie-clock"
     files = [
         f"plugins/src/{pack}/frontend/index.ts",
@@ -321,10 +321,10 @@ def test_pack_pr_rejects_revert_proofs_tree() -> None:
     ]
     code, lines = run_check(files, {}, pr_number=111)
     assert code == 1
-    assert any("revert-proofs/" in line for line in lines)
+    assert any("112" in line for line in lines)
 
 
-def test_pack_pr_rejects_own_revert_proofs_folder() -> None:
+def test_pack_pr_accepts_own_revert_proofs_folder_111() -> None:
     pack = "nixie-clock"
     files = [
         f"plugins/src/{pack}/frontend/index.ts",
@@ -332,8 +332,8 @@ def test_pack_pr_rejects_own_revert_proofs_folder() -> None:
         "revert-proofs/111/nixie-fc-glsl-revert.json",
     ]
     code, lines = run_check(files, {}, pr_number=111)
-    assert code == 1
-    assert any("revert-proofs/" in line for line in lines)
+    assert code == 0
+    assert any("passed" in line for line in lines)
 
 
 def test_pack_pr_rejects_second_pack_folder() -> None:

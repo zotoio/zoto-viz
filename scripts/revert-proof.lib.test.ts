@@ -698,11 +698,11 @@ describe("revert-proof head record tree key", () => {
   });
 });
 
-describe("revert-proof self-test checkout isolation (catch-up option b)", () => {
-  it("(option-b) vitest self-test does not require checkout revert-proofs/ (temp fixtures only)", () => {
-    expect(fs.existsSync(path.join(repoRoot, "revert-proofs"))).toBe(false);
-    // Remaining cases in this vitest bundle build their own git trees under os.tmpdir();
-    // CI `revert-proof-ci-selftest.sh head` runs this file and must pass on option-(b) checkouts.
+describe("revert-proof self-test checkout isolation (#128 catch-up)", () => {
+  it("(option-b) self-test does not read catch-up proof trees from checkout (e.g. revert-proofs/48/)", () => {
+    // After #128, main may ship baseline folders (102/, 112/, 95/) but not every merged PR’s tree.
+    expect(fs.existsSync(path.join(repoRoot, "revert-proofs", "48"))).toBe(false);
+    // Row proofs in this bundle use temp git fixtures under os.tmpdir(), not `git ls-files revert-proofs`.
   });
 });
 
