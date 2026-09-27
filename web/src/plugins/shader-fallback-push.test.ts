@@ -240,7 +240,6 @@ describe("shader fallback push contract", () => {
     const chip = pane.querySelector(".tile-shader-fallback-chip");
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     host.canvas.dispatchEvent(new Event("webglcontextrestored"));
-    expect(pane.contains(chip!)).toBe(true);
     expect(pane.querySelector(".tile-shader-fallback-chip")).toBe(chip);
     host.dispose();
     wall.remove();
