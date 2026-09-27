@@ -115,8 +115,8 @@
     "options": { "$ref": "#/$defs/freeMap" },
     "config": {
       "oneOf": [
-        { "$ref": "#/$defs/freeMap" },
-        { "$ref": "#/$defs/pluginConfigList" }
+        { "$ref": "#/$defs/pluginConfigList" },
+        { "$ref": "#/$defs/freeObject" }
       ]
     },
     "produces": {
@@ -200,6 +200,11 @@
     "freeMap": {
       "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims. Prefer pluginConfigList for typed config arrays.",
       "type": ["object", "array"],
+      "additionalProperties": true
+    },
+    "freeObject": {
+      "description": "Free-form object map (additionalProperties: true). Used for plugin config objects so oneOf with pluginConfigList stays unambiguous.",
+      "type": "object",
       "additionalProperties": true
     },
     "pluginConfigField": {
