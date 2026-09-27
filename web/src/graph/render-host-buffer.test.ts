@@ -14,7 +14,7 @@ describe("RenderHost.bufferPixelSize", () => {
     const host = new RenderHost(parent);
     const a = host.bufferPixelSize();
     const b = host.bufferPixelSize();
-    expect(a).toBe(b);
+    expect(a === b).toBe(true);
     host.dispose();
     parent.remove();
   });
