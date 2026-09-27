@@ -4,6 +4,7 @@ import { FloorGrid } from "./floor";
 import type { DreamAnim, NetScene } from "./scene";
 import { fadeTowardPole, type Theme } from "../core/themes";
 import { probeWebGL } from "./webgl";
+import { devicePxRatioNumber, layoutDevicePxRatio } from "./render-host-device-px-ratio";
 
 const _grid = new THREE.Color();
 const _fill = new THREE.Color();
@@ -166,7 +167,7 @@ export class LookStage {
     if (!r) return;
     const w = this.host.clientWidth, h = this.host.clientHeight;
     if (w < 2 || h < 2) return;
-    const dpr = Math.min(devicePixelRatio || 1, 1.5);
+    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
     if (w === this.lastW && h === this.lastH && dpr === this.lastDpr) return;
     this.lastW = w; this.lastH = h; this.lastDpr = dpr;
     this.camera.aspect = w / h;

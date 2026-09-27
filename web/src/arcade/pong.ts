@@ -10,6 +10,7 @@ import { fitText, isExchangeStart, noReplyExpected, portRole, roundRect } from "
 import { markFrame, PaneFps } from "../core/fps";
 import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
+import { devicePxRatioNumber, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
 
 /**
  * NetPong: Logstalgia ("Apache Pong") for one host on the network.
@@ -722,7 +723,8 @@ export class PongView {
   // ------------------------------------------------------------------ frame
 
   private fit(): void {
-    const W = this.container.clientWidth, H = this.container.clientHeight, dpr = Math.min(1.5, devicePixelRatio || 1);
+    const W = this.container.clientWidth, H = this.container.clientHeight;
+    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
     if (W === this.W && H === this.H && dpr === this.dpr) return;
     this.W = W; this.H = H; this.dpr = dpr;
     this.canvas.width = Math.round(W * dpr);

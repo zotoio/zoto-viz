@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index e4787b6..a1b2c3d 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -304,6 +304,7 @@ export class RenderHost {
+       this.software ? undefined : this.canvasDeviceHeight,
+     );
+     if (this.software) {
++      void (null as DeviceRect);
+       return viewMutAsDeviceRect(this.fbDeviceViewport);
+     }
+     toGlRectInto(

@@ -1,0 +1,12 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "vitest/globals"]
+  },
+  "include": [
+    "test-support/pack-mirror-rect.boundary.ts",
+    "src/graph/render-host-fb-viewport.test.ts",
+    "src/graph/render-host-gpu-viewport-css.test.ts"
+  ],
+  "exclude": []
+}

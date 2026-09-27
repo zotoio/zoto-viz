@@ -1,0 +1,26 @@
+diff --git a/web/src/graph/render-host-device-px-ratio.ts b/web/src/graph/render-host-device-px-ratio.ts
+index 3984c7b..380beff 100644
+--- a/web/src/graph/render-host-device-px-ratio.ts
++++ b/web/src/graph/render-host-device-px-ratio.ts
+@@ -43,7 +43,7 @@ function rearmResolutionMediaQuery(rawDppx: number): void {
+     const next = capRawDevicePxRatio(raw);
+     cachedLayoutRatio = next;
+     rearmResolutionMediaQuery(raw);
+-    if (next !== prev) notifyLayoutListeners(next);
++    notifyLayoutListeners(next);
+   };
+   currentMq.addEventListener("change", onDpiChange);
+ }
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 459bc46..07f0d89 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -348,7 +348,7 @@ export class RenderHost {
+   private applyWindowLayoutDevicePxRatio(): void {
+     const capped = layoutDevicePxRatio();
+     const pr = devicePxRatioNumber(capped);
+-    if (Math.abs(pr - this.pr) < 0.01) return;
++
+     this.layoutDevicePxRatio = capped;
+     this.pr = pr;
+     if (!this.software) {

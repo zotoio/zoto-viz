@@ -5,8 +5,20 @@ import { rIp, rName } from "../core/redact";
 import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
 import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame, PaneFps } from "../core/fps";
+import {
+  devicePxRatioNumber,
+  layoutBackingDevicePx,
+  layoutDevicePxRatio,
+  onLayoutDevicePxRatioChange,
+} from "../graph/render-host-device-px-ratio";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
+import {
+  asCanvasDeviceHeight,
+  deviceRect,
+  type GlRectMut,
+  toGlRectInto,
+} from "../graph/pack-mirror-rect";
 import { probeWebGL } from "../graph/webgl";
 import { observeResize } from "../core/resize";
 import { POLL_MS, REPLAY_S, isKnown } from "./arcade";
@@ -23,6 +35,7 @@ export abstract class Stage3D {
   protected running = false;
   protected W = 0;
   protected H = 0;
+  private layoutDpr = 0;
   protected pps = 0;
   protected lastT = 0;
   protected readonly world = new THREE.Scene();
@@ -48,6 +61,7 @@ export abstract class Stage3D {
   private readonly paneFps: PaneFps;
   private readonly picture = new PaneChangeProbe();
   private readonly flatPicture = new CanvasChangeProbe();
+  private readonly paneGlVpScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
 
   constructor(protected readonly container: HTMLElement, protected readonly scene: NetScene) {
     this.paneFps = new PaneFps(container);
@@ -72,6 +86,7 @@ export abstract class Stage3D {
     this.container.addEventListener("pointerleave", this.onPtrUp);
     this.container.addEventListener("wheel", this.onWheel, { passive: false });
     observeResize(this.container, () => this.fit());
+    onLayoutDevicePxRatioChange(() => this.fit());
   }
 
   start(preferIp?: string | null): void {
@@ -150,8 +165,9 @@ export abstract class Stage3D {
   protected fit(): void {
     const W = this.container.clientWidth, H = this.container.clientHeight;
     if (!W || !H) return;
-    this.W = W; this.H = H;
-    const dpr = Math.min(1.75, devicePixelRatio || 1);
+    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
+    if (W === this.W && H === this.H && dpr === this.layoutDpr) return;
+    this.W = W; this.H = H; this.layoutDpr = dpr;
     if (this.renderer) {
       this.renderer.setPixelRatio(dpr);
       this.renderer.setSize(W, H, false);
@@ -247,7 +263,12 @@ export abstract class Stage3D {
       const draw = () => this.renderer?.render(this.world, this.camera);
       if (gl) {
         timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
-        const vp = { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+        const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+        const vp = toGlRectInto(
+          dev,
+          asCanvasDeviceHeight(gl.drawingBufferHeight),
+          this.paneGlVpScratch,
+        );
         this.picture.tick(gl, vp, ts, (at) => this.paneFps.mark(at));
       } else draw();
     } else if (this.fallback && this.canvas) {

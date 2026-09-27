@@ -36,6 +36,18 @@ import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
 import { markFrame, PaneFps } from "../core/fps";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
+import {
+  asCanvasDeviceHeight,
+  deviceRect,
+  isDeviceRect,
+  type GlRect,
+  type GlRectMut,
+  toGlRectInto,
+} from "./pack-mirror-rect";
+import {
+  devicePxRatioNumber,
+  layoutDevicePxRatio,
+} from "./render-host-device-px-ratio";
 import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
@@ -1055,6 +1067,7 @@ export class NetScene implements HostedView {
   private readonly inputEl: HTMLElement;
   /** viewport of the last present() through the host, framebuffer pixels */
   private lastVp: Viewport | null = null;
+  private readonly glVpScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
   /** WebGL clear colour this scene wants (applied at present time so panes sharing a context differ) */
   private clearHex: number;
   readonly labelLayer: LabelLayer;
@@ -1275,12 +1288,14 @@ export class NetScene implements HostedView {
       container.classList.add("hosted");
       this.host.add(this);
     } else {
-      const dpr = Math.min(devicePixelRatio, this.satellite ? 1 : 1.5);
-      this.baseDpr = dpr;
-      this.lastTuneDpr = dpr;
+      const capped = layoutDevicePxRatio();
+      this.baseDpr = this.satellite
+        ? Math.min(1, devicePxRatioNumber(capped))
+        : devicePxRatioNumber(capped);
+      this.lastTuneDpr = this.baseDpr;
       this.renderer = ownRenderer(container, {
         satellite: this.satellite,
-        dpr,
+        dpr: this.baseDpr,
         clearHex: this.clearHex,
         onLost: () => this.hostContextLost(),
         onRestored: () => this.hostContextRestored(),
@@ -1581,12 +1596,19 @@ export class NetScene implements HostedView {
     if (this.software) {
       const canvas = this.host?.canvas ?? (this.renderer instanceof SoftwareGpu ? this.renderer.domElement : null);
       const ctx = canvas?.getContext("2d");
-      if (ctx && canvas && this.canvasProbe.sample(ctx, canvas, this.lastVp)) this.paneFps.mark(now);
+      const devVp = this.lastVp && isDeviceRect(this.lastVp) ? this.lastVp : null;
+      if (ctx && canvas && devVp && this.canvasProbe.sample(ctx, canvas, devVp)) this.paneFps.mark(now);
       return;
     }
     const gl = (this.host?.gl ?? (this.renderer as THREE.WebGLRenderer).getContext()) as WebGL2RenderingContext | null;
     if (!gl) return;
-    const vp = this.lastVp ?? { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+    let vp: GlRect;
+    if (this.lastVp && this.lastVp.__unit === "gl") {
+      vp = this.lastVp;
+    } else {
+      const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+      vp = toGlRectInto(dev, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);
+    }
     this.changeProbe.tick(gl, vp, this.lastFrameTs || now, (ts) => this.paneFps.mark(ts));
   }
 

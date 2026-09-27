@@ -1,7 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { bytesDiffer, CanvasChangeProbe, probeLines } from "./pane-change";
 
 describe("bytesDiffer", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("is false for an identical patch and true when any byte changes", () => {
     const a = new Uint8Array([1, 2, 3, 4]);
     expect(bytesDiffer(a, [1, 2, 3, 4])).toBe(false);
@@ -10,6 +14,10 @@ describe("bytesDiffer", () => {
 });
 
 describe("probeLines", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("crosses the whole pane with three rows and three columns, clipped to the buffer", () => {
     const lines = probeLines({ x: 100, y: 50, w: 600, h: 300 }, 640, 400);
     expect(lines).toHaveLength(6);
