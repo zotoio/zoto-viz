@@ -4,9 +4,9 @@
   "testName": "mosaic pane notice > shows and clears inline copy on a tile",
   "description": "Revert setPaneNotice paint hook so inline needs review copy never appears",
   "red": {
-    "actual": null,
-    "expected": "needs review"
+    "actual": false,
+    "expected": true
   },
   "project": "web",
-  "redLine": "TypeError: .toMatch() expects to receive a string, but got undefined"
+  "redLine": "AssertionError: expected false to be true // Object.is equality"
 }
