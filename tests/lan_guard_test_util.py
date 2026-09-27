@@ -15,6 +15,7 @@ LAN_STUB_OTHER_IP = "10.99.99.99"
 class LanOsStubState(TypedDict):
     query_calls: int
     gate: NotRequired[threading.Event]
+    refresh_started: NotRequired[threading.Event]
     fail_refresh: NotRequired[bool]
     extra_ip: NotRequired[str]
     second_query_extra_other: NotRequired[bool]
@@ -30,6 +31,10 @@ def stub_lan_os_interfaces(monkeypatch: pytest.MonkeyPatch) -> LanOsStubState:
         state["query_calls"] += 1
         if state.get("fail_refresh"):
             raise OSError("stubbed OS lookup failure")
+        if state["query_calls"] > 1:
+            started = state.get("refresh_started")
+            if started is not None:
+                started.set()
         g = state.get("gate")
         if g is not None:
             g.wait(timeout=30.0)

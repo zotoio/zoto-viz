@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, web
+
+from service import request_guard
 
 from tests.lan_guard_test_util import (
     LAN_STUB_IFACE_IP,
@@ -152,6 +155,20 @@ async def _one_session(port: int, ip: str, host: str) -> int:
             return resp.status
 
 
+def test_configure_request_guard_stamps_last_lookup_and_refresh_lock(
+    stub_lan_os_interfaces: LanOsStubState,
+) -> None:
+    t0 = 1000.0
+    app = web.Application()
+    app["request_guard_clock"] = lambda: t0
+    request_guard.configure_request_guard(app, bind="0.0.0.0", port=7020)
+    assert app["request_guard_last_if_lookup"] == t0
+    assert app.get("request_guard_refresh_lock") is not None
+    assert stub_lan_os_interfaces["query_calls"] == 1
+    allowed = app.get("request_guard_allowed_hosts") or frozenset()
+    assert f"{LAN_STUB_IFACE_IP}:7020" in allowed
+
+
 def test_dhcp_refresh_single_flight_fifty_concurrent_lookups(
     stub_lan_os_interfaces: LanOsStubState,
 ) -> None:
@@ -160,6 +177,8 @@ def test_dhcp_refresh_single_flight_fifty_concurrent_lookups(
     gate = stub_lan_os_interfaces["gate"]
     assert gate is not None
     stub_lan_os_interfaces["second_query_extra_other"] = True
+    refresh_started = threading.Event()
+    stub_lan_os_interfaces["refresh_started"] = refresh_started
 
     def clock() -> float:
         return now
@@ -180,7 +199,7 @@ def test_dhcp_refresh_single_flight_fifty_concurrent_lookups(
                 asyncio.create_task(_one_session(port, ip, LAN_STUB_OTHER_IP))
                 for _ in range(50)
             ]
-            await asyncio.sleep(0.05)
+            await asyncio.to_thread(refresh_started.wait, 30.0)
             gate.set()
             statuses = await asyncio.gather(*tasks)
             assert all(s == 200 for s in statuses)
