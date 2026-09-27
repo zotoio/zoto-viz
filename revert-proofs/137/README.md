@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|-------|
-| `proven_at` | _(filled at PR head after revert-proof run)_ |
-| `tree` | _(filled at PR head after revert-proof run)_ |
+| `proven_at` | `957785ea328adfcd9ae7b6b0ee2d01827073ddc7` |
+| `tree` | `957785ea328adfcd9ae7b6b0ee2d01827073ddc7` |
 
 Five pytest revert rows (`origin-userinfo`, `origin-path-suffix`, `origin-127-0-0-2-default`, `origin-127-0-0-2-insecure-lan`, `origin-null-no-token`).
 
