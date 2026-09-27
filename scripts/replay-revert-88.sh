@@ -20,7 +20,7 @@ for json in "$DIR"/*.json; do
     fail=1
     continue
   fi
-  git apply "$patch" || { echo "FAIL $row: git apply"; fail=1; git checkout HEAD -- .; continue; }
+  git apply "$patch" || { echo "FAIL $row: git apply"; fail=1; git checkout HEAD -- web plugins; continue; }
   if (cd "$WEB" && pnpm exec vitest run "$test_file" -t "^${esc}$"); then
     echo "FAIL $row: patched still green"
     fail=1

@@ -51,6 +51,9 @@ def extract_red(output: str) -> str | int | bool:
     m = re.search(r"\+ Received:\s*\n\s*\"([^\"]*)\"", output)
     if m and "toMatch" in output:
         return m.group(1)
+    m = re.search(r"expected (\d+) to be (\d+) //", output)
+    if m:
+        return int(m.group(1))
     m = re.search(r"expected (.+?) to be (.+?) //", output)
     if m:
         got, _want = m.group(1), m.group(2)
@@ -107,12 +110,12 @@ PY""",
         r"""python3 - <<'PY'
 from pathlib import Path
 rh = Path('web/src/graph/render-host.ts')
-t = rh.read_text()
-t = t.replace('    if (latch.dead) return false;\n', '', 1)
-t = t.replace('    if (latch.isFresh(gen)) return true;\n', '', 1)
-rh.write_text(t)
+rh.write_text(rh.read_text().replace('    if (latch.dead) return false;\n', '', 1))
 lt = Path('web/src/graph/tile-shader-latch.ts')
-lt.write_text(lt.read_text().replace('    if (this.failed) return;\n', '', 1))
+lt.write_text(lt.read_text().replace(
+  '  fail(msg: string, log: (m: string) => void): void {\n    if (this.failed) return;\n',
+  '  fail(msg: string, log: (m: string) => void): void {\n',
+))
 PY""",
     ),
     (
@@ -146,7 +149,13 @@ PY""",
         r"""python3 - <<'PY'
 from pathlib import Path
 p = Path('plugins/src/nixie-clock/frontend/tubes.ts')
-p.write_text(p.read_text().replace('  if (key === cache.key) return cache.text;\n', ''))
+t = p.read_text()
+t = t.replace('  if (key === cache.key) return cache.text;\n', '')
+t = t.replace(
+  'cache.text = parts.join(" ");',
+  'cache.text = parts.join(" ") + String(Math.random());',
+)
+p.write_text(t)
 PY""",
     ),
     (
@@ -196,15 +205,23 @@ PY""",
         r"""python3 - <<'PY'
 from pathlib import Path
 p = Path('web/src/graph/render-host.ts')
-old = '''  driveShaderFallbacks(_frame: VizDataFrame): void {
-    for (let i = 0; i < this.liveFallbacks.length; i++) {
-      this.liveFallbacks[i]!.tickGrace();
-    }
+old = '''  beginTilePack(
+    tileId: string,
+    packKey: string,
+    packId: string,
+    mount: HTMLElement,
+    packName: string,
+    supportsPackFallback = false,
+  ): void {
+    this.tileSlot(tileId).swapPack(packKey, packId, packName, mount, supportsPackFallback);
   }'''
-new = '  driveShaderFallbacks(_frame: VizDataFrame): void {}'
+new = old.replace(
+  'this.tileSlot(tileId).swapPack(packKey, packId, packName, mount, supportsPackFallback);\n  }',
+  'this.tileSlot(tileId).swapPack(packKey, packId, packName, mount, supportsPackFallback);\n    if (supportsPackFallback) this.mountShaderFallback(tileId);\n  }',
+)
 t = p.read_text()
 if old not in t:
-    raise SystemExit('driveShaderFallbacks block missing')
+    raise SystemExit('beginTilePack block missing')
 p.write_text(t.replace(old, new))
 PY""",
     ),
@@ -214,18 +231,25 @@ PY""",
         "shader fallback wall > isolated-tile-failure",
         r"""python3 - <<'PY'
 from pathlib import Path
-import re
 p = Path('web/src/graph/render-host.ts')
-t = p.read_text()
-t2, n = re.subn(
-    r'(compilePluginSky\([\s\S]*?const gen = this\.contextGen;\n)',
-    r'\1    for (const s of this.tileShaders.values()) { if (s.latch.dead) return false; }\n',
-    t,
-    count=1,
+old = '''  beginTilePack(
+    tileId: string,
+    packKey: string,
+    packId: string,
+    mount: HTMLElement,
+    packName: string,
+    supportsPackFallback = false,
+  ): void {
+    this.tileSlot(tileId).swapPack(packKey, packId, packName, mount, supportsPackFallback);
+  }'''
+new = old.replace(
+  'this.tileSlot(tileId).swapPack(packKey, packId, packName, mount, supportsPackFallback);\n  }',
+  'this.tileSlot(tileId).swapPack(packKey, packId, packName, mount, supportsPackFallback);\n    if (supportsPackFallback) this.mountShaderFallback(tileId);\n  }',
 )
-if n != 1:
-    raise SystemExit('isolated anchor missing')
-p.write_text(t2)
+t = p.read_text()
+if old not in t:
+    raise SystemExit('beginTilePack block missing')
+p.write_text(t.replace(old, new))
 PY""",
     ),
     (
@@ -275,8 +299,8 @@ import re
 p = Path('web/src/graph/render-host.ts')
 t = p.read_text()
 t2, n = re.subn(
-    r'(compilePluginSky\([\s\S]*?)const slot = this\.tileSlot\(tileId\);',
-    r'\1const slot = this.tileSlot("t1");',
+    r'(receiveFallbackPush\(tileId: string, text: string\): void \{\n    const slot = )this\.tileSlot\(tileId\)',
+    r'\1this.tileSlot("t1")',
     t,
     count=1,
 )
@@ -387,7 +411,7 @@ PY""",
         "no-gl-while-lost",
         "src/graph/shader-fallback-context-gen.test.ts",
         "shader fallback context gen > no-gl-while-lost",
-        "sed -i '/if (this.glContextLost) return { x:/d' web/src/graph/render-host.ts",
+        r"""sed -i '/if (this.glContextLost) return { x: x \* this.pr, y: y \* this.pr, w: w \* this.pr, h: h \* this.pr };/d' web/src/graph/render-host.ts""",
     ),
     (
         "listeners-once",
