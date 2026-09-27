@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/settings-drawer-layout.test.ts",
+  "testName": "keeps the top-chrome drawer inside the viewport at 1024px wide",
+  "description": "Revert top-chrome fixed viewport anchor for the settings drawer"
+}

@@ -804,6 +804,15 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
   box-shadow: 0 12px 32px var(--shadow); backdrop-filter: blur(10px);
   animation: menu-in 0.12s ease-out;
 }
+/* Top chrome: anchor below the header on the viewport, not the cog — wrapped header rows leave the cog on the left. */
+body[data-chrome="top"] .field.settings.open > .settings-pop.drawer:not(.flyout):not(.floated) {
+  position: fixed;
+  top: calc(var(--bar-h, 76px) + 6px);
+  right: 14px;
+  left: auto;
+  width: min(640px, calc(100vw - 28px));
+  max-width: calc(100vw - 28px);
+}
 .settings-pop.drawer { align-items: stretch; }
 .settings-pop.drawer:not([hidden]) {
   display: grid;
