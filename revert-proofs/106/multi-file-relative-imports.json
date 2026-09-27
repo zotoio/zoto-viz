@@ -3,5 +3,5 @@
   "description": "Unbundled ESM module.js must keep relative imports and serve helper.js siblings via pack-assets.",
   "timeoutSec": 120,
   "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_sandbox_fixture_multi_serves_sibling_files",
-  "red": "ge.readthedocs.io/en/7.16.1/messages.html#warning-module-not-imported\n  self.warn(f\"Module {pkg} was never imported.\", slug=\"module-not-imported\")\n/home/ubuntu/.local/lib/python3.12/site-packages/coverage/inorout.py:558: CoverageWarning: Module service.bootstrap was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.16.1/messages.html#warning-module-not-imported\n  self.warn(f\"Module {pkg} was never imported.\", slug=\"module-not-imported\")\n/home/ubuntu/.local/lib/python3.12/site-packages/coverage/inorout.py:558: CoverageWarning: Module service.plugin_catalog was never imported. (module-not-imported); see https://coverage.readthedocs.io/en/7.16.1/messages.html#warning-module-not-imported\n  self.warn(f\"Module {pkg} was never imported.\", slug=\"module-not-imported\")\n"
+  "red": "AssertionError: assert 0 == 1"
 }
