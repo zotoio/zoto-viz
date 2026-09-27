@@ -144,14 +144,13 @@ def write_json(name: str, data: dict) -> None:
 
 def custom_edits(name: str) -> list[tuple[str, str, str]] | None:
     if name == "main-on-plugin-fields-wiring":
-        head = read("web/src/app/main-on-plugin-fields.ts")
         old = """export function runMainOnPluginFields(deps: MainOnPluginFieldsDeps): void {
   syncPluginFieldsFromSettingsEdit({
     settings: deps.settings,
     fallbackModeId: deps.modeSelValue,
     hostModeById: deps.hostModeById,
     optsFor: deps.optsFor,
-    mosaic: deps.mosaic,
+    mosaic: deps.mosaic ?? null,
     scene: deps.scene,
     pluginSpecForMode: deps.pluginSpecForMode,
     setCurrentOpts: deps.setCurrentOpts,

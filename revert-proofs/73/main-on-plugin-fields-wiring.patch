@@ -1,5 +1,5 @@
 diff --git a/web/src/app/main-on-plugin-fields.ts b/web/src/app/main-on-plugin-fields.ts
-index 5641d1e..2fd1eb3 100644
+index d7d5823..857ba10 100644
 --- a/web/src/app/main-on-plugin-fields.ts
 +++ b/web/src/app/main-on-plugin-fields.ts
 @@ -27,20 +27,16 @@ export type MainOnPluginFieldsDeps = {
@@ -11,7 +11,7 @@ index 5641d1e..2fd1eb3 100644
 -    fallbackModeId: deps.modeSelValue,
 -    hostModeById: deps.hostModeById,
 -    optsFor: deps.optsFor,
--    mosaic: deps.mosaic,
+-    mosaic: deps.mosaic ?? null,
 -    scene: deps.scene,
 -    pluginSpecForMode: deps.pluginSpecForMode,
 -    setCurrentOpts: deps.setCurrentOpts,
