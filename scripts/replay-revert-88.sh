@@ -7,6 +7,7 @@ cd "$ROOT"
 fail=0
 for json in "$DIR"/*.json; do
   [[ "$json" == *".sidecar.json" ]] && continue
+  [[ "$(basename "$json" .json)" == "hunk-map" ]] && continue
   row="$(basename "$json" .json)"
   patch="$DIR/$row.patch"
   [[ -f "$patch" ]] || { echo "missing patch $row"; fail=1; continue; }
@@ -21,7 +22,11 @@ for json in "$DIR"/*.json; do
     continue
   fi
   git apply "$patch" || { echo "FAIL $row: git apply"; fail=1; git checkout HEAD -- web plugins; continue; }
-  if out=$(cd "$WEB" && pnpm exec vitest run "$test_file" -t "^${esc}$" 2>&1); then
+  set +e
+  out="$(cd "$WEB" && pnpm exec vitest run "$test_file" -t "^${esc}$" 2>&1)"
+  patched_code=$?
+  set -e
+  if [[ "$patched_code" -eq 0 ]]; then
     echo "FAIL $row: patched still green"
     fail=1
   else

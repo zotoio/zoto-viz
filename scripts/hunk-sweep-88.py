@@ -39,7 +39,7 @@ def parse_hunks(diff: str) -> list[dict]:
 def row_for_file(path: str) -> str | None:
     name = Path(path).name
     for j in (ROOT / "revert-proofs" / "88").glob("*.json"):
-        if j.name.endswith(".sidecar.json"):
+        if j.name.endswith(".sidecar.json") or j.name == "hunk-map.json":
             continue
         data = json.loads(j.read_text())
         tf = data.get("testFile", "")

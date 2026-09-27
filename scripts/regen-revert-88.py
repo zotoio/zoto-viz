@@ -51,8 +51,11 @@ def extract_red(output: str) -> str | int | bool:
     m = re.search(r"to have a length of \d+ but got \+(\d+)", output)
     if m:
         return int(m.group(1))
+    m = re.search(r"AssertionError: expected '([^']*)' to be ", output)
+    if m:
+        return m.group(1)
     m = re.search(r"\+ Received:\s*\n\s*\"([^\"]*)\"", output)
-    if m and "toMatch" in output:
+    if m and ("toMatch" in output or "toBe" in output):
         return m.group(1)
     m = re.search(r"expected (\d+) to be (\d+) //", output)
     if m:
