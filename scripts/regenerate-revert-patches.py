@@ -2,8 +2,8 @@
 """Regenerate revert-proofs/*.patch from HEAD via git diff (zero apply offset)."""
 from __future__ import annotations
 
+import copy
 import subprocess
-import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -475,19 +475,117 @@ def write_patch(proofs_dir: Path, name: str, edits: list[tuple[str, str, str]]) 
     restore(paths)
 
 
+def is_pack_mirror_stack() -> bool:
+    return (ROOT / "web/src/graph/pack-mirror-gl.ts").is_file()
+
+
+def build_patches_42() -> dict[str, list[tuple[str, str, str]]]:
+    patches = copy.deepcopy(PATCHES_42)
+    if is_pack_mirror_stack():
+        return patches
+    patches["pack-mirror-brand-cast"] = [
+        (
+            "web/src/graph/render-host-gl-adapter.ts",
+            """  renderer.setScissor(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
+}
+""",
+            """  renderer.setScissor(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
+}
+
+void (null as DeviceRect);
+""",
+        ),
+    ]
+    patches["pack-mirror-capture-rounding"] = [
+        (
+            "web/src/graph/pack-mirror-rect.ts",
+            """  toDeviceRectInto(
+    cssRect(box.x, topY, box.w, box.h),
+    pixelRatio,
+    out,
+  );
+  return out as DeviceRect;""",
+            """  const pr = pixelRatio;
+  out.x = cssBoxDim(box.x) * pr;
+  out.y = topY * pr;
+  out.w = cssBoxDim(box.w) * pr;
+  out.h = cssBoxDim(box.h) * pr;
+  Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
+  return out as DeviceRect;""",
+        ),
+    ]
+    patches["render-host-gpu-viewport-css-revert"] = [
+        (
+            "web/src/graph/render-host.ts",
+            """        this.software = false;
+        this.renderer.setPixelRatio(1);
+        this.renderer.setClearColor(0x000000, 0);
+        this.canvas = this.renderer.domElement;
+      } catch {""",
+            """        this.software = false;
+        this.renderer.setPixelRatio(this.pr);
+        this.renderer.setClearColor(0x000000, 0);
+        this.canvas = this.renderer.domElement;
+      } catch {""",
+        ),
+        (
+            "web/src/graph/render-host.ts",
+            """  /** Whole-wall layout DPR (auto-tune). Backing store scales here; renderer pixel ratio stays 1. */
+  setPixelRatio(pr: number): void {
+    if (Math.abs(pr - this.pixelRatio) < 0.01) return;
+    this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
+    this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
+    if (!this.software) {
+      this.renderer.setPixelRatio(1);
+      this.resizeGpuCanvas();
+    } else {
+      this.resizeSoftware();
+    }
+    this.dirty = true;
+  }
+
+  /**
+   * Draw `scene` through `camera` into the viewport under `view.viewEl`, clearing it to `clearHex`.""",
+            """  /** Whole-wall layout DPR (auto-tune). Backing store scales here; renderer pixel ratio stays 1. */
+  setPixelRatio(pr: number): void {
+    if (Math.abs(pr - this.pixelRatio) < 0.01) return;
+    this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
+    this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
+    if (!this.software) {
+      this.renderer.setPixelRatio(pr);
+      this.resizeGpuCanvas();
+    } else {
+      this.resizeSoftware();
+    }
+    this.dirty = true;
+  }
+
+  /**
+   * Draw `scene` through `camera` into the viewport under `view.viewEl`, clearing it to `clearHex`.""",
+        ),
+        patches["render-host-gpu-viewport-css-revert"][2],
+    ]
+    return patches
+
+
 def main() -> None:
     subprocess.run(["git", "checkout", "HEAD", "--", "web"], cwd=ROOT, check=True)
 
+    patches42 = build_patches_42()
     proofs42 = ROOT / "revert-proofs/42"
-    for name, edits in PATCHES_42.items():
+    for name, edits in patches42.items():
         write_patch(proofs42, name, edits)
 
-    proofs86 = ROOT / "revert-proofs/86"
-    for name, edits in PATCHES_86.items():
-        write_patch(proofs86, name, edits)
+    stack = is_pack_mirror_stack()
+    if stack:
+        proofs86 = ROOT / "revert-proofs/86"
+        for name, edits in PATCHES_86.items():
+            write_patch(proofs86, name, edits)
+        print(f"86: {len(PATCHES_86)} patches")
+    else:
+        print("86: skipped (no pack-mirror-gl.ts on this branch)")
 
-    print(f"42: {len(PATCHES_42)} patches")
-    print(f"86: {len(PATCHES_86)} patches")
+    print(f"42: {len(patches42)} patches (stack_86={stack})")
 
 
 if __name__ == "__main__":
