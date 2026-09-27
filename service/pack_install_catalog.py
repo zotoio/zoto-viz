@@ -44,15 +44,6 @@ def _save(rows: list[dict[str, str]]) -> None:
     _CACHE = rows
 
 
-def reset_install_catalog_records_for_tests() -> None:
-    global _CACHE
-    with _LOCK:
-        _CACHE = []
-        path = _store_path()
-        if path.is_file():
-            path.unlink(missing_ok=True)
-
-
 def append_catalog_record(row: dict[str, str], *, once_key: str) -> None:
     with _LOCK:
         rows = list(_load())

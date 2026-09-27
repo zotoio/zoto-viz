@@ -1,13 +1,14 @@
 diff --git a/service/access.py b/service/access.py
-index 45db64b..76da3f9 100644
+index 45db64b2..08b05245 100644
 --- a/service/access.py
 +++ b/service/access.py
-@@ -104,7 +104,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+@@ -104,7 +104,8 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
          return _deny("forbidden host")
      if not origin_ok(request):
          return _deny("forbidden origin")
 -    if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):
-+    if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and "/blocked/retry" not in request.path and not csrf_ok(request):
++    _path = request.path.rstrip("/")
++    if request.method in MUTATE and _path != "/mcp" and _path != "/api/ai/plugin/local/blocked/retry" and not csrf_ok(request):
          return _deny("csrf required")
      resp = await handler(request)
      attach_csrf(request, resp)

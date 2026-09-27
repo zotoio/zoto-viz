@@ -1,12 +1,11 @@
 diff --git a/service/plugin_install.py b/service/plugin_install.py
-index f8c85eb..702013a 100644
 --- a/service/plugin_install.py
 +++ b/service/plugin_install.py
-@@ -247,6 +247,7 @@ def _check_pack_install_warnings(ctx: InstallContext) -> dict[str, Any]:
+@@ -268,7 +268,6 @@
+         check(ctx)
+     _check_pack_install_warnings(ctx)
+     _check_bundle_allowlist(ctx)
+-    _check_sdk_contract(ctx)
  
  
- def _check_sdk_contract(ctx: InstallContext) -> None:
-+    return
-     row = assert_pack_sdk_compatible(ctx.staging, ctx.doc, ctx.rel, runtime_parent=ctx.runtime.parent)
-     if row is not None:
-         raise ValueError(row.get("message") or "SDK contract mismatch")
+ def _write_zip_atomic(src_zip: Path, dest: Path) -> None:

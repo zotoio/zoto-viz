@@ -22,7 +22,7 @@ from .plugin_install import (
 _zip_block_cache: dict[str, dict[str, str]] = {}
 
 
-def reset_zip_block_cache() -> None:
+def _clear_zip_block_cache() -> None:
     _zip_block_cache.clear()
 
 

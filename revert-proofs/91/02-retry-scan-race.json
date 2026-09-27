@@ -3,5 +3,5 @@
   "testFile": "tests/test_plugin_install.py",
   "testName": "test_retry_and_scan_race_single_install",
   "description": "Drop-folder install ignores persisted sha256 block rows.",
-  "patchedFailure": "tests/test_plugin_install.py:486: AssertionError: assert 2 == 1"
+  "patchedFailure": "E       assert 2 == 1"
 }

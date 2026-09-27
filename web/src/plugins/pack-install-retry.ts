@@ -29,11 +29,6 @@ export type PackInstallRetryApiBody = {
 const retryInFlight = new Set<string>();
 const installHistory: string[] = [];
 
-export function resetPackInstallRetryForTests(): void {
-  retryInFlight.clear();
-  installHistory.length = 0;
-}
-
 export function packInstallHistory(): readonly string[] {
   return installHistory;
 }
