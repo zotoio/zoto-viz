@@ -39,6 +39,15 @@ class PackAssetsSecurityTests(AioHTTPTestCase):
     async def get_application(self) -> web.Application:
         return make_pack_test_app()
 
+    async def test_consented_module_js_is_no_store(self) -> None:
+        row = {"id": "demo-pack", "has_frontend": True}
+        with patch.object(plugins, "_plugin_row", lambda pid: row if pid == "demo-pack" else None):
+            with patch.object(plugins, "consented", lambda _doc: True):
+                with patch.object(plugins, "module_response", lambda _pid: web.Response(text="export {};", content_type="text/javascript")):
+                    resp = await self.client.get(pack_url("demo-pack", "module.js"), headers=NULL)
+        assert resp.status == 200
+        assert resp.headers.get("Cache-Control") == "no-store"
+
     async def test_valid_token_cannot_fetch_unconsented_pack(self) -> None:
         """Session token does not bypass consent for a different pack id in the path."""
         row_a = {"id": "pack-a", "has_frontend": True, "file": "/fake/a/plugin.yml"}

@@ -25,7 +25,9 @@ def canonical_static_path(path: str) -> str | None:
     if not raw.startswith("/"):
         return None
     decoded = _decode_path(raw)
-    if decoded.startswith("//") or "\\" in decoded:
+    if decoded.startswith("//"):
+        return None
+    if "\\" in decoded:
         return None
     segments: list[str] = []
     for part in decoded.split("/"):
@@ -48,8 +50,7 @@ def static_path_allowed(request_path: str) -> bool:
     decoded = _decode_path(raw)
     if decoded != canon and raw != canon:
         return False
-    base = canon.rsplit("/", 1)[-1]
-    if base in _BLOCKED_STATIC:
+    if is_legacy_sandbox_request(request_path):
         return False
     return True
 
