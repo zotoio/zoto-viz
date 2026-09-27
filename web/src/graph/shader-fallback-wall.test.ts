@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
+import { TileShaderFallback } from "./tile-shader-fallback";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 const EMPTY: VizDataFrame = {
@@ -145,12 +146,12 @@ describe("shader fallback wall", () => {
     failTiles.add("main");
     host.beginTilePack("main", "k:1", "nixie-clock", pane, "Nixie", true);
     expect(host.compilePluginSky("main", {} as never, {} as never)).toBe(false);
+    const dispose = vi.spyOn(TileShaderFallback.prototype, "dispose");
     host.onTileShaderCompileFailed("main");
-    const first = pane.querySelector(".tile-shader-fallback");
-    expect(first).toBeTruthy();
     host.onTileShaderCompileFailed("main");
     expect(pane.querySelectorAll(".tile-shader-fallback")).toHaveLength(1);
-    expect(pane.querySelector(".tile-shader-fallback")).toBe(first);
+    expect(dispose).toHaveBeenCalledTimes(0);
+    dispose.mockRestore();
     host.dispose();
     wall.remove();
   });
