@@ -1,12 +1,17 @@
-diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+diff --git a/web/src/app/render-scale-governor-wiring.ts b/web/src/app/render-scale-governor-wiring.ts
 index 2810f2aa..00000000 100644
---- a/web/src/app/main.ts
-+++ b/web/src/app/main.ts
-@@ -531,7 +531,6 @@ function refreshPluginDriveForMode(spec: PluginView | null, modeId: string): void
+--- a/web/src/app/render-scale-governor-wiring.ts
++++ b/web/src/app/render-scale-governor-wiring.ts
+@@ -80,12 +80,6 @@ export function runRenderScaleGovernorPresentTick(
+   ts: number,
+   now = performance.now(),
+ ): void {
+-  const panes = collectRenderScalePanes(host);
+-  for (const p of panes) p.renderScaleState.onPaneFrame(ts);
+-  const enabled = hostRenderScaleGovernorEnabled();
+-  if (enabled) governorEnabledTickCount++;
+-  tickRenderScalePanes(panes, now, enabled);
++  void host;
++  void ts;
++  void now;
  }
- 
- addPresentListener((ts) => {
--  runRenderScaleGovernorPresentTick(renderScaleGovernorHost, ts);
-   const mode = modeById(modeSel.value);
-   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
-   if (packId) vizBudget.markPresent(ts);

@@ -63,7 +63,7 @@ import {
   bootRenderScaleGpuTimer,
   createVizGovernorToggle,
   refreshRenderScaleGovernorFromUrl,
-  runRenderScaleGovernorPresentTick,
+  bindRenderScaleGovernorPresentListener,
   syncHostRenderGovernorForSpec,
   type RenderScaleGovernorHost,
 } from "./render-scale-governor-wiring";
@@ -495,6 +495,7 @@ const renderScaleGovernorHost: RenderScaleGovernorHost = {
   vizHud,
 };
 refreshRenderScaleGovernorFromUrl();
+bindRenderScaleGovernorPresentListener(renderScaleGovernorHost);
 const pluginHudCaptions = new Map<string, string | null>();
 
 function mosaicHudOn(): boolean {
@@ -531,7 +532,6 @@ function refreshPluginDriveForMode(spec: PluginView | null, modeId: string): voi
 }
 
 addPresentListener((ts) => {
-  runRenderScaleGovernorPresentTick(renderScaleGovernorHost, ts);
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);

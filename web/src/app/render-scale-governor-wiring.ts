@@ -14,6 +14,7 @@ import type { PluginView } from "../plugins/plugin";
 import type { VizFrameBudgetStats } from "../plugins/viz-host";
 import type { VizHud } from "../ui/viz-hud";
 import { Toggle } from "../ui/ui";
+import { addPresentListener } from "../core/fps";
 
 export type RenderScaleGovernorHost = {
   scene: NetScene;
@@ -85,6 +86,11 @@ export function runRenderScaleGovernorPresentTick(
   const enabled = hostRenderScaleGovernorEnabled();
   if (enabled) governorEnabledTickCount++;
   tickRenderScalePanes(panes, now, enabled);
+}
+
+/** Production hook: one governor tick per display present (same as `main.ts`). */
+export function bindRenderScaleGovernorPresentListener(host: RenderScaleGovernorHost): () => void {
+  return addPresentListener((ts) => runRenderScaleGovernorPresentTick(host, ts));
 }
 
 export function vizHudGovernorTickFields(

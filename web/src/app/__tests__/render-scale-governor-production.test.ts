@@ -42,11 +42,12 @@ function minimalState(): StateMsg {
     flows: [],
   };
 }
+import { markFrame } from "../../core/fps";
 import {
   applyHostRenderScaleGovernor,
+  bindRenderScaleGovernorPresentListener,
   resetRenderScaleGovernorWiringForTests,
   renderScaleGovernorEnabledTickCountForTests,
-  runRenderScaleGovernorPresentTick,
   syncHostRenderGovernorForSpec,
   type RenderScaleGovernorHost,
 } from "../render-scale-governor-wiring";
@@ -100,13 +101,16 @@ function runFrames(
   gpuMs: number,
   startNow = 0,
 ): void {
+  const unbind = bindRenderScaleGovernorPresentListener(host);
   let ts = startNow;
-  let now = startNow;
-  for (let i = 0; i < frames; i++) {
-    scene.noteFrameCost(gpuMs);
-    runRenderScaleGovernorPresentTick(host, ts, now);
-    ts += FRAME_MS;
-    now += FRAME_MS;
+  try {
+    for (let i = 0; i < frames; i++) {
+      scene.noteFrameCost(gpuMs);
+      markFrame(ts);
+      ts += FRAME_MS;
+    }
+  } finally {
+    unbind();
   }
 }
 
