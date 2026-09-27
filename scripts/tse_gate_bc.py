@@ -190,9 +190,10 @@ def main() -> None:
 
     print("\n=== (#80) pnpm state files must not appear in PR diff stat ===")
     pnpm_errs: list[str] = []
-    pnpm_errs.extend(check_pnpm_not_in_diff("6520b01", "4a1e647d"))
-    pnpm_errs.extend(check_pnpm_not_in_diff("4a1e647d", "e4d64961"))
-    pnpm_errs.extend(check_pnpm_not_in_diff("e4d64961", "6678a61b"))
+    pnpm_errs.extend(check_pnpm_not_in_diff("6520b01", "cursor/viz-frame-contract-v27a-afd6"))
+    pnpm_errs.extend(check_pnpm_not_in_diff("4a1e647d", "cursor/viz-frame-contract-v27b-afd6"))
+    pnpm_errs.extend(check_pnpm_not_in_diff("e4d64961", "cursor/viz-frame-contract-v27c-afd6"))
+    pnpm_errs.extend(check_pnpm_not_in_diff("6520b01", "cursor/viz-frame-contract-v27c-afd6"))
     print("\n".join(pnpm_errs) if pnpm_errs else "No node_modules/.modules.yaml or .pnpm-workspace-state-v1.json in split diffs.")
 
     sidecar_shape: list[str] = []
