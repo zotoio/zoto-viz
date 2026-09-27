@@ -50,9 +50,11 @@ Machine: cloud agent VM, same commands as main comparison (`pnpm exec vitest run
 
 | Category | Requirement | This PR @ HEAD |
 |----------|-------------|----------------|
-| **(a) Env-only** | Fails on `origin/main` (`6520b01`) with **same test name** and **same error text** — paste both | **(none)** — full suites green on main and on `4a1e647d` |
-| **(b) PR snapshot** | Snapshot updated in PR; list changed entries | **(none)** — no vitest/pytest snapshot failures at HEAD |
-| **(c) Nondeterministic** | Fixed seed + 20/20 identical runs, or test deleted and named | **(none)** — no flaky inventory; nothing deleted for nondeterminism |
+| **(a) Env-only / pre-existing on main** | Fails on `6520b01` with **same test name** and **same error text** — paste both | **`fat-LAN live soak`** → `AssertionError: expected 119 to be 120 // Object.is equality` (main + all HEADs until TSE fix; **not** deselected) |
+| **(b) PR snapshot** | Snapshot updated in PR; list changed entries | **(none)** |
+| **(c) Nondeterministic** | Fixed seed + 20/20 identical runs, or test deleted and named | **(none)** — main soak **restored**, not deleted |
+
+**`git diff 6520b01 -- web/src/plugins/dogfood.test.ts`:** only `beforeEach` / `hasAssertions` lines (#94); fat-LAN block matches main bytes.
 
 **Suite @ HEAD:** vitest **698 passed**, 3 skipped; pytest **433 passed**.
 
@@ -101,9 +103,11 @@ V2 monolith / tick delivery stays on **#88**; #94 is collector + contract tests 
 
 | Category | This PR @ HEAD |
 |----------|----------------|
-| **(a) Env-only** (same name + error on `6520b01`) | **(none)** |
+| **(a) Env-only / pre-existing on main** | **`fat-LAN live soak`** — same name + `AssertionError: expected 119 to be 120 // Object.is equality` on `6520b01` and this HEAD (TSE fix pending; not deselected) |
 | **(b) PR snapshot** | **(none)** |
-| **(c) Nondeterministic** (seed×20 or deleted) | **(none)** |
+| **(c) Nondeterministic** | **(none)** |
+
+**`git diff 6520b01 -- web/src/plugins/dogfood.test.ts`:** **empty**
 
 **Suite @ HEAD:** vitest **701 passed**, 4 skipped; pytest **433 passed**. **@ main:** vitest 663 passed; pytest 433 passed.
 
@@ -131,9 +135,11 @@ V2 monolith / tick delivery stays on **#88**; #94 is collector + contract tests 
 
 | Category | This PR @ HEAD |
 |----------|----------------|
-| **(a) Env-only** | **(none)** |
+| **(a) Env-only / pre-existing on main** | **`fat-LAN live soak`** — same as `6520b01` (see shared block below) |
 | **(b) PR snapshot** | **(none)** |
 | **(c) Nondeterministic** | **(none)** |
+
+**`git diff 6520b01 -- web/src/plugins/dogfood.test.ts`:** **empty**
 
 **Suite @ HEAD:** vitest **733 passed**, 4 skipped; pytest **442 passed**. **@ main:** vitest 663 passed; pytest 433 passed.
 
@@ -214,7 +220,32 @@ git apply --check -p1 revert-proofs/27/<row>.patch
 
 Hunk table column **lint row** — run `python3 scripts/qe_gate_pr27.py`.
 
-### Deleted nondeterministic test (#94 / 27a)
+### Main `fat-LAN live soak` — do not delete (TSE fix in flight)
 
-**Removed** `dogfood.test.ts` → `"fat-LAN live soak: all three packs under budget or honest skips"` (load-dependent; fails on main with `expected 119 to be 120`). Deleted in `b48a7d81` (27a collector landing); not replaced — category **(c)** by deletion, named here per QE #86.
+**Correction:** #94 must **not** remove main’s soak. Restored **`it("fat-LAN live soak: all three packs under budget or honest skips", …)`** byte-identical to `6520b01`; only split-owned addition is file-level `beforeEach(() => expect.hasAssertions())`.
+
+**Known failure (pre-existing on main, until TSE lands fake-clock/seed PR):**
+
+| Where | Test | Error (same on main + all split HEADs) |
+|-------|------|----------------------------------------|
+| `web/src/plugins/dogfood.test.ts` | `fat-LAN live soak: all three packs under budget or honest skips` | `AssertionError: expected 119 to be 120 // Object.is equality` (on `pack.delivered` vs `pack.frames`; load/timing on CI) |
+
+**Category:** **(a) / pre-existing main flake** — not introduced by #94/#92/#93; do **not** deselect or workaround.
+
+**#94 `git diff 6520b01 -- web/src/plugins/dogfood.test.ts`** (only this PR’s lines):
+
+```diff
+-import { describe, expect, it, vi } from "vitest";
++import { beforeEach, describe, expect, it, vi } from "vitest";
+…
++beforeEach(() => {
++  expect.hasAssertions();
++});
+```
+
+(fat-LAN `it(...)` block unchanged from main.)
+
+**#92 / #93:** `git diff 6520b01 -- web/src/plugins/dogfood.test.ts` → **empty** (no edits to that file).
+
+**Split-added fat-LAN tests:** none removed in this stack (only main’s soak was wrongly deleted in `b48a7d81`; now restored).
 
