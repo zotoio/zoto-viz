@@ -29,12 +29,10 @@ def test_query_os_interface_addresses_parses_canned_ip_json(monkeypatch: pytest.
         return MagicMock(returncode=0, stdout=_CANNED_ADDR_JSON)
 
     monkeypatch.setattr(request_guard.subprocess, "run", fake_run)
-    assert request_guard.query_os_interface_addresses() == [
-        "10.0.0.5",
-        "fd00::5",
-        "fe80::1",
-        "169.254.1.1",
-    ]
+    addrs = request_guard.query_os_interface_addresses()
+    assert len(addrs) == 4
+    assert sorted(addrs) == sorted(["10.0.0.5", "fd00::5", "fe80::1", "169.254.1.1"])
+    assert "00:11:22:33:44:55" not in addrs
 
 
 def test_query_os_interface_addresses_nonzero_returncode_is_empty(
@@ -87,9 +85,10 @@ def test_local_interface_hosts_filters_stubbed_os_addresses(
             "10.0.0.5",
         ],
     )
-    assert request_guard.local_interface_hosts(7020) == {
-        "localhost:7020",
-        "127.0.0.1:7020",
-        "[::1]:7020",
-        "10.0.0.5:7020",
-    }
+    hosts = sorted(request_guard.local_interface_hosts(7020))
+    assert [h for h in hosts if "169.254." in h] == []
+    assert [h for h in hosts if "[fe80" in h] == []
+    assert [h for h in hosts if h.startswith("0.0.0.0:")] == []
+    assert hosts == sorted(
+        ["localhost:7020", "127.0.0.1:7020", "[::1]:7020", "10.0.0.5:7020"],
+    )
