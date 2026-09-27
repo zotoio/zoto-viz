@@ -1,0 +1,11 @@
+diff --git a/web/src/graph/backdrop.ts b/web/src/graph/backdrop.ts
+--- a/web/src/graph/backdrop.ts
++++ b/web/src/graph/backdrop.ts
+@@ -49,7 +49,6 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
+   macaws: "/skies/macaws.jpg",
+   ruins: "/skies/ruins.jpg",
+   fungi: "/skies/fungi.jpg",
+-  alpine: "/skies/alpine.jpg",
+   bamboo: "/skies/bamboo.jpg",
+   blossom: "/skies/blossom.jpg",
+   fjord: "/skies/fjord.jpg",

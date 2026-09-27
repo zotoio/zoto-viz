@@ -308,7 +308,7 @@ export async function fetchPluginSky(
   signal?: AbortSignal,
 ): Promise<string> {
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-  const r = await apiFetch(pluginSkyPath(id, hash));
+  const r = await apiFetch(pluginSkyPath(id, hash), { cache: "no-store" });
   if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   if (!r.ok) throw new Error(`plugin sky ${r.status}`);
   const text = await r.text();
@@ -736,7 +736,7 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
-  const r = await apiFetch("/api/plugins");
+  const r = await apiFetch("/api/plugins", { cache: "no-store" });
   if (!r.ok) throw new Error(`plugins ${r.status}`);
   return r.json() as Promise<PluginList>;
 }

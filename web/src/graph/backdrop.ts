@@ -23,7 +23,9 @@ import {
 
 export type PhotoSkyKind =
   | "earth" | "meadow" | "tunnel" | "bomb" | "reef" | "tornado" | "desert" | "amazon"
-  | "aquarium" | "macaws" | "ruins" | "fungi";
+  | "aquarium" | "macaws" | "ruins" | "fungi"
+  | "alpine" | "bamboo" | "blossom" | "fjord" | "glacier" | "lagoon" | "lava" | "lavender"
+  | "saltflat" | "seastacks";
 
 export type BackdropKind =
   | "none" | "fractal" | "space" | "matrix" | "live"
@@ -47,6 +49,16 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
   macaws: "/skies/macaws.jpg",
   ruins: "/skies/ruins.jpg",
   fungi: "/skies/fungi.jpg",
+  alpine: "/skies/alpine.jpg",
+  bamboo: "/skies/bamboo.jpg",
+  blossom: "/skies/blossom.jpg",
+  fjord: "/skies/fjord.jpg",
+  glacier: "/skies/glacier.jpg",
+  lagoon: "/skies/lagoon.jpg",
+  lava: "/skies/lava.jpg",
+  lavender: "/skies/lavender.jpg",
+  saltflat: "/skies/saltflat.jpg",
+  seastacks: "/skies/seastacks.jpg",
 };
 
 /** Target length of a photo-sky video loop (seconds). Stills Ken-Burns on this period until a clip lands. */
@@ -166,6 +178,16 @@ export const BACKDROP_OPTIONS: { value: BackdropKind; label: string; hint: strin
   { value: "macaws", label: "macaws", hint: "photo / video loop: macaws in jungle", group: "photo" },
   { value: "ruins", label: "ruins", hint: "photo / video loop: Incan ruins", group: "photo" },
   { value: "fungi", label: "fungi", hint: "photo / video loop: bioluminescent mushroom forest", group: "photo" },
+  { value: "alpine", label: "alpine", hint: "photo / video loop: alpine peaks at dusk", group: "photo" },
+  { value: "bamboo", label: "bamboo", hint: "photo / video loop: bamboo forest", group: "photo" },
+  { value: "blossom", label: "blossom", hint: "photo / video loop: cherry blossom", group: "photo" },
+  { value: "fjord", label: "fjord", hint: "photo / video loop: Norwegian fjord", group: "photo" },
+  { value: "glacier", label: "glacier", hint: "photo / video loop: glacier ice", group: "photo" },
+  { value: "lagoon", label: "lagoon", hint: "photo / video loop: tropical lagoon", group: "photo" },
+  { value: "lava", label: "lava", hint: "photo / video loop: night lava field, amber cracks", group: "photo" },
+  { value: "lavender", label: "lavender", hint: "photo / video loop: lavender fields", group: "photo" },
+  { value: "saltflat", label: "saltflat", hint: "photo / video loop: salt flat mirror", group: "photo" },
+  { value: "seastacks", label: "seastacks", hint: "photo / video loop: sea stacks at dusk", group: "photo" },
   { value: "dynamic", label: "AI Dynamic", hint: "Gemma rebuilds this sky on a timer", group: "live" },
   { value: "custom", label: "agent shader", hint: "GLSL the local agent wrote into the model-named profile", group: "live" },
   { value: "plugin", label: "plugin shader", hint: "GLSL shipped in the selected plugin zip", group: "live" },
@@ -177,7 +199,9 @@ export const CYCLE_SKIES: BackdropKind[] = [
   "fractal", "space", "matrix", "aurora", "rain", "ocean", "fire", "warp", "clouds", "circuit", "plasma", "lattice",
   "dusk", "void", "vhs", "nebula", "acid", "ice", "dawn", "phosphor",
   "earth", "meadow", "tunnel", "bomb", "reef", "tornado", "desert", "amazon",
-  "aquarium", "macaws", "ruins", "fungi", "live",
+  "aquarium", "macaws", "ruins", "fungi",
+  "alpine", "bamboo", "blossom", "fjord", "glacier", "lagoon", "lava", "lavender", "saltflat", "seastacks",
+  "live",
 ];
 
 /** Cycle pool minus live when the camera was denied or is missing. */
@@ -545,6 +569,8 @@ const MODE_NUM: Record<BackdropKind, number> = {
   earth: 25, meadow: 26, tunnel: 27,
   bomb: 28, reef: 29, tornado: 30, desert: 31, amazon: 32,
   aquarium: 33, macaws: 34, ruins: 35, fungi: 36,
+  alpine: 37, bamboo: 38, blossom: 39, fjord: 40, glacier: 41, lagoon: 42, lava: 43, lavender: 44,
+  saltflat: 45, seastacks: 46,
 };
 
 const LIVE_VERT = /* glsl */ `

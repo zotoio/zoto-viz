@@ -39,6 +39,8 @@ describe("BACKDROP_OPTIONS", () => {
     expect(isPhotoSky("space")).toBe(false);
     expect(Object.keys(PHOTO_SKIES)).toEqual(expect.arrayContaining([
       "bomb", "reef", "tornado", "desert", "amazon", "aquarium", "macaws", "ruins", "fungi",
+      "alpine", "bamboo", "blossom", "fjord", "glacier", "lagoon", "lava", "lavender", "saltflat",
+      "seastacks",
     ]));
     expect(isPhotoSky("fungi")).toBe(true);
     expect(PHOTO_LOOP_S).toBe(5);

@@ -98,6 +98,7 @@ def test_sanitize_drops_junk() -> None:
     assert live.sanitize_patch({"anim": {"backdrop": "earth"}})["anim"]["backdrop"] == "earth"
     assert live.sanitize_patch({"anim": {"backdrop": "amazon"}})["anim"]["backdrop"] == "amazon"
     assert live.sanitize_patch({"anim": {"backdrop": "fungi"}})["anim"]["backdrop"] == "fungi"
+    assert live.sanitize_patch({"anim": {"backdrop": "alpine"}})["anim"]["backdrop"] == "alpine"
     assert anim["gravity"] == 1.5
     assert anim["mosaic"] == "4"
     assert anim["hero"] == "left"

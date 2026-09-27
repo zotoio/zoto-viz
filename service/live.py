@@ -84,6 +84,8 @@ BACKDROPS = (
     "earth", "meadow", "tunnel",
     "bomb", "reef", "tornado", "desert", "amazon",
     "aquarium", "macaws", "ruins", "fungi",
+    "alpine", "bamboo", "blossom", "fjord", "glacier", "lagoon", "lava", "lavender", "saltflat",
+    "seastacks",
     "dynamic", "custom", "plugin",
 )
 FLOOR_SHAPES = ("square", "hex", "triangle", "diamond", "circle")
