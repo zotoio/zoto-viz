@@ -1,0 +1,12 @@
+diff --git a/web/src/style.css b/web/src/style.css
+index ba87336..0e9dd2b 100644
+--- a/web/src/style.css
++++ b/web/src/style.css
+@@ -1667,7 +1667,6 @@ body.panel-wide #debuglog {
+ .wall-notice-status,
+ .wall-notice-alert { display: flex; flex-direction: column; gap: 6px; pointer-events: none; }
+ .wall-notice-row {
+-  pointer-events: auto;
+   padding: 8px 12px;
+   border-radius: var(--radius);
+   background: var(--panel);

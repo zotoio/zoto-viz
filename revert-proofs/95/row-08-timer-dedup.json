@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > re-arms a single auto-clear timer only when the text changes",
+  "description": "Revert production guard (row-08-timer-dedup)",
+  "red": "AssertionError: expected \"setTimeout\" to be called 1 times, but got 3 times"
+}

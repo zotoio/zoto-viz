@@ -11,6 +11,7 @@
     "asbuild": "asc --config asconfig.json --target release",
     "build": "pnpm asbuild && tsc --noEmit && vite build",
     "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
     "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",

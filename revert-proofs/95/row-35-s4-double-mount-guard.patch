@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 8ee2a46..61fff55 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -145,7 +145,6 @@ function dismissEntry(e: Entry): void {
+ }
+ /** Status notices stack above error notices. Within each group, the newest is at the bottom. */
+ export function mountWallNoticeRegion(root: HTMLElement): void {
+-  if (regionNode?.isConnected) return;
+   mountRoot = root;
+   if (!root.hasAttribute("tabindex")) root.tabIndex = -1;
+   if (regionNode && !regionNode.isConnected) {

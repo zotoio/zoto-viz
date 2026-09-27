@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > updates visible text once on the same node when the copy changes",
+  "description": "Revert production guard (row-04-key-text-update)",
+  "red": "AssertionError: expected 2 to be 1 // Object.is equality"
+}

@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-35-s4-double-mount-guard)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > mounting twice keeps the one region node",
+  "red": "AssertionError: expected 2 to be 1 // Object.is equality"
+}
