@@ -77,6 +77,21 @@ import {
   isMetaConfigKey,
 } from "./plugin-settings";
 
+/** Pack info `.sec-hint` line (id / version / engine + optional workBudget note). */
+export function pluginPackMetaLine(spec: PluginView): string {
+  const base = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
+  if (spec.workBudgetLimited) {
+    return `${base}. ${spec.workBudgetLimited}`;
+  }
+  return base;
+}
+
+/** Visible label beside the field caption when the value differs from default. */
+export const FIELD_EDITED_LABEL = "Edited";
+
+/** Screen-reader hint when a control differs from its schema default (not colour-only). */
+export const FIELD_EDITED_ARIA = "Unsaved change";
+
 export type PluginHudCaptionSink = (spec: PluginView, caption: string | null) => void;
 
 let hudCaptionSink: PluginHudCaptionSink | null = null;
@@ -550,8 +565,12 @@ export function fillPluginFields(
   title.textContent = specCaption(spec);
   const meta = document.createElement("div");
   meta.className = "sec-hint";
+<<<<<<< HEAD
+  meta.textContent = pluginPackMetaLine(spec);
+=======
   const packTitle = spec.packName || spec.name || spec.id;
   meta.textContent = `${packTitle} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
+>>>>>>> origin/cursor/catchup-consolidation
   head.append(title, meta);
   let knobs = fields;
   if (spec.id === "nest-cams") {
