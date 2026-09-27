@@ -1,0 +1,30 @@
+id: host-mesh-demo
+name: Host mesh demo
+version: 1
+hint: Host-owned GLB instancing driven from sandbox slot 2 (fixture triangle mesh).
+description: Demonstrates the host mesh lane — one instanced demo model, no live capture required.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+assets:
+  - id: cube
+    path: assets/cube.gltf
+    sha256: 24cb5e76df1bb910c6fc64412905021f92f3bff13d4cd4d15d0a085e3f4438f3
+    bytes: 632
+    triangles: 1
+viz:
+  presentTick: true
+  graphWalk: false
+  idle:
+    fixture: host
+  maxBuffers: 3
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uOpacity
+frontend:
+  entry: frontend/index.ts
+config: []

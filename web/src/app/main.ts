@@ -199,6 +199,17 @@ import {
 import { revertModeSelection } from "./apply-mode-mosaic";
 import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
+import { applyVizWriteBatch } from "../plugins/viz-write-batch";
+import {
+  notePackHostPresentInterval,
+  notePackSandboxFrame,
+  packHostPerfSnapshot,
+  packPerfEnabled,
+} from "../core/pack-host-perf";
+import { maybeReportPackHostPerf } from "./pack-perf-report";
+import { createHostMeshBridge } from "./host-mesh-bridge";
+import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
+import { showPluginSkyConsentNotice, warnPluginSkyConsent } from "./plugin-sky-consent-notice";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { mergePluginConsentLivePatch } from "./plugin-consent-live";
@@ -241,6 +252,7 @@ applyThemeChrome(theme);
 const renderHost = new RenderHost($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
+const hostMeshBridge = createHostMeshBridge(scene);
 scene.retargetPanel("main");
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
@@ -501,6 +513,11 @@ addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
+  if (packPerfEnabled()) {
+    const dt = presentInterval();
+    if (dt > 0) notePackHostPresentInterval(dt);
+    void maybeReportPackHostPerf(ts);
+  }
   deliverPluginPresentTick(presentDrive, ts);
   if (mode.pluginId === "backrooms") {
     pluginSfx.syncBackroomsViewConfig(currentOpts);
@@ -564,6 +581,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   }
   if (writer && preserveUbo && !resetFrameTs) broadcastPluginUbo(scene, writer.ubo, mosaic?.on ? mosaic : null);
   refreshPluginDriveForMode(spec ?? activePluginSpec, modeSel.value);
+  void hostMeshBridge.mountPack(spec);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
@@ -574,12 +592,23 @@ sandbox.handlers = {
   setStyle: (s) => scene.setPluginStyle(s),
   setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
   writeBuffer: (slot, data) => {
-    if (vizWriter?.writeBuffer(slot, data).ok) broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
+    if (vizWriter?.writeBuffer(slot, data).ok) {
+      broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
+      const asset = activePluginSpec?.assets?.[0];
+      if (asset && slot === 2) hostMeshBridge.applySlot(slot, data, asset.id);
+    }
   },
   writeUniform: (name, value) => {
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
+  writeBatch: (batch) => {
+    if (!vizWriter) return;
+    applyVizWriteBatch(vizWriter, batch, {
+      onBuffer: () => broadcastPluginUbo(scene, vizWriter!.ubo, mosaic?.on ? mosaic : null),
+      onUniform: (name, value) => scene.setPluginUniform(name, value),
+    });
+  },
 };
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };
@@ -995,11 +1024,12 @@ async function loadPluginSkyOnto(
   pinPlugin: boolean,
   signal: AbortSignal,
 ): Promise<void> {
-  const look = spec ? (lookForMode(pluginViewId(spec.id, spec.instanceId)) ?? spec.look) : undefined;
-  const want = pinPlugin && !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
-  const key = want && spec ? `${spec.id}:${spec.shader_sha256 || ""}` : "";
-  if (target === scene && key && key === skyLoaded) return;
+  const lookOpts = spec ? (lookForMode(pluginViewId(spec.id, spec.instanceId)) ?? spec.look) : undefined;
+  const want = pinPlugin && !!spec && lookOpts?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
+  const packKey = want && spec ? `${spec.id}:${spec.shader_sha256 || ""}` : "";
+  if (target === scene && packKey && packKey === skyLoaded) return;
   if (!want || !spec) {
+    if (target === scene) showPluginSkyConsentNotice($("scene"), false);
     if (target === scene && skyLoaded) {
       scene.setPluginShader(null);
       skyLoaded = "";
@@ -1009,16 +1039,22 @@ async function loadPluginSkyOnto(
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
+    warnPluginSkyConsent(spec.id);
+    showPluginSkyConsentNotice(target === scene ? $("scene") : null, true);
     target.setPluginShader(null);
     if (target === scene) skyLoaded = "";
+    spec.sky_error = "needs consent";
+    spec.sky_available = false;
     return;
   }
+  showPluginSkyConsentNotice(target === scene ? $("scene") : null, false);
   const disposeSky = () => {
     target.setPluginShader(null);
     if (target === scene) skyLoaded = "";
   };
   addModeSwitchAbortListener(signal, disposeSky, { once: true });
   try {
+    recordPluginSkyLoad({ packId: spec.id, packKey: packKey, isShaderPack: true, look: lookOpts });
     const source = await fetchPluginSky(spec.id, spec.shader_sha256, signal);
     throwIfAborted(signal);
     const err = target.setPluginShader({ id: spec.id, source });
@@ -1026,15 +1062,14 @@ async function loadPluginSkyOnto(
       console.warn("zoto-viz plugin sky:", err);
       spec.sky_error = err;
       spec.sky_available = false;
-      target.setPluginShader(null);
-      if (target === scene) skyLoaded = "";
       throw new Error(err);
     }
-    if (target === scene) skyLoaded = key;
+    spec.sky_available = true;
+    delete spec.sky_error;
+    if (target === scene) skyLoaded = packKey;
   } catch (e) {
     if (signal.aborted) return;
     console.warn("zoto-viz plugin sky:", e);
-    disposeSky();
     removeModeSwitchAbortListener(signal, disposeSky);
     throw e;
   }
@@ -1615,6 +1650,7 @@ function feed(m: StateMsg): void {
           optsFor,
           budgetStats: vizBudget.stats,
         });
+        if (packPerfEnabled() && active?.id) notePackSandboxFrame(active.id);
       },
     });
     vizFrameClockMs = delivered.nextClockMs;

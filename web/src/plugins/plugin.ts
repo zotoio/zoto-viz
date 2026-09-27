@@ -233,6 +233,9 @@ export interface PluginView {
   sky_error?: string;
   /** Host drawer: presets, HUD label fields, section order (from plugin.yml / visualisation.yml). */
   settings?: import("./plugin-visualisation").PluginSettingsDecl;
+  /** Declared binary assets (meshes/textures) hashed into consent (`assets_sha256`). */
+  assets?: { id: string; path: string; sha256?: string; bytes?: number; triangles?: number }[];
+  assets_sha256?: string;
 }
 
 const LOOK_ANIM_KEYS = [
