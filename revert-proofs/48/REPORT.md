@@ -29,14 +29,14 @@
 | selection-others-skipped | scripts/revert-proof.lib.test.ts :: vitest JSON selection by full name > requires target passed/failed and all others skipped | Count the target itself among tests that must be skipped | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest JSON selection by full name > requires target passed/failed and all others skipped$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | selection-target-skipped | scripts/revert-proof.lib.test.ts :: vitest JSON selection by full name > rejects when target is skipped (it.skipIf / ctx.skip) | Treat a skipped target as executed | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest JSON selection by full name > rejects when target is skipped \\(it\\.skipIf / ctx\\.skip\\)$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | stays-green-guard | scripts/revert-proof.dogfood.test.ts :: revert-proof dogfood guards > stays-green guard rejects patched green vitest runs | Remove stays-green failure guard so noop reverts are accepted | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^revert-proof dogfood guards > stays-green guard rejects patched green vitest runs$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.dogfood.test.ts | RED (expected) |
+| strict-git-apply | scripts/revert-proof.lib.test.ts :: strict git apply > (strict) rejects patches that only apply at an offset | Allow git apply --check at fuzz/offset (drop strict enforcement) | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^strict git apply > \\(strict\\) rejects patches that only apply at an offset$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | vitest-fullname-ancestors | scripts/revert-proof.lib.test.ts :: vitest JSON report parsing > rebuilds fullName from ancestorTitles and reads meta | Stop rebuilding fullName from ancestorTitles | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest JSON report parsing > rebuilds fullName from ancestorTitles and reads meta$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
 | vitest-red-parsed | scripts/revert-proof.lib.test.ts :: vitest JSON report parsing > reads structured revertProofRed from task meta | Drop revertProofRed when parsing the vitest JSON report | web/node_modules/.bin/vitest run --config scripts/revert-proof-vitest-overlay.mjs -t "^vitest JSON report parsing > reads structured revertProofRed from task meta$" --reporter=json --outputFile.json=<tmp> -- scripts/revert-proof.lib.test.ts | RED (expected) |
-| red-not-compared | | | | **ERROR: row red-not-compared: test stayed GREEN after revert patch (expected failure)** |
-| red-not-required | | | | **ERROR: row red-not-required: red line mismatch (expected "row r: sidecar JSON missing string field \"red\"", got "AssertionError: expected undefined to be 'row r: sidecar JSON missing string fi…' // Object.is equality")** |
-| red-pytest-shape | | | | **ERROR: row red-pytest-shape: red line mismatch (expected "row r: red must be a single-line string, not an object (got structured sidecar)", got "AssertionError: expected undefined to be 'row r: pytest red must start with \"as…' // Object.is equality")** |
-| red-string-accepted | | | | **ERROR: row red-string-accepted: red line mismatch (expected "row r: red must be a single-line string, not an object (got structured sidecar)", got "AssertionError: expected 'row r: sidecar JSON missing string fi…' to be 'row r: red must be a single-line stri…' // Object.is equality")** |
+| red-not-compared | | | | **ERROR: row red-not-compared: red line mismatch (expected "row r: red line mismatch (expected \"AssertionError: expected 2 to be 1 // Object.is equality\", got \"AssertionError: expected 3 to be 1 // Object.is equality\")", got "AssertionError: expected undefined to be 'row r: red line mismatch (expected \"A…' // Object.is equality")** |
+| red-not-required | | | | **ERROR: row red-not-required: red line mismatch (expected "AssertionError: expected undefined to be 'row r: sidecar JSON missing string field \"red\"' // Object.is equality", got "AssertionError: expected undefined to be 'row r: sidecar JSON missing string fi…' // Object.is equality")** |
+| red-pytest-shape | | | | **ERROR: row red-pytest-shape: red line mismatch (expected "AssertionError: expected undefined to be 'row r: pytest red must start with \"assert \" (rewritten assert source)' // Object.is equality", got "AssertionError: expected undefined to be 'row r: pytest red must start with \"as…' // Object.is equality")** |
+| red-string-accepted | | | | **ERROR: row red-string-accepted: red line mismatch (expected "AssertionError: expected 'row r: sidecar JSON missing string field \"red\"' to be 'row r: red must be a single-line string, not an object (got structured sidecar)' // Object.is equality", got "AssertionError: expected 'row r: sidecar JSON missing string fi…' to be 'row r: red must be a single-line stri…' // Object.is equality")** |
 | red-vitest-shape | | | | **ERROR: row red-vitest-shape: test stayed GREEN after revert patch (expected failure)** |
-| strict-git-apply | | | | **ERROR: row strict-git-apply: red line mismatch (expected "AssertionError: expected false to be true // Object.is equality", got "AssertionError: expected [Function] to throw an error")** |
 
 ### brand-expect
 
@@ -468,6 +468,22 @@ AssertionError: expected undefined to be 'row dogfood: test stayed GREEN after �
     at file://<tmp>
     at new Promise (<anonymous>)
     at runWithTimeout (file://<tmp>
+```
+
+### strict-git-apply
+
+```
+AssertionError: expected [Function] to throw an error
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.<anonymous> (file://<tmp>
+    at Proxy.methodWrapper (file://<tmp>
+    at Proxy.revertProofBrandedMethod (file://<tmp>
+    at <tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at file://<tmp>
+    at new Promise (<anonymous>)
 ```
 
 ### vitest-fullname-ancestors
