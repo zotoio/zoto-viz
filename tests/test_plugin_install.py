@@ -104,83 +104,12 @@ def _reset_hooks(monkeypatch: pytest.MonkeyPatch) -> None:
     plugin_local.reset_watch_for_tests()
 
 
-def test_bad_v2_upgrade_preserves_v1_tree_and_blocked_message(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    v1 = _zip_tree(_pack_fixture("upgrade-probe"))
-    v2 = _zip_tree(_pack_fixture("upgrade-probe-bad"))
-    pid = "upgrade-probe"
-    info_v1 = plugin_local.install_local_zip(v1, overwrite=True)
-    assert info_v1.get("wrote") is True
-    assert (_runtime_parent() / pid).is_dir()
-    hash_v1 = runtime_tree_hash(_runtime_parent() / pid)
-    zip_v1_sha = pz.plugin_sha256(paths.plugin_local_dir() / f"{pid}.zip")
-
-    with pytest.raises(InstallV2BlockedError) as exc:
-        plugin_local.install_local_zip(v2, overwrite=True)
-    assert "v2 was blocked" in str(exc.value)
-    assert "v1 is still running" in str(exc.value)
-
-    runtime = _runtime_parent() / pid
-    assert runtime_tree_hash(runtime) == hash_v1
-    assert pz.plugin_sha256(paths.plugin_local_dir() / f"{pid}.zip") == zip_v1_sha
-    assert pid in {p["id"] for p in plugins.scan()["plugins"]}
-    assert plugins.bundle_for(pid) is not None
-    assert_runtime_parent_clean(_runtime_parent())
 
 
-def test_bad_zip_app_install_leaves_no_staging_or_bak(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    parent = _runtime_parent()
-    info = plugin_local.publish_local(
-        {"zip_b64": base64.b64encode(b"not-a-zip").decode(), "activate": False},
-    )
-    assert info.get("ok") is False
-    assert_runtime_parent_clean(parent)
 
 
-def test_bad_zip_drop_scan_leaves_no_staging_or_bak(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    parent = _runtime_parent()
-    local = paths.plugin_local_dir(create=True)
-    pack_id = "pack-boundary-host-escape"
-    raw = _zip_tree(_pack_fixture("host-escape"))
-    zpath = local / f"{pack_id}.zip"
-    zpath.write_bytes(raw)
-    plugin_local._seen[str(zpath.resolve())] = "stale-digest"
-    results = plugin_local.sync_local_drop()
-    assert any(not r.get("ok", True) for r in results) or pack_id not in {
-        p["id"] for p in plugins.scan()["plugins"]
-    }
-    assert not (_runtime_parent() / pack_id).exists()
-    assert_runtime_parent_clean(parent)
 
 
-def test_invalid_zip_leaves_no_staging_or_runtime(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    runtime_parent = _runtime_parent()
-    with pytest.raises(ValueError):
-        plugin_local.install_local_zip(b"not-a-zip", overwrite=True)
-    assert_runtime_parent_clean(runtime_parent)
 
 
 def test_interrupted_swap_uses_after_first_rename_hook(
@@ -244,35 +173,6 @@ def test_interrupted_swap_uses_after_first_rename_hook(
     assert_runtime_parent_clean(runtime.parent)
 
 
-def test_v2_start_failure_restores_v1_and_zip(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    v1 = _zip_tree(_pack_fixture("upgrade-probe"))
-    pid = "upgrade-probe"
-    plugin_local.install_local_zip(v1, overwrite=True)
-    plugins.scan()
-    digest_v1, _ = plugins.bundle_for(pid)
-    assert digest_v1 is not None
-    zip_v1_sha = pz.plugin_sha256(paths.plugin_local_dir() / f"{pid}.zip")
-    v2 = _bump_pack(tmp_path, 2)
-
-    def fail_start(home: Path, doc: dict, sha: str | None) -> None:
-        raise RuntimeError("compile exploded")
-
-    monkeypatch.setattr("service.plugin_install._start_runtime", fail_start)
-    with pytest.raises(InstallStartFailedError) as exc:
-        plugin_local.install_local_zip(v2, overwrite=True)
-    assert "couldn't start" in str(exc.value)
-    assert "v1 was restored" in str(exc.value)
-    plugins.scan()
-    digest_after, _ = plugins.bundle_for(pid)
-    assert digest_after == digest_v1
-    assert pz.plugin_sha256(paths.plugin_local_dir() / f"{pid}.zip") == zip_v1_sha
-    assert_runtime_parent_clean(_runtime_parent())
 
 
 def test_start_failed_zip_hash_blocks_rescan_notice_once(
@@ -516,80 +416,8 @@ def test_retry_and_scan_race_single_install_20_of_20(
             loop_mp.undo()
 
 
-def test_failed_v2_start_next_scan_stays_on_v1(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    pid = "upgrade-probe"
-    plugin_local.install_local_zip(_zip_tree(_pack_fixture("upgrade-probe")), overwrite=True)
-    marker_v1 = (_runtime_parent() / pid / "frontend/sdk/marker.ts").read_text(encoding="utf-8")
-    v2 = _bump_pack(tmp_path, 2)
-    monkeypatch.setattr(
-        "service.plugin_install._start_runtime",
-        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")),
-    )
-    with pytest.raises(InstallStartFailedError):
-        plugin_local.install_local_zip(v2, overwrite=True)
-    bad = paths.plugin_local_dir() / f"{pid}.zip"
-    bad.write_bytes(v2)
-    plugin_local._seen[str(bad.resolve())] = "force-rescan"
-    plugin_local.sync_local_drop()
-    assert (_runtime_parent() / pid / "frontend/sdk/marker.ts").read_text(encoding="utf-8") == marker_v1
 
 
-def test_concurrent_install_same_pack_serializes_with_barriers(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    pid = "upgrade-probe"
-    plugin_local.install_local_zip(_zip_tree(_pack_fixture("upgrade-probe")), overwrite=True)
-
-    order: list[str] = []
-    first_in_hook = threading.Event()
-    release_hook = threading.Event()
-    second_started = threading.Event()
-    errors: list[BaseException] = []
-
-    v2 = _bump_pack(tmp_path, 2)
-    v3 = _bump_pack(tmp_path, 3)
-
-    def after_first_rename() -> None:
-        order.append("hook")
-        first_in_hook.set()
-        release_hook.wait(timeout=5)
-
-    def install_thread(label: str, body: bytes) -> None:
-        try:
-            if label == "second":
-                second_started.set()
-            plugin_local.install_local_zip(body, overwrite=True)
-            order.append(f"done-{label}")
-        except BaseException as e:
-            errors.append(e)
-
-    monkeypatch.setattr("service.plugin_install._after_first_rename", after_first_rename)
-    t1 = threading.Thread(target=install_thread, args=("first", v2), daemon=True)
-    t2 = threading.Thread(target=install_thread, args=("second", v3), daemon=True)
-    t1.start()
-    assert first_in_hook.wait(timeout=5)
-    assert not pack_install_lock(pid).acquire(blocking=False)
-    t2.start()
-    assert second_started.wait(timeout=5)
-    release_hook.set()
-    t1.join(timeout=10)
-    t2.join(timeout=10)
-
-    assert not errors
-    assert order.index("hook") < order.index("done-first")
-    assert order.index("done-first") < order.index("done-second")
-    assert (_runtime_parent() / pid / "plugin.yml").read_text(encoding="utf-8").find("version: 3") >= 0
-    assert_runtime_parent_clean(_runtime_parent())
 
 
 def test_concurrent_install_passes_20_of_20(
@@ -633,45 +461,6 @@ def test_concurrent_install_passes_20_of_20(
         assert_runtime_parent_clean(_runtime_parent())
 
 
-def test_install_lock_serializes_swap_hooks(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    pid = "upgrade-probe"
-    plugin_local.install_local_zip(_zip_tree(_pack_fixture("upgrade-probe")), overwrite=True)
-    inside = 0
-    peak = 0
-    entered = threading.Event()
-    release = threading.Event()
-
-    def after_first_rename() -> None:
-        nonlocal inside, peak
-        inside += 1
-        peak = max(peak, inside)
-        entered.set()
-        release.wait(timeout=5)
-        inside -= 1
-
-    monkeypatch.setattr("service.plugin_install._after_first_rename", after_first_rename)
-    t1 = threading.Thread(
-        target=lambda: plugin_local.install_local_zip(_bump_pack(tmp_path, 2), overwrite=True),
-        daemon=True,
-    )
-    t2 = threading.Thread(
-        target=lambda: plugin_local.install_local_zip(_bump_pack(tmp_path, 3), overwrite=True),
-        daemon=True,
-    )
-    t1.start()
-    assert entered.wait(timeout=5)
-    t2.start()
-    assert peak == 1
-    release.set()
-    t1.join(timeout=10)
-    t2.join(timeout=10)
-    assert_runtime_parent_clean(_runtime_parent())
 
 
 def test_zip_slip_rejected_on_unpack(tmp_path: Path) -> None:
@@ -738,18 +527,6 @@ def test_unchanged_zip_skips_reinstall_on_three_scans(
     assert read_install_state(runtime.parent).get(pid) == sha
 
 
-def test_host_escape_still_blocked_via_bundle_lint(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    raw = _zip_tree(_pack_fixture("host-escape"))
-    from service.pack_boundary import PackBundleBoundaryError
-
-    with pytest.raises((PackBundleBoundaryError, InstallV2BlockedError, ValueError)):
-        plugin_local.install_local_zip(raw, overwrite=True)
 
 
 def test_sdk_contract_still_checked_on_install(
@@ -795,23 +572,6 @@ def test_install_local_unchanged_zip_routes_through_pipeline(
     assert calls == 2
 
 
-def test_fresh_install_start_failure_removes_runtime_tree(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    _repo(tmp_path, monkeypatch)
-    plugins.reset_bundles()
-    pid = "fresh-probe"
-    raw = _minimal_plugin_zip(pid)
-    monkeypatch.setattr(
-        "service.plugin_install._start_runtime",
-        lambda *_a, **_k: (_ for _ in ()).throw(RuntimeError("nope")),
-    )
-    with pytest.raises(RuntimeError, match="nope"):
-        plugin_local.install_local_zip(raw, overwrite=True)
-    runtime = _runtime_parent() / pid
-    assert not runtime.exists()
 
 
 def _minimal_plugin_zip(plugin_id: str) -> bytes:

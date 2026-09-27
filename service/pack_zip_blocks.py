@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from . import paths
+from . import plugin_zip as pz
 from .pack_id import pack_block_path, pack_id_valid, require_pack_id
 
 _LOCK = threading.Lock()
@@ -327,3 +328,23 @@ def row_for_start_failure(
         "upgrade_blocked": "true",
         "retryable": "true",
     }
+
+
+# Scan-time cache (zip path + digest) → catalog error row
+_scan_zip_block_cache: dict[str, dict[str, str]] = {}
+
+
+def reset_zip_block_cache_for_tests() -> None:
+    _scan_zip_block_cache.clear()
+
+
+def zip_block_cache_key(zip_path: Path) -> str:
+    path = Path(zip_path)
+    digest = pz.plugin_sha256(path)
+    st = path.stat()
+    return f"{path.resolve()}:{digest}:{st.st_mtime_ns}:{st.st_size}"
+
+
+def forget_zip_block_cache_for_path(zip_path: Path) -> None:
+    key = zip_block_cache_key(zip_path)
+    _scan_zip_block_cache.pop(key, None)

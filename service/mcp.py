@@ -34,7 +34,6 @@ from . import paths
 from . import plugin_migration as pmg
 from . import plugin_zip as pz
 from . import plugin_local
-from .pack_boundary import PackBundleBoundaryError
 from . import plugins
 from . import profiles
 
@@ -684,41 +683,23 @@ def install_catalog_zip(
         tmp_path.write_bytes(raw)
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
-        dirty = pmg.dirty_tree_paths(pid)
-        if dirty and not force:
-            raise pmg.DirtyTreeError(dirty, pid)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        from .plugin_install import install_zip_to_runtime
-
-        upgrade = dest.is_file() and runtime.is_dir()
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming and not force:
-            unpacked = install_zip_to_runtime(
-                dest,
-                dest,
-                runtime,
-                doc,
-                rel=str(dest),
-                sha256=incoming,
-                upgrade=upgrade,
-                force=False,
-            )
+        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+            unpacked = pz.unpack_zip(dest, runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
                 info["remintedFrom"] = reminted_from
             _refresh_plugin_python(info)
             return info
-        if dest.is_file() and not overwrite and not force:
+        dirty = pmg.dirty_tree_paths(pid)
+        if dirty and not force:
+            raise pmg.DirtyTreeError(dirty, pid)
+        if dest.is_file() and not overwrite:
             raise ValueError(f"plugin {pid!r} already exists (pass overwrite: true)")
-        unpacked = install_zip_to_runtime(
-            tmp_path,
-            dest,
-            runtime,
-            doc,
-            rel=str(dest),
-            sha256=incoming,
-            upgrade=upgrade,
-            force=force,
-        )
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        staged = dest.with_name(dest.name + ".tmp")
+        shutil.copy2(tmp_path, staged)
+        os.replace(staged, dest)
+        unpacked = pz.unpack_zip(dest, runtime)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -1066,8 +1047,6 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             "paths": e.paths,
             "hint": "pass force: true to write despite uncommitted catalog changes",
         }, is_error=True)
-    except PackBundleBoundaryError as e:
-        return _tool_text({"ok": False, **e.block.to_dict()}, is_error=True)
     except ValueError as e:
         return _tool_text({"error": str(e)}, is_error=True)
 

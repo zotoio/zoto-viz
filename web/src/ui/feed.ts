@@ -124,7 +124,6 @@ export class LiveFeed {
   private stickToBottom = true;
   private followTick = false;
   private lastScrollTop = 0;
-  private operatorNoticeUntil = 0;
 
   constructor(host: HTMLElement, private scene: NetScene) {
     this.el = host;
@@ -233,13 +232,6 @@ export class LiveFeed {
     });
   }
 
-  /** Operator-facing install / safety message (not traffic). */
-  showOperatorNotice(text: string, ttlMs = 90_000): void {
-    this.operatorNoticeUntil = performance.now() + ttlMs;
-    this.hint.textContent = text;
-    this.hint.classList.add("feed-hint-warn");
-  }
-
   setGraphBase(base: string | undefined): void {
     const next = base ?? "";
     if (next === this.graphBase) return;
@@ -317,10 +309,7 @@ export class LiveFeed {
     const fresh = pk.filter((p) => p[0] > this.lastT);
     this.lastT = newest;
     if (!fresh.length) return;
-    if (performance.now() >= this.operatorNoticeUntil) {
-      this.hint.textContent = "";
-      this.hint.classList.remove("feed-hint-warn");
-    }
+    this.hint.textContent = "";
     let added = false;
     for (const p of fresh) {
       if (this.eat(p)) added = true;
