@@ -10,7 +10,7 @@ describe("fillPluginFields", () => {
     expect(host.textContent).toMatch(/no extra settings/);
 
     const spec: PluginView = {
-      id: "pulse", name: "Pulse", version: 2, engine: "graph", base: "topology", hint: "demo",
+      id: "pulse", packName: "Pulse", version: 2, engine: "graph", base: "topology", hint: "demo",
       config: [
         { key: "on", label: "on", type: "boolean", default: true },
         { key: "mode", label: "mode", type: "select", values: [["a", "A"], ["b", "B"]], default: "a" },

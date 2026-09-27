@@ -1,4 +1,5 @@
 diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
+index 86f15719..f5830ae6 100644
 --- a/web/src/plugins/instances.ts
 +++ b/web/src/plugins/instances.ts
 @@ -83,7 +83,7 @@ function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly st

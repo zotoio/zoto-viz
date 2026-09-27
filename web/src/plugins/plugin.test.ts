@@ -274,7 +274,7 @@ describe("visualisation.yml", () => {
   it("round-trips a full visualisation fixture into PluginView", () => {
     const spec = toPluginView({
       id: "lan-heat",
-      packName: "LAN heat",
+      name: "LAN heat",
       version: 1,
       visualisation: {
         engine: "graph",

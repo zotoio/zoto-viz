@@ -1,33 +1,12 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index 455b9f1f..b4cc3a99 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1943,6 +1943,15 @@
-           if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
-
-           this.persistAnim();
-
-           this.animUi?.syncTiles();
-
-+          if (!this.isOpen) return;
-
-+          if (this.viewPluginDirty) {
-
-+            const gain = this.viewHost?.querySelector<HTMLInputElement>(
-
-+              '.plugin-layer[data-layer="view"] .slider input[type=range]',
-
-+            );
-
-+            gain?.focus();
-
-+          } else {
-
-+            this.mosaicLayoutPickerTrigger?.focus();
-
-+          }
-
-         }
-
-       });
-
-       row.append(cap, sel);
+@@ -541,6 +541,7 @@ export class Settings {
+ 
+   private focusViewDrawerReturnTarget(): void {
+     (this.viewDrawerReturnFocus ?? this.mosaicLayoutPickerTrigger)?.focus();
++    this.mosaicLayoutPickerTrigger?.focus();
+   }
+ 
+   /** Refresh Nest camera chips when Device Access lists devices. */

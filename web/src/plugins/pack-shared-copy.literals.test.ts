@@ -7,7 +7,9 @@ import {
   perTilePackScopeNoteMessage,
 } from "./pack-shared-copy";
 import { loadSettingsDeclFixture } from "./test/load-settings-fixture";
-import { specCaption, tileDisplayName } from "./plugin";
+import { tileDisplayName } from "./plugin";
+import { engineDispatch } from "./plugin-visualisation";
+import { viewCaption } from "../core/modes";
 import { HEADLINES_PACK, ALT_FEED_INSTANCE } from "../../test/fixtures/headlines-alt-feed";
 
 describe("pack shared copy literals", () => {
@@ -31,6 +33,9 @@ describe("pack shared copy literals", () => {
       mosaicOn: true,
       tileModeIds: ["plugin:settings-fixture", "plugin:settings-fixture!1"],
     };
+    expect(packScopeNoteText(spec, scope)!.replace(/^Changes apply to /, "")).toBe(
+      "all 2 Settings fixture tiles on this wall.",
+    );
     expect(packScopeNoteText(spec, scope)).toBe(
       "Changes apply to all 2 Settings fixture tiles on this wall.",
     );
@@ -66,7 +71,14 @@ describe("pack shared copy literals", () => {
     });
     const title = host.querySelector(".sec-title");
     expect(title?.childElementCount).toBe(0);
-    expect(title?.textContent).toBe(specCaption(spec));
+    const dispatch = engineDispatch(spec);
+    const expectedTitle = viewCaption({
+      id: spec.id,
+      label: tileDisplayName(spec),
+      graphBase: dispatch.graphBase,
+      arcadeId: dispatch.arcadeId,
+    });
+    expect(title?.textContent).toBe(expectedTitle);
   });
 });
 

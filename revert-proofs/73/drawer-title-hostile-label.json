@@ -3,5 +3,5 @@
   "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
   "testName": "^pack shared copy literals > drawer view title renders hostile instance label as plain text$",
   "description": "Drawer title must use tileDisplayName so instance labels stay plain text.",
-  "redOutput": "AssertionError: expected 'Headlines' to be '<img src=x>' // Object.is equality"
+  "redOutput": "AssertionError: expected 'NET Headlines' to be 'NET <img src=x>' // Object.is equality"
 }
