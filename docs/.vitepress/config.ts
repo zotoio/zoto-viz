@@ -27,6 +27,7 @@ export default defineConfig({
       { text: "systemd and Wi-Fi hopper", link: "/systemd" },
       { text: "Batch CLI", link: "/batch" },
       { text: "Contributing", link: "/contributing" },
+      { text: "Revert-proofs archive", link: "/revert-proofs-archive" },
     ],
   },
 });
