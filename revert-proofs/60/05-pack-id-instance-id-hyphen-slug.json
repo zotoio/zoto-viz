@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_id_pattern.py",
+  "testName": "test_schema_rejects_nonconforming_plugin_instance_id[bad_underscore]",
+  "description": "plugin instance id pattern must reject underscore slugs.",
+  "patchedFailure": "E       Failed: DID NOT RAISE <class 'ValueError'>"
+}

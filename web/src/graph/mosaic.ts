@@ -74,6 +74,21 @@ export function assignMosaicSkies(
   return out;
 }
 
+/** A plugin-sky look stays `plugin` even if a saved unique-sky plan named a host sky. */
+export function pinPluginTileSkies(
+  skies: Partial<Record<string, BackdropKind>>,
+  ids: string[],
+): Record<string, BackdropKind> {
+  const out: Record<string, BackdropKind> = {};
+  for (const [id, sky] of Object.entries(skies)) {
+    if (sky !== undefined) out[id] = sky;
+  }
+  for (const id of ids) {
+    if (lookForTile(id)?.backdrop === "plugin") out[id] = "plugin";
+  }
+  return out;
+}
+
 export function mosaicAnimForTile(
   wall: DreamAnim,
   id: string,
@@ -255,6 +270,7 @@ export class Mosaic {
   get focusedId(): string { return this.focused; }
   get mainMode(): string { return this._mainId; }
   get mainId(): string { return this._mainId; }
+  get mainTileId(): string { return this._mainId; }
   get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
 
   paneElement(slotId: string): HTMLElement | undefined {
@@ -1057,7 +1073,14 @@ export class Mosaic {
     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
     if (a.mosaicUniqueSkies === true || planned) {
       const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
-      const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
+      const assigned = assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
+      const base: Record<string, BackdropKind> = { ...assigned };
+      if (planned) {
+        for (const [id, sky] of Object.entries(planned)) {
+          if (sky !== undefined) base[id] = sky;
+        }
+      }
+      const next = pinPluginTileSkies(base, ids);
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;

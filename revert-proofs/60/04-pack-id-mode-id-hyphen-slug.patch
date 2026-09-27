@@ -1,0 +1,12 @@
+diff --git a/schema/plugin.schema.json b/schema/plugin.schema.json
+--- a/schema/plugin.schema.json
++++ b/schema/plugin.schema.json
+@@ -84,7 +84,7 @@
+     },
+     "mode_id": {
+       "type": "string",
+-      "pattern": "^[a-z0-9][a-z0-9-]*$",
++      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+       "description": "Optional catalog id to overlay when it differs from `id`."
+     },
+     "instances": {

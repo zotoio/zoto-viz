@@ -48,7 +48,7 @@ Consent is `~/.zoto-viz/plugin-consent.yml` (see [Plugins](/plugins)).
 - CSP: `default-src 'none'; script-src 'unsafe-inline' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'`
 
 The compiled bundle is inlined as a module script next to a small host SDK
-(`globalThis.zoto`). Parent ↔ iframe messages are typed (`zoto-viz-host` /
+(`getVizZoto()` from `plugins/sdk/viz-zoto`; runtime `globalThis.zoto`). Parent ↔ iframe messages are typed (`zoto-viz-host` /
 `zoto-viz-plugin`). Style writes are dropped unless `graph.style` is in the
 filtered cap list.
 

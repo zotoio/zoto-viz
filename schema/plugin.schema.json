@@ -13,7 +13,7 @@
   "properties": {
     "id": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
       "description": "Stable plugin id. The live view is addressed as plugin:<id>."
     },
     "name": {
@@ -128,7 +128,7 @@
     },
     "mode_id": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
       "description": "Optional catalog id to overlay when it differs from `id`."
     },
     "instances": {
@@ -461,7 +461,7 @@
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
         },
         "name": {
           "type": "string",

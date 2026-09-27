@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-lint.test.ts",
+  "testName": "pack lint guardrails > host importing plugins/src outside debt allowlist fails with pack-source message",
+  "description": "Host reverse boundary must block plugins/src imports outside HOST_PACK_SRC_IMPORT_ALLOWLIST.",
+  "patchedFailure": "AssertionError: expected 0 to be greater than 0"
+}

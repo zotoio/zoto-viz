@@ -1,0 +1,16 @@
+id: pack-sdk-stale-contract
+name: Stale SDK contract fixture
+version: 1
+runtime: typescript
+capabilities:
+  - viz.read
+frontend:
+  entry: frontend/index.ts
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 8
+  maxParticles: 0
+  uniforms: []
+  idle:
+    fixture: host

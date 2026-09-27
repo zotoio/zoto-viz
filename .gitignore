@@ -8,6 +8,8 @@ web/.env.*
 data/
 out/
 web/node_modules/
+**/node_modules/.modules.yaml
+**/node_modules/.pnpm-workspace-state-v1.json
 web/dist/
 docs/node_modules/
 service/cursor-bridge/node_modules/
@@ -27,5 +29,7 @@ sys-config.yml
 plugins/.runtime/
 plugins/*.zip
 dist/
-web/dist-gate-check/
-plugins/src/**/node_modules/
+plugins/src/.pack-sdk/
+**/.zip-install-blocks.json
+**/.install-catalog-records.json
+revert-proofs/**/red/*.txt

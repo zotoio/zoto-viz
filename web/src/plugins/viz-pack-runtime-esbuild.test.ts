@@ -46,6 +46,8 @@ function esbuildPackFromHome(packHome: string): string {
       "--target=es2022",
       "--external:three",
       "--external:d3-force-3d",
+      "--external:../../../sdk/viz-zoto",
+      "--external:../../../sdk/viz-pack-host",
     ],
     { encoding: "utf8" },
   );
