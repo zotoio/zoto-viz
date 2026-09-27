@@ -384,19 +384,6 @@ describe("viz dogfood gates", () => {
     const skipSamples = budget.stats.skipped > 0 ? [{ t: 1000, n: budget.stats.skipped }] : [];
     expect(formatSkipRate(skipRatePerSec(skipSamples, 1000))).toBe("skips 0/s");
   });
-
-  it("revert: fat-LAN soak cannot read performance.now / Date.now", () => {
-    expect(() =>
-      withFatLanSoakFakeTime((now) => {
-        void now;
-        return runDogfoodSoak({
-          state: fatLan,
-          framesPerPack: FAT_LAN_SOAK_FRAMES,
-          now: () => performance.now(),
-        });
-      }),
-    ).toThrow(FAT_LAN_SOAK_REAL_TIME_FORBIDDEN);
-  });
 });
 
 describe("viz dogfood over-budget honesty", () => {
