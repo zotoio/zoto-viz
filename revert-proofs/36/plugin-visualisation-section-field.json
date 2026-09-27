@@ -3,5 +3,5 @@
   "testFile": "web/src/plugins/plugin-visualisation.test.ts",
   "testName": "parseConfig > maps plugin.yml section onto PluginField",
   "description": "parseConfig must copy plugin.yml section onto PluginField",
-  "red": "AssertionError: expected [ { key: 'gain', …(4) }, …(1) ] to deeply equal [ ObjectContaining{…}, …(1) ]"
+  "red": "AssertionError: expected [ { key: 'gain', …(3) }, …(1) ] to deeply equal [ ObjectContaining{…}, …(1) ]"
 }
