@@ -85,7 +85,7 @@ const HOST_TRANSPORT_RULES: { target: string; re: RegExp }[] = [
   },
 ];
 
-function hostTransportViolations(repoRel: string, text: string): PackLintViolation[] {
+export function hostTransportViolations(repoRel: string, text: string): PackLintViolation[] {
   const code = maskComments(text);
   for (const { target, re } of HOST_TRANSPORT_RULES) {
     const m = re.exec(code);
@@ -240,7 +240,7 @@ function symlinkViolations(packDirAbs: string, packRepoPrefix: string, repoRoot:
   }));
 }
 
-function lintPackSource(
+export function lintPackSource(
   repoRel: string,
   text: string,
   packRepoPrefix: string,
