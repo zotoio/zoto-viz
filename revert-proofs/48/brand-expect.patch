@@ -1,5 +1,5 @@
 diff --git a/scripts/revert-proof-vitest-brand.mjs b/scripts/revert-proof-vitest-brand.mjs
-index 78f5370..a08761f 100644
+index 78f5370..c1ffa38 100644
 --- a/scripts/revert-proof-vitest-brand.mjs
 +++ b/scripts/revert-proof-vitest-brand.mjs
 @@ -20,8 +20,8 @@ function brandIfAssertion(err, isAssertion) {
@@ -8,25 +8,22 @@ index 78f5370..a08761f 100644
        redAtBrand.set(err, {
 -        actual: toJsonValue("actual" in err ? err.actual : undefined),
 -        expected: toJsonValue("expected" in err ? err.expected : undefined),
-+        actual: "actual" in err ? err.actual : undefined,
-+        expected: "expected" in err ? err.expected : undefined,
++        actual: toJsonValue("expected" in err ? err.expected : undefined),
++        expected: toJsonValue("actual" in err ? err.actual : undefined),
        });
      }
      lastBranded = err;
-@@ -29,16 +29,6 @@ function brandIfAssertion(err, isAssertion) {
-   return err;
- }
- 
--/** The JSON reporter drops `undefined`, so red values are JSON-normalized (undefined → null). */
--function toJsonValue(value) {
--  if (value === undefined) return null;
--  try {
--    return JSON.parse(JSON.stringify(value)) ?? null;
--  } catch {
--    return String(value);
--  }
--}
--
- function softErrorCount(test) {
-   return test?.result?.errors?.length ?? 0;
- }
+diff --git a/scripts/revert_proof_pytest_plugin.py b/scripts/revert_proof_pytest_plugin.py
+index 466ff50..fb1d4f2 100644
+--- a/scripts/revert_proof_pytest_plugin.py
++++ b/scripts/revert_proof_pytest_plugin.py
+@@ -22,8 +22,7 @@ def _rewritten_assert_in_test(excinfo, item) -> tuple[bool, str | None]:
+             continue
+         if frame_path != test_path:
+             continue
+-        statement = getattr(entry, "statement", None)
+-        stmt = str(statement).strip() if statement is not None else ""
++        stmt = (getattr(entry, "statement", None) or "").strip()
+         if stmt.startswith("assert "):
+             return True, stmt
+         return False, stmt or None

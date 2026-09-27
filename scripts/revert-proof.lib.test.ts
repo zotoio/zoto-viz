@@ -563,12 +563,12 @@ describe("strict git apply in the runner", () => {
 describe("revert-proof runner wiring guards", () => {
   it("(f) revert-proof.mjs calls assertVitestNodeAssertFailClosed on unbranded failures", () => {
     const src = fs.readFileSync(path.join(scriptsDir, "revert-proof.mjs"), "utf8");
-    expect(src).toContain("assertVitestNodeAssertFailClosed(slug, target)");
+    expect(src.includes("assertVitestNodeAssertFailClosed(slug, target)")).toBe(true);
   });
 
   it("(f) revert-proof.mjs imports assertVitestNodeAssertFailClosed", () => {
     const src = fs.readFileSync(path.join(scriptsDir, "revert-proof.mjs"), "utf8");
-    expect(src).toMatch(/assertVitestNodeAssertFailClosed,/);
+    expect(/assertVitestNodeAssertFailClosed,/.test(src)).toBe(true);
   });
 
   it("(g) vitest runner clears nodeAssert at runTask start", () => {
@@ -576,7 +576,7 @@ describe("revert-proof runner wiring guards", () => {
       path.join(scriptsDir, "revert-proof-vitest-runner.mjs"),
       "utf8",
     );
-    expect(src).toMatch(/nodeAssert\.delete\(test\)/);
+    expect(/nodeAssert\.delete\(test\)/.test(src)).toBe(true);
   });
 });
 
