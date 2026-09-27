@@ -1,0 +1,36 @@
+JSON report written to /tmp/ingest-sky-pin-plugin-p.json
+(node:66871) ExperimentalWarning: Type Stripping is an experimental feature and might change at any time
+(Use `node --trace-warnings ...` to show where the warning was created)
+DOMException [AbortError]: The operation was aborted.
+    at Fetch.onAsyncTaskManagerAbort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:546:23)
+    at Object.<anonymous> (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:416:101)
+    at AsyncTaskManager.abortAll (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:292:30)
+    at AsyncTaskManager.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:52:21)
+    at DetachedBrowserFrame.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/browser/detached-browser/DetachedBrowserFrame.js:112:58)
+    at DetachedWindowAPI.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/window/DetachedWindowAPI.js:51:35)
+    at teardownWindow (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/index.1_nbEjJY.js:1166:22)
+    at Object.teardown (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/index.1_nbEjJY.js:1228:10)
+    at file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/base.BTS5G301.js:167:65
+    at Traces.$ (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/traces.js:143:27)
+DOMException [AbortError]: The operation was aborted.
+    at Fetch.onAsyncTaskManagerAbort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:546:23)
+    at Object.<anonymous> (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:416:101)
+    at AsyncTaskManager.abortAll (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:292:30)
+    at AsyncTaskManager.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:52:21)
+    at DetachedBrowserFrame.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/browser/detached-browser/DetachedBrowserFrame.js:112:58)
+    at DetachedWindowAPI.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/window/DetachedWindowAPI.js:51:35)
+    at teardownWindow (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/index.1_nbEjJY.js:1166:22)
+    at Object.teardown (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/index.1_nbEjJY.js:1228:10)
+    at file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/base.BTS5G301.js:167:65
+    at Traces.$ (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/traces.js:143:27)
+DOMException [AbortError]: The operation was aborted.
+    at Fetch.onAsyncTaskManagerAbort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:546:23)
+    at Object.<anonymous> (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/fetch/Fetch.js:416:101)
+    at AsyncTaskManager.abortAll (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:292:30)
+    at AsyncTaskManager.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/async-task-manager/AsyncTaskManager.js:52:21)
+    at DetachedBrowserFrame.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/browser/detached-browser/DetachedBrowserFrame.js:112:58)
+    at DetachedWindowAPI.abort (file:///workspace/web/node_modules/.pnpm/happy-dom@20.14.5/node_modules/happy-dom/lib/window/DetachedWindowAPI.js:51:35)
+    at teardownWindow (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/index.1_nbEjJY.js:1166:22)
+    at Object.teardown (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/index.1_nbEjJY.js:1228:10)
+    at file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/chunks/base.BTS5G301.js:167:65
+    at Traces.$ (file:///workspace/web/node_modules/.pnpm/vitest@5.0.0_@types+node@22.18.12_@vitest+coverage-v8@5.0.0_happy-dom@20.14.5_vite@8.2._6d3a96f056ff63ff27e718d2dcef2a7b/node_modules/vitest/dist/traces.js:143:27)

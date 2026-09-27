@@ -1,20 +1,13 @@
 diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
-index 2988728c..129db398 100644
+index 2988728c..6250daeb 100644
 --- a/web/src/graph/mosaic.ts
 +++ b/web/src/graph/mosaic.ts
-@@ -1151,13 +1151,8 @@ export class Mosaic {
-     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
-     if (a.mosaicUniqueSkies === true || planned) {
-       const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
--      const rolled = assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
--      const next = pinPluginTileSkies(
--        planned ?? rolled,
--        ids,
+@@ -1155,7 +1155,7 @@ export class Mosaic {
+       const next = pinPluginTileSkies(
+         planned ?? rolled,
+         ids,
 -        Object.fromEntries(this.tileSkies),
--      );
--      this.tileSkies = new Map(Object.entries(next));
-+      const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
-+      this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
++        {},
+       );
+       this.tileSkies = new Map(Object.entries(next));
        this.applyRecoveredSkies();
-       return;
-     }

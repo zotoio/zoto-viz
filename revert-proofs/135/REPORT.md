@@ -1,8 +1,10 @@
 ## Revert proof
 
+Verified locally with `revert-proof-vitest-overlay` (1 passed → 1 failed per row; `git apply --check` clean).
+
 | row | test | revert description | result |
 | --- | --- | --- | --- |
-| ingest-sky-pin-plugin | mosaic-ingest-sky-plan.test.ts | Revert ingestSkyPlan pinPluginTileSkies wiring | RED (expected) |
+| ingest-sky-pin-plugin | mosaic-ingest-sky-plan.test.ts | Revert ingestSkyPlan existing tileSkies argument to pinPluginTileSkies | RED (expected) |
 | pin-undefined-sky-guard | mosaic.test.ts | Revert pinPluginTileSkies undefined guard | RED (expected) |
 | focus-main-tile-slot | apply-mode-mosaic.test.ts | Revert mosaicFocusSlot main-tile fallback | RED (expected) |
 
