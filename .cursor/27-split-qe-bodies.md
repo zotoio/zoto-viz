@@ -50,7 +50,7 @@ Machine: cloud agent VM, same commands as main comparison (`pnpm exec vitest run
 
 | Category | Requirement | This PR @ HEAD |
 |----------|-------------|----------------|
-| **(a) Env-only / pre-existing on main** | Fails on `6520b01` with **same test name** and **same error text** — paste both | **`fat-LAN live soak`** → `AssertionError: expected 119 to be 120 // Object.is equality` (main + all HEADs until TSE fix; **not** deselected) |
+| **(a) Env-only / pre-existing on main** | Fails on `6520b01` with **same test name** and **same error text** — paste both | **`fat-LAN live soak`** → `AssertionError: expected 119 to be 120 // Object.is equality` only when main shows the **same name + error** (TSE **#101** pending; **not** deselected; do **not** fix `termNow` or the soak in #94/#92/#93) |
 | **(b) PR snapshot** | Snapshot updated in PR; list changed entries | **(none)** |
 | **(c) Nondeterministic** | Fixed seed + 20/20 identical runs, or test deleted and named | **(none)** — main soak **restored**, not deleted |
 
@@ -103,7 +103,7 @@ V2 monolith / tick delivery stays on **#88**; #94 is collector + contract tests 
 
 | Category | This PR @ HEAD |
 |----------|----------------|
-| **(a) Env-only / pre-existing on main** | **`fat-LAN live soak`** — same name + `AssertionError: expected 119 to be 120 // Object.is equality` on `6520b01` and this HEAD (TSE fix pending; not deselected) |
+| **(a) Env-only / pre-existing on main** | **`fat-LAN live soak`** — category **(a)** only if `6520b01` fails with the **same test name and same error text** (TSE **#101** fixes main; not merged — do not cherry-pick #101 or patch `termNow` here) |
 | **(b) PR snapshot** | **(none)** |
 | **(c) Nondeterministic** | **(none)** |
 
@@ -135,7 +135,7 @@ V2 monolith / tick delivery stays on **#88**; #94 is collector + contract tests 
 
 | Category | This PR @ HEAD |
 |----------|----------------|
-| **(a) Env-only / pre-existing on main** | **`fat-LAN live soak`** — same as `6520b01` (see shared block below) |
+| **(a) Env-only / pre-existing on main** | **`fat-LAN live soak`** — same rule as #94: **(a)** only when main matches name + error (see shared block; TSE **#101**) |
 | **(b) PR snapshot** | **(none)** |
 | **(c) Nondeterministic** | **(none)** |
 
@@ -220,17 +220,26 @@ git apply --check -p1 revert-proofs/27/<row>.patch
 
 Hunk table column **lint row** — run `python3 scripts/qe_gate_pr27.py`.
 
-### Main `fat-LAN live soak` — do not delete (TSE fix in flight)
+### Main `fat-LAN live soak` — do not delete; TSE **#101** (not merged)
+
+**Policy:** Keep main’s soak **byte-identical** on this stack. Only #94 may add file-level `beforeEach(() => expect.hasAssertions())`. Do **not** fix the flake, fake timers, or `termNow` — that is **TSE PR #101** (`frame.t` for hn-term teletype + timer-count soak). **Do not merge #101’s branch** into #94/#92/#93; after #101 is on main, rebase/stack from updated main when TSE says so.
+
+**Full vitest — category (a):** Put **`fat-LAN live soak`** in **(a)** only if the failure on the split HEAD uses the **same test name and same error text** as a run on **`6520b01`**. If the soak fails with a **different** error on the split but not on main, that is **not** (a) — classify under **(b)** or **(c)** or fix the split.
+
+**Known pre-existing failure on main today (until #101 lands):**
+
+| Where | Test | Error (when main matches) |
+|-------|------|---------------------------|
+| `web/src/plugins/dogfood.test.ts` | `fat-LAN live soak: all three packs under budget or honest skips` | `AssertionError: expected 119 to be 120 // Object.is equality` (typical on `pack.delivered` vs `pack.frames`; timing) |
+
+**#101 overlap — hn-term / `termNow` on this stack:**
+
+| PR | Touches hn-term / teletype? |
+|----|-----------------------------|
+| **#94 / #92** | **No** — no `plugins/src/hn-term/**` or `viz-pack-host.ts` diff |
+| **#93** | **`plugins/src/hn-term/plugin.yml:11`** — adds `viz.contract: 2` only. **`termNow` unchanged** at `web/src/plugins/viz-pack-host.ts:52–53` (`performance.now()` path; same bytes as `6520b01`) |
 
 **Correction:** #94 must **not** remove main’s soak. Restored **`it("fat-LAN live soak: all three packs under budget or honest skips", …)`** byte-identical to `6520b01`; only split-owned addition is file-level `beforeEach(() => expect.hasAssertions())`.
-
-**Known failure (pre-existing on main, until TSE lands fake-clock/seed PR):**
-
-| Where | Test | Error (same on main + all split HEADs) |
-|-------|------|----------------------------------------|
-| `web/src/plugins/dogfood.test.ts` | `fat-LAN live soak: all three packs under budget or honest skips` | `AssertionError: expected 119 to be 120 // Object.is equality` (on `pack.delivered` vs `pack.frames`; load/timing on CI) |
-
-**Category:** **(a) / pre-existing main flake** — not introduced by #94/#92/#93; do **not** deselect or workaround.
 
 **#94 `git diff 6520b01 -- web/src/plugins/dogfood.test.ts`** (only this PR’s lines):
 
