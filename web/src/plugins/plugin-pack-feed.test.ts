@@ -71,6 +71,7 @@ describe("plugin pack feed notices", () => {
       "plugin:wifi",
       formatSandboxStartupFailure("Wi-Fi"),
       "fail",
+      { onRetry: undefined, showRetry: false },
     );
   });
 });

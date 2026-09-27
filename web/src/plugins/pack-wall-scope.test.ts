@@ -39,7 +39,7 @@ describe("pack wall scope (production-shaped)", () => {
     expect(packScopeNoteText(spec, {
       mosaicOn: true,
       tileModeIds: ["plugin:settings-fixture", "plugin:settings-fixture"],
-    })).toContain("Applies to all");
+    })).toContain("apply to all");
   });
 
   it("keeps distinct mosaic slot ids for the same pack view", () => {
@@ -49,7 +49,7 @@ describe("pack wall scope (production-shaped)", () => {
       mosaicTiles: ["plugin:settings-fixture", "plugin:settings-fixture!1"],
     });
     expect(scope.tileModeIds).toEqual(["plugin:settings-fixture", "plugin:settings-fixture!1"]);
-    expect(packScopeNoteText(spec, scope)).toContain("Applies to all");
+    expect(packScopeNoteText(spec, scope)).toContain("apply to all");
   });
 
   it("packWallScopeFromAnim dedupes tile ids so shared note stays hidden until duplicate tiles ship", () => {
