@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
-  assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds, movePaneTileView,
+  assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds,
   nextPaneTiles,
   placePaneTileView,
   parseMosaicNode, parseMosaicTiles, setRatio, structureKey, swapLeaves,

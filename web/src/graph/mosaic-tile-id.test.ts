@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   allocateMosaicTileSlot,
   drawerKeyForModeId,
@@ -12,6 +12,10 @@ import { configStoreId } from "../plugins/instances";
 import { parsePluginId } from "../plugins/instances";
 
 describe("mosaic tile slot ids", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("round-trips pack view ids and allocates duplicate slots", () => {
     expect(mosaicTileViewId("plugin:topology")).toBe("plugin:topology");
     expect(mosaicTileViewId("plugin:topology!2")).toBe("plugin:topology");

@@ -1,14 +1,25 @@
 diff --git a/web/src/graph/mosaic-layout.ts b/web/src/graph/mosaic-layout.ts
-index 0ccc771..26e2421 100644
+index 0ccc771..32947fa 100644
 --- a/web/src/graph/mosaic-layout.ts
 +++ b/web/src/graph/mosaic-layout.ts
-@@ -202,7 +202,8 @@ export function placePaneTileView(ids: string[], fromSlot: string, viewId: strin
+@@ -201,9 +201,17 @@ export function placePaneTileView(ids: string[], fromSlot: string, viewId: strin
+ 
  /** Drawer / wall pane pick: allocate another tile slot for the same catalog view when needed. */
  export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
-   if (!viewId || fromSlot === viewId) return ids;
+-  if (!viewId || fromSlot === viewId) return ids;
 -  if (mosaicTileViewId(fromSlot) === viewId) return ids;
-+  const j = ids.findIndex((id, k) => k !== ids.indexOf(fromSlot) && mosaicTileViewId(id) === viewId);
-+  if (j >= 0) return movePaneTileView(ids, fromSlot, ids[j]!);
-   return placePaneTileView(ids, fromSlot, viewId);
+-  return placePaneTileView(ids, fromSlot, viewId);
++  const i = ids.indexOf(fromSlot);
++  if (i < 0 || !viewId || fromSlot === viewId) return ids;
++  const next = ids.slice();
++  const j = next.indexOf(viewId);
++  if (j >= 0) {
++    next[i] = viewId;
++    next[j] = fromSlot;
++    return next;
++  }
++  next[i] = viewId;
++  return next;
  }
  
+ /** Put `want` onto existing cells in order. Extra / missing ids keep the leftover leaves. */
