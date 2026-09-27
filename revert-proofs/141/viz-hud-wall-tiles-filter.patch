@@ -1,21 +1,12 @@
 diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
-index 1818651c..ae7158c0 100644
+index 4859096a..ae7158c0 100644
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
-@@ -472,13 +472,13 @@ export class VizHud {
+@@ -472,7 +472,6 @@ export class VizHud {
        const nowTick = Math.round(now * 300);
        const wallTiles = (tileBudgetLines ?? [])
          .map((l) => l.tile)
 -        .filter((t): t is VizTileBudgetStats => t !== null);
-+      const mateTileCount = wallTiles.length > 0 ? wallTiles.length : activeTiles;
+       const mateTileCount = wallTiles.length > 0 ? wallTiles.length : activeTiles;
        const chrome = wallTiles.length
--        ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
-+        ? wallHudChrome(tileBudget, wallTiles, nowTick, mateTileCount)
-         : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
-       const limited =
-         chrome.state === "limited" && chrome.limitedLabel
--          ? this.skipLabelLine.limitedLabel(activeTiles, chrome.cadenceK)
-+          ? this.skipLabelLine.limitedLabel(mateTileCount, chrome.cadenceK)
-           : null;
-       const skipText = limited ?? formatSkipRate(rate);
-       this.skipLabelLine.writeText(this.skipEl, skipText);
+         ? wallHudChrome(tileBudget, wallTiles, nowTick, mateTileCount)
