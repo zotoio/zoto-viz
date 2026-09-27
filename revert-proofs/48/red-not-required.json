@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "sidecar red value > (5-red-required) sidecar without red string is rejected",
   "description": "Stop validating the red sidecar field",
-  "red": "row r: sidecar JSON missing string field \"red\""
+  "red": "AssertionError: expected undefined to be 'row r: sidecar JSON missing string field \"red\"' // Object.is equality"
 }

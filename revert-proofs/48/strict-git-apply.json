@@ -3,5 +3,5 @@
   "testFile": "scripts/revert-proof.lib.test.ts",
   "testName": "strict git apply > (strict) rejects patches that only apply at an offset",
   "description": "Allow git apply --check at fuzz/offset (drop strict enforcement)",
-  "red": "AssertionError: expected false to be true // Object.is equality"
+  "red": "AssertionError: expected [Function] to throw an error"
 }
