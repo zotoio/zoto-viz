@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-tile.test.ts",
+  "testName": "shader fallback tile overlay > copy-default-name",
+  "redValue": "AssertionError: expected ' can\\'t run its graphics on this devi\u2026' to be 'This view can\\'t run its graphics on \u2026' // Object.is equality"
+}

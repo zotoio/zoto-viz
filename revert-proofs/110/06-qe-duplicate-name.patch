@@ -1,0 +1,16 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index c4fde32..422b28b 100644
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -405,11 +405,6 @@ def _read_all_members(zf: zipfile.ZipFile) -> dict[str, bytes]:
+         if not pz._allowed_member(rel):
+             raise ValueError(zip_entry_error(rel, "disallowed path suffix"))
+         key = member_dedupe_key(rel)
+-        if key in seen:
+-            first = seen[key]
+-            raise ValueError(
+-                zip_entry_error(raw_name, f"duplicate name (same as {first!r} after normalization)"),
+-            )
+         seen[key] = raw_name
+         claimed = int(info.file_size)
+         cap = max_uncompressed - total

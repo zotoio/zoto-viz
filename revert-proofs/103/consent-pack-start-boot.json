@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/consent-pack-start.test.ts",
+  "testName": "consent blocks pack start paths > boot reconcile then switch shows consent notice and does not mount",
+  "description": "Revert boot mosaic tile reconcile before pack start",
+  "red": {
+    "actual": "plugin:topology",
+    "expected": "plugin:heat"
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected 'plugin:topology' to be 'plugin:heat' // Object.is equality"
+}

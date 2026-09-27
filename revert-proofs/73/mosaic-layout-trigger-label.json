@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
+  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > shows discard status when the last pack tile is removed with unsaved edits$",
+  "description": "Mosaic layout picker trigger must keep the Layout aria-label.",
+  "redOutput": "AssertionError: expected 'Tiles' to be 'Layout' // Object.is equality"
+}

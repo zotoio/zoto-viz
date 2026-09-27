@@ -1,0 +1,5 @@
+{
+  "runner": "lint",
+  "kind": "lint",
+  "expectedRed": "src/graph/render-host.ts:307:17: brand-cast"
+}

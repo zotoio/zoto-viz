@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-compile.test.ts",
+  "testName": "plugin sky one compile > one-compile-per-shader",
+  "redValue": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
+}

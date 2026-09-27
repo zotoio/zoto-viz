@@ -1,0 +1,13 @@
+diff --git a/web/src/app/plugin-consent-live.ts b/web/src/app/plugin-consent-live.ts
+index 553d051f..148fbe50 100644
+--- a/web/src/app/plugin-consent-live.ts
++++ b/web/src/app/plugin-consent-live.ts
+@@ -12,7 +12,7 @@ export function mergePluginConsentLivePatch(
+   if (!id || (kind !== "reviewed" && kind !== "authored")) return false;
+   const spec = specs.find((p) => p.id === id);
+   if (!spec) return false;
+-  spec.consent = kind;
++  // skip consent
+   if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+   return true;
+ }

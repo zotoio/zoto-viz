@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index d13fd72..1625001 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -402,7 +402,6 @@ export class RenderHost {
+     this.glContextLost = false;
+     this.gfxNotice.onContextRestored();
+     for (const slot of this.tileShaders.values()) {
+-      slot.latch.reset();
+     }
+     this.resumeShaderFallbackTicks();
+   }

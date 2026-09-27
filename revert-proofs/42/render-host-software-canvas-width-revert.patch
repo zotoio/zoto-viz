@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index e4787b6..83f45a9 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -390,7 +390,7 @@ export class RenderHost {
+   }
+ 
+   private resizeSoftware(): void {
+-    const pr = this.pr;
++    const pr = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
+     this.canvas.width = Math.max(1, Math.round(this.w * pr));
+     this.canvas.height = Math.max(1, Math.round(this.h * pr));
+     this.canvas.style.width = "100%";

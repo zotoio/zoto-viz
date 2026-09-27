@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/mosaic-consent-resume.test.ts",
+  "testName": "mosaic consent resume > registers a pending tile pick when consent is denied",
+  "description": "Revert registerConsentPending on consent deny",
+  "red": {
+    "actual": false,
+    "expected": true
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected false to be true // Object.is equality"
+}

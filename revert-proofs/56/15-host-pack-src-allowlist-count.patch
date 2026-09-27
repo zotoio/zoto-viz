@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/pack-lint.test.ts b/web/src/plugins/pack-lint.test.ts
+index 0000000..1111111 100644
+--- a/web/src/plugins/pack-lint.test.ts
++++ b/web/src/plugins/pack-lint.test.ts
+@@ -318,7 +318,7 @@ describe("pack lint guardrails", () => {
+   });
+ 
+   it("HOST_PACK_SRC_IMPORT_ALLOWLIST only shrinks (pinned debt count)", () => {
+-    expect(HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT).toBe(7);
++    expect(HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT).toBe(0);
+   });
+ 
+   it("host importing plugins/src outside debt allowlist fails with pack-source message", () => {

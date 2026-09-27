@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_pack_assets_sandbox_csp.py::PackAssetsSandboxCspTests::test_sandbox_csp_builder_unit",
+  "description": "sandbox_csp_for_token uses validated origin.",
+  "timeoutSec": 60,
+  "red": "assert 'http://192.168.1.50:7020/pack-assets/sess-tok/' in \"default-src 'none'; script-src http://127.0.0.1:7020/pack-assets/sess-tok/; img-src http://127.0.0.1:7020/pack-assets...; frame-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'; connect-src 'none'; frame-ancestors 'self'\""
+}

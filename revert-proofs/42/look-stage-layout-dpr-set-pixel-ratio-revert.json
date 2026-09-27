@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/look-stage-layout-dpr.test.ts",
+  "testName": "^LookStage layout DPR resize > resize passes capped layout DPR to WebGLRenderer\\.setPixelRatio$",
+  "expectedRed": "AssertionError: expected \"vi.fn()\" to be called with arguments: [ 1.25 ]"
+}

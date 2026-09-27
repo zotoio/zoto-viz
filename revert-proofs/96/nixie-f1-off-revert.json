@@ -1,0 +1,8 @@
+{
+  "row": "F1 off revert upload on frameIndex % 60",
+  "runner": "vitest",
+  "testFile": "web/src/plugins/nixie-wall-broadcast.test.ts",
+  "testName": "^nixie wall upload F1 \\(live pack path, 60 fps\\) > F1 seconds off from 12:00:30: one upload per minute step$",
+  "patchedAssertion": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 10 times",
+  "excerpt": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 10 times"
+}

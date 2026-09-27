@@ -1,0 +1,29 @@
+diff --git a/web/src/graph/scene.ts b/web/src/graph/scene.ts
+index cffe5775..e8b9f1a2 100644
+--- a/web/src/graph/scene.ts
++++ b/web/src/graph/scene.ts
+@@ -1045,8 +1045,6 @@ export interface SceneOpts {
+   satellite?: boolean;
+   /** draw through a shared context (one canvas for the whole wall) instead of owning a canvas */
+   host?: RenderHost;
+-  /** mosaic pane id (or `main` for the solo scene) — keys tile shader fallback state on the host */
+-  tileId?: string;
+ }
+ 
+ export class NetScene implements HostedView {
+@@ -1054,7 +1052,6 @@ export class NetScene implements HostedView {
+   readonly renderer: HostGpu;
+   /** shared renderer this scene draws through, or null when it owns `renderer` */
+   private readonly host: RenderHost | null;
+-  readonly tileId: string;
+   /** where pointer / wheel listeners live: the shared host's pane container, or this scene's canvas */
+   private readonly inputEl: HTMLElement;
+   /** viewport of the last present() through the host, framebuffer pixels */
+@@ -1266,7 +1263,6 @@ export class NetScene implements HostedView {
+     this.paneFps = new PaneFps(container);
+     this.satellite = !!opts.satellite;
+     this.host = opts.host ?? null;
+-    this.tileId = opts.tileId ?? "main";
+     this.clearHex = this.theme.scene.clear;
+     if (this.host) {
+       // shared context: the host's canvas covers the wall; this pane is a transparent window onto it

@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-v1-frame-adapter.ts b/web/src/plugins/viz-v1-frame-adapter.ts
+index ec62e84..c237997 100644
+--- a/web/src/plugins/viz-v1-frame-adapter.ts
++++ b/web/src/plugins/viz-v1-frame-adapter.ts
+@@ -260,7 +260,7 @@ export class VizV1FrameAdapter {
+ 
+   /** Called from host scope sync when mode/plugin options change (not per frame). */
+   syncViewOpts(opts: Readonly<Record<string, string>>): void {
+-    this.viewOpts = { ...opts };
++    this.viewOpts = opts;
+   }
+ 
+   hasV1Packs(): boolean {

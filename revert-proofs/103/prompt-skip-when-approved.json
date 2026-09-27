@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/plugin-consent-mount.test.ts",
+  "testName": "shouldPromptPluginReview > does not prompt when every pack is already approved",
+  "description": "Revert shouldPromptPluginReview skipping reviewed packs",
+  "red": {
+    "actual": true,
+    "expected": false
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected true to be false // Object.is equality"
+}

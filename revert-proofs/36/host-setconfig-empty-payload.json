@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/host.test.ts",
+  "testName": "PluginSandbox > posts config even when the payload is empty",
+  "description": "Empty config object must still post so plugins can clear keys",
+  "red": "AssertionError: expected undefined to deeply equal {}"
+}

@@ -1,0 +1,16 @@
+diff --git a/plugins/src/nixie-clock/frontend/index.ts b/plugins/src/nixie-clock/frontend/index.ts
+index 141a3137..b774d541 100644
+--- a/plugins/src/nixie-clock/frontend/index.ts
++++ b/plugins/src/nixie-clock/frontend/index.ts
+@@ -1,9 +1,9 @@
+ /** IN-18 Nixie clock — local time packed into sky slots. */
+ 
+ import { nixieCanvasSize, packNixieBuffer, parseNixieLook, type NixieLook } from "./tubes";
+-import type { VizDataFrame, VizZotoPluginHooks } from "../../../sdk/viz-contract";
++import type { VizDataFrame } from "../../../sdk/viz-contract";
+ 
+-declare const zoto: VizZotoPluginHooks & {
++declare const zoto: {
+   onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "talkers">) => void) | null;
+   onConfig: ((cfg: Record<string, string>) => void) | null;
+   getConfig?: () => Record<string, string>;

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/nest-cams-chips-stable.test.ts",
+  "testName": "^nest cams drawer chips > device chips and selection survive duplicate pack count 2\u21923 without drawer rebuild$",
+  "description": "Nest camera chips (all + per device) must survive duplicate pack count 2\u21923 without rebuilding chip DOM or losing selection.",
+  "redOutput": "AssertionError: expected \"rebuildViewDrawerContent\" to not be called at all, but actually been called 1 times"
+}

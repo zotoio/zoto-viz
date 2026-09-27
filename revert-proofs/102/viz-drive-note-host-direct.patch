@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-drive.ts b/web/src/plugins/viz-drive.ts
+index 8490a133..9837e2f9 100644
+--- a/web/src/plugins/viz-drive.ts
++++ b/web/src/plugins/viz-drive.ts
+@@ -29,7 +29,7 @@ export function bindVizDriveElement(tileId: string, el: HTMLElement | null): voi
+ 
+ /** Host-side viz-pack-host handler ran for this tile. */
+ export function noteHostDirect(tileId: string): void {
+-  applyDrive(tileId, "host-direct");
++  void tileId;
+ }
+ 
+ /** Pack unloaded or tile torn down. */

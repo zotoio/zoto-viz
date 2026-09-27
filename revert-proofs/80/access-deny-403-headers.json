@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access_deny_headers.py::test_csrf_denied_attaches_frame_and_pack_asset_headers",
+  "red": "assert None == 'nosniff'",
+  "description": "access-deny-403-headers",
+  "timeoutSec": 120
+}

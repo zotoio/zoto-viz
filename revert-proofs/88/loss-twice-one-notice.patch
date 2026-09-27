@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index d13fd72..c6603c2 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -392,7 +392,6 @@ export class RenderHost {
+   }
+ 
+   private onSharedContextLost(): void {
+-    if (this.glContextLost) return;
+     this.glContextLost = true;
+     this.gfxNotice.onContextLost();
+     this.pauseShaderFallbackTicks();

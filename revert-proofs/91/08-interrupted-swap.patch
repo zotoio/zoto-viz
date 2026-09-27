@@ -1,0 +1,23 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -516,19 +516,6 @@
+             if dest_zip is not None:
+                 _restore_zip_from_bak(dest_zip)
+             cleanup_staging_for_pack(runtime_parent, pid)
+-            from .pack_install_catalog import append_catalog_record
+-
+-            msg = format_interrupted_restore_message(name)
+-            append_catalog_record(
+-                {
+-                    "error": "pack_install_interrupted",
+-                    "message": msg,
+-                    "id": pid,
+-                    "name": name,
+-                },
+-                once_key=f"interrupted:{pid}",
+-            )
+-            messages.append(msg)
+         finally:
+             lock.release()
+     return messages

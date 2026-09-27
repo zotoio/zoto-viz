@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_invalid_zip_leaves_no_staging_or_runtime",
+  "description": "install_local_zip must return {ok:false} for unsafe zip bytes (not raise ValueError).",
+  "patchedFailure": "tests/test_plugin_install.py:201: AssertionError: unsafe zip must return dict"
+}

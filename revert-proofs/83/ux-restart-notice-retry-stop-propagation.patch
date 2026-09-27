@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf12631816dd230faf445486bd24d9ccd311..68b76c94655a70fcf60ba88f4499f8696458c3a5 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -91,7 +91,7 @@
+       btn.type = "button";
+       btn.className = "wall-notice-action btn small";
+       btn.textContent = e.action.label;
+-      btn.addEventListener("click", (ev) => { ev.stopPropagation(); e.action?.onClick(); });
++      btn.addEventListener("click", (ev) => { e.action?.onClick(); });
+       node.append(btn);
+     } else if (existingBtn.textContent !== e.action.label) existingBtn.textContent = e.action.label;
+   } else if (existingBtn) detachRow(existingBtn);

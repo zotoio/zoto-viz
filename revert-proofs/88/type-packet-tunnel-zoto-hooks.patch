@@ -1,0 +1,16 @@
+diff --git a/plugins/src/packet-tunnel/frontend/index.ts b/plugins/src/packet-tunnel/frontend/index.ts
+index abbddd53..25c3c82f 100644
+--- a/plugins/src/packet-tunnel/frontend/index.ts
++++ b/plugins/src/packet-tunnel/frontend/index.ts
+@@ -1,9 +1,9 @@
+ /** Packet-field tunnel raymarch scaffold — maps decimated proto fields into sky uniforms. */
+ 
+ import { packetTunnelSample } from "./tunnel";
+-import type { VizDataFrame, VizZotoPluginHooks } from "../../../sdk/viz-contract";
++import type { VizDataFrame } from "../../../sdk/viz-contract";
+ 
+-declare const zoto: VizZotoPluginHooks & {
++declare const zoto: {
+   onFrame: ((frame: Pick<VizDataFrame, "t" | "packets">) => void) | null;
+   writeBuffer: (slot: number, data: number[]) => void;
+   writeUniform: (name: string, value: number | [number, number, number]) => void;

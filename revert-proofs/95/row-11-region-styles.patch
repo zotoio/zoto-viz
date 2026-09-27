@@ -1,0 +1,13 @@
+diff --git a/web/src/style.css b/web/src/style.css
+index 399fb02..1ade83d 100644
+--- a/web/src/style.css
++++ b/web/src/style.css
+@@ -1650,7 +1650,7 @@ body.panel-wide #debuglog {
+ 
+ /* Shared wall notice stack (wall-notice-region.ts) */
+ .wall-notice-region {
+-  position: fixed;
++  position: static;
+   left: 50%;
+   transform: translateX(-50%);
+   bottom: calc(var(--bar-h) + 16px);

@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/shader-fallback-copy.ts b/web/src/graph/shader-fallback-copy.ts
+index e86c5ac..e93237c 100644
+--- a/web/src/graph/shader-fallback-copy.ts
++++ b/web/src/graph/shader-fallback-copy.ts
+@@ -1,6 +1,6 @@
+ import { sanitizePackDisplayName } from "./sanitize-pack-name";
+ 
+-export const GFX_INTERRUPTED_NOTICE = "Graphics were interrupted. Restoring the wall…";
++export const GFX_INTERRUPTED_NOTICE = "Graphics were interrupted. Restoring the wall...";
+ export const GFX_NO_RESTORE_NOTICE = "Graphics didn't come back. Reload to restore the wall.";
+ 
+ /** Host copy when a shader pack has no {@link ShaderPack.fallbackText} hook or it fails. */

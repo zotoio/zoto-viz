@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-tile.test.ts",
+  "testName": "shader fallback tile overlay > clear-untracks-fallback",
+  "redValue": "AssertionError: expected 1 to be +0 // Object.is equality"
+}

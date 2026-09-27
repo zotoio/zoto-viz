@@ -10,9 +10,20 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 ROWS = ROOT / "revert-proofs" / "117"
+ARCHIVE_DOC = ROOT / "docs" / "revert-proofs-archive.md"
 WEB = ROOT / "web"
 
 ASSERTION_RE = re.compile(r"^AssertionError: .+$")
+
+
+def revert_proofs_pr_tracked(pr: str) -> bool:
+    """True only when git indexes revert-proofs/<pr>/ (ignore untracked workspace copies)."""
+    out = subprocess.check_output(
+        ["git", "ls-files", "--", f"revert-proofs/{pr}/"],
+        cwd=ROOT,
+        text=True,
+    ).strip()
+    return bool(out)
 
 
 def run_vitest(test_file: str, test_name: str) -> tuple[int, str]:
@@ -55,6 +66,13 @@ def git_apply(patch: Path, reverse: bool = False) -> None:
 
 
 def main() -> None:
+    if not revert_proofs_pr_tracked("117"):
+        print(
+            f"skip: revert-proofs/117/ not tracked (catch-up option b); "
+            f"replay on refs/pull/117/head — see {ARCHIVE_DOC.relative_to(ROOT)}",
+            file=sys.stderr,
+        )
+        return
     mapping = {
         "entry-connect-call": ("main-entry.connect.test.ts", "opens the live websocket and marks #conn ok"),
         "entry-ws-feed-state": ("main-entry.feed.test.ts", "applies websocket state to the demo LAN counters"),

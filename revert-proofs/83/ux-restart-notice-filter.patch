@@ -1,0 +1,12 @@
+diff --git a/web/src/core/http-notice.ts b/web/src/core/http-notice.ts
+index 33f7f43..bac3337 100644
+--- a/web/src/core/http-notice.ts
++++ b/web/src/core/http-notice.ts
+@@ -39,7 +39,6 @@ export function bindServerRestartWallNotice(): () => void {
+ 
+   const onRestart = (e: Event) => {
+     const msg = (e as CustomEvent<string>).detail;
+-    if (msg !== SERVER_RESTART_NOTICE) return;
+     restartHandle = postWallNotice({
+       key: "server-restarted",
+       text: msg,

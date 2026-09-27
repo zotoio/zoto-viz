@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic-layout.test.ts",
+  "testName": "^close / swap / assign > assigns tile slot ids in order and keeps duplicate pack views$",
+  "description": "Revert parseMosaicTiles 96-char cap (#86).",
+  "expectedRed": "AssertionError: expected 80 to be 96 // Object.is equality"
+}

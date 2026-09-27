@@ -1,0 +1,15 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -234,10 +234,7 @@
+ ) -> bool:
+     if not dest_zip.is_file() or not runtime.is_dir():
+         return False
+-    if pz.plugin_sha256(dest_zip) != incoming_sha:
+-        return False
+-    recorded = installed_zip_sha(runtime.parent, runtime.name)
+-    return recorded == incoming_sha
++    return False
+ 
+ 
+ def _check_pack_install_warnings(ctx: InstallContext) -> dict[str, Any]:

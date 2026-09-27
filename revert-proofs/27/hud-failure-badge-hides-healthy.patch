@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
+index d005e99..60a8a1c 100644
+--- a/web/src/ui/viz-hud.ts
++++ b/web/src/ui/viz-hud.ts
+@@ -86,7 +86,7 @@ export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null
+   const parts: string[] = [];
+   if (talkerPeak > 0) parts.push(`${Math.round(talkerPeak * 100)}% TCP`);
+   if (failedUnits > 0) parts.push(`${failedUnits} unit${failedUnits === 1 ? "" : "s"}`);
+-  if (!parts.length) return null;
++  if (!parts.length) return `⚠ DEGRADED`;
+   return `⚠ DEGRADED ${parts.join(" · ")}`;
+ }
+ 

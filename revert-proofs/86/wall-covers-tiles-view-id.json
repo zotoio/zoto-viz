@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/plugin-wall.test.ts",
+  "testName": "^plugin wall remnants > treats a closed-tile sys mosaic as a remnant$",
+  "description": "Revert wallCoversTiles view-id normalization (#86).",
+  "expectedRed": "AssertionError: expected false to be true // Object.is equality"
+}

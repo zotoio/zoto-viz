@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/arcade/arcade-layout-dpr-fit.test.ts",
+  "testName": "^arcade layout DPR fit > fit uses capped layout DPR for canvas backing width$",
+  "expectedRed": "AssertionError: expected 150 to be 125 // Object.is equality"
+}

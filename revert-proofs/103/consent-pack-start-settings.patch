@@ -1,0 +1,16 @@
+diff --git a/web/src/app/mosaic-pane-pick.ts b/web/src/app/mosaic-pane-pick.ts
+index 613fa78..797ad66 100644
+--- a/web/src/app/mosaic-pane-pick.ts
++++ b/web/src/app/mosaic-pane-pick.ts
+@@ -10,11 +10,6 @@ export async function pickMosaicPaneWith(
+   fromId: string,
+   toId: string,
+ ): Promise<boolean> {
+-  const sw = await deps.runSwitch(toId, fromId);
+-  if (!sw.ok) {
+-    deps.refreshMosaicSlots();
+-    return false;
+-  }
+   return true;
+ }
+ 

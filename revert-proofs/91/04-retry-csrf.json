@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_local_retry_access.py",
+  "testName": "RetryBlockedZipAccessTest::test_retry_post_requires_csrf",
+  "description": "Retry POST bypasses CSRF middleware.",
+  "patchedFailure": "E       AssertionError: assert 404 == 403"
+}

@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
+index 389e5e2..0ef79ca 100644
+--- a/web/src/plugins/viz-pack-host.ts
++++ b/web/src/plugins/viz-pack-host.ts
+@@ -78,7 +78,6 @@ export function syncNixiePackScope(opts?: Record<string, string> | null): void {
+       changed = true;
+     }
+   }
+-  if (!changed) return;
+   nixieScopedLook = parseNixieLook(opts, nixieScopedLook);
+ }
+ 

@@ -1,0 +1,11 @@
+diff --git a/web/src/graph/render-host-device-px-ratio.ts b/web/src/graph/render-host-device-px-ratio.ts
+index 2245e46..64fe2e6 100644
+--- a/web/src/graph/render-host-device-px-ratio.ts
++++ b/web/src/graph/render-host-device-px-ratio.ts
+@@ -99,5 +99,5 @@ export function devicePxRatioNumber(r: DevicePxRatio): number {
+ 
+ /** CSS layout pixels → backing-store device pixels at the current layout DPR. */
+ export function layoutBackingDevicePx(cssPx: number): number {
+-  return Math.round(cssPx * devicePxRatioNumber(layoutDevicePxRatio()));
++  return Math.floor(cssPx * devicePxRatioNumber(layoutDevicePxRatio()));
+ }

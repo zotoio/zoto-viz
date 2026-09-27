@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 8e6b2bf..8b4b431 100644
+--- a/web/src/graph/render-host.ts
++++ b/web/src/graph/render-host.ts
+@@ -366,7 +366,7 @@ export class RenderHost {
+   }
+ 
+   private stopFallbackTile(tileId: string, _slot: TileShaderSlot): void {
+-    this.fallbackTileIds.delete(tileId);
++    void tileId;
+     if (this.fallbackTileIds.size === 0 && this.fallbackTick !== null) {
+       clearInterval(this.fallbackTick);
+       this.fallbackTick = null;

@@ -1,0 +1,16 @@
+diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
+index 171944c..72451e1 100644
+--- a/service/pack_install_copy.py
++++ b/service/pack_install_copy.py
+@@ -122,10 +122,7 @@ def zip_unsafe_user_message(
+     if kind == "oversize":
+         return _couldnt_install_line(stem, ZIP_UX_OVERSIZE_TAIL)
+     if prior_version is not None:
+-        tail = ZIP_UX_CORRUPT_TAIL.rstrip(".") + ZIP_UX_CORRUPT_PRIOR_SUFFIX.format(
+-            version=prior_version,
+-        )
+-        return _couldnt_install_line(stem, tail)
++        return _couldnt_install_line(stem, ZIP_UX_CORRUPT_TAIL)
+     return _couldnt_install_line(stem, ZIP_UX_CORRUPT_TAIL)
+ 
+ def zip_rejection_log_message(technical: str) -> str:

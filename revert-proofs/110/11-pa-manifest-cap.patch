@@ -1,0 +1,13 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index c4fde32..a61254e 100644
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -22,7 +22,7 @@ from . import plugin_zip as pz
+ _LOG = logging.getLogger(__name__)
+ 
+ # Fixed cap for manifest/metadata member reads (plugin.yml); packs cannot raise this.
+-MANIFEST_MEMBER_MAX_BYTES = 65_536
++MANIFEST_MEMBER_MAX_BYTES = 1_000_000
+ 
+ _MAX_COMPRESSION_RATIO = 100
+ _REQUIRED = "plugin.yml"

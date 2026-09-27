@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/consent-preserve-ubo.test.ts",
+  "testName": "consent deny clears viz UBO preserve > clears preserveVizUbo after consent deny on switchPaneView",
+  "description": "Revert clearing preserveVizUbo on consent deny",
+  "red": {
+    "actual": true,
+    "expected": false
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected true to be false // Object.is equality"
+}

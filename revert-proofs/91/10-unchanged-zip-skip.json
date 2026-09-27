@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_unchanged_zip_skips_reinstall_on_three_scans",
+  "description": "Unchanged local zips trigger reinstall on every drop scan.",
+  "patchedFailure": "E       assert 1 == 0"
+}

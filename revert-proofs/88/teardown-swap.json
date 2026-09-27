@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-hook.test.ts",
+  "testName": "shader fallback pack hook > teardown-swap",
+  "redValue": "AssertionError: expected 2 to be 1 // Object.is equality"
+}

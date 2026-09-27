@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/pack-install-retry.ts b/web/src/plugins/pack-install-retry.ts
+--- a/web/src/plugins/pack-install-retry.ts
++++ b/web/src/plugins/pack-install-retry.ts
+@@ -44,9 +44,6 @@
+ 
+ export function packRetryButtonState(zipSha256: string): { disabled: boolean; label: string } {
+   const sha = zipSha256.toLowerCase();
+-  if (retryInFlight.has(sha)) {
+-    return { disabled: true, label: PACK_RETRY_BUTTON_BUSY };
+-  }
+   return { disabled: false, label: PACK_RETRY_BUTTON_IDLE };
+ }
+ 

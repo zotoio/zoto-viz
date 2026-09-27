@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf1..cfa0f1e 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -60,7 +60,6 @@ function pickContainer(key: NoticeKey): HTMLElement {
+ function clearNoticeTimer(e: Entry): void {
+   if (e.timer != null) {
+     clearTimeout(e.timer);
+-    e.timer = null;
+   }
+ }
+ function syncNoticeTimer(e: Entry, restart: boolean): void {

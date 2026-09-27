@@ -1,0 +1,29 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 1c321c7e..a5350511 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -92,24 +92,16 @@ let open: MediaAskHost | null = null;
+ 
+ function capturePreviousFocus(): HTMLElement | null {
+   const el = document.activeElement;
+   if (el instanceof HTMLElement && el !== document.body) return el;
+   return null;
+ }
+ 
+ function focusReturnTarget(previous: HTMLElement | null): HTMLElement | null {
+-  if (
+-    previous instanceof HTMLElement
+-    && previous.isConnected
+-    && !previous.closest("#wall")
+-    && !previous.classList.contains("wall-notice-action")
+-  ) {
+-    return previous;
+-  }
+   const mic = document.getElementById("mic");
+   return mic instanceof HTMLElement ? mic : null;
+ }
+ 
+ function restoreFocus(previous: HTMLElement | null): void {
+   focusReturnTarget(previous)?.focus();
+ }
+

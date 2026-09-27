@@ -1,0 +1,11 @@
+diff --git a/web/src/app/mosaic-pane-pick.ts b/web/src/app/mosaic-pane-pick.ts
+index b2bae11..2ccffd2 100644
+--- a/web/src/app/mosaic-pane-pick.ts
++++ b/web/src/app/mosaic-pane-pick.ts
+@@ -29,6 +29,5 @@ export function applyMosaicWallPanePick<T extends Record<string, unknown>>(
+   deps: MosaicPanePickDeps,
+ ): T {
+   const withPick = cfg as T & { onPanePick?: MosaicOnPanePick };
+-  withPick.onPanePick = (fromId, toId) => pickMosaicPaneWith(deps, fromId, toId);
+   return withPick;
+ }

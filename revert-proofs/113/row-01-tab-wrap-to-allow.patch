@@ -1,0 +1,23 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 1c321c7e..937b1cb8 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -378,17 +378,16 @@ function openMediaAsk(waiters: Waiter[]): void {
+       return;
+     }
+     modal.close("allow");
+   });
+ 
+   document.body.classList.add("modal-open");
+   document.body.appendChild(modal);
+   modal.showModal();
+-  allow.focus();
+ }
+ 
+ async function flush(): Promise<void> {
+   const batch = queue;
+   queue = [];
+   if (!batch.length) return;
+ 
+   if (open) {
+

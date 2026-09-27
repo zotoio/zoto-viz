@@ -1,0 +1,30 @@
+diff --git a/service/access.py b/service/access.py
+index 5406219..c60b561 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -206,16 +206,6 @@ def host_header_raw(request: web.Request) -> str:
+     return (request.headers.get("Host") or "").strip()
+ 
+ 
+-def host_ok(request: web.Request) -> bool:
+-    raw = host_header_raw(request)
+-    if not raw or _HOST_INJECTION.search(raw):
+-        return False
+-    host = header_hostname(raw)
+-    if request.app.get("insecure_lan"):
+-        return bool(host)
+-    return is_loopback_name(host)
+-
+-
+ def pack_asset_csp_origin(request: web.Request) -> str:
+     """Origin for sandbox CSP script-src (never raw untrusted Host fragments)."""
+     from .request_guard import validated_http_origin
+@@ -257,8 +247,6 @@ def csrf_ok(request: web.Request) -> bool:
+ 
+ def _deny(msg: str, status: int = 403) -> web.Response:
+     resp = web.json_response({"error": msg}, status=status)
+-    attach_pack_asset_json_headers(resp)
+-    attach_frame_embed_policy(resp)
+     return resp
+ 
+ 

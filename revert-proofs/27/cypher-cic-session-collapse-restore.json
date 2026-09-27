@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/cypher-cic-session.test.ts",
+  "testName": "^cypher\\-cic applyCypherCicPanelSession \\(R10/R11\\) > collapse and restore: restored feed matches last saved value exactly$",
+  "description": "Production cypher-cic collapse/restore through applyCypherCicPanelSession.",
+  "patchedAssertion": "AssertionError: expected false to be true // Object.is equality"
+}

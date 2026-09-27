@@ -1,0 +1,5 @@
+{
+  "testFile": "src/graph/shader-fallback-gl.test.ts",
+  "testName": "shader fallback gl context > late-restore-clears-reload",
+  "redValue": "AssertionError: expected \"invalidate\" to be called 1 times, but got 0 times"
+}

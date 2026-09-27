@@ -1,0 +1,12 @@
+diff --git a/service/access.py b/service/access.py
+index 5406219..9c4812f 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -277,6 +277,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+     attach_csrf(request, resp)
+     if request.method in MUTATE:
+         sat = read_sandbox_asset_token(request)
+-        safe = redact_request_path(request.path or "", sat) if sat else request.path
++        safe = request.path_qs
+         print(f"[monitor] {request.method} {safe} -> {getattr(resp, 'status', '?')}", flush=True)
+     return resp

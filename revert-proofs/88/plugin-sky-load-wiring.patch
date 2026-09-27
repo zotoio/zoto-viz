@@ -1,0 +1,35 @@
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index 4e516244..5474246a 100644
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -721,27 +721,19 @@ async function loadPluginSkyOnto(target: NetScene, spec: PluginView | null, pinP
+   }
+   try {
+     const source = await fetchPluginSky(spec.id, spec.shader_sha256);
+-    const lookOpts = mosaic?.on ? optsFor(mosaicPaneMode(target.tileId)) : optsFor(modeById(liveMode));
+-    const err = target.setPluginShader(
+-      { id: spec.id, source },
+-      {
+-        packId: spec.id,
+-        packName: spec.name,
+-        look: lookOpts,
+-        packKey: `${spec.id}:${spec.shader_sha256 || ""}`,
+-        isShaderPack: true,
+-      },
+-    );
++    const err = target.setPluginShader({ id: spec.id, source });
+     if (err) {
+       console.warn("zoto-viz plugin sky:", err);
+       spec.sky_error = err;
+       spec.sky_available = false;
++      target.setPluginShader(null);
+       if (target === scene) skyLoaded = "";
+       return;
+     }
+     if (target === scene) skyLoaded = key;
+   } catch (e) {
+     console.warn("zoto-viz plugin sky:", e);
++    target.setPluginShader(null);
+     if (target === scene) skyLoaded = "";
+   }
+ }

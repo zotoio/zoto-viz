@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/pack-mirror-readback.test.ts",
+  "testName": "^pack mirror readback 16:9 letterbox \\(SwiftShader\\) > 1:1 mirror tile pr 1: bar pixels match surface panel colour, first scene row at offset$",
+  "description": "SwiftShader harness: letterbox bar centres match surface panel token; revert stretches scene and bar colour / row offset fail expect()."
+}

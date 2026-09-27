@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+index 5586cd9c..afcf2265 100644
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -467,6 +467,7 @@ export class Mosaic {
+   /** Change one pane. Picking a view already on the wall swaps those two tiles. */
+   setPaneView(fromId: string, toId: string): boolean {
+     if (!this.tree || !toId || fromId === toId) return false;
++    return false; // revert swap
+     const next = nextPaneTiles(this.tileIds, fromId, toId);
+     if (next.join("\0") === this.tileIds.join("\0")) return false;
+     if (!next.includes(fromId)) releasePanelView(fromId);

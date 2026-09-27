@@ -1,0 +1,11 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -267,7 +267,6 @@
+     for check in _INSTALL_CHECKS:
+         check(ctx)
+     _check_pack_install_warnings(ctx)
+-    _check_bundle_allowlist(ctx)
+     _check_sdk_contract(ctx)
+ 
+ 

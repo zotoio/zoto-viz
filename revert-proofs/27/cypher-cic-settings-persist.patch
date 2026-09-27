@@ -1,0 +1,13 @@
+diff --git a/web/src/app/cypher-cic-panels.ts b/web/src/app/cypher-cic-panels.ts
+index 15c8621..d4e5f6a 100644
+--- a/web/src/app/cypher-cic-panels.ts
++++ b/web/src/app/cypher-cic-panels.ts
+@@ -42,7 +42,7 @@ export function applyCypherCicPanelSession(
+   );
+   holder.session = begin.session;
+   settings.setCypherCicPanelCollapsed(true);
+-  if (begin.hideFeed) settings.setFeedOn(false, { persist: false });
++  if (begin.hideFeed) settings.setFeedOn(false, { persist: true });
+   if (begin.hideChat) settings.setChatOn(false, { persist: false });
+ }
+ 

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-focus.chromium.test.ts",
+  "testName": "keeps the Reload notice action unreachable while the dialog is open",
+  "description": "Revert production guard (row-02-reload-unreachable)",
+  "red": "AssertionError: expected '.wall-notice-action' not to be '.wall-notice-action' // Object.is equality"
+}

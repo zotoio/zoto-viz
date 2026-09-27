@@ -1,0 +1,7 @@
+{
+  "row": "N4 revert drop flicker from slot comparison",
+  "testName": "^nixie wall clock rows > N4: look option keys \u2014 one parse per change, literal key list$",
+  "excerpt": "AssertionError: expected 3 to be 4 // Object.is equality",
+  "testFile": "web/src/plugins/nixie-wall-clock.test.ts",
+  "patchedAssertion": "AssertionError: expected 3 to be 4 // Object.is equality"
+}

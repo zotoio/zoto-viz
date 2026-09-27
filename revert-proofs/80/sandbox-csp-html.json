@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_pack_assets_sandbox_csp.py::PackAssetsSandboxCspTests::test_sandbox_html_csp_directives",
+  "description": "Sandbox bootstrap CSP locked down.",
+  "timeoutSec": 60,
+  "red": "assert \"'self' blob:\" not in \"default-src...stors 'self'\""
+}

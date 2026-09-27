@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/plugin-ui.test.ts",
+  "testName": "fillPluginFields > field edited visible label string",
+  "description": "Visible edited cue must be exactly Edited beside the field label",
+  "red": "AssertionError: expected 'Changed' to be 'Edited' // Object.is equality"
+}

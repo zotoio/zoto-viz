@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-install-retry.test.ts",
+  "testName": "pack install retry UX > success: removes blocked row and appends history line",
+  "description": "success: removes blocked row and appends history line",
+  "patchedFailure": "AssertionError: expected [ { \u2026(11) } ] to have a length of +0 but got 1"
+}

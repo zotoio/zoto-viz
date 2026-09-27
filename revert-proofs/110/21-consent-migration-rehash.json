@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_consent_survives_pack_tree_hash_migration",
+  "description": "Consent tree hash migrated once per record (boot2 reads 0 bytes).",
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:792: AssertionError: consent migration second boot silent"
+}

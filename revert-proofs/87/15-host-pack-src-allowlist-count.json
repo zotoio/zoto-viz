@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-lint.test.ts",
+  "testName": "pack lint guardrails > HOST_PACK_SRC_IMPORT_ALLOWLIST only shrinks (pinned debt count)",
+  "description": "HOST_PACK_SRC_IMPORT_ALLOWLIST count is pinned so debt can only shrink.",
+  "patchedFailure": "AssertionError: expected 7 to be +0 // Object.is equality"
+}

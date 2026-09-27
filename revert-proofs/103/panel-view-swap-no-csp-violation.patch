@@ -1,0 +1,12 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+index 5586cd9c..38c75217 100644
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -469,6 +469,7 @@ export class Mosaic {
+     if (!this.tree || !toId || fromId === toId) return false;
+     const next = nextPaneTiles(this.tileIds, fromId, toId);
+     if (next.join("\0") === this.tileIds.join("\0")) return false;
++    return false;
+     if (!next.includes(fromId)) releasePanelView(fromId);
+     this.assignViews(next);
+     return true;

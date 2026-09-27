@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-lint.test.ts",
+  "testName": "pack lint guardrails > off-allowlist inline zoto declare fails disallowedLegacyZoto guard",
+  "description": "disallowedLegacyZoto must block declare const zoto on packs not on LEGACY_DECLARE_ZOTO_PACK_IDS.",
+  "patchedFailure": "AssertionError: expected +0 to deeply equal 1"
+}

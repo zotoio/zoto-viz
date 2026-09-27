@@ -1,0 +1,16 @@
+diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
+index dcd4781..607297b 100644
+--- a/web/src/graph/pack-mirror-gl.ts
++++ b/web/src/graph/pack-mirror-gl.ts
+@@ -155,7 +155,10 @@ export class PackTexturePresenter {
+   ): CssRect {
+     const innerTd = this.scratch.innerTd;
+     if (opts.letterbox) {
+-      letterboxInnerRectInto(dst, contentAspect, innerTd);
++      innerTd.x = 0;
++      innerTd.y = 0;
++      innerTd.w = dst.w;
++      innerTd.h = dst.h;
+     } else {
+       innerTd.x = 0;
+       innerTd.y = 0;

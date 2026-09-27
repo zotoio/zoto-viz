@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/plugin-consent-sync.test.ts",
+  "testName": "plugin consent sync (one page subscription) > stops the shared poll when no tiles are waiting",
+  "description": "Revert disarming consent poll when pending clears",
+  "red": {
+    "actual": true,
+    "expected": false
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected true to be false // Object.is equality"
+}

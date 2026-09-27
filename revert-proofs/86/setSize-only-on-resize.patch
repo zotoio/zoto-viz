@@ -1,0 +1,21 @@
+diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
+index dcd4781..00d90be 100644
+--- a/web/src/graph/pack-mirror-gl.ts
++++ b/web/src/graph/pack-mirror-gl.ts
+@@ -259,8 +259,14 @@ export class PackMirrorSession {
+       return this.rt;
+     }
+     if (pw !== this.pw || ph !== this.ph) {
+-      this.rt.setSize(pw, ph);
+-      packMirrorResourceStats.renderTargetSetSize += 1;
++      this.rt.dispose();
++      packMirrorResourceStats.renderTargetDisposed += 1;
++      this.rt = new THREE.WebGLRenderTarget(pw, ph, {
++        depthBuffer: true,
++        stencilBuffer: false,
++        samples,
++      });
++      packMirrorResourceStats.renderTargetCreated += 1;
+       this.pw = pw;
+       this.ph = ph;
+     }

@@ -1,0 +1,12 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/switch-pane-view.test.ts",
+  "testName": "switchPaneView > does not teardown the from-view when it remains tiled after a swap",
+  "description": "Revert skip teardown when swapped-from id stays on wall",
+  "red": {
+    "actual": 1,
+    "expected": 0
+  },
+  "project": "web",
+  "redLine": "AssertionError: expected [ [ 'plugin:topology' ] ] to have a length of +0 but got 1"
+}
