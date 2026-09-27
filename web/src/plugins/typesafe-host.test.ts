@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { StateMsg } from "../core/types";
+import { resetVizClockInjectors, setVizWallClockInjector } from "../core/viz-clock";
 import { VIZ_FRAME_BUDGET_MS } from "../plugins/viz-host";
 import {
   TYPESAFE_HEADROOM_MS,
@@ -240,5 +241,22 @@ describe("typesafe opt-in", () => {
     await host.tick(minimalState(), goodPresent);
     expect(sense).toHaveBeenCalledTimes(1);
     expect(host.pluginStateSlice()?.typesafe.ok).toBe(true);
+  });
+
+  it("shadow timestamp uses vizFrameEpochSec (wall clock injector)", async () => {
+    resetVizClockInjectors();
+    setVizWallClockInjector(() => 4_250);
+    withProxy();
+    setTypeSafeSdkFactory(async () => ({ sense: vi.fn(async () => ({ answer: { ok: true } })) }));
+
+    const host = new TypeSafeHost();
+    host.configure({
+      packHasCap: true,
+      enable: parseTypeSafeEnable("?typesafe=1"),
+    });
+
+    await host.tick(minimalState(0), goodPresent);
+    expect(host.pluginStateSlice()?.typesafe.t).toBe(4.25);
+    resetVizClockInjectors();
   });
 });

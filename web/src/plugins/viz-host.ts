@@ -1,4 +1,7 @@
 import type { Device, Flow, StateMsg } from "../core/types";
+import type { Device, StateMsg } from "../core/types";
+import { vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
+import { type MonoMs, monoMs, monoMsDeltaSec } from "../core/viz-time";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
 import type { Device, StateMsg } from "../core/types";
 import { vizClockMs } from "../core/viz-clock";
@@ -634,6 +637,18 @@ function buildVizFrameCore(
   resetVizDecimationDropStats();
   const t = state.ts || vizClockMs() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
+/**
+ * @param prevVizClockMs previous {@link vizClockMs} sample from the last delivered frame (ms), not wall epoch.
+ */
+export function buildVizFrame(
+  state: StateMsg,
+  prevVizClockMs: MonoMs = monoMs(0),
+  audio = 0,
+  bind?: SourceBind | Record<string, string>,
+): VizDataFrame {
+  const t = vizFrameEpochSec(state.ts);
+  const nowClock = vizClockMs();
+  const dt = prevVizClockMs > monoMs(0) ? monoMsDeltaSec(prevVizClockMs, nowClock) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
   const headlineEligible = countEligibleSourceHeadlines(state.sources, parsed);
   const rawHeadlines = sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed);
@@ -673,7 +688,7 @@ export function buildVizFrame(
 /** Build a live frame and merge idle demo slices when monitor traffic is absent. */
 export function buildVizFrameForPlugin(
   state: StateMsg,
-  prevTs: number,
+  prevVizClockMs: MonoMs,
   audio: number,
   idle: VizIdleConfig,
   packContract: PackVizContractVersion | number = 1,
@@ -692,6 +707,7 @@ export function buildVizFrameForPlugin(
   const frame = mergeVizIdleFrame(buildVizFrameCore(state, prevTs, audio, bind), idle);
   bumpFrameObject();
   return frame;
+  return mergeVizIdleFrame(buildVizFrame(state, prevVizClockMs, audio, bind), idle);
 }
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
@@ -715,7 +731,7 @@ export class VizFrameBudget {
   private _lastGpuMs = 0;
   private readonly scratch = new Float32Array(BUDGET_SAMPLE_CAP);
 
-  constructor(now: () => number = () => performance.now()) {
+  constructor(now: () => number = vizClockMs) {
     this.now = now;
   }
 
@@ -835,13 +851,13 @@ export class VizFrameBudget {
    */
   deliver(
     state: StateMsg,
-    prevTs: number,
+    prevVizClockMs: MonoMs,
     audio: number,
     onFrame: (frame: VizDataFrame) => void,
-    build: (state: StateMsg, prevTs: number, audio: number) => VizDataFrame = buildVizFrame,
+    build: (state: StateMsg, prevVizClockMs: MonoMs, audio: number) => VizDataFrame = buildVizFrame,
   ): VizDataFrame | null {
     const t0 = this.now();
-    const frame = build(state, prevTs, audio);
+    const frame = build(state, prevVizClockMs, audio);
     this._lastBuilt = frame;
     const over = this.record(this.now() - t0);
     if (over) {

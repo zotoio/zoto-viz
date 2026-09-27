@@ -116,6 +116,7 @@ import {
 } from "../plugins/typesafe-host";
 import { runPackFrameHandler } from "../plugins/viz-pack-host";
 import { deliverVizFrameToPackTiles } from "../plugins/viz-frame-pack-deliver";
+import { runPackFrameHandler, syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -124,6 +125,7 @@ import { stereoAiFrame } from "../plugins/stereo-ai";
 import { FeedTitleCube } from "../plugins/feed-title-cube";
 import { NestCamsLive } from "../plugins/nest-cams-live";
 import { parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
+import { monoMs, type MonoMs } from "../core/viz-time";
 import { applyInstance } from "../plugins/instances";
 import { VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
@@ -133,6 +135,10 @@ import { mountWallNoticeRegion } from "../core/wall-notice-region";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentFrameStats, presentInterval } from "../core/present-clock";
+import { markPresent, presentInterval } from "../core/present-clock";
+import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
+import { vizClockMs } from "../core/viz-clock";
+import { broadcastPluginUbo } from "./viz-plugin-ubo";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -450,7 +456,7 @@ let settings!: Settings;
 const sandbox = new PluginSandbox();
 const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
-let vizFrameTs = 0;
+let vizFrameClockMs: MonoMs = monoMs(0);
 const vizBudget = new VizFrameBudget();
 
 type VizDevFixtureModule = typeof import("../plugins/viz-dev-fixture");
@@ -583,7 +589,7 @@ scene.afterLook = () => {
     );
     vizWriter.writeBuffer(0, drive.slot0);
     vizWriter.writeBuffer(1, drive.slot1);
-    scene.setPluginUboBuffer(vizWriter.ubo);
+    broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
     return;
   }
   if (mode.pluginId !== "stereo-gram" || !vizWriter) {
@@ -610,7 +616,7 @@ scene.afterLook = () => {
   // The sky only draws; the scene is built here once per frame.
   const frame = buildStereoFrame({ timing, clock, act: drive[0]!, level: heard.level, bins: stereoBins, ai });
   for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
-  scene.setPluginUboBuffer(vizWriter.ubo);
+  broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
 };
 let v1AdapterPackId: string | null = null;
 const vizFrameScope = new VizFrameScopeCache({
@@ -645,13 +651,14 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
     ? defaultVizContract() : undefined);
   const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
   vizWriter = writer;
-  if (resetFrameTs) vizFrameTs = 0;
+  if (resetFrameTs) vizFrameClockMs = monoMs(0);
   if (resetBudget) {
     vizBudget.reset();
     vizHud.resetSkipBaseline();
   }
   if (writer && preserveUbo && !resetFrameTs) scene.setPluginUboBuffer(writer.ubo);
   syncRenderGovernor(spec);
+  if (writer && preserveUbo && !resetFrameTs) broadcastPluginUbo(scene, writer.ubo, mosaic?.on ? mosaic : null);
 }
 function swapVizPack(packId: VizDemoPackId): void {
   if (modeById(pluginViewId(packId)).id === modeSel.value) return;
@@ -664,6 +671,7 @@ sandbox.handlers = {
   writeBuffer: (slot, data) => {
     tileHealth?.noteVizWrite();
     if (vizWriter?.writeBuffer(slot, data).ok) scene.setPluginUboBuffer(vizWriter.ubo);
+    if (vizWriter?.writeBuffer(slot, data).ok) broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
   },
   writeUniform: (name, value) => {
     tileHealth?.noteVizWrite();
@@ -1684,6 +1692,13 @@ function feed(m: StateMsg): void {
       }
       : buildLiveFrame;
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
+    const bind = packId === "hn-rain" || packId === "hn-term"
+      ? illustratedSourceBind(optsFor(mode))
+      : parseSourceBind(optsFor(mode));
+    const buildFrame = idle
+      ? (s: StateMsg, pt: MonoMs, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
+      : (s: StateMsg, pt: MonoMs, a: number) => buildVizFrame(s, pt, a, bind);
+    const frame = vizBudget.deliver(shown, vizFrameClockMs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       deliverVizPluginFrame({
         frame: f,
@@ -1732,6 +1747,7 @@ function feed(m: StateMsg): void {
         deliverMosaicDemoPacks(mosaic, f, modeById, pluginSpecForMode, optsFor);
       } else if (packId) {
         noteHostDirect("main");
+        syncVizPackRenderCanvas(renderHost.bufferPixelSize());
         runPackFrameHandler(packId, f, {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
@@ -1741,8 +1757,8 @@ function feed(m: StateMsg): void {
         clearVizDrive("main");
       }
     }, buildFrame);
+    if (frame) vizFrameClockMs = monoMs(vizClockMs());
     if (frame) {
-      vizFrameTs = frame.t;
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }
@@ -1772,6 +1788,7 @@ function feed(m: StateMsg): void {
       now,
       renderScale,
       governorEnabled: govOn,
+      now: vizClockMs(),
     });
     if (!mosaic?.on) {
       vizHud.tick({
@@ -1826,6 +1843,9 @@ function setRedaction(on: boolean): void {
   mosaic?.eachGraph((s) => { if (s !== scene) s.refresh(); });
 }
 setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
+{
+  bootNixieRealWallClock();
+}
 
 // ---------------------------------------------------------------- settings cog: allow/block filters + the moved show / privacy switches
 

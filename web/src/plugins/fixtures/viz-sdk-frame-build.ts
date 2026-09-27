@@ -1,3 +1,4 @@
+import { monoMs } from "../../core/viz-time";
 import type { Device, Flow, StateMsg } from "../../core/types";
 import type { VizDataFrame } from "../viz-host";
 import { buildVizFrame, buildVizFrameForPlugin } from "../viz-host";
@@ -447,6 +448,7 @@ export function vmLiveCaptureState(): StateMsg {
 export function buildVizSdkIdleFrame(): VizDataFrame {
   const state = emptyMonitorState(10);
   const raw = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE, 2);
+  const raw = buildVizFrameForPlugin(state, monoMs(0), 0, VIZ_SDK_HOST_IDLE);
   const map = scrubMapForFrame(state, raw);
   return scrubVizDataFrame(raw, map, state);
 }
@@ -501,6 +503,7 @@ function scrubIdleDemoSlices(frame: VizDataFrame): VizDataFrame {
   if (!frame.demo || !slices) return frame;
   const empty = emptyMonitorState(frame.t);
   const seed = buildVizFrameForPlugin(empty, 0, 0, VIZ_SDK_HOST_IDLE, 2);
+  const seed = buildVizFrameForPlugin(empty, monoMs(0), 0, VIZ_SDK_HOST_IDLE);
   const map = scrubMapForFrame(empty, seed);
   const scrubbed = scrubVizDataFrame(seed, map, empty);
   return {
@@ -513,7 +516,7 @@ function scrubIdleDemoSlices(frame: VizDataFrame): VizDataFrame {
   };
 }
 
-function buildLiveFrame(state: StateMsg, prevTs = 0, audio = 0.12): VizDataFrame {
+function buildLiveFrame(state: StateMsg, prevTs = monoMs(0), audio = 0.12): VizDataFrame {
   const raw = buildVizFrame(state, prevTs, audio);
   const map = scrubMapForFrame(state, raw);
   return scrubVizDataFrame(raw, map, state);
@@ -521,6 +524,8 @@ function buildLiveFrame(state: StateMsg, prevTs = 0, audio = 0.12): VizDataFrame
 
 function buildPluginQuietFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFrame {
   const raw = buildVizFrameForPlugin(state, prevTs, audio, VIZ_SDK_HOST_IDLE, 2);
+function buildPluginQuietFrame(state: StateMsg, prevTs = monoMs(0), audio = 0): VizDataFrame {
+  const raw = buildVizFrameForPlugin(state, prevTs, audio, VIZ_SDK_HOST_IDLE);
   return scrubIdleDemoSlices(raw);
 }
 

@@ -292,6 +292,15 @@ export class Mosaic {
 
   paneElement(slotId: string): HTMLElement | undefined {
     return this.panes.get(slotId);
+  private _tileIdsCache: string[] = [];
+  private _tileIdsTree: MosaicNode | null | undefined;
+
+  get tileIds(): string[] {
+    if (this.tree !== this._tileIdsTree) {
+      this._tileIdsTree = this.tree;
+      this._tileIdsCache = this.tree ? leafIds(this.tree) : [];
+    }
+    return this._tileIdsCache;
   }
   get layout(): MosaicLayoutPatch {
     return {

@@ -88,6 +88,15 @@ export interface HostedView {
 /** Software panes: top-left device pixels. GPU panes: GL bottom-left (`readPixels`). */
 export type Viewport = DeviceRect | GlRect;
 
+/**
+ * Canvas backing-store pixels (`canvas.width` / `canvas.height`), not CSS layout.
+ * Sized from the wall viewport × devicePixelRatio, capped at 1.5× for stability.
+ */
+export interface DevicePixelSize {
+  w: number;
+  h: number;
+}
+
 /** The methods NetScene uses on the shared (or owned) GPU object. */
 export class SoftwareGpu {
   readonly software = true as const;
@@ -216,6 +225,7 @@ export class RenderHost {
   private glContextLost = false;
   private readonly fallbackTileIds = new Set<string>();
   private fallbackTick: ReturnType<typeof setInterval> | null = null;
+  private readonly bufferPixels: DevicePixelSize = { w: 0, h: 0 };
 
   constructor(
     readonly wall: HTMLElement,
@@ -314,6 +324,13 @@ export class RenderHost {
 
   get viewCount(): number { return this.views.length; }
   get contextLost(): boolean { return this.glContextLost; }
+
+  /** Same object every call; dimensions refreshed from the canvas backing store. */
+  bufferPixelSize(): Readonly<DevicePixelSize> {
+    this.bufferPixels.w = this.canvas.width;
+    this.bufferPixels.h = this.canvas.height;
+    return this.bufferPixels;
+  }
 
   /** WebGL2 context, or null when lost / unavailable. */
   get gl(): WebGL2RenderingContext | null {
@@ -912,5 +929,7 @@ export class RenderHost {
     this.canvas.style.width = "100%";
     this.canvas.style.height = "100%";
     this.refreshCanvasDeviceHeight();
+    this.bufferPixels.w = this.canvas.width;
+    this.bufferPixels.h = this.canvas.height;
   }
 }

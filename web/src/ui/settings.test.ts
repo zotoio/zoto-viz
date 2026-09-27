@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { compileMatcher, Settings } from "./settings";
 import type { Device } from "../core/types";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
@@ -10,6 +10,10 @@ const d = (over: Partial<Device> = {}): Device => ({
 });
 
 describe("compileMatcher", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("matches CIDR, prefixes, names, and globs", () => {
     expect(compileMatcher("")(undefined, "1.1.1.1")).toBe(false);
     const cidr = compileMatcher("192.168.86.0/24");

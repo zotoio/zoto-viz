@@ -1,4 +1,6 @@
 import type { StateMsg } from "../core/types";
+import { setVizBuildCostInjector, vizClockMs } from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
 import { skipRatePerSec, vizHudMetric, type VizHudTick } from "../ui/viz-hud";
@@ -172,7 +174,7 @@ export function percentile(samples: number[], p: number): number {
 export function dogfoodTick(
   packId: VizDemoPackId,
   state: StateMsg,
-  prevTs: number,
+  prevVizClockMs: import("../core/viz-time").MonoMs,
   audio: number,
   budget: VizFrameBudget,
   writer: VizBufferWriter,
@@ -180,9 +182,9 @@ export function dogfoodTick(
   build: typeof buildVizFrame = buildVizFrame,
 ): DogfoodTickResult {
   const contract = DEMO_PACK_CONTRACTS[packId];
-  const idleBuild = (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(s, pt, a, contract.idle);
+  const idleBuild = (s: StateMsg, pt: import("../core/viz-time").MonoMs, a: number) => buildVizFrameForPlugin(s, pt, a, contract.idle);
   let buildCalls = 0;
-  const wrappedBuild = (s: StateMsg, pt: number, a: number) => {
+  const wrappedBuild = (s: StateMsg, pt: import("../core/viz-time").MonoMs, a: number) => {
     buildCalls++;
     if (buildSpy) buildSpy.calls++;
     return build === buildVizFrame ? idleBuild(s, pt, a) : build(s, pt, a);
@@ -194,7 +196,7 @@ export function dogfoodTick(
     writeParticles: (data, stride) => { writer.writeParticles(data, stride); },
   };
 
-  const frame = budget.deliver(state, prevTs, audio, (f) => runPackFrameHandler(packId, f, handlers), wrappedBuild);
+  const frame = budget.deliver(state, prevVizClockMs, audio, (f) => runPackFrameHandler(packId, f, handlers), wrappedBuild);
   return {
     delivered: frame !== null,
     frame,
@@ -238,11 +240,56 @@ export function hudTickFromBudget(
   };
 }
 
+/** Frames per pack in the fat-LAN deterministic soak (count gate, not wall time). */
+export const DOGFOOD_SOAK_FRAMES_PER_PACK = 120;
+
+/** Simulated host clock step — 60 Hz (ms). */
+export const DOGFOOD_SOAK_CLOCK_STEP_MS = 1000 / 60;
+
+/** Monitor fixture event period — one StateMsg tick per deliver at 60 Hz (ms). */
+export const DOGFOOD_SOAK_EVENT_PERIOD_MS = 1000 / 60;
+
+/**
+ * Injected per-deliver build cost (ms) for the fat-LAN soak. Hand-worked skips:
+ * 120 delivers × 4 ms ≤ 16.7 ms budget → 0 over-budget → skipped = 0, delivered = 120.
+ * HUD skip rate at simulated t = 120 × (1000/60) ms ≈ 2 s with 0 skip deltas → 0/s.
+ */
+export const DOGFOOD_SOAK_BUILD_COST_MS = 4;
+
+/** Injected build cost on every third deliver (0-based index i where i % 3 === 2). */
+export const DOGFOOD_SOAK_OVER_BUDGET_BUILD_COST_MS = 20;
+
+export const DOGFOOD_SOAK_PATTERN_PERIOD = 3;
+
+export function dogfoodSoakPatternedBuildCostMs(index: number): number {
+  return index % DOGFOOD_SOAK_PATTERN_PERIOD === 2
+    ? DOGFOOD_SOAK_OVER_BUDGET_BUILD_COST_MS
+    : DOGFOOD_SOAK_BUILD_COST_MS;
+}
+
+/**
+ * Tile cadence hand-work (see TILE_BUDGET_R4_PATTERN): 100 delivered, 20 skipped at 120 frames.
+ */
+export const DOGFOOD_SOAK_PATTERN_EXPECTED = {
+  delivered: 100,
+  skipped: 20,
+  /** Skip deltas in the final 1000 ms HUD window (20 total over 2 s). */
+  skipRatePerSec: 20,
+} as const;
+
 export interface DogfoodSoakOptions {
   state?: StateMsg;
   framesPerPack?: number;
   audio?: number;
   now?: () => number;
+  /** Advance `simTimeMs.value` by this much after each deliver (deterministic soak). */
+  clockStepMs?: number;
+  /** Backing store for `now()` when running on a simulated clock. */
+  simTimeMs?: { value: number };
+  /** Advance `state.ts` by this period each deliver (fixture event rate). */
+  eventPeriodMs?: number;
+  /** Fixed or per-index build ms; bypasses wall-clock measurement in {@link VizFrameBudget}. */
+  buildCostMs?: number | readonly number[] | ((index: number) => number);
   /** Synthetic vsync step for soft-FPS honesty tests (present-to-present skips). */
   presentStepMs?: number;
 }
@@ -256,6 +303,25 @@ export function dogfoodWithinBudget(
   const buildOk = buildP95 <= VIZ_FRAME_BUDGET_MS;
   const presentOk = presentP95 <= VIZ_FRAME_BUDGET_MS;
   return (buildOk && presentOk) || skipped > 0;
+}
+
+function resolveBuildCostInjector(
+  buildCostMs: DogfoodSoakOptions["buildCostMs"],
+): ((index: number) => number) | undefined {
+  if (buildCostMs == null) return undefined;
+  if (typeof buildCostMs === "number") return () => buildCostMs;
+  if (typeof buildCostMs === "function") return buildCostMs;
+  const table = buildCostMs;
+  return (index) => table[Math.min(index, table.length - 1)]!;
+}
+
+function buildCostSample(
+  buildCostMs: DogfoodSoakOptions["buildCostMs"],
+  index: number,
+  measuredMs: number,
+): number {
+  const inject = resolveBuildCostInjector(buildCostMs);
+  return inject ? inject(index) : measuredMs;
 }
 
 /**
@@ -350,82 +416,96 @@ export function formatDogfoodCountGateReport(result: DogfoodCountGateResult): st
 
 /**
  * Local wall-clock soak (opt-in via `ZOTO_VIZ_PERF=1` / `pnpm dogfood:perf`).
+ * Dogfood soak: fat-LAN fixture, all demo packs. Use {@link buildCostMs} +
+ * injected `now` for deterministic count gates; omit build costs only on local GPU runs.
  */
 export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult {
-  const state = opts.state ?? fatLanFixture();
-  const framesPerPack = opts.framesPerPack ?? 120;
+  const baseState = opts.state ?? fatLanFixture();
+  const framesPerPack = opts.framesPerPack ?? DOGFOOD_SOAK_FRAMES_PER_PACK;
   const audio = opts.audio ?? 0.15;
-  const now = opts.now ?? (() => performance.now());
+  const now = opts.now ?? vizClockMs;
   const presentStepMs = opts.presentStepMs;
+  const clockStepMs = opts.clockStepMs;
+  const eventPeriodMs = opts.eventPeriodMs;
+  const buildCostOpt = opts.buildCostMs;
+  const simTimeMs = opts.simTimeMs;
 
-  const packs: DogfoodPackStats[] = [];
+  const costInjector = resolveBuildCostInjector(buildCostOpt);
+  if (costInjector) setVizBuildCostInjector(costInjector);
 
-  for (const packId of VIZ_DEMO_PACKS) {
-    const contract = DEMO_PACK_CONTRACTS[packId];
-    const budget = new VizFrameBudget(now);
-    const writer = new VizBufferWriter(contract);
-    const buildTimes: number[] = [];
-    const presentTimes: number[] = [];
-    let prevTs = 0;
-    let delivered = 0;
-    let skippedStart = 0;
-    const skipSamples: { t: number; n: number }[] = [];
-    const t0 = now();
-    let presentT = 0;
+  try {
+    const packs: DogfoodPackStats[] = [];
 
-    for (let i = 0; i < framesPerPack; i++) {
-      const tickT0 = now();
-      const tick = dogfoodTick(packId, state, prevTs, audio, budget, writer);
-      buildTimes.push(now() - tickT0);
-      if (tick.delivered && tick.frame) {
-        delivered++;
-        prevTs = tick.frame.t;
+    for (const packId of VIZ_DEMO_PACKS) {
+      const contract = DEMO_PACK_CONTRACTS[packId];
+      const budget = new VizFrameBudget(now);
+      const writer = new VizBufferWriter(contract);
+      const buildTimes: number[] = [];
+      let prevVizClockMs = monoMs(0);
+      let delivered = 0;
+      let skippedStart = 0;
+      const skipSamples: { t: number; n: number }[] = [];
+      let presentT = 0;
+
+      for (let i = 0; i < framesPerPack; i++) {
+        const tickState = eventPeriodMs != null
+          ? { ...baseState, ts: baseState.ts + (i * eventPeriodMs) / 1000 }
+          : baseState;
+        const tickT0 = now();
+        const tick = dogfoodTick(packId, tickState, prevVizClockMs, audio, budget, writer);
+        buildTimes.push(buildCostSample(buildCostOpt, i, now() - tickT0));
+        if (tick.delivered && tick.frame) {
+          delivered++;
+          prevVizClockMs = monoMs(now());
+        }
+        if (presentStepMs != null) {
+          presentT += presentStepMs;
+          budget.markPresent(presentT);
+        }
+        const delta = budget.stats.skipped - skippedStart;
+        if (delta > 0) {
+          skipSamples.push({ t: now(), n: delta });
+          skippedStart = budget.stats.skipped;
+        }
+        if (clockStepMs != null) {
+          if (!simTimeMs) throw new Error("clockStepMs requires simTimeMs");
+          simTimeMs.value += clockStepMs;
+        }
       }
-      if (presentStepMs != null) {
-        presentT += presentStepMs;
-        const presentT0 = now();
-        budget.markPresent(presentT);
-        presentTimes.push(now() - presentT0);
-      }
-      const delta = budget.stats.skipped - skippedStart;
-      if (delta > 0) {
-        skipSamples.push({ t: now(), n: delta });
-        skippedStart = budget.stats.skipped;
-      }
+
+      const skipped = budget.stats.skipped;
+      const p95 = percentile(buildTimes, 0.95);
+      const presentP95 = presentStepMs != null ? presentStepMs : 0;
+      const withinBudget = dogfoodWithinBudget(p95, presentP95, skipped);
+      const lastHud = hudTickFromBudget(packId, packId, baseState, budget, now());
+      const metric = vizHudMetric(packId, lastHud.frame, baseState);
+
+      packs.push({
+        packId,
+        frames: framesPerPack,
+        delivered,
+        skipped,
+        buildMs: {
+          p50: percentile(buildTimes, 0.5),
+          p95,
+          max: buildTimes.length ? Math.max(...buildTimes) : 0,
+        },
+        skipRatePerSec: skipRatePerSec(skipSamples, now()),
+        withinBudget,
+        hudMetric: metric,
+      });
     }
 
-    const skipped = budget.stats.skipped;
-    const p95 = percentile(buildTimes, 0.95);
-    const presentP95 = presentStepMs != null
-      ? presentStepMs
-      : percentile(presentTimes, 0.95);
-    const withinBudget = dogfoodWithinBudget(p95, presentP95, skipped);
-    const lastHud = hudTickFromBudget(packId, packId, state, budget, now());
-    const metric = vizHudMetric(packId, lastHud.frame, state);
-
-    packs.push({
-      packId,
-      frames: framesPerPack,
-      delivered,
-      skipped,
-      buildMs: {
-        p50: percentile(buildTimes, 0.5),
-        p95,
-        max: buildTimes.length ? Math.max(...buildTimes) : 0,
-      },
-      skipRatePerSec: skipRatePerSec(skipSamples, now()),
-      withinBudget,
-      hudMetric: metric,
-    });
+    return {
+      fixture: { devices: baseState.devices.length, flows: baseState.flows.length },
+      budgetMs: VIZ_FRAME_BUDGET_MS,
+      framesPerPack,
+      packs,
+      allWithinBudgetOrHonestSkips: packs.every((p) => p.withinBudget),
+    };
+  } finally {
+    if (costInjector) setVizBuildCostInjector(undefined);
   }
-
-  return {
-    fixture: { devices: state.devices.length, flows: state.flows.length },
-    budgetMs: VIZ_FRAME_BUDGET_MS,
-    framesPerPack,
-    packs,
-    allWithinBudgetOrHonestSkips: packs.every((p) => p.withinBudget),
-  };
 }
 
 /** Mid-run pack swap sequence: preserve vizFrameTs, skip counters, and UBO mirror. */
@@ -433,7 +513,7 @@ export function runPackSwapPreserve(
   state: StateMsg,
   fromPack: VizDemoPackId,
   toPack: VizDemoPackId,
-  now: () => number = () => performance.now(),
+  now: () => number = vizClockMs,
 ): {
   frameTs: number;
   skipped: number;
@@ -443,28 +523,27 @@ export function runPackSwapPreserve(
   writer.writeBuffer(0, [1, 2, 3, 4]);
 
   const budget = new VizFrameBudget(now);
-  let frameTs = 0;
-  const tick1 = dogfoodTick(fromPack, state, frameTs, 0.1, budget, writer);
-  if (tick1.frame) frameTs = tick1.frame.t;
+  let prevClock = monoMs(0);
+  const tick1 = dogfoodTick(fromPack, state, prevClock, 0.1, budget, writer);
+  prevClock = monoMs(now());
 
-  dogfoodTick(fromPack, state, frameTs, 0.1, budget, writer);
+  dogfoodTick(fromPack, state, prevClock, 0.1, budget, writer);
   const uboBeforeSwap = writer.ubo.slice();
 
   const bound = hostBindOnPackSwap(
     writer,
     DEMO_PACK_CONTRACTS[toPack],
-    frameTs,
+    0,
     budget,
     true,
   );
   const nextWriter = bound.writer!;
-  frameTs = bound.frameTs;
   const uboMatch = Array.from(nextWriter.ubo).every((v, i) => v === uboBeforeSwap[i]);
 
-  dogfoodTick(toPack, state, frameTs, 0.1, budget, nextWriter);
+  dogfoodTick(toPack, state, prevClock, 0.1, budget, nextWriter);
 
   return {
-    frameTs,
+    frameTs: tick1.frame?.t ?? 0,
     skipped: budget.stats.skipped,
     uboMatch,
   };

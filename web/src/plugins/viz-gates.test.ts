@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { monoMs } from "../core/viz-time";
 import { toPluginView } from "./plugin-visualisation";
 import {
   VIZ_FRAME_BUDGET_MS,
@@ -10,6 +11,10 @@ import {
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 
 describe("viz merge gates", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("fat LAN fixture forces over-budget skip without calling sandbox.frame", () => {
     const fatLan = fatLanFixture();
     expect(fatLan.devices.length).toBeGreaterThanOrEqual(300);
@@ -20,11 +25,11 @@ describe("viz merge gates", () => {
     let tick = 0;
     const budget = new VizFrameBudget(() => times[tick++] ?? 999);
 
-    const ok = budget.deliver(fatLan, 0, 0, (f) => sandbox.frame(f), buildVizFrame);
+    const ok = budget.deliver(fatLan, monoMs(0), 0, (f) => sandbox.frame(f), buildVizFrame);
     expect(ok).not.toBeNull();
     expect(sandbox.frame).toHaveBeenCalledTimes(1);
 
-    const skipped = budget.deliver(fatLan, ok!.t, 0, (f) => sandbox.frame(f), buildVizFrame);
+    const skipped = budget.deliver(fatLan, monoMs(ok!.t), 0, (f) => sandbox.frame(f), buildVizFrame);
     expect(skipped).toBeNull();
     expect(budget.stats.overBudget).toBe(1);
     expect(budget.stats.skipped).toBe(1);
