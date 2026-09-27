@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
+  "testName": "^pack shared copy literals > shared pack scope note for two tiles ends with a full stop$",
+  "description": "Shared multi-tile scope note must end with a full stop.",
+  "redOutput": "AssertionError: expected 'all 2 Settings fixture tiles on this wall' to be 'all 2 Settings fixture tiles on this wall.' // Object.is equality"
+}

@@ -21,6 +21,6 @@ describe("hostModeById > duplicate mosaic slot ids", () => {
     const mode = hostModeById(slotId);
     expect(mode.id).toBe(slotId);
     expect(mode.pluginId).toBe("settings-fixture");
-    expect(mode.label).toBe(spec.name);
+    expect(mode.label).toBe(spec.packName);
   });
 });

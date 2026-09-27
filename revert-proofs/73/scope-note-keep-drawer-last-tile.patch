@@ -1,13 +1,12 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index d97c72c..58f0f29 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1748,7 +1748,7 @@ export class Settings {
+@@ -1811,7 +1811,7 @@ export class Settings {
      const packId = this.viewBind.spec.id;
      const focus = this.viewFocusId;
      const nextCount = countPackTiles(nextTiles, packId);
 -    if (nextCount === 0) {
 +    if (false && nextCount === 0) {
        const unsaved = this.viewPluginDirty;
-       const msg = unsaved ? packLastTileDiscardMessage(this.viewBind.spec.name) : null;
+       const msg = unsaved ? packLastTileDiscardMessage(this.viewBind.spec.packName) : null;
        this.teardownViewDrawerAfterLastPackTile(msg);

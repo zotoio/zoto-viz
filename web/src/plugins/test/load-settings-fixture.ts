@@ -4,7 +4,7 @@ import type { PluginView } from "../plugin";
 export function loadSettingsDeclFixture(): PluginView {
   return {
     id: "settings-fixture",
-    name: "Settings fixture",
+    packName: "Settings fixture",
     version: 1,
     engine: "graph",
     config: [

@@ -1,11 +1,12 @@
-diff --git a/web/src/plugins/pack-shared-copy.ts b/web/src/plugins/pack-shared-copy.ts
-index 7c16f8e..e045e8a 100644
---- a/web/src/plugins/pack-shared-copy.ts
-+++ b/web/src/plugins/pack-shared-copy.ts
-@@ -8,5 +8,5 @@ export function packLastTileDiscardMessage(packName: string): string {
+diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
+--- a/web/src/plugins/instances.ts
++++ b/web/src/plugins/instances.ts
+@@ -83,7 +83,7 @@ function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly st
  
- /** Per-tile instance drawer scope note (`textContent` only; pack name is embedded like discard copy). */
- export function perTilePackScopeNoteMessage(packName: string): string {
--  return `These settings apply to this tile only. Anything you change here overrides the shared ${packName} settings.`;
-+  return "These settings apply to this tile only.";
- }
+ export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
+   if (configStoredPerTile(spec)) {
+-    return perTilePackScopeNoteMessage(spec.packName);
++    return perTilePackScopeNoteMessage(spec.instanceLabel ?? spec.packName);
+   }
+   const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
+   if (shared < 2) return null;

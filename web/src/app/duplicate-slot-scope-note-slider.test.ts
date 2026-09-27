@@ -43,7 +43,7 @@ describe("duplicate slot shared config > plugin field persist", () => {
     const spec = loadSettingsDeclFixture();
     setPluginModes([
       compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
-      compilePlugin({ id: "topology", name: "Topology", version: 1, engine: "graph", base: "topology" }),
+      compilePlugin({ id: "topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
     ]);
     const settings = new Settings({ storePrefix: "zoto-scope-note-slider", onChange: () => {} });
     document.body.append(settings.el);

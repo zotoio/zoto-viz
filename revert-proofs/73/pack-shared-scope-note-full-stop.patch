@@ -1,0 +1,19 @@
+diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
+--- a/web/src/plugins/instances.ts
++++ b/web/src/plugins/instances.ts
+@@ -87,7 +87,7 @@
+   }
+
+   const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
+
+   if (shared < 2) return null;
+
+-  return `Changes apply to all ${shared} ${spec.packName} tiles on this wall.`;
+
++  return `Changes apply to all ${shared} ${spec.packName} tiles on this wall`;
+
+ }
+
+ 
+
+ export function parseInstances(raw: unknown): PluginInstance[] | undefined {

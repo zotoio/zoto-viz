@@ -29,7 +29,7 @@ describe("nest cams drawer chips", () => {
   it("device chips and selection survive duplicate pack count 2→3 without drawer rebuild", async () => {
     const nestSpec = {
       id: "nest-cams",
-      name: "Nest cams",
+      packName: "Nest cams",
       version: 1,
       engine: "graph" as const,
       config: [
@@ -42,8 +42,8 @@ describe("nest cams drawer chips", () => {
     };
     setPluginModes([
       compilePlugin(nestSpec),
-      compilePlugin({ id: "topology", name: "Topology", version: 1, engine: "graph", base: "topology" }),
-      compilePlugin({ id: "memory", name: "Memory", version: 1, engine: "graph", base: "memory" }),
+      compilePlugin({ id: "topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
+      compilePlugin({ id: "memory", packName: "Memory", version: 1, engine: "graph", base: "memory" }),
     ]);
     const settings = new Settings({ storePrefix: "zoto-nest-chips-stable", onChange: () => {} });
     document.body.append(settings.el);

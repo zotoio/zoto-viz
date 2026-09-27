@@ -1,20 +1,33 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
-@@ -1943,6 +1943,16 @@ export class Settings {
+@@ -1943,6 +1943,15 @@
            if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
+
            this.persistAnim();
+
+           this.animUi?.syncTiles();
+
++          if (!this.isOpen) return;
+
++          if (this.viewPluginDirty) {
+
++            const gain = this.viewHost?.querySelector<HTMLInputElement>(
+
++              '.plugin-layer[data-layer="view"] .slider input[type=range]',
+
++            );
+
++            gain?.focus();
+
++          } else {
+
++            this.mosaicLayoutPickerTrigger?.focus();
+
++          }
+
          }
-+        if (!this.isOpen) return;
-+        this.animUi?.syncTiles();
-+        if (this.viewPluginDirty) {
-+          const gain = this.viewHost?.querySelector<HTMLInputElement>(
-+            '.plugin-layer[data-layer="view"] .slider input[type=range]',
-+          );
-+          gain?.focus();
-+        } else {
-+          this.mosaicLayoutPickerTrigger?.focus();
-+        }
+
        });
+
        row.append(cap, sel);
-       host.appendChild(row);

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
+  "testName": "^applyInstance instanceLabel normalisation > stores undefined for whitespace-only instance labels$",
+  "description": "Whitespace-only instance labels must not be stored on the resolved spec.",
+  "redOutput": "AssertionError: expected '   ' to be undefined"
+}

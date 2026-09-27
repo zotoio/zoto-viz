@@ -1,0 +1,17 @@
+diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
+--- a/web/src/plugins/instances.ts
++++ b/web/src/plugins/instances.ts
+@@ -86,7 +86,6 @@
+     return perTilePackScopeNoteMessage(spec.packName);
+
+   }
+
+   const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
+
+-  if (shared < 2) return null;
+
+   return `Changes apply to all ${shared} ${spec.packName} tiles on this wall.`;
+
+ }
+
+ 

@@ -187,7 +187,7 @@ export function askPluginReview(spec: PluginView): Promise<"reviewed" | "authore
     const head = document.createElement("div");
     head.className = "mhead";
     const h = document.createElement("strong");
-    h.textContent = `Review “${spec.name}” before activating`;
+    h.textContent = `Review “${spec.packName}” before activating`;
     head.appendChild(h);
     const body = document.createElement("div");
     body.className = "ask-body";

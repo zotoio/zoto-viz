@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
   "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
-  "testName": "^pack shared copy literals > per-tile scope note renders hostile pack name as plain text$",
-  "description": "Pack scope note must set textContent (never innerHTML) so markup in the pack name stays plain text with no child nodes.",
-  "redOutput": "AssertionError: expected 1 to be +0 // Object.is equality"
+  "testName": "^pack shared copy literals > per-tile scope note renders pack name as plain text$",
+  "description": "Scope note must use textContent so hostile pack names stay plain text.",
+  "redOutput": "AssertionError: expected '' to be 'These settings apply to this tile only. Anything you change here overrides the shared <img src=x> settings.' // Object.is equality"
 }

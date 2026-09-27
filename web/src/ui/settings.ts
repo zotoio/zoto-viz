@@ -1813,7 +1813,7 @@ export class Settings {
     const nextCount = countPackTiles(nextTiles, packId);
     if (nextCount === 0) {
       const unsaved = this.viewPluginDirty;
-      const msg = unsaved ? packLastTileDiscardMessage(this.viewBind.spec.name) : null;
+      const msg = unsaved ? packLastTileDiscardMessage(this.viewBind.spec.packName) : null;
       this.teardownViewDrawerAfterLastPackTile(msg);
       return;
     }
@@ -1942,6 +1942,7 @@ export class Settings {
           this.anim.mosaicTiles = parseMosaicTiles(next);
           if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
           this.persistAnim();
+          this.animUi?.syncTiles();
         }
       });
       row.append(cap, sel);

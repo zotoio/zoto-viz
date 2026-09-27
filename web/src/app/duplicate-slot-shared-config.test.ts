@@ -8,7 +8,13 @@ import { compilePlugin } from "../plugins/plugin";
 import { Settings } from "../ui/settings";
 import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
 
+import { HEADLINES_PACK } from "../../test/fixtures/headlines-alt-feed";
+
 const PACK = "plugin:settings-fixture";
+
+function headlinesTileModeIds(count: number): string[] {
+  return Array.from({ length: count }, (_, i) => (i === 0 ? "plugin:headlines" : `plugin:headlines!${i}`));
+}
 
 describe("duplicate slot shared config > scope note when two tiles share one store", () => {
   beforeEach(() => {
@@ -22,12 +28,12 @@ describe("duplicate slot shared config > scope note when two tiles share one sto
       tileModeIds: ["plugin:settings-fixture", "plugin:settings-fixture!1"],
     };
     expect(packScopeNoteText(spec, scope)).toBe(
-      `Changes apply to all 2 ${spec.name} tiles on this wall`,
+      `Changes apply to all 2 ${spec.packName} tiles on this wall.`,
     );
     const host = document.createElement("div");
     fillPluginFields(host, spec, spec.config ?? [], () => {}, { wallScope: scope });
     expect(host.querySelector(".plugin-pack-scope-note")?.textContent).toBe(
-      `Changes apply to all 2 ${spec.name} tiles on this wall`,
+      `Changes apply to all 2 ${spec.packName} tiles on this wall.`,
     );
   });
 
@@ -38,6 +44,26 @@ describe("duplicate slot shared config > scope note when two tiles share one sto
     const host = document.createElement("div");
     fillPluginFields(host, spec, spec.config ?? [], () => {}, { wallScope: scope });
     expect(host.querySelector(".plugin-pack-scope-note")).toBeNull();
+  });
+
+  it.each([
+    { n: 1, tail: "", noteCount: 0, full: null as string | null },
+    { n: 2, tail: "all 2 Headlines tiles on this wall.", noteCount: 1, full: "Changes apply to all 2 Headlines tiles on this wall." },
+    { n: 4, tail: "all 4 Headlines tiles on this wall.", noteCount: 1, full: "Changes apply to all 4 Headlines tiles on this wall." },
+  ])("shared pack scope note when $n Headlines tiles are on the wall", ({ n, tail, noteCount, full }) => {
+    const scope = { mosaicOn: true, tileModeIds: headlinesTileModeIds(n) };
+    const noteText = packScopeNoteText(HEADLINES_PACK, scope);
+    if (noteText) {
+      expect(noteText.replace(/^Changes apply to /, "")).toBe(tail);
+    } else {
+      expect(tail).toBe("");
+    }
+    const host = document.createElement("div");
+    fillPluginFields(host, HEADLINES_PACK, HEADLINES_PACK.config ?? [], () => {}, { wallScope: scope });
+    expect(host.querySelectorAll(".plugin-pack-scope-note")).toHaveLength(noteCount);
+    if (full) {
+      expect(host.querySelector(".plugin-pack-scope-note")?.textContent).toBe(full);
+    }
   });
 });
 

@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/plugin.ts b/web/src/plugins/plugin.ts
+--- a/web/src/plugins/plugin.ts
++++ b/web/src/plugins/plugin.ts
+@@ -218,7 +218,7 @@ export interface PluginView {
+ }
+ 
+ export function tileDisplayName(spec: Pick<PluginView, "packName" | "instanceLabel">): string {
+-  return spec.instanceLabel ?? spec.packName;
++  return spec.packName;
+ }
+ 
+ const LOOK_ANIM_KEYS = [

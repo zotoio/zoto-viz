@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
+--- a/web/src/plugins/instances.ts
++++ b/web/src/plugins/instances.ts
+@@ -112,6 +112,7 @@ export function applyInstance(spec: PluginView, inst: PluginInstance): PluginVie
+   return {
+     ...spec,
+     instanceId: inst.id,
++    packName: inst.name || spec.packName,
+     instanceLabel: inst.name?.trim() || undefined,
+     hint: inst.hint || spec.hint,
+     look: spec.look,

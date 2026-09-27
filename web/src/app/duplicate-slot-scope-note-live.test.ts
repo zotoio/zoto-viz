@@ -27,9 +27,9 @@ function mountLiveFixture() {
   const spec = loadSettingsDeclFixture();
   setPluginModes([
     compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
-    compilePlugin({ id: "topology", name: "Topology", version: 1, engine: "graph", base: "topology" }),
-    compilePlugin({ id: "memory", name: "Memory", version: 1, engine: "graph", base: "memory" }),
-    compilePlugin({ id: "disk", name: "Disk", version: 1, engine: "graph", base: "disk" }),
+    compilePlugin({ id: "topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
+    compilePlugin({ id: "memory", packName: "Memory", version: 1, engine: "graph", base: "memory" }),
+    compilePlugin({ id: "disk", packName: "Disk", version: 1, engine: "graph", base: "disk" }),
   ]);
 
   const settings = new Settings({ storePrefix: "zoto-scope-note-live", onChange: () => {} });
@@ -135,7 +135,7 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     assertDrawerEditingStable(settings, viewLayer, gain, "7");
     expect(scopeNotes(settings)).toHaveLength(1);
     expect(scopeNotes(settings)[0]?.textContent).toBe(
-      `Changes apply to all 2 ${spec.name} tiles on this wall`,
+      `Changes apply to all 2 ${spec.packName} tiles on this wall.`,
     );
     settings.el.remove();
   });
@@ -224,7 +224,7 @@ describe("duplicate slot shared config > scope note follows live tile count whil
 
     expect(settings.isOpen).toBe(true);
     expect(consoleErrorSpy).not.toHaveBeenCalled();
-    expect(viewDrawerStatusLine(settings)?.textContent).toBe(DISCARD_MSG(spec.name));
+    expect(viewDrawerStatusLine(settings)?.textContent).toBe(DISCARD_MSG(spec.packName));
     expect(viewDrawerStatusLine(settings)?.classList.contains("fail")).toBe(false);
     expect(document.activeElement).toBe(layoutTrigger);
     expect(layoutTrigger.getAttribute("aria-label")).toBe("Layout");

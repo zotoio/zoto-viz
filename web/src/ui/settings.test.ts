@@ -107,7 +107,7 @@ describe("Settings panes", () => {
   it("shows plugin options and config knobs on This view", () => {
     const s = new Settings({ storePrefix: "zoto-viz-view-knobs", onChange: () => {} });
     s.bindView({
-      id: "lan-heat", name: "LAN heat", version: 1, engine: "graph", base: "talkers",
+      id: "lan-heat", packName: "LAN heat", version: 1, engine: "graph", base: "talkers",
       options: [{ key: "rank", label: "rank by", values: [["rate", "current rate"], ["bytes", "bytes"]], default: "rate" }],
       config: [{ key: "internet", label: "internet hosts", type: "select", values: [["dim", "dim"], ["hide", "hide"]], default: "dim" }],
     });
@@ -115,7 +115,7 @@ describe("Settings panes", () => {
     expect(pane?.textContent).toMatch(/rank by/);
     expect(pane?.textContent).toMatch(/internet hosts/);
     expect(pane?.querySelector("textarea[aria-label=prompt]")).toBeTruthy();
-    s.bindView({ id: "agent", name: "Agent", version: 1 });
+    s.bindView({ id: "agent", packName: "Agent", version: 1 });
     expect(s.el.querySelector('[data-pane="view"]')?.querySelector("textarea[aria-label=prompt]")).toBeTruthy();
     expect(s.el.querySelector('[data-pane="view"]')?.textContent).not.toMatch(/no extra settings/);
   });
@@ -134,7 +134,7 @@ describe("Settings panes", () => {
     const extra = document.createElement("button");
     extra.type = "button";
     extra.textContent = "source";
-    s.bindView({ id: "netpong", name: "NetPong", version: 1, engine: "netpong" }, undefined, null, [extra]);
+    s.bindView({ id: "netpong", packName: "NetPong", version: 1, engine: "netpong" }, undefined, null, [extra]);
     const pane = s.el.querySelector('[data-pane="view"]');
     expect(pane?.textContent).toMatch(/source/);
     const prompt = pane?.querySelector("textarea[aria-label=prompt]");
@@ -157,7 +157,7 @@ describe("Settings panes", () => {
     expect(view?.textContent).toMatch(/1×/);
     expect(view?.textContent).toMatch(/hero/);
     expect(s.el.querySelector('[data-pane="motion"]')?.textContent).not.toMatch(/assign a view to every pane/);
-    s.bindView({ id: "nest-cams", name: "Nest cams", version: 1, engine: "graph" });
+    s.bindView({ id: "nest-cams", packName: "Nest cams", version: 1, engine: "graph" });
     const thisView = s.el.querySelector('[data-pane="view"]');
     expect(thisView?.textContent).toMatch(/View/);
     expect(thisView?.textContent).toMatch(/Wall/);

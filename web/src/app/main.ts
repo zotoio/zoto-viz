@@ -65,6 +65,7 @@ import {
   viewSelectOptions,
   writePluginConfig,
   configStoreId,
+  tileDisplayName,
   type PluginView,
 } from "../plugins/plugin";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
@@ -639,7 +640,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     tsWatchHash = spec.hash;
     const m = modeById(modeSel.value);
     if (m.pluginId === spec.id) {
-      vizHud.setActive(spec.id, spec.name);
+      vizHud.setActive(spec.id, tileDisplayName(spec));
     }
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
@@ -888,7 +889,7 @@ function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: Plugin
   } else {
     paint();
   }
-  vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec?.name ?? m.label);
+  vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec ? tileDisplayName(spec) : m.label);
 }
 
 function renderLegend(m: ViewMode, opts: Record<string, string>): void {
@@ -1079,7 +1080,7 @@ function feed(m: StateMsg): void {
     if (!mosaic?.on) {
       vizHud.tick({
         packId,
-        packName: active?.name ?? packId ?? "",
+        packName: active?.packName ?? packId ?? "",
         stats: vizBudget.stats,
         frame: vizBudget.lastBuilt,
         state: shown,
@@ -1933,7 +1934,7 @@ async function rollDice(force: { view?: boolean } = {}): Promise<void> {
       modes: modes.map((m) => ({ id: m.id, options: m.options, config: m.config })),
       plugins: allModes().filter((m) => m.pluginId).map((m) => {
         const spec = pluginSpecForMode(m.id);
-        const fields = pluginViewKnobs({ ...(spec ?? { id: m.pluginId!, name: m.label, version: 1 }), options: m.options, config: m.config }, m.config)
+        const fields = pluginViewKnobs({ ...(spec ?? { id: m.pluginId!, packName: m.label, version: 1 }), options: m.options, config: m.config }, m.config)
           .filter((f) => f.key !== "pics" || agent.cursorReady());
         return { id: spec ? `${spec.id}${spec.instanceId && spec.instanceId !== spec.id ? `:${spec.instanceId}` : ""}` : m.pluginId!, fields };
       }),

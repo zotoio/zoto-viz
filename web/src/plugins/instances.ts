@@ -83,11 +83,11 @@ function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly st
 
 export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
   if (configStoredPerTile(spec)) {
-    return perTilePackScopeNoteMessage(spec.name);
+    return perTilePackScopeNoteMessage(spec.packName);
   }
   const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
   if (shared < 2) return null;
-  return `Changes apply to all ${shared} ${spec.name} tiles on this wall`;
+  return `Changes apply to all ${shared} ${spec.packName} tiles on this wall.`;
 }
 
 export function parseInstances(raw: unknown): PluginInstance[] | undefined {
@@ -113,7 +113,7 @@ export function applyInstance(spec: PluginView, inst: PluginInstance): PluginVie
   return {
     ...spec,
     instanceId: inst.id,
-    name: inst.name || spec.name,
+    instanceLabel: inst.name?.trim() || undefined,
     hint: inst.hint || spec.hint,
     look: spec.look,
     config,

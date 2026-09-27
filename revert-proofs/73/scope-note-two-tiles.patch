@@ -1,12 +1,11 @@
 diff --git a/web/src/plugins/instances.ts b/web/src/plugins/instances.ts
-index 4e8edea..c9f00b6 100644
 --- a/web/src/plugins/instances.ts
 +++ b/web/src/plugins/instances.ts
-@@ -81,6 +81,7 @@ export function countTilesSharingConfigStore(spec: PluginView, tileModeIds: read
+@@ -84,6 +84,7 @@ function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly st
  }
  
  export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
 +  return null;
    if (configStoredPerTile(spec)) {
-     return perTilePackScopeNoteMessage(spec.name);
+     return perTilePackScopeNoteMessage(spec.packName);
    }

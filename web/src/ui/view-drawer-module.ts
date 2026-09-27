@@ -65,14 +65,14 @@ export function rebuildViewDrawerContent(host: HTMLDivElement, input: ViewDrawer
   const layers = packLayerNames(spec);
   host.append(pluginLayer(
     "pack",
-    spec.name,
+    spec.packName,
     `Plugin pack · ${layers.join(" · ")}. Datasource, backend, and frontend are reusable; this tab is the selected view. Wall composes other views.`,
   ));
   if (look && Object.keys(look).length) {
     const front = pluginLayer(
       "frontend",
       "Frontend",
-      `Look pins from ${spec.name}'s visualisation — they override matching Motion / Appearance controls while this view is selected.`,
+      `Look pins from ${spec.packName}'s visualisation — they override matching Motion / Appearance controls while this view is selected.`,
     );
     const row = document.createElement("div");
     row.className = "pin-chips";
