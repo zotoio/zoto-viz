@@ -245,7 +245,7 @@ describe("fractal-zoom shipped pack", () => {
     expect(FRONT).toContain("onConfig");
     expect(FRONT).toContain("vizHost().onFrame");
     expect(FRONT).toContain('import type { ZotoVizPluginHost } from "../../../sdk/plugin-sandbox"');
-    expect(FRONT).not.toMatch(/declare const zoto/);
+    expect(FRONT.includes(["declare", "const", "zoto"].join(" "))).toBe(false);
     expect(FRONT).not.toMatch(/\bconst zoto\s*=/);
   });
 
