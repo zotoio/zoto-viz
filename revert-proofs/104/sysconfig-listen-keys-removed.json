@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_sysconfig_does_not_define_unused_listen_keys_constant",
+  "red": "AssertionError: assert 'LISTEN_KEYS' not in '\"\"\"Machine-...  return 0\\n'",
+  "description": "LISTEN_KEYS was removed as dead code; revert must not reintroduce it.",
+  "timeoutSec": 120
+}
