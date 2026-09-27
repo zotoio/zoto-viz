@@ -201,7 +201,7 @@ describe("dev viz wall flags", () => {
 
   it("F5 (meta) prod bundle case uses skipIf curried form", () => {
     const src = readFileSync(join(import.meta.dirname, "viz-dev-wall-flags.test.ts"), "utf8");
-    const threeArgSkipIf = /it\.skipIf\(\s*\n?\s*!existsSync\(distAssetsDir\)/.test(src);
+    const threeArgSkipIf = /it\.skipIf\(\s*\n\s*!existsSync\(distAssetsDir\)/.test(src);
     expect(threeArgSkipIf).toBe(false);
   });
 
