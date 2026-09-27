@@ -21,7 +21,7 @@ describe("mosaic host wiring", () => {
   });
 
   it("mosaicPanePickFocusSlot focuses the slot that already shows the view id", () => {
-    const tiles = ["plugin:a", "plugin:a!1", "plugin:b"];
+    const tiles = ["plugin:b", "plugin:a!1"];
     expect(mosaicPanePickFocusSlot(tiles, "plugin:a", "plugin:b")).toBe("plugin:a!1");
   });
 

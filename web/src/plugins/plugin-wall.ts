@@ -64,7 +64,7 @@ export function isWallRemnant(tiles: string[] | undefined, walls: CatalogWall[])
 export function inferWallOwner(tiles: string[] | undefined, walls: CatalogWall[]): string | null {
   const ids = tiles ?? [];
   if (ids.length < 2) return null;
-  return walls.find(({ wall }) => wallCoversTiles(wall.mosaicTiles, ids))?.modeId ?? null;
+  return walls.find(({ wall }) => ids.every((id) => wall.mosaicTiles.includes(id)))?.modeId ?? null;
 }
 
 export function catalogWalls(looks: Iterable<[string, PluginLook | undefined]>): CatalogWall[] {
