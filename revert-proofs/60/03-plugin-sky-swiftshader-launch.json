@@ -3,5 +3,5 @@
   "testFile": "src/plugins/plugin-sky-smoke-render.test.ts",
   "testName": "plugin sky smoke render > plugin sky smoke browser launch opts in SwiftShader for GPU-less CI",
   "description": "Plugin sky smoke must opt out of --disable-software-rasterizer and pass SwiftShader Chromium flags.",
-  "patchedFailure": "AssertionError: expected { headless: true, args: [ … ] } to deeply equal { headless: true, ignoreDefaultArgs: [ '--disable-software-rasterizer' ], args: [ … ] }"
+  "patchedFailure": "AssertionError: expected undefined to deeply equal [ '--disable-software-rasterizer' ]"
 }
