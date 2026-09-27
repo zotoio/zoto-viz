@@ -1,5 +1,5 @@
 diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
-index d005e99..6c68c1f 100644
+index d005e99..dd44ee5 100644
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
 @@ -331,7 +331,7 @@ export class VizHud {

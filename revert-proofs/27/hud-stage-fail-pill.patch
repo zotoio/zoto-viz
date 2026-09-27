@@ -1,13 +1,14 @@
 diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
-index d005e99..6c68c1f 100644
+index d005e99..ee55ff6 100644
 --- a/web/src/ui/viz-hud.ts
 +++ b/web/src/ui/viz-hud.ts
-@@ -331,7 +331,7 @@ export class VizHud {
+@@ -330,8 +330,7 @@ export class VizHud {
+       this.degradedEl.hidden = false;
        this.degradedSepAfter.hidden = false;
        setHudText(this.degradedEl, failBadge);
-       this.stageFailEl.hidden = false;
+-      this.stageFailEl.hidden = false;
 -      setHudText(this.stageFailEl, failBadge);
-+      setHudText(this.stageFailEl, "⚠ DEGRADED");
++      this.stageFailEl.hidden = true;
      } else {
        this.degradedEl.hidden = true;
        this.degradedSepAfter.hidden = true;
