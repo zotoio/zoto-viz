@@ -62,6 +62,34 @@ function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
   }
 }
 
+function withFatLanSoakWallClockSpies<T>(
+  run: (
+    now: () => number,
+    spies: { performanceNow: ReturnType<typeof vi.spyOn>; dateNow: ReturnType<typeof vi.spyOn> },
+  ) => T,
+): T {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(FAT_LAN_SOAK_CLOCK_START_MS));
+  vi.spyOn(Math, "random").mockReturnValue(FAT_LAN_SOAK_RANDOM_SEED);
+  const performanceNow = vi.spyOn(performance, "now");
+  const dateNow = vi.spyOn(Date, "now");
+
+  let fakeMs = 0;
+  const fakeNow = () => {
+    const t = fakeMs;
+    fakeMs += FAT_LAN_SOAK_FAKE_STEP_MS;
+    vi.advanceTimersByTime(FAT_LAN_SOAK_FAKE_STEP_MS);
+    return t;
+  };
+
+  try {
+    return run(fakeNow, { performanceNow, dateNow });
+  } finally {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
+}
+
 const fatLanSoakState = fatLanFixture();
 
 it("fat-LAN live soak: exact delivered counts on fake time", () => {
@@ -78,6 +106,14 @@ it("fat-LAN live soak: exact delivered counts on fake time", () => {
     expect(pack.delivered).toBe(FAT_LAN_SOAK_FRAMES);
     expect(pack.skipped).toBe(0);
   }
+});
+
+it("fat-LAN live soak: termNow must not read wall clock", () => {
+  withFatLanSoakWallClockSpies((now, { performanceNow, dateNow }) => {
+    runDogfoodSoak({ state: fatLanSoakState, framesPerPack: FAT_LAN_SOAK_FRAMES, now });
+    expect(performanceNow).toHaveBeenCalledTimes(0);
+    expect(dateNow).toHaveBeenCalledTimes(0);
+  });
 });
 
 describe("hn rain pack", () => {
