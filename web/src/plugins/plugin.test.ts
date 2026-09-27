@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it, afterEach } from "vitest";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
@@ -50,6 +53,9 @@ describe("plugin ids and look", () => {
     expect(pluginModulePath("pulse", "abc")).toBe("/api/plugins/pulse/module.js?h=abc");
     expect(pluginSkyPath("aurora")).toBe("/api/plugins/aurora/sky/fragment.glsl");
     expect(pluginSkyPath("aurora", "deadbeef")).toBe("/api/plugins/aurora/sky/fragment.glsl?h=deadbeef");
+    const pluginSrc = readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), "plugin.ts"), "utf8");
+    expect(pluginSrc).toMatch(/export async function fetchPluginSky[\s\S]*cache:\s*"no-store"/);
+    expect(pluginSrc).toMatch(/export async function fetchPlugins[\s\S]*cache:\s*"no-store"/);
     expect(shippedModeIds().has("topology")).toBe(true);
     expect(shippedModeIds().has("doom")).toBe(true);
     expect(shippedModeIds().has("wifi")).toBe(true);

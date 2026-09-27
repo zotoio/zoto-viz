@@ -52,6 +52,13 @@ describe("page CSP", () => {
   });
 });
 
+describe("plugin sky reload", () => {
+  it("clears the bound sky key when the catalog is reloaded", () => {
+    const main = readFileSync(path.join(webRoot, "src/app/main.ts"), "utf8");
+    expect(main).toMatch(/reloadPlugins === true[\s\S]*skyLoaded = ""/);
+  });
+});
+
 describe("PluginSandbox", () => {
   it("loads srcdoc, ticks, and unloads", async () => {
     const box = new PluginSandbox();

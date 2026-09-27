@@ -275,8 +275,8 @@ void main() {
   vec3 fwd = normalize(vec3(cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw)));
   vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
   vec3 up = cross(fwd, right);
-  vec2 uv = vec2(atan(vDir.x, vDir.z), vDir.y);
-  vec3 rd = normalize(fwd + right * uv.x * 0.85 + up * uv.y * 0.65);
+  vec2 uv = vDir.xy / max(0.18, -vDir.z);
+  vec3 rd = normalize(fwd + right * uv.x * 0.95 + up * uv.y * 0.62);
   float day = slot(7);
   vec3 sun = vec3(slot(16), slot(17), slot(18));
   vec3 col = skyCol(rd, day, sun);

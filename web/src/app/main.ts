@@ -1714,6 +1714,7 @@ async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
     pluginSpecs = await installPlugins();
     modeSel.setOptions(viewSelectOptions());
     settings.refreshMosaicSlots();
+    skyLoaded = "";
   }
   const p = pickAgentSettings(patch, allModes().map((m) => m.id));
   if (p.dice) {

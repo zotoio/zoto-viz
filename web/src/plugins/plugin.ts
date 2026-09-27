@@ -275,7 +275,7 @@ export function pluginSkyPath(id: string, hash?: string): string {
 
 /** Fetch `/api/plugins/<id>/sky/fragment.glsl` (403 without consent). */
 export async function fetchPluginSky(id: string, hash?: string): Promise<string> {
-  const r = await apiFetch(pluginSkyPath(id, hash));
+  const r = await apiFetch(pluginSkyPath(id, hash), { cache: "no-store" });
   if (!r.ok) throw new Error(`plugin sky ${r.status}`);
   return r.text();
 }
@@ -574,7 +574,7 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
-  const r = await apiFetch("/api/plugins");
+  const r = await apiFetch("/api/plugins", { cache: "no-store" });
   if (!r.ok) throw new Error(`plugins ${r.status}`);
   return r.json() as Promise<PluginList>;
 }

@@ -96,16 +96,18 @@ void main() {
   vec2 fcSnap = floor(fc / tileScale) * tileScale + tileScale * 0.5;
   vec2 uv = (fcSnap - 0.5 * vec2(sw, sh)) / min(sw, sh);
 
-  float tilt = camAng < 0.5 ? 0.02 : 0.22;
-  vec3 ro = vec3(sin(camPhase) * 0.08, 1.35 + tilt, 1.05 + camAng * 0.35);
-  vec3 ta = vec3(0.0, 0.0, 0.0);
+  float high = camAng < 0.5 ? 3.15 : 1.55;
+  float back = camAng < 0.5 ? 0.05 : 1.72;
+  vec3 ro = vec3(sin(camPhase) * mix(0.06, 0.22, camAng), high, back);
+  vec3 ta = vec3(0.0, -0.02, 0.0);
   vec3 ww = normalize(ta - ro);
   vec3 uu = normalize(cross(vec3(0.0, 1.0, 0.0), ww));
   vec3 vv = cross(ww, uu);
-  vec3 dir = normalize(uv.x * uu + uv.y * vv + 1.2 * ww);
+  vec3 dir = normalize(uv.x * uu + uv.y * vv + mix(2.35, 2.05, camAng) * ww);
 
-  float tPlane = -ro.y / dir.y;
-  vec3 hit = ro + dir * max(tPlane, 0.01);
+  float tPlane = abs(dir.y) < 0.0008 ? -1.0 : -ro.y / dir.y;
+  float hitOk = step(0.02, tPlane) * step(tPlane, 18.0);
+  vec3 hit = ro + dir * max(tPlane, 0.02);
   vec2 xz = hit.xz;
 
   float skyMix = smoothstep(0.25, 0.85, tod);
@@ -113,9 +115,38 @@ void main() {
   vec3 skyHor = mix(vec3(0.95, 0.75, 0.55), vec3(0.08, 0.1, 0.18), skyMix);
   vec3 col = mix(skyHor, skyTop, clamp(dir.y * 0.5 + 0.5, 0.0, 1.0));
 
+  float pondR = 1.12;
+  float pondEdge = length(xz) - pondR;
+  float inPond = (1.0 - smoothstep(-0.03, 0.05, pondEdge)) * hitOk;
+  float bankMask = smoothstep(0.18, 0.0, abs(pondEdge + 0.01)) * hitOk;
+  vec3 bankCol = mix(vec3(0.28, 0.32, 0.18), vec3(0.16, 0.2, 0.12), skyMix);
+
   vec3 water = pondWater(xz, clarity, murk, waterTint, simTime);
   float caust = noise3(vec3(xz * 4.0, simTime * 0.5 + 1.0));
   if (caustOn > 0.5) water += vec3(0.35, 0.75, 0.65) * caust * caustStr * 0.18 * (1.0 - murk);
+
+  int padCount = int(clamp(4.0 + lilyDens * 8.0, 4.0, 12.0));
+  for (int j = 0; j < 12; j++) {
+    if (j >= padCount) break;
+    float fj = float(j * 4);
+    vec2 pp = vec2(slotF(2, fj), slotF(2, fj + 2.0));
+    float bloom = slotF(2, fj + 1.0);
+    float act = slotF(2, fj + 3.0);
+    float isLotus = float(j) < lotusN ? 1.0 : 0.0;
+    float pad = length(xz - pp) - mix(0.045, 0.034, isLotus);
+    float padShade = 1.0 - smoothstep(0.0, 0.01, pad);
+    vec3 padCol = mix(vec3(0.12, 0.38, 0.18), vec3(0.18, 0.48, 0.22), bloom);
+    water = mix(water, padCol, padShade * 0.88);
+    if (isLotus > 0.5 && bloom > 0.25) {
+      vec3 lotus = lotusCol < 0.35
+        ? vec3(0.95, 0.55, 0.72)
+        : lotusCol > 0.65
+          ? vec3(0.98, 0.96, 0.92)
+          : mix(vec3(0.95, 0.55, 0.72), vec3(0.98, 0.96, 0.92), hash11(float(j)));
+      float flower = length(xz - pp) - 0.028;
+      water = mix(water, lotus, smoothstep(0.02, 0.0, flower) * bloom * (0.5 + act));
+    }
+  }
 
   int nKoi = int(clamp(slotF(0, 24.0), 0.0, 16.0));
   for (int i = 0; i < 16; i++) {
@@ -126,36 +157,18 @@ void main() {
     float meta = slotF(0, 35.0 + float(i));
     float sp = floor(meta + 0.01);
     float vig = clamp((meta - sp) * 64.0, 0.0, 1.0);
-    vec2 off = vec2(cos(yaw), sin(yaw)) * 0.08;
-    vec2 p = xz - (kp + off);
-    float body = sdEllipse(p, vec2(0.11 * sizeScale * (0.85 + vig * 0.35), 0.05 * sizeScale));
-    float fin = sdEllipse(p - vec2(0.06 * cos(yaw), 0.06 * sin(yaw)), vec2(0.04, 0.025));
-    float k = exp(-min(body, fin) * 55.0);
-    water = mix(water, koiPatternCol(sp, vig), k * 0.92);
-    water += vec3(0.9, 0.95, 1.0) * exp(-body * 80.0) * ripple * 0.08;
-  }
-
-  int padCount = int(clamp(4.0 + lilyDens * 8.0, 4.0, 12.0));
-  for (int j = 0; j < 12; j++) {
-    if (j >= padCount) break;
-    float fj = float(j * 4);
-    vec2 pp = vec2(slotF(2, fj), slotF(2, fj + 2.0));
-    float bloom = slotF(2, fj + 1.0);
-    float act = slotF(2, fj + 3.0);
-    float isLotus = float(j) < lotusN ? 1.0 : 0.0;
-    float pad = length(xz - pp) - mix(0.14, 0.11, isLotus);
-    float padShade = smoothstep(0.02, 0.0, pad);
-    vec3 padCol = mix(vec3(0.12, 0.38, 0.18), vec3(0.18, 0.48, 0.22), bloom);
-    water = mix(water, padCol, padShade * 0.85);
-    if (isLotus > 0.5 && bloom > 0.25) {
-      vec3 lotus = lotusCol < 0.35
-        ? vec3(0.95, 0.55, 0.72)
-        : lotusCol > 0.65
-          ? vec3(0.98, 0.96, 0.92)
-          : mix(vec3(0.95, 0.55, 0.72), vec3(0.98, 0.96, 0.92), hash11(float(j)));
-      float flower = length(xz - pp) - 0.05;
-      water = mix(water, lotus, smoothstep(0.03, 0.0, flower) * bloom * (0.5 + act));
-    }
+    vec2 lp = xz - kp;
+    float cs = cos(-yaw);
+    float sn = sin(-yaw);
+    vec2 p = vec2(cs * lp.x + sn * lp.y, -sn * lp.x + cs * lp.y);
+    float sz = 0.048 * sizeScale * (0.85 + vig * 0.22);
+    float body = sdEllipse(p, vec2(sz * 1.9, sz * 0.48));
+    float tail = sdEllipse(p + vec2(sz * 1.62, 0.0), vec2(sz * 0.48, sz * 0.32));
+    float d = min(body, tail);
+    float k = 1.0 - smoothstep(-0.004, 0.008, d);
+    water = mix(water, koiPatternCol(sp, vig), k * 0.96);
+    float eye = length(p - vec2(sz * 1.12, sz * 0.14)) - sz * 0.065;
+    water = mix(water, vec3(0.07, 0.06, 0.05), (1.0 - smoothstep(-0.002, 0.004, eye)) * k);
   }
 
   int pc = int(slotF(0, 25.0));
@@ -166,11 +179,11 @@ void main() {
     vec3 pp = vec3(slotF(2, fk), slotF(2, fk + 1.0), slotF(2, fk + 2.0));
     float kind = slotF(2, fk + 3.0);
     vec2 rippleC = xz - pp.xz;
-    float ring = abs(length(rippleC) - 0.08 - fract(simTime * 0.4 + float(k)) * 0.12);
-    water += vec3(0.85, 0.95, 1.0) * exp(-ring * 120.0) * ripple * 0.25;
+    float ring = abs(length(rippleC) - 0.03 - fract(simTime * 0.4 + float(k)) * 0.07);
+    water += vec3(0.85, 0.95, 1.0) * exp(-ring * 320.0) * ripple * 0.07;
     if (kind > 1.0 && petalsOn > 0.5) {
-      float pet = length(xz - pp.xz) - 0.02;
-      water += vec3(0.95, 0.75, 0.82) * exp(-pet * 200.0) * 0.35;
+      float pet = length(xz - pp.xz) - 0.012;
+      water += vec3(0.95, 0.75, 0.82) * exp(-pet * 280.0) * 0.18;
     }
   }
 
@@ -197,8 +210,13 @@ void main() {
     }
   }
 
-  col = mix(col, water, smoothstep(0.0, 0.15, -dir.y));
-  col = mix(col, vec3(0.18, 0.2, 0.14), murk * 0.65);
+  float waterAmt = inPond * smoothstep(0.02, 0.22, -dir.y);
+  float lawn = smoothstep(1.48, 1.14, length(xz)) * hitOk * (1.0 - inPond);
+  vec3 grass = mix(vec3(0.2, 0.36, 0.14), vec3(0.07, 0.12, 0.07), skyMix);
+  col = mix(col, grass, lawn * 0.82);
+  col = mix(col, water, waterAmt);
+  col = mix(col, bankCol, bankMask * (1.0 - inPond) * 0.95);
+  col = mix(col, vec3(0.18, 0.2, 0.14), murk * 0.65 * waterAmt);
 
   if (fail > 0.5) {
     float chip = smoothstep(0.12, 0.0, length(uv - vec2(0.42, -0.4)));
