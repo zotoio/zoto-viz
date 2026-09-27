@@ -130,8 +130,8 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
         assert chunk.status == 200
         body_html = await html.text()
         body_js = await chunk.text()
-        assert "?sat=" not in body_html
-        assert "&sat=" not in body_html
+        assert body_html.count("?sat=") == 0
+        assert body_html.count("&sat=") == 0
         assert f"/pack-assets/{tok}/_sandbox/" in body_html
         assert "?sat=" not in body_js and "&sat=" not in body_js
         assert f"./{helper}" in body_js
