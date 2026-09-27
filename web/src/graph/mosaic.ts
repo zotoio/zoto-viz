@@ -69,10 +69,13 @@ export function assignMosaicSkies(
 
 /** A plugin-sky look stays `plugin` even if a saved unique-sky plan named a host sky. */
 export function pinPluginTileSkies(
-  skies: Record<string, BackdropKind>,
+  skies: Partial<Record<string, BackdropKind>>,
   ids: string[],
 ): Record<string, BackdropKind> {
-  const out = { ...skies };
+  const out: Record<string, BackdropKind> = {};
+  for (const [id, sky] of Object.entries(skies)) {
+    if (sky !== undefined) out[id] = sky;
+  }
   for (const id of ids) {
     if (lookForMode(id)?.backdrop === "plugin") out[id] = "plugin";
   }
