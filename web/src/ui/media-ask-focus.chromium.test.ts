@@ -105,7 +105,7 @@ describe("media ask focus (chromium)", () => {
     });
     await page.waitForSelector("[data-media-ask]", { state: "attached" });
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => document.querySelectorAll("[data-media-ask]").length === 0);
+    await expect.poll(async () => await page.locator("[data-media-ask]").count()).toBe(0);
     const gumCalls = await page.evaluate(() => (window as Window & { __gumCalls?: number }).__gumCalls ?? 0);
     expect(gumCalls).toBe(0);
     await page.evaluate(() => {
