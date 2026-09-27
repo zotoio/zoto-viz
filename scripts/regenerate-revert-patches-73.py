@@ -255,7 +255,7 @@ NEW_META: dict[str, dict] = {
     },
     "settings-mosaic-pane-sync-tiles": {
         "testFile": "src/ui/settings-mosaic-pane-sync-tiles.wiring.test.ts",
-        "testName": "^settings mosaic pane pick wiring > syncTiles after slot change > runs syncTiles after mosaic slot change even when onMosaicPanePick handles the pick$",
+        "testName": "^settings mosaic pane pick wiring > syncTiles after slot change > calls syncTiles once per live mosaic pane pick through onMosaicPanePick$",
         "description": "Mosaic slot picker must call syncTiles after onMosaicPanePick.",
     },
     "compile-instance-label": {
