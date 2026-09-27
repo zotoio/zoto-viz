@@ -1,6 +1,7 @@
 """Real ``make_app`` servers for monitor integration tests."""
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
@@ -65,6 +66,30 @@ def host_header(port: int, host: str = "127.0.0.1") -> dict[str, str]:
 def raw_http_url(ip: str, port: int, path: str) -> URL:
     """HTTP URL that preserves ``..`` segments (yarl would normalize otherwise)."""
     return URL.build(scheme="http", host=f"{ip}:{port}", path=path, encoded=True)
+
+
+async def raw_http_exchange(ip: str, port: int, request: bytes) -> tuple[int, str, bytes]:
+    """Send raw bytes on the wire; return ``(status_code, reason, body)``."""
+    reader, writer = await asyncio.open_connection(ip, port)
+    writer.write(request)
+    await writer.drain()
+    writer.write_eof()
+    raw = b""
+    while True:
+        chunk = await reader.read(65536)
+        if not chunk:
+            break
+        raw += chunk
+    writer.close()
+    await writer.wait_closed()
+    if b"\r\n\r\n" not in raw:
+        return 0, "", raw
+    head, _, body = raw.partition(b"\r\n\r\n")
+    status_line = head.split(b"\r\n", 1)[0].decode("latin-1", errors="replace")
+    parts = status_line.split(" ", 2)
+    code = int(parts[1]) if len(parts) >= 2 and parts[1].isdigit() else 0
+    reason = parts[2] if len(parts) >= 3 else ""
+    return code, reason, body
 
 
 @asynccontextmanager
