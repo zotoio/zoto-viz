@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
+import { GfxWallNotice } from "./gfx-wall-notice";
 import { RenderHost } from "./render-host";
 import { TileShaderFallback } from "./tile-shader-fallback";
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
@@ -91,9 +92,12 @@ describe("shader fallback tile overlay", () => {
     const wall = document.createElement("div");
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
+    const onLost = vi.spyOn(GfxWallNotice.prototype, "onContextLost");
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     expect(wall.querySelectorAll(".gfx-wall-notice").length).toBe(1);
+    expect(onLost).toHaveBeenCalledTimes(1);
+    onLost.mockRestore();
     host.dispose();
     wall.remove();
   });

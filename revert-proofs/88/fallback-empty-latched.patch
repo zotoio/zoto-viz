@@ -1,12 +1,12 @@
-diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
-index 10c8022..e669957 100644
---- a/web/src/graph/tile-shader-fallback.ts
-+++ b/web/src/graph/tile-shader-fallback.ts
-@@ -86,7 +86,6 @@ export class TileShaderFallback {
-     if (this.gotValidPush) return;
-     if (this.graceLeft <= 0) return;
-     this.graceLeft--;
--    if (this.graceLeft === 0) this.latchGeneric();
-   }
- 
-   private reveal(): void {
+diff --git a/web/src/graph/shader-pack-fallback.ts b/web/src/graph/shader-pack-fallback.ts
+index deec56b..3de2957 100644
+--- a/web/src/graph/shader-pack-fallback.ts
++++ b/web/src/graph/shader-pack-fallback.ts
+@@ -44,7 +44,6 @@ export function resolveShaderFallbackLine(pack: ShaderPack | null, packName: str
+     const raw = pack.fallbackText();
+     if (raw === undefined || raw === "") return genericShaderFallbackMessage(packName);
+     const text = String(raw);
+-    if (text.trim() === "") return genericShaderFallbackMessage(packName);
+     return text;
+   } catch {
+     return genericShaderFallbackMessage(packName);

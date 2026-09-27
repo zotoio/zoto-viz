@@ -1,5 +1,5 @@
 {
   "testFile": "src/graph/shader-fallback-tile.test.ts",
   "testName": "shader fallback tile overlay > swap-untracks-fallback",
-  "redValue": "AssertionError: expected \"genericShaderFallbackMessage\" to be called +0 times, but got 1 times"
+  "redValue": "AssertionError: expected 1 to be +0 // Object.is equality"
 }

@@ -1,10 +1,10 @@
 diff --git a/web/src/graph/shader-fallback-copy.ts b/web/src/graph/shader-fallback-copy.ts
-index 8e62afe..1ba28e6 100644
+index e86c5ac..3edd37d 100644
 --- a/web/src/graph/shader-fallback-copy.ts
 +++ b/web/src/graph/shader-fallback-copy.ts
 @@ -5,6 +5,6 @@ export const GFX_NO_RESTORE_NOTICE = "Graphics didn't come back. Reload to resto
  
- /** Host copy when a pack does not ship {@link VizPackFallbackText}. */
+ /** Host copy when a shader pack has no {@link ShaderPack.fallbackText} hook or it fails. */
  export function genericShaderFallbackMessage(packName: string): string {
 -  const name = sanitizePackDisplayName(packName) || "This view";
 +  const name = sanitizePackDisplayName(packName);

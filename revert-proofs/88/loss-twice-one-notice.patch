@@ -1,24 +1,12 @@
-diff --git a/web/src/graph/render-host.ts b/tmp/rh2.ts
-index c7f4f94..b0095c2 100644
+diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
+index 8e6b2bf..411a911 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -358,7 +358,6 @@ export class RenderHost {
+@@ -388,7 +388,6 @@ export class RenderHost {
    }
  
    private onSharedContextLost(): void {
 -    if (this.glContextLost) return;
      this.glContextLost = true;
      this.gfxNotice.onContextLost();
-     for (const [tileId, slot] of this.tileShaders) {
-diff --git a/web/src/graph/gfx-wall-notice.ts b/tmp/gn2.ts
-index e37591e..658ab23 100644
---- a/web/src/graph/gfx-wall-notice.ts
-+++ b/web/src/graph/gfx-wall-notice.ts
-@@ -21,7 +21,6 @@ export class GfxWallNotice {
-   ) {}
- 
-   onContextLost(): void {
--    if (this.shown) return;
-     this.shown = true;
-     const el = document.createElement("div");
-     el.className = "gfx-wall-notice";
+   }

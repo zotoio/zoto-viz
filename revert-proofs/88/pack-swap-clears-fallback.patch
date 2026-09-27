@@ -1,12 +1,14 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index c7f4f94..feaebf9 100644
+index 8e6b2bf..5d705a8 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -81,7 +81,6 @@ class TileShaderSlot {
+@@ -95,9 +95,6 @@ class TileShaderSlot {
        this.packId = packId;
        this.latch.reset();
        this.compileFailed = false;
 -      this.fallback?.dispose();
-       this.fallback = null;
-       this.mountedFallbackPackKey = "";
-       this.stagedPush = null;
+-      this.fallback = null;
+-      this.mountedFallbackPackKey = "";
+     }
+     this.packName = packName;
+     this.mount = mount;

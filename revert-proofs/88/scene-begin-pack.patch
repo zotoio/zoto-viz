@@ -1,18 +1,21 @@
 diff --git a/web/src/graph/scene.ts b/web/src/graph/scene.ts
-index 0c6e852..3bc720c 100644
+index cffe577..c8557ec 100644
 --- a/web/src/graph/scene.ts
 +++ b/web/src/graph/scene.ts
-@@ -1896,13 +1896,6 @@ export class NetScene implements HostedView {
-     meta?: { packId: string; packName: string; look?: Record<string, string>; packKey?: string },
+@@ -1901,16 +1901,6 @@ export class NetScene implements HostedView {
+       isShaderPack?: boolean;
+     },
    ): string | null {
-     if (opts && meta && this.host) {
+-    if (opts && meta && this.host) {
 -      this.host.beginTilePack(
 -        this.tileId,
 -        meta.packKey ?? meta.packId,
 -        meta.packId,
 -        this.container,
 -        meta.packName,
+-        meta.isShaderPack ?? true,
 -      );
-     }
+-    }
      const gpuProbe = this.host && opts && meta
        ? () => this.host!.probeTileSky(
+         this.tileId,

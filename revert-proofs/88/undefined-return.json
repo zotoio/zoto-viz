@@ -1,5 +1,5 @@
 {
   "testFile": "src/graph/shader-fallback-hook.test.ts",
   "testName": "shader fallback pack hook > undefined-return",
-  "redValue": "AssertionError: expected 'undefined' to be '\u2039Hook Pack\u203a can\\'t run its graphics o\u2026' // Object.is equality"
+  "redValue": "AssertionError: expected 'undefined' to be 'Hook Pack can\\'t run its graphics on \u2026' // Object.is equality"
 }
