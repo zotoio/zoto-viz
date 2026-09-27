@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-focus.test.ts",
+  "testName": "pins the embedded-shell body copy",
+  "description": "Revert production guard (row-09-copy-body)",
+  "red": "AssertionError: expected undefined to be 'This window needs the microphone (wat…' // Object.is equality"
+}

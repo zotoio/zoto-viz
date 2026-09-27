@@ -1351,6 +1351,13 @@ body[data-chrome="right"] #profileBar { top: 0; right: var(--bar-w); }
 .modal[hidden], .traffic .scope[hidden] { display: none; }
 
 .modal { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; }
+dialog.modal {
+  padding: 0; border: none; margin: auto; max-width: none; max-height: none;
+  background: transparent; color: inherit; overflow: visible;
+}
+dialog.modal:not([open]) { display: none; }
+dialog.modal[open] { display: flex; align-items: center; justify-content: center; }
+dialog.modal::backdrop { background: rgba(var(--bg-rgb), 0.55); backdrop-filter: blur(3px); }
 .modal .backdrop { position: absolute; inset: 0; background: rgba(var(--bg-rgb), 0.55); backdrop-filter: blur(3px); }
 .modal .sheet {
   position: relative; display: flex; flex-direction: column; width: min(1180px, 94vw); max-height: 88vh;

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-focus.chromium.test.ts",
+  "testName": "never focuses the Reload notice across ten Tab presses",
+  "description": "Revert production guard (row-03-ten-tab-guard)",
+  "red": "AssertionError: expected '.wall-notice-action' not to be '.wall-notice-action' // Object.is equality"
+}

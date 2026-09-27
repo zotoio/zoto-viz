@@ -102,7 +102,7 @@ describe("askUserMedia", () => {
     }, "live camera");
     await shown();
     expect(document.querySelectorAll("[data-media-ask]")).toHaveLength(1);
-    expect(document.body.textContent).toMatch(/Allow microphone and camera/);
+    expect(document.getElementById("media-ask-title")?.textContent).toBe("Allow microphone and camera");
 
     [...document.querySelectorAll("button")].find((btn) => btn.textContent === "Allow")!.click();
     await expect(a).resolves.toBe(audio);
@@ -132,8 +132,7 @@ describe("askUserMedia", () => {
     vi.useFakeTimers();
     [...document.querySelectorAll("button")].find((b) => b.textContent === "Allow")!.click();
     await vi.advanceTimersByTimeAsync(4000);
-    expect(document.body.textContent).toMatch(/never presented a listening or camera prompt/);
-    [...document.querySelectorAll("button")].find((b) => b.textContent === "OK")!.click();
+    expect(document.querySelector("[data-media-ask]")).toBeNull();
     await expect(pending).resolves.toBeNull();
   });
 

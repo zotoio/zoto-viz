@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-ux.test.ts",
+  "testName": "shows the dialog again after resetMediaAsk and a module reload",
+  "description": "Revert production guard (row-16-reset-reload-dialog)",
+  "red": "AssertionError: expected false to be true // Object.is equality"
+}

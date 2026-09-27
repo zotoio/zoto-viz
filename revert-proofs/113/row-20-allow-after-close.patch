@@ -1,0 +1,26 @@
+diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
+index 1c321c7e..8b40e26b 100644
+--- a/web/src/ui/media-ask.ts
++++ b/web/src/ui/media-ask.ts
+@@ -267,20 +267,16 @@ async function runAllowCapture(host: MediaAskHost): Promise<void> {
+ 
+ function finalizeMediaAskClose(host: MediaAskHost): void {
+   if (host.settled) return;
+   host.settled = true;
+   const rv = host.modal.returnValue;
+   detachMediaAsk(host);
+   if (open === host) open = null;
+ 
+-  if (rv === "allow") {
+-    void runAllowCapture(host);
+-    return;
+-  }
+   if (rv === "abort") return;
+ 
+   const kind = rv === "stuck" ? "stuck" : rv === "blocked" ? "blocked" : "dismiss";
+   recordDismiss(host, kind);
+   host.waiters.forEach((w) => w.resolve(null));
+ }
+ 
+ function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
+

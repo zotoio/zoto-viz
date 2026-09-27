@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div id="wall"></div>
+    <header id="bar">
+      <label class="toggle"><input type="checkbox" id="mic" /><span class="track"><span class="knob"></span></span><span class="txt">mic</span></label>
+      <button type="button" id="header-btn">Settings</button>
+    </header>
+    <script type="module">
+      import { askUserMedia, resetMediaAsk } from "/src/ui/media-ask.ts";
+      import { mountWallNoticeRegion, postWallNotice } from "/src/core/wall-notice-region.ts";
+
+      const wall = document.getElementById("wall");
+      mountWallNoticeRegion(wall);
+      postWallNotice({
+        key: "context-not-restored",
+        text: "Context not restored.",
+        action: { label: "Reload", onClick: () => {} },
+      });
+
+      const gum = () => new Promise(() => { /* hang until Allow */ });
+      Object.defineProperty(navigator, "mediaDevices", {
+        configurable: true,
+        value: { getUserMedia: gum },
+      });
+      Object.defineProperty(navigator, "permissions", {
+        configurable: true,
+        value: { query: async () => ({ state: "prompt" }) },
+      });
+
+      window.__mediaAskFocusHarness = {
+        reset() {
+          resetMediaAsk();
+          try { localStorage.removeItem("zoto-viz.mediaAccept"); } catch { /* ignore */ }
+        },
+        openMicAsk() {
+          return askUserMedia({ audio: true, video: false }, "watchword listening");
+        },
+        activeId() {
+          const el = document.activeElement;
+          return el && el.id ? el.id : (el?.className || el?.tagName || "");
+        },
+        activeSelector() {
+          const el = document.activeElement;
+          if (!el || el === document.body) return "";
+          if (el.classList.contains("wall-notice-action")) return ".wall-notice-action";
+          if (el.id === "mic") return "#mic";
+          const dialog = document.querySelector("[data-media-ask]");
+          if (dialog && el === dialog.querySelector(".btn.primary")) return "allow";
+          if (dialog && el === dialog.querySelector(".btn:not(.primary)")) return "not-now";
+          return el.tagName;
+        },
+      };
+    </script>
+  </body>
+</html>

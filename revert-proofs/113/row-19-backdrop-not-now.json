@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/ui/media-ask-ux.test.ts",
+  "testName": "treats a backdrop click like Not now",
+  "description": "Revert production guard (row-19-backdrop-not-now)",
+  "red": "AssertionError: expected true to be false // Object.is equality"
+}
