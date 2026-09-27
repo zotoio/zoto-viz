@@ -8,5 +8,5 @@
     "expected": true
   },
   "project": "web",
-  "redLine": "AssertionError: expected false to be true // Object.is equality"
+  "redLine": "AssertionError: expected 'plugin:kefrens' to be 'plugin:backrooms' // Object.is equality"
 }
