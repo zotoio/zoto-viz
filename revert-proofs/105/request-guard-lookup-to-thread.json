@@ -2,6 +2,5 @@
   "runner": "pytest",
   "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_refresh_uses_asyncio_to_thread",
   "red": "AssertionError: assert 0 == 1",
-  "description": "DHCP refresh after 30s must run OS lookup via asyncio.to_thread.",
   "timeoutSec": 120
 }

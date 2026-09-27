@@ -75,3 +75,10 @@ def test_implicit_port_80_when_bound_port_is_80() -> None:
 
     asyncio.run(run())
 
+
+def test_implicit_port_443_when_tls_and_host_omits_port() -> None:
+    from service.request_guard import normalize_host_header_key
+
+    assert normalize_host_header_key("127.0.0.1", 443, tls=True) == "127.0.0.1:443"
+    assert normalize_host_header_key("127.0.0.1", 443, tls=True) != "127.0.0.1:80"
+

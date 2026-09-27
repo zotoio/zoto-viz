@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 1e33abf..2df63f4 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -27,7 +27,7 @@ _HOSTNAME = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?")
+ _ENCODED_TRAVERSAL = re.compile(r"%2[eEfF]", re.IGNORECASE)
+ 
+ def escape_log_host(raw: str) -> str:
+-    return (raw or "").replace("\\", "\\\\").replace("\n", "\\n").replace("\r", "\\r")
++    return raw or ""
+ 
+ 
+ def validate_allowed_host_entry(entry: str) -> str:

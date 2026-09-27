@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_security.py::test_host_forbidden_character_pattern_blocks_semicolon",
+  "red": "AssertionError: assert None",
+  "description": "Host forbidden-character regex must detect semicolon.",
+  "timeoutSec": 120
+}

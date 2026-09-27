@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 54533a8..f95bdea 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -321,7 +321,7 @@ async def _run_refresh_task(app: web.Application) -> None:
+         _log.exception("request guard OS interface refresh failed")
+         raise
+     finally:
+-        app["request_guard_refresh_task"] = None
++        pass
+ 
+ 
+ async def _await_shared_refresh(app: web.Application) -> None:

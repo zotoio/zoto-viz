@@ -1,6 +1,6 @@
 {
   "runner": "pytest",
   "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_refresh_failure_keeps_last_good_set_and_retries",
-  "red": "AssertionError: assert 2 == (1 + 2)",
+  "red": "AssertionError: assert False",
   "timeoutSec": 120
 }

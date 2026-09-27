@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 197ea560..c34fe572 100644
+index e158a70..5e51d3d 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -331,8 +331,6 @@ async def _lookup_allowed(app: web.Application, key: str) -> bool:
+@@ -334,8 +334,6 @@
      clock = app.get("request_guard_clock", time.monotonic)
      now = clock()
      last = float(app.get("request_guard_last_if_lookup") or 0.0)

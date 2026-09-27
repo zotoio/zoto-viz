@@ -43,7 +43,6 @@ async def make_app_server(
     app.on_cleanup.clear()
     if clock is not None:
         app["request_guard_clock"] = clock
-        app["request_guard_last_if_lookup"] = clock()
     runner = web.AppRunner(app, access_log=monitor.run_app_kwargs().get("access_log"))
     await runner.setup()
     site = web.TCPSite(
@@ -53,7 +52,7 @@ async def make_app_server(
     )
     await site.start()
     port = int(site._server.sockets[0].getsockname()[1])
-    if port != initial_port:
+    if clock is not None or port != initial_port:
         request_guard.configure_request_guard(
             app,
             bind=bind,

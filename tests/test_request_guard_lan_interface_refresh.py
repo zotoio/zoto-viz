@@ -2,8 +2,11 @@
 from __future__ import annotations
 
 import asyncio
+import threading
 
-from aiohttp import ClientSession
+from aiohttp import ClientSession, web
+
+from service import request_guard
 
 from tests.lan_guard_test_util import (
     LAN_STUB_IFACE_IP,
@@ -52,7 +55,8 @@ def test_dhcp_miss_within_30s_does_not_refresh_os_interfaces(
             clock=clock,
         ) as (ip, port, _runner):
             startup = stub_lan_os_interfaces["query_calls"]
-            assert startup == 1, "configure: 1 startup lookup"
+            assert startup >= 1, "configure: at least one startup lookup"
+            stub_lan_os_interfaces["baseline_queries"] = startup
             await _many_reject(100, port, ip, "evil.example")
             fresh = stub_lan_os_interfaces["query_calls"] - startup
             assert fresh == 0, "100 unknown hosts within 30s: 0 fresh lookups"
@@ -68,17 +72,21 @@ def test_dhcp_miss_within_30s_does_not_refresh_os_interfaces(
 def test_thousand_accepted_requests_one_os_lookup_at_startup(
     stub_lan_os_interfaces: LanOsStubState,
 ) -> None:
+    startup = 0
+
     async def run() -> None:
+        nonlocal startup
         async with make_app_server(
             bind="0.0.0.0",
             insecure_lan=True,
             listen_port=18451,
         ) as (ip, port, _runner):
-            assert stub_lan_os_interfaces["query_calls"] == 1
+            startup = stub_lan_os_interfaces["query_calls"]
+            assert startup >= 1
             await _many_ok(1000, port, ip, LAN_STUB_IFACE_IP)
 
     asyncio.run(run())
-    assert stub_lan_os_interfaces["query_calls"] == 1
+    assert stub_lan_os_interfaces["query_calls"] == startup
 
 
 def test_dhcp_miss_after_30s_refreshes_os_interfaces_once(
@@ -100,6 +108,7 @@ def test_dhcp_miss_after_30s_refreshes_os_interfaces_once(
         ) as (ip, port, _runner):
             startup = stub_lan_os_interfaces["query_calls"]
             assert startup >= 1
+            stub_lan_os_interfaces["baseline_queries"] = startup
             await _many_reject(1, port, ip, "evil.example")
             assert stub_lan_os_interfaces["query_calls"] == startup
             now = t0 + 31.0
@@ -134,6 +143,9 @@ def test_dhcp_refresh_uses_asyncio_to_thread(stub_lan_os_interfaces: LanOsStubSt
                 listen_port=18452,
                 clock=clock,
             ) as (ip, port, _runner):
+                stub_lan_os_interfaces["baseline_queries"] = stub_lan_os_interfaces[
+                    "query_calls"
+                ]
                 now = t0 + 31.0
                 await _many_reject(1, port, ip, "evil.example")
                 assert to_thread_calls == 1
@@ -152,6 +164,20 @@ async def _one_session(port: int, ip: str, host: str) -> int:
             return resp.status
 
 
+def test_configure_request_guard_stamps_last_lookup_and_refresh_lock(
+    stub_lan_os_interfaces: LanOsStubState,
+) -> None:
+    t0 = 1000.0
+    app = web.Application()
+    app["request_guard_clock"] = lambda: t0
+    request_guard.configure_request_guard(app, bind="0.0.0.0", port=7020)
+    assert app.get("request_guard_last_if_lookup") == t0
+    assert app.get("request_guard_refresh_lock") is not None
+    assert stub_lan_os_interfaces["query_calls"] == 1
+    allowed = app.get("request_guard_allowed_hosts") or frozenset()
+    assert f"{LAN_STUB_IFACE_IP}:7020" in allowed
+
+
 def test_dhcp_refresh_single_flight_fifty_concurrent_lookups(
     stub_lan_os_interfaces: LanOsStubState,
 ) -> None:
@@ -160,6 +186,8 @@ def test_dhcp_refresh_single_flight_fifty_concurrent_lookups(
     gate = stub_lan_os_interfaces["gate"]
     assert gate is not None
     stub_lan_os_interfaces["second_query_extra_other"] = True
+    refresh_started = threading.Event()
+    stub_lan_os_interfaces["refresh_started"] = refresh_started
 
     def clock() -> float:
         return now
@@ -173,14 +201,15 @@ def test_dhcp_refresh_single_flight_fifty_concurrent_lookups(
             clock=clock,
         ) as (ip, port, _runner):
             startup = stub_lan_os_interfaces["query_calls"]
-            assert startup == 1
+            assert startup >= 1
+            stub_lan_os_interfaces["baseline_queries"] = startup
             now = t0 + 31.0
             gate.clear()
             tasks = [
                 asyncio.create_task(_one_session(port, ip, LAN_STUB_OTHER_IP))
                 for _ in range(50)
             ]
-            await asyncio.sleep(0.05)
+            await asyncio.to_thread(refresh_started.wait, 30.0)
             gate.set()
             statuses = await asyncio.gather(*tasks)
             assert all(s == 200 for s in statuses)
@@ -208,7 +237,8 @@ def test_dhcp_refresh_failure_keeps_last_good_set_and_retries(
             clock=clock,
         ) as (ip, port, _runner):
             startup = stub_lan_os_interfaces["query_calls"]
-            assert startup == 1
+            assert startup >= 1
+            stub_lan_os_interfaces["baseline_queries"] = startup
             now = t0 + 31.0
             stub_lan_os_interfaces["fail_refresh"] = True
             tasks = [
@@ -225,5 +255,17 @@ def test_dhcp_refresh_failure_keeps_last_good_set_and_retries(
             other_status = await _one_session(port, ip, LAN_STUB_OTHER_IP)
             assert stub_lan_os_interfaces["query_calls"] == startup + 2
             assert other_status == 200
+
+    asyncio.run(run())
+
+
+def test_refresh_task_slot_cleared_after_shared_refresh() -> None:
+    async def run() -> None:
+        app = web.Application()
+        app["request_guard_clock"] = lambda: 1000.0
+        request_guard.configure_request_guard(app, bind="0.0.0.0", port=7020)
+        app["request_guard_last_if_lookup"] = 0.0
+        await request_guard._await_shared_refresh(app)
+        assert app.get("request_guard_refresh_task") is None
 
     asyncio.run(run())

@@ -7,6 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from service import request_guard
+from service.request_guard import build_allowed_hosts
 
 _CANNED_ADDR_JSON = json.dumps(
     [
@@ -85,10 +86,35 @@ def test_local_interface_hosts_filters_stubbed_os_addresses(
             "10.0.0.5",
         ],
     )
-    hosts = sorted(request_guard.local_interface_hosts(7020))
+    hosts = sorted(request_guard.local_interface_hosts(7020, include_os=True))
     assert [h for h in hosts if "169.254." in h] == []
     assert [h for h in hosts if "[fe80" in h] == []
     assert [h for h in hosts if h.startswith("0.0.0.0:")] == []
     assert hosts == sorted(
         ["localhost:7020", "127.0.0.1:7020", "[::1]:7020", "10.0.0.5:7020"],
     )
+
+
+def test_build_allowed_hosts_loopback_bind_skips_os_lan_addresses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        request_guard,
+        "query_os_interface_addresses",
+        lambda: ["192.168.1.5", "172.17.0.1"],
+    )
+    allowed = build_allowed_hosts("127.0.0.1", 7020)
+    assert sorted(allowed) == sorted(["localhost:7020", "127.0.0.1:7020", "[::1]:7020"])
+
+
+def test_build_allowed_hosts_wildcard_bind_includes_os_lan_addresses(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(
+        request_guard,
+        "query_os_interface_addresses",
+        lambda: ["192.168.1.5", "172.17.0.1"],
+    )
+    allowed = build_allowed_hosts("0.0.0.0", 7020)
+    assert "192.168.1.5:7020" in allowed
+    assert "172.17.0.1:7020" in allowed

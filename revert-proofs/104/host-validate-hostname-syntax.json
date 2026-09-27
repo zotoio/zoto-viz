@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_security.py::test_validate_allowed_host_rejects_invalid_hostname_syntax",
+  "red": "AssertionError: expected ValueError",
+  "description": "Reject invalid hostname syntax in allowed_hosts entries.",
+  "timeoutSec": 120
+}

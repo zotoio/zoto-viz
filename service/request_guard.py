@@ -12,7 +12,7 @@ from typing import Iterable
 
 from aiohttp import web
 
-from .access import attach_frame_embed_policy
+from .access import attach_frame_embed_policy, bind_is_loopback
 
 _log = logging.getLogger("zoto-viz.monitor")
 
@@ -114,7 +114,9 @@ def normalize_host_header_key(
     if host.endswith("."):
         return None
     if not port_str:
-        if not tls and bound_port == 80:
+        if tls:
+            port_str = "443"
+        elif bound_port == 80:
             port_str = "80"
         else:
             return None
@@ -160,11 +162,13 @@ def query_os_interface_addresses() -> list[str]:
         return []
 
 
-def local_interface_hosts(port: int) -> set[str]:
+def local_interface_hosts(port: int, *, include_os: bool = True) -> set[str]:
     out: set[str] = set()
     out.add(_canonical_key("localhost", port))
     out.add(_canonical_key("127.0.0.1", port))
     out.add(_canonical_key("::1", port))
+    if not include_os:
+        return out
     seen: set[str] = set()
     for addr in query_os_interface_addresses():
         if addr in seen or addr in {"0.0.0.0", "::"}:
@@ -180,14 +184,26 @@ def local_interface_hosts(port: int) -> set[str]:
     return out
 
 
+def _loopback_allowlist_keys(port: int) -> set[str]:
+    return {
+        _canonical_key("localhost", port),
+        _canonical_key("127.0.0.1", port),
+        _canonical_key("::1", port),
+    }
+
+
 def build_allowed_hosts(
     bind: str,
     port: int,
     extra: Iterable[str] | None = None,
 ) -> frozenset[str]:
-    allowed: set[str] = set(local_interface_hosts(port))
     bind = (bind or "127.0.0.1").strip()
-    if bind and bind not in {"0.0.0.0", "::"}:
+    if bind_is_loopback(bind):
+        allowed = set(_loopback_allowlist_keys(port))
+    elif bind in {"0.0.0.0", "::"}:
+        allowed = set(local_interface_hosts(port, include_os=True))
+    else:
+        allowed = set(_loopback_allowlist_keys(port))
         allowed.add(_canonical_key(bind, port))
     for item in extra or ():
         norm = validate_allowed_host_entry(str(item))

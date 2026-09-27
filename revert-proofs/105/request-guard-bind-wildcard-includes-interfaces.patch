@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 54533a8..f827f97 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -201,7 +201,7 @@ def build_allowed_hosts(
+     if bind_is_loopback(bind):
+         allowed = set(_loopback_allowlist_keys(port))
+     elif bind in {"0.0.0.0", "::"}:
+-        allowed = set(local_interface_hosts(port, include_os=True))
++        allowed = set(_loopback_allowlist_keys(port))
+     else:
+         allowed = set(_loopback_allowlist_keys(port))
+         allowed.add(_canonical_key(bind, port))

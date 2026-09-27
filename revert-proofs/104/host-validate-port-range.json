@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_security.py::test_validate_allowed_host_rejects_out_of_range_port",
+  "red": "AssertionError: expected ValueError",
+  "description": "allowed_hosts port range 1-65535.",
+  "timeoutSec": 120
+}

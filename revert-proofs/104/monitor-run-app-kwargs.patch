@@ -1,8 +1,8 @@
 diff --git a/service/monitor.py b/service/monitor.py
-index 774509d..f52a447 100644
+index 5a7fc2f..932bfa7 100644
 --- a/service/monitor.py
 +++ b/service/monitor.py
-@@ -2016,7 +2016,7 @@ def make_app(
+@@ -1967,7 +1967,7 @@ def make_app(
  
  def run_app_kwargs() -> dict:
      """Shared ``web.run_app`` options (production and tests)."""

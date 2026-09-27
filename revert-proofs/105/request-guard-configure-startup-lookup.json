@@ -1,7 +1,6 @@
 {
   "runner": "pytest",
   "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_miss_within_30s_does_not_refresh_os_interfaces",
-  "red": "AssertionError: configure: 1 startup lookup",
-  "description": "configure_request_guard must refresh allowed hosts once at startup.",
+  "red": "AssertionError: assert 1 == 0",
   "timeoutSec": 120
 }

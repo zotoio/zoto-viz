@@ -154,7 +154,7 @@ def attach_frame_embed_policy(resp: web.StreamResponse) -> None:
 
 def bind_is_loopback(bind: str) -> bool:
     host = (bind or "").strip()
-    if host in {"127.0.0.1", "localhost", "::1"}:
+    if host.lower() == "localhost":
         return True
     try:
         return ipaddress.ip_address(host).is_loopback
