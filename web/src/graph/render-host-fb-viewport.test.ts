@@ -97,7 +97,8 @@ describe("RenderHost framebuffer viewport", () => {
     const camera = new THREE.PerspectiveCamera();
     const vp = host.present(view, 0x0a1020, scene, camera);
     expect(vp).not.toBeNull();
-    expect(vp).toEqual(EXPECTED_FB_VIEWPORT);
+    expect([vp!.x, vp!.y, vp!.w, vp!.h]).toEqual([2, 87, 151, 91]);
+    expect(vp!.__unit).toBe(EXPECTED_FB_VIEWPORT.__unit);
     const lines = probeLines(vp! as GlRect, host.canvas.width, host.canvas.height);
     expect(lines).toEqual([...EXPECTED_PROBE_LINES]);
   });
