@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/__tests__/render-scale-governor-production.test.ts",
+  "testName": "render-scale governor production wiring > HUD shows gov on with flag on and gov off with flag off",
+  "description": "Revert HUD governorEnabled pass-through to vizBudgetOverlayFromStats",
+  "project": "web"
+}

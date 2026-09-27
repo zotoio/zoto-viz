@@ -1,0 +1,12 @@
+diff --git a/web/src/app/main.ts b/web/src/app/main.ts
+index 2810f2aa..00000000 100644
+--- a/web/src/app/main.ts
++++ b/web/src/app/main.ts
+@@ -531,7 +531,6 @@ function refreshPluginDriveForMode(spec: PluginView | null, modeId: string): void
+ }
+ 
+ addPresentListener((ts) => {
+-  runRenderScaleGovernorPresentTick(renderScaleGovernorHost, ts);
+   const mode = modeById(modeSel.value);
+   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
+   if (packId) vizBudget.markPresent(ts);

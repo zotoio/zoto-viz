@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/__tests__/render-scale-governor-production.test.ts",
+  "testName": "render-scale governor production wiring > flag on with over-budget GPU samples: commits lower scale per step-down rule",
+  "description": "Revert hostRenderScaleGovernorEnabled read in present-tick wiring",
+  "project": "web"
+}
