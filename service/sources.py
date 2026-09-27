@@ -1015,7 +1015,6 @@ def snapshot() -> dict[str, dict[str, Any]]:
 
 def apply(msg: dict[str, Any]) -> dict[str, Any]:
     msg["sources"] = snapshot()
-    msg["nasaApiKeyConfigured"] = nasa_api.configured()
     return msg
 
 

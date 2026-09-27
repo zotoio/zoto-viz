@@ -296,7 +296,6 @@ let activeArcade: string | null = null;
 let mosaic: Mosaic | null = null;
 let lastRaw: StateMsg | null = null;
 let typeSafeKeyOn = false;
-let nasaApiKeyOn = false;
 
 const themeSel = new Select({
   id: "theme",
@@ -2220,7 +2219,6 @@ async function bootCatalogFromSession(): Promise<void> {
   try {
     const session = await bootSession();
     typeSafeKeyOn = session.typesafeConfigured;
-    nasaApiKeyOn = session.nasaApiKeyConfigured;
     setTypeSafeProxyConfigured(() => typeSafeKeyOn);
     agent.setControlFromServer(session.aiControl);
     pluginSpecs = await installPlugins();
@@ -2547,7 +2545,6 @@ function liveAuthCtx(): AuthCtx {
     sources: lastRaw?.sources,
     cursorConfigured: agent.cursorReady(),
     typesafeConfigured: typeSafeKeyOn,
-    nasaApiKeyConfigured: nasaApiKeyOn || !!lastRaw?.nasaApiKeyConfigured,
   };
 }
 

@@ -7,12 +7,17 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pytest
+from aiohttp import ClientSession
+
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from service import access
 from service import logbuf
 from service import nasa_api
+from service import request_guard
 from service import sources
+from tests.monitor_app_test_util import host_header, make_app_server
 
 
 FAKE_KEY = "fake-nasa-key-for-tests-only"
@@ -76,28 +81,122 @@ def test_write_key_persists_host_env(tmp_path: Path) -> None:
     assert nasa_api.read_key() == FAKE_KEY
 
 
-def _run(coro):
-    return asyncio.run(coro)
+async def _nasa_key_app_no_access_middleware() -> tuple[TestClient, int]:
+    app = web.Application(middlewares=[request_guard.middleware])
+    app["csrf"] = "token-nasa-guard"
+    app["insecure_lan"] = False
+    request_guard.register_response_prepare_hook(app)
+    app.router.add_put("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
+    app.router.add_get("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
+    client = TestClient(TestServer(app))
+    await client.start_server()
+    port = client.port
+    request_guard.configure_request_guard(app, bind="127.0.0.1", port=port)
+    return client, port
 
 
-def test_nasa_key_api_roundtrip() -> None:
-    async def _inner() -> None:
-        app = web.Application()
-        app.router.add_get("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
-        app.router.add_put("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
-        client = TestClient(TestServer(app))
-        await client.start_server()
+def test_nasa_key_handler_guard_rejects_put_without_csrf() -> None:
+    async def run() -> None:
+        client, port = await _nasa_key_app_no_access_middleware()
         try:
-            async with client.get("/api/sources/nasa-api-key") as resp:
-                assert (await resp.json())["configured"] is False
-            async with client.put("/api/sources/nasa-api-key", json={"key": FAKE_KEY}) as resp:
-                assert resp.status == 200
-                assert (await resp.json())["nasaApiKeyConfigured"] is True
-            async with client.get("/api/sources/nasa-api-key") as resp:
-                body = await resp.json()
-                assert body["configured"] is True
-                assert FAKE_KEY not in json.dumps(body)
+            resp = await client.put(
+                "/api/sources/nasa-api-key",
+                json={"key": FAKE_KEY},
+                headers=host_header(port),
+            )
+            assert resp.status == 403
+            body = await resp.json()
+            assert body.get("error") == "csrf required"
         finally:
             await client.close()
 
-    _run(_inner())
+    asyncio.run(run())
+
+
+def test_nasa_key_handler_guard_rejects_cross_origin() -> None:
+    async def run() -> None:
+        client, port = await _nasa_key_app_no_access_middleware()
+        try:
+            resp = await client.put(
+                "/api/sources/nasa-api-key",
+                json={"key": FAKE_KEY},
+                headers={
+                    **host_header(port),
+                    access.HEADER: "token-nasa-guard",
+                    "Origin": "http://evil.example",
+                },
+            )
+            assert resp.status == 403
+            body = await resp.json()
+            assert body.get("error") == "forbidden origin"
+        finally:
+            await client.close()
+
+    asyncio.run(run())
+
+
+def test_nasa_key_put_rejects_cross_origin() -> None:
+    async def run() -> None:
+        async with make_app_server() as (ip, port, _runner):
+            async with ClientSession() as session:
+                async with session.get(
+                    f"http://{ip}:{port}/api/session",
+                    headers=host_header(port, ip),
+                ) as boot:
+                    token = boot.headers.get(access.HEADER, "")
+                async with session.put(
+                    f"http://{ip}:{port}/api/sources/nasa-api-key",
+                    json={"key": FAKE_KEY},
+                    headers={
+                        **host_header(port, ip),
+                        access.HEADER: token,
+                        "Origin": "http://evil.example",
+                    },
+                ) as resp:
+                    assert resp.status == 403
+                    body = await resp.json()
+                    assert body.get("error") == "forbidden origin"
+
+    asyncio.run(run())
+
+
+def test_nasa_key_put_rejects_without_csrf_token() -> None:
+    async def run() -> None:
+        async with make_app_server() as (ip, port, _runner):
+            async with ClientSession() as session:
+                async with session.put(
+                    f"http://{ip}:{port}/api/sources/nasa-api-key",
+                    json={"key": FAKE_KEY},
+                    headers=host_header(port, ip),
+                ) as resp:
+                    assert resp.status == 403
+                    body = await resp.json()
+                    assert body.get("error") == "csrf required"
+
+    asyncio.run(run())
+
+
+def test_nasa_key_get_never_returns_secret() -> None:
+    async def run() -> None:
+        async with make_app_server() as (ip, port, _runner):
+            async with ClientSession() as session:
+                async with session.get(
+                    f"http://{ip}:{port}/api/session",
+                    headers=host_header(port, ip),
+                ) as boot:
+                    token = boot.headers.get(access.HEADER, "")
+                async with session.put(
+                    f"http://{ip}:{port}/api/sources/nasa-api-key",
+                    json={"key": FAKE_KEY},
+                    headers={**host_header(port, ip), access.HEADER: token},
+                ) as put:
+                    assert put.status == 200
+                async with session.get(
+                    f"http://{ip}:{port}/api/sources/nasa-api-key",
+                    headers=host_header(port, ip),
+                ) as resp:
+                    blob = json.dumps(await resp.json())
+                    assert FAKE_KEY not in blob
+                    assert nasa_api.ENV_KEY not in blob
+
+    asyncio.run(run())

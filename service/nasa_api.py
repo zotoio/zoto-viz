@@ -8,6 +8,7 @@ from typing import Any
 
 from aiohttp import web
 
+from . import access
 from . import paths
 
 ENV_KEY = "NASA_API_KEY"
@@ -159,7 +160,21 @@ def public_snapshot(live: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]
     return {sid: public_live_row(row) for sid, row in live.items()}
 
 
+def _deny_settings_mutate(request: web.Request) -> web.Response | None:
+    """Origin + CSRF for PUT/DELETE — same contract as other Settings writes."""
+    if request.method not in access.MUTATE:
+        return None
+    if not access.origin_ok(request):
+        return access._deny("forbidden origin")
+    if not access.csrf_ok(request):
+        return access._deny("csrf required")
+    return None
+
+
 async def api_nasa_key(request: web.Request) -> web.Response:
+    denied = _deny_settings_mutate(request)
+    if denied is not None:
+        return denied
     if request.method == "DELETE":
         if os.environ.get(ENV_KEY, "").strip() and not _host_has_key():
             return web.json_response({"ok": False, "error": f"{ENV_KEY} env wins"}, status=400)

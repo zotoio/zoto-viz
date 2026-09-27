@@ -165,7 +165,6 @@ export async function bootSession(): Promise<{
   aiControl: boolean;
   pluginService: boolean;
   typesafeConfigured: boolean;
-  nasaApiKeyConfigured: boolean;
 }> {
   try {
     const r = await apiFetch("/api/session");
@@ -175,7 +174,6 @@ export async function bootSession(): Promise<{
         aiControl: false,
         pluginService: false,
         typesafeConfigured: false,
-        nasaApiKeyConfigured: false,
       };
     }
     const data = await r.json() as {
@@ -183,7 +181,6 @@ export async function bootSession(): Promise<{
       aiControl?: boolean;
       pluginService?: boolean;
       typesafeConfigured?: boolean;
-      nasaApiKeyConfigured?: boolean;
     };
     if (typeof data.csrf === "string" && data.csrf) csrf = data.csrf;
     const typesafeConfigured = typeof data.typesafeConfigured === "boolean"
@@ -194,7 +191,6 @@ export async function bootSession(): Promise<{
       aiControl: !!data.aiControl,
       pluginService: !!data.pluginService,
       typesafeConfigured,
-      nasaApiKeyConfigured: !!data.nasaApiKeyConfigured,
     };
   } catch {
     return {
@@ -202,7 +198,6 @@ export async function bootSession(): Promise<{
       aiControl: false,
       pluginService: false,
       typesafeConfigured: false,
-      nasaApiKeyConfigured: false,
     };
   }
 }

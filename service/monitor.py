@@ -1808,7 +1808,6 @@ async def api_session(request: web.Request) -> web.Response:
         "pluginService": plugins.python_enabled(),
         "insecureLan": bool(request.app.get("insecure_lan")),
         "typesafeConfigured": typesafe_proxy.api_key_configured(),
-        "nasaApiKeyConfigured": nasa_api.configured(),
     })
 
 
