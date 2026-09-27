@@ -1,7 +1,8 @@
 diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+index 116265e3..585185f2 100644
 --- a/web/src/plugins/plugin-ui.ts
 +++ b/web/src/plugins/plugin-ui.ts
-@@ -38,7 +38,9 @@ function appendFieldControl(
+@@ -57,7 +57,9 @@ function appendFieldControl(
    const current = values[f.key] ?? fieldDefault(f);
    const syncDirty = (el: HTMLElement) => {
      const cur = values[f.key] ?? fieldDefault(f);
@@ -9,5 +10,6 @@ diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
 +    if (f.type === "number") {
 +      syncFieldEditedMarkers(el, String(cur) !== String(fieldDefault(f)));
 +    }
+     onDirtyChange?.();
    };
    const wrap = (el: HTMLElement) => {

@@ -1,11 +1,11 @@
 diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+index 116265e3..9a73036f 100644
 --- a/web/src/plugins/plugin-ui.ts
 +++ b/web/src/plugins/plugin-ui.ts
-@@ -11,21 +11,7 @@ export const FIELD_EDITED_ARIA = "Unsaved change";
- 
+@@ -13,19 +13,6 @@ export const FIELD_EDITED_ARIA = "Unsaved change";
  function syncSectionSummaryEdited(details: HTMLDetailsElement): void {
    const sum = details.querySelector("summary");
--  if (!sum) return;
+   if (!sum) return;
 -  const dirtyInside = !!details.querySelector(".field-dirty");
 -  const show = dirtyInside && !details.open;
 -  if (show) {
@@ -19,7 +19,6 @@ diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
 -  } else {
 -    sum.querySelector(".field-edited-cue")?.remove();
 -  }
-+  if (!sum) return;
  }
  
  function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
