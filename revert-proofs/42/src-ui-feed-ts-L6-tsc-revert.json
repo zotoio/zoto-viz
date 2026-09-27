@@ -1,6 +1,0 @@
-{
-  "runner": "tsc",
-  "kind": "tsc",
-  "tsconfig": "tsc",
-  "expectedRed": "src/ui/feed.ts(146,5): error TS2304: Cannot find name 'onLayoutDevicePxRatioChange'."
-}

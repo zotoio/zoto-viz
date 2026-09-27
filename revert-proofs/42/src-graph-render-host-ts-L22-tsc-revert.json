@@ -1,6 +1,0 @@
-{
-  "runner": "tsc",
-  "kind": "tsc",
-  "tsconfig": "tsc",
-  "expectedRed": "src/graph/render-host.ts(40,24): error TS2304: Cannot find name 'DeviceRect'."
-}

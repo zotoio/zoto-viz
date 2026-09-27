@@ -1,6 +1,0 @@
-{
-  "runner": "tsc",
-  "kind": "tsc",
-  "tsconfig": "tsc-test",
-  "expectedRed": "test-support/pack-mirror-rect.boundary.ts(59,3): error TS2578: Unused '@ts-expect-error' directive."
-}

@@ -1,6 +1,0 @@
-{
-  "runner": "tsc",
-  "kind": "tsc",
-  "tsconfig": "tsc",
-  "expectedRed": "src/graph/scene.ts(1058,33): error TS2304: Cannot find name 'GlRectMut'."
-}

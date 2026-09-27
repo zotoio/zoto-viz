@@ -1,6 +1,0 @@
-{
-  "runner": "tsc",
-  "kind": "tsc",
-  "tsconfig": "tsc",
-  "expectedRed": "src/arcade/pong.ts(726,17): error TS2304: Cannot find name 'devicePxRatioNumber'."
-}

@@ -1,6 +1,0 @@
-{
-  "runner": "tsc",
-  "kind": "tsc",
-  "tsconfig": "tsc",
-  "expectedRed": "src/graph/render-host.ts(171,10): error TS2551: Property 'refreshCanvasDeviceHeight' does not exist on type 'RenderHost'. Did you mean 'canvasDeviceHeight'?"
-}
