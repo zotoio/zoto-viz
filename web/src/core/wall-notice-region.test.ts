@@ -417,12 +417,12 @@ describe("wall notice region", () => {
 describe("wall notice queue", () => {
   beforeEach(() => expect.hasAssertions());
   afterEach(() => { document.body.innerHTML = ""; });
-  it("R7 a held install-failed posted 600 times is queued once", () => {
+  it("R7 a held status notice posted 600 times is queued once", () => {
     const { region } = boot();
     postWallNotice({ key: "context-not-restored", text: "e1" });
     postWallNotice({ key: "update-rolled-back", text: "e2" });
     postWallNotice({ key: "install-failed", text: "e3" });
-    for (let i = 0; i < 600; i++) postWallNotice({ key: "install-failed", text: "held" });
+    for (let i = 0; i < 600; i++) postWallNotice({ key: "context-lost", text: "held" });
     expect(region.dataset.queueCount).toBe("1");
   });
 });
