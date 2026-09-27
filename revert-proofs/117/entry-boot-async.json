@@ -1,0 +1,8 @@
+{
+  "description": "Revert production guard (entry-boot-async)",
+  "runner": "vitest",
+  "project": "web",
+  "testFile": "src/app/__tests__/main-entry.boot.test.ts",
+  "testName": "finishes async boot and writes session live state",
+  "redLine": "AssertionError: expected null to be truthy"
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Revert production guard (entry-connect-call)",
+  "runner": "vitest",
+  "project": "web",
+  "testFile": "src/app/__tests__/main-entry.connect.test.ts",
+  "testName": "opens the live websocket and marks #conn ok",
+  "redLine": "AssertionError: expected false to be true // Object.is equality"
+}
