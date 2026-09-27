@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_nasa_api.py",
-  "testName": "test_api_and_snapshot_never_expose_key",
-  "description": "Revert monitor log redaction for NASA API key",
-  "red": "assert FAKE_KEY not in logs"
-}

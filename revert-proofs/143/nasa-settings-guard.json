@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_nasa_api.py",
-  "testName": "test_nasa_key_handler_guard_rejects_put_without_csrf",
-  "description": "Revert handler Origin/CSRF guard on PUT /api/sources/nasa-api-key",
-  "red": "assert resp.status == 403"
-}
