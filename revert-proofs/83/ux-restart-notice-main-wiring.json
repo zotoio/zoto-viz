@@ -2,7 +2,7 @@
   "runner": "vitest",
   "testFile": "src/app/main.wiring.test.ts",
   "testName": "main entry wiring > shows the restart strip when the server-restart event fires after entry bind",
-  "red": "",
+  "red": "AssertionError: expected null not to be null",
   "description": "ux-restart-notice-main-wiring",
   "timeoutSec": 120
 }
