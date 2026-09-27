@@ -72,7 +72,8 @@ describe("Settings panes", () => {
     expect(dicePane?.textContent).toMatch(/Guardian/);
     s.bindView(null);
     const pluginPane = s.el.querySelector('[data-pane="view"]');
-    expect(pluginPane?.textContent).toMatch(/The cog next to the view menu or on a mosaic tile opens this tab/);
+    expect(pluginPane?.textContent).toMatch(/On a single view, the cog next to the header view menu opens this tab/);
+    expect(pluginPane?.textContent).toMatch(/On a wall, use the corner cog on that pane/);
     expect(pluginPane?.textContent).toMatch(/Network and system visibility live under Graph/);
     expect(pluginPane?.textContent).toMatch(/Host and subnet filters live under Privacy/);
   });
@@ -180,5 +181,19 @@ describe("Settings panes", () => {
     expect(s.el.querySelector('.mosaic-pane-row[data-pane="plugin:memory"]')?.classList.contains("focus")).toBe(true);
     s.openView("plugin:memory");
     expect(s.isOpen).toBe(false);
+  });
+
+  it("binds This view when that settings tab opens", () => {
+    const s = new Settings({ storePrefix: "zoto-viz-show-view", onChange: () => {} });
+    let n = 0;
+    s.onShowView = () => { n += 1; };
+    s.open("view");
+    expect(n).toBe(1);
+    expect(s.openPane).toBe("view");
+    s.showPane("appearance");
+    expect(n).toBe(1);
+    expect(s.openPane).toBe("appearance");
+    s.showPane("view");
+    expect(n).toBe(2);
   });
 });

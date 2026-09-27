@@ -157,8 +157,9 @@ active profile; prefixes AI Dynamic and rebuilds it after a short pause) live
 under **This view → View**. A mosaic wall is **This view → Wall**.
 
 Content plugins are **instances**, not copies. `plugin.yml` `instances:` (and `~/.zoto-viz/plugin-instances.yml`) add catalog rows that reuse the same tree with a host `source` and title / caption / image / filter defaults. View id is `plugin:<id>` when the instance id matches the plugin, otherwise `plugin:<id>:<instance>`. Carousel ships NASA IOTD plus APOD / Earth Observatory / Commons POTD / Met; HN Rain ships HN plus Lobsters / Guardian / Mastodon.
-The cog next to the view menu opens that tab. Network and system visibility live under
-**Graph**. Host and subnet filters live under **Privacy**.
+The cog next to the header view menu opens that tab on a single view. A mosaic
+wall hides the header view menu; use the corner cog on the pane. Network and
+system visibility live under **Graph**. Host and subnet filters live under **Privacy**.
 
 Examples: `plugins/src/lan-pulse/`, `plugins/src/pulse-ts/`, `plugins/src/doom/`, `plugins/src/hn-term/`, `plugins/src/stereo-gram/`.
 
@@ -223,7 +224,7 @@ the current view).
 
 Write-safety guards (the tool writes into gitignored `plugins/<id>.zip`):
 
-1. **Loopback only** — Host must be loopback; hosted MCP is not on the roadmap.
+1. **Host gate** — Host must be loopback unless `insecure_lan` is on; hosted MCP is not on the roadmap.
 2. **Unique id** — never write a second plugin under an id that src, a contrib
    zip, or the local drop zone already uses. Remint and return `remintedFrom`.
    `overwrite` / `force` update that zip in place; they still never write into
