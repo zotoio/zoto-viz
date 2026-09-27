@@ -220,7 +220,8 @@ def test_dhcp_refresh_failure_keeps_last_good_set_and_retries(
             assert ok == 200
             stub_lan_os_interfaces["fail_refresh"] = False
             now = t0 + 62.0
-            assert await _one_session(port, ip, LAN_STUB_OTHER_IP) == 200
+            other_status = await _one_session(port, ip, LAN_STUB_OTHER_IP)
             assert stub_lan_os_interfaces["query_calls"] == startup + 2
+            assert other_status == 200
 
     asyncio.run(run())

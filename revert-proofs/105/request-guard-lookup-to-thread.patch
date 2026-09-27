@@ -1,13 +1,14 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 6dd9a32..88a0570 100644
+index 197ea560..214a98d0 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -304,7 +304,7 @@ async def _lookup_allowed(app: web.Application, key: str) -> bool:
+@@ -333,7 +333,8 @@ async def _lookup_allowed(app: web.Application, key: str) -> bool:
+     last = float(app.get("request_guard_last_if_lookup") or 0.0)
      if now - last < 30.0:
          return False
-     app["request_guard_last_if_lookup"] = now
--    await asyncio.to_thread(_refresh_allowed_hosts, app)
+-    await _await_shared_refresh(app)
 +    _refresh_allowed_hosts(app)
++    app["request_guard_last_if_lookup"] = clock()
      allowed = app.get("request_guard_allowed_hosts") or frozenset()
      return key in allowed
  

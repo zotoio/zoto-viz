@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_refresh_single_flight_fifty_concurrent_lookups",
+  "red": "AssertionError: assert 51 == (1 + 1)",
+  "timeoutSec": 120
+}
