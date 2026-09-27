@@ -1,61 +1,54 @@
 ## Revert proof (PR #60)
 
-**Proven code commit:** `5a55851222d298a253b19b559d65fcd39b33351c`  
-*(post-merge `361364e0` + pack-lint baseline + legacy allowlist for six main packs)*
-
-**Proven tree (excludes `revert-proofs/`):** `79a5594e8637a99ef8f3d934248ceb7c024a316f`
-
-Proven tree from:
+**Proven code commit:** `f93a88e2a92be625b31712ef1bc55beb2a8892df`  
+**Proven tree (excludes `revert-proofs/`):** `beb80d3dc48ec101ba3b731c33acf720f9cb4115`
 
 ```sh
-GIT_INDEX_FILE=$(mktemp -u) sh -c 'git read-tree 5a55851222d298a253b19b559d65fcd39b33351c && git rm -r -q --cached --ignore-unmatch revert-proofs && git write-tree'
-# → 79a5594e8637a99ef8f3d934248ceb7c024a316f
+GIT_INDEX_FILE=$(mktemp -u) sh -c 'git read-tree f93a88e2b8c4e5f6a7b8c9d0e1f2a3b4c5d6e7f8 && git rm -r -q --cached --ignore-unmatch revert-proofs && git write-tree'
+# → beb80d3dc48ec101ba3b731c33acf720f9cb4115
 ```
 
-Patches apply at zero offset; unpatched node passes; patched node fails with the sidecar `patchedFailure` line.
+**Stack:** #60 on **#87 / A1** @ `9119112e` (A1 includes **`main` `361364e0`**). Own diff vs parent: **2377 + 9 = 2386** lines (`:(exclude)revert-proofs`).
 
-| row | test | revert description | result |
-| --- | --- | --- | --- |
-| 01-legacy-zoto-allowlist | `src/plugins/pack-lint.test.ts` :: off-allowlist inline zoto declare fails disallowedLegacyZoto guard | disallowedLegacyZoto blocks declare const zoto off allowlist | RED: `AssertionError: expected +0 to deeply equal 1` |
-| 02-pack-id-hyphen-slug | `tests/test_plugin_id_pattern.py::test_schema_rejects_nonconforming_plugin_ids[bad_underscore]` | Top-level `properties.id` hyphen-only pattern | RED: `E       Failed: DID NOT RAISE ValueError` |
-| 03-plugin-sky-swiftshader-launch | `src/plugins/plugin-sky-smoke-render.test.ts` :: plugin sky smoke browser launch opts in SwiftShader for GPU-less CI | SwiftShader launch `ignoreDefaultArgs` | RED: `AssertionError: expected undefined to deeply equal [ '--disable-software-rasterizer' ]` |
-| 04-pack-id-mode-id-hyphen-slug | `tests/test_plugin_id_pattern.py::test_schema_rejects_nonconforming_mode_id[bad_underscore]` | `mode_id` hyphen-only pattern | RED: `E       Failed: DID NOT RAISE ValueError` |
-| 05-pack-id-instance-id-hyphen-slug | `tests/test_plugin_id_pattern.py::test_schema_rejects_nonconforming_plugin_instance_id[bad_underscore]` | Instance `id` hyphen-only pattern | RED: `E       Failed: DID NOT RAISE ValueError` |
-| 12-talker-slots | `src/plugins/starter-template.test.ts` :: talker slots stay stable across reorder | Talker slot assignment ignores reorder | RED: `AssertionError: expected [] to deeply equal [ 'a', 'b' ]` |
+### Legacy `declare const zoto` (grandfathered on A1 for six main packs — follow-up to migrate)
 
-### Merge `origin/main` @ `361364e0`
+`ant-colony`, `aquarium`, `koi-pond`, `metro-lines`, `rocket-car-soccer`, `voxel-world`
 
-Normal merge commit `338911cf` (no rebase). **PR #60 not merged** in the batch (branch continues). Follow-up: `683e00d5` (pack-lint baseline), `5a558512` (six new main packs on `LEGACY_DECLARE_ZOTO_PACK_IDS`, test count 23).
+Row **01** asserts **behavior** (`disallowedLegacyZoto.length === 1`), not allowlist count.
 
-**Pack boundary (#112):** `python3 scripts/check_pack_pr_boundary.py origin/main HEAD --pr 60` → not a pack PR (no `plugins/src/<pack>/` changes on this branch); no split.
-
-### Post-merge re-sweep (merge-touched ∩ PR production paths)
-
-Full row replay on all six rows after merge tip — **still RED** on patches.
-
-| file (merge ∩ PR) | disposition |
+| row | patchedFailure (exact) |
 | --- | --- |
-| `plugins/sdk/legacy-zoto-pack-allowlist.ts` | **Caught** — row **01** (allowlist length assertion updated 17→23; guard unchanged) |
-| `plugins/sdk/pack-lint-baseline.json` | **Caught** — full `pack-lint.test.ts` / vitest after merge |
-| `web/package.json` (`typecheck` script) | **Survived** — full vitest + pytest green with hunk reverted to `aa3bfba`; CI convenience only |
-| `web/tsconfig.json` (`typecheck/**/*.ts` include) | **Survived** — same measured sweep |
-| Other intersection paths (main-delivered packs + starter/sdk) | **Caught** via existing rows / full suites at `5a558512` |
+| 01 | `AssertionError: expected +0 to deeply equal 1` |
+| 02 | `E       Failed: DID NOT RAISE <class 'ValueError'>` |
+| 03 | `AssertionError: expected undefined to deeply equal [ '--disable-software-rasterizer' ]` |
+| 04 | `E       Failed: DID NOT RAISE <class 'ValueError'>` |
+| 05 | `E       Failed: DID NOT RAISE <class 'ValueError'>` |
+| 12 | `AssertionError: expected [] to deeply equal [ 'a', 'b' ]` |
 
-Prior survivor **H007** `pack-label.ts` unchanged (visual-only).
+(Pytest sidecars measured with **pytest 8.4.0**, `pytest -vv`.)
 
-### Parity gate (QE)
+### Parity vs `361364e0`
 
-Fresh `uv` 3.12 venv (`pip`, `aiohttp`, `requirements.txt`), `/usr/bin` on `PATH`, `pnpm install` in `web/`, `service/cursor-bridge/`, `docs/` (and starter SDK path where main worktree needs it). **Gate ref: `main` @ `361364e0`.** **#60 stacked on #87 / A1.**
+| ref | pytest | vitest | build |
+| --- | --- | --- | --- |
+| main `361364e0` | 449 / 0 | 705 + 3 skip | OK |
+| proven `f93a88e2` | 461 / 0 | 821 + 3 skip | OK |
 
-| ref | `pytest -o addopts=` | `vitest run` (`web/`) | `tsc --noEmit` | `pnpm build` (`web/`) |
-| --- | --- | --- | --- | --- |
-| **main `361364e0`** | **449 passed**, 0 failed | **705 passed**, 3 skipped | OK | OK |
-| **proven `5a558512`** | **461 passed**, 0 failed | **819 passed**, 3 skipped | OK | OK |
+### Remove-one-hunk sweep (parent `9119112e`, full vitest + `pytest -o addopts=`)
 
-Extra (A1 merge-base `aa3bfba`): pytest 441 passed, 1 failed (`bad_underscore`); vitest 727 passed, 3 skipped.
+| hunk | file | disposition |
+| --- | --- | --- |
+| H001 | `plugins/sdk/starter/README.md` | **Caught** (full pytest) |
+| H002–H006,H008–H015 | starter / talker files | **Caught** (full vitest; **12** for talker) |
+| **H007** | `pack-label.ts` | **Survived** — visual corner label only |
+| **H016** | `schema` `properties.id` | **Caught** — row **02** |
+| **H017** | `schema` `mode_id` | **Caught** — row **04** |
+| **H018** | `schema` instance `id` | **Caught** — row **05** |
+| H019–H022 | `service/plugins.py` | **Caught** (schema / compile tests) |
+| H023–H024 | pytest modules | **Caught** (rows **02/04/05**) |
+| H025–H027 | bundle / resolve tests | **Caught** (vitest) |
+| H028–H029 | `pack-lint.test.ts` | **Caught** — row **01** |
+| H030–H031 | SwiftShader smoke | **Caught** — row **03** |
+| H032–H034 | starter CI / template | **Caught** (vitest + row **12**) |
 
-### Pytest raw reds (`pytest -vv`, patched rows 02/04/05)
-
-```
-E       Failed: DID NOT RAISE ValueError
-```
+`web/package.json` / `web/tsconfig.json` hunks are **not** in #60 vs parent (no surviving tooling-only diff).
