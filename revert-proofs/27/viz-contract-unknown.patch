@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
+index 03d6430..2b775a2 100644
+--- a/web/src/plugins/viz-host.ts
++++ b/web/src/plugins/viz-host.ts
+@@ -309,7 +309,7 @@ function parsePackContractVersion(raw: unknown): PackVizContractVersion | "missi
+     return { blocked: "viz.contract must be a whole number (1 or 2)." };
+   }
+   if (raw === 1 || raw === 2) return raw as PackVizContractVersion;
+-  return { blocked: `viz.contract ${raw} is not supported; use 1 or 2.` };
++  return raw as PackVizContractVersion;
+ }
+ 
+ /** Parse plugin.yml ``viz`` block into a normalized contract or a blocked reason. */

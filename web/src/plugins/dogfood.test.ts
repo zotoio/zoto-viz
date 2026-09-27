@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { formatSkipRate, skipRatePerSec, vizHudMetric } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
@@ -28,6 +28,10 @@ import {
   buildVizFrameForPlugin,
 } from "./viz-host";
 import type { StateMsg } from "../core/types";
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("hn rain pack", () => {
   it("packs uppercase headline bytes the sky can decode", () => {

@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-host.ts b/web/src/plugins/viz-host.ts
+index 03d6430..641bb64 100644
+--- a/web/src/plugins/viz-host.ts
++++ b/web/src/plugins/viz-host.ts
+@@ -323,7 +323,7 @@ export function parseVizContractResult(raw: unknown): VizContractParseResult | u
+   if (typeof versionParse === "object" && "blocked" in versionParse) {
+     return { state: "Blocked", reason: versionParse.blocked };
+   }
+-  const contractVersion: PackVizContractVersion = versionParse === "missing" ? 1 : versionParse;
++  const contractVersion: PackVizContractVersion = versionParse === "missing" ? 2 : versionParse;
+   const uniforms = Array.isArray(doc.uniforms)
+     ? doc.uniforms.filter((u): u is VizSkyUniform => typeof u === "string" && SKY_UNIFORM_SET.has(u))
+     : [...PLUGIN_SKY_UNIFORMS];

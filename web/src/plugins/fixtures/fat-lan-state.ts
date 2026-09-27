@@ -25,18 +25,46 @@ export function fatLanFixture(): StateMsg {
     chan: i % 23 === 0 ? 36 + (i % 12) : undefined,
   }));
 
-  const flows: Flow[] = Array.from({ length: 1200 }, (_, i) => ({
-    a: devices[i % devices.length]!.ip,
-    b: devices[(i * 3) % devices.length]!.ip,
-    bytes: 100 + i,
-    packets: 1 + (i % 40),
-    ports: [`tcp/${443 + (i % 20)}`],
-    protos: [PROTOS[i % PROTOS.length]!],
-    ifaces: ["eth0"],
-    first_seen: 0,
-    last_seen: 100,
-    rate: 1 + (i % 5),
-  }));
+  const flows: Flow[] = Array.from({ length: 1200 }, (_, i) => {
+    const pktRate = 1 + (i % 5);
+    const ai = i % devices.length;
+    let bi = (i * 3 + 1) % devices.length;
+    if (bi === ai) bi = (bi + 1) % devices.length;
+    return {
+      a: devices[ai]!.ip,
+      b: devices[bi]!.ip,
+      bytes: 100 + i,
+      packets: 1 + (i % 40),
+      ports: [`tcp/${443 + (i % 20)}`],
+      protos: [PROTOS[i % PROTOS.length]!],
+      ifaces: ["eth0"],
+      first_seen: 0,
+      last_seen: 100,
+      rate: pktRate,
+      rate_pkt_ab: pktRate,
+      rate_pkt_ba: pktRate * 0.2,
+    };
+  });
+
+  const hubIps = [0, 1, 2, 3].map((i) => devices[i]!.ip);
+  for (let i = 0; i < hubIps.length; i++) {
+    for (let j = i + 1; j < hubIps.length; j++) {
+      flows.push({
+        a: hubIps[i]!,
+        b: hubIps[j]!,
+        bytes: 8000,
+        packets: 400,
+        ports: ["tcp/443"],
+        protos: ["tcp"],
+        ifaces: ["eth0"],
+        first_seen: 0,
+        last_seen: 100,
+        rate: 90,
+        rate_pkt_ab: 90,
+        rate_pkt_ba: 15,
+      });
+    }
+  }
 
   return {
     type: "state",
@@ -59,6 +87,7 @@ export function fatLanFixture(): StateMsg {
     },
     devices,
     flows,
+    host: { vizFrame: { links: true, linksMax: 64 } },
     views: {
       wifi: {
         devices: devices.filter((d) => d.ssid),

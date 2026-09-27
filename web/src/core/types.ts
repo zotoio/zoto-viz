@@ -33,6 +33,8 @@ export interface Device {
   temp?: number;
   /** RAPL / GPU watts when readable */
   watts?: number;
+  /** TCP failed / reset events in the capture window, 0..1 (viz frame v2). */
+  conn_fail?: number;
   /* ---- RF nodes (ap: / sta:) */
   /** network the node lives on: an AP's own SSID, the SSID of the AP a station talks to */
   ssid?: string;
@@ -143,6 +145,10 @@ export interface Flow {
   rate_ab?: number;
   /** bytes/s b→a */
   rate_ba?: number;
+  /** packets/s a→b (monitor smoothing window) */
+  rate_pkt_ab?: number;
+  /** packets/s b→a */
+  rate_pkt_ba?: number;
 }
 
 export interface Stats {
@@ -228,6 +234,13 @@ export interface StateMsg {
   /** Backend and host shadow extensions (e.g. typesafe Sense results). */
   plugin_state?: Record<string, unknown>;
   sources?: Record<string, SourceLive>;
+  /** Monitor host options (from ~/.zoto-viz/sys-config.yml). */
+  host?: {
+    vizFrame?: {
+      links?: boolean;
+      linksMax?: number;
+    };
+  };
   /** Google Nest Device Access (redacted). */
   sdm?: {
     linked?: boolean;

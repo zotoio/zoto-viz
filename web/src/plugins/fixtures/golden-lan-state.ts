@@ -41,6 +41,8 @@ function flow(a: string, b: string, rate: number, proto = "tcp"): Flow {
     first_seen: 0,
     last_seen: 100,
     rate,
+    rate_pkt_ab: rate,
+    rate_pkt_ba: Math.max(0, rate * 0.25),
   };
 }
 

@@ -197,6 +197,10 @@ export function scrubMapForFrame(state: StateMsg, frame: VizDataFrame): Map<stri
   for (const t of frame.talkers) {
     if (!isPlaceholderId(t.id)) assignPlaceholder(map, t.id);
   }
+  for (const l of frame.links ?? []) {
+    assignPlaceholder(map, l.src);
+    assignPlaceholder(map, l.dst);
+  }
   for (const b of frame.rf) assignPlaceholder(map, b.ssid);
   for (const h of frame.headlines) {
     if (stringHasSensitive(h.id, hostnames)) assignPlaceholder(map, h.id);
@@ -212,6 +216,7 @@ export function scrubVizDataFrame(
   const hostnames = state ? collectHostnameTokens(state) : new Set<string>();
   return {
     ...frame,
+    ...(frame.contract != null ? { contract: frame.contract } : {}),
     packets: frame.packets.map((p) => ({
       ...p,
       proto: scrubStringIfSensitive(p.proto, map, hostnames),
@@ -224,7 +229,16 @@ export function scrubVizDataFrame(
       id: scrubStructuralId(t.id, map),
       rate: t.rate,
       role: t.role,
+      ...(t.failed != null ? { failed: t.failed } : {}),
     })),
+    ...(frame.links?.length ? {
+      links: frame.links.map((l) => ({
+        src: scrubStructuralId(l.src, map),
+        dst: scrubStructuralId(l.dst, map),
+        rate: l.rate,
+      })),
+    } : {}),
+    ...(frame.linksDropped != null ? { linksDropped: frame.linksDropped } : {}),
     headlines: frame.headlines.map((h) => ({
       ...h,
       id: scrubStringIfSensitive(h.id, map, hostnames),
@@ -259,6 +273,7 @@ function trimDevice(d: Device): Device {
     ...(d.cpu != null ? { cpu: d.cpu } : {}),
     ...(d.ssid != null ? { ssid: d.ssid } : {}),
     ...(d.chan != null ? { chan: d.chan } : {}),
+    ...(d.conn_fail != null ? { conn_fail: d.conn_fail } : {}),
   };
 }
 
@@ -274,6 +289,10 @@ function trimFlow(f: Flow): Flow {
     first_seen: f.first_seen,
     last_seen: f.last_seen,
     rate: f.rate,
+    ...(f.rate_ab != null ? { rate_ab: f.rate_ab } : {}),
+    ...(f.rate_ba != null ? { rate_ba: f.rate_ba } : {}),
+    ...(f.rate_pkt_ab != null ? { rate_pkt_ab: f.rate_pkt_ab } : {}),
+    ...(f.rate_pkt_ba != null ? { rate_pkt_ba: f.rate_pkt_ba } : {}),
   };
 }
 
@@ -427,7 +446,7 @@ export function vmLiveCaptureState(): StateMsg {
 /** Real host idle merge on an empty monitor (buildIdleVizFrame via `fixture: host`). */
 export function buildVizSdkIdleFrame(): VizDataFrame {
   const state = emptyMonitorState(10);
-  const raw = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE);
+  const raw = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE, 2);
   const map = scrubMapForFrame(state, raw);
   return scrubVizDataFrame(raw, map, state);
 }
@@ -466,11 +485,22 @@ export function withFailedUnitsView(state: StateMsg, failedCount = 3): StateMsg 
   };
 }
 
+/** Stamp per-device `conn_fail` gauges for frozen failed fixtures (viz v2 talkers[].failed). */
+export function withConnFailDevices(state: StateMsg, failByIp: Record<string, number>): StateMsg {
+  return {
+    ...state,
+    devices: state.devices.map((d) => {
+      const ratio = failByIp[d.ip];
+      return ratio != null ? { ...d, conn_fail: ratio } : d;
+    }),
+  };
+}
+
 function scrubIdleDemoSlices(frame: VizDataFrame): VizDataFrame {
   const slices = frame.demoSlices;
   if (!frame.demo || !slices) return frame;
   const empty = emptyMonitorState(frame.t);
-  const seed = buildVizFrameForPlugin(empty, 0, 0, VIZ_SDK_HOST_IDLE);
+  const seed = buildVizFrameForPlugin(empty, 0, 0, VIZ_SDK_HOST_IDLE, 2);
   const map = scrubMapForFrame(empty, seed);
   const scrubbed = scrubVizDataFrame(seed, map, empty);
   return {
@@ -490,7 +520,7 @@ function buildLiveFrame(state: StateMsg, prevTs = 0, audio = 0.12): VizDataFrame
 }
 
 function buildPluginQuietFrame(state: StateMsg, prevTs = 0, audio = 0): VizDataFrame {
-  const raw = buildVizFrameForPlugin(state, prevTs, audio, VIZ_SDK_HOST_IDLE);
+  const raw = buildVizFrameForPlugin(state, prevTs, audio, VIZ_SDK_HOST_IDLE, 2);
   return scrubIdleDemoSlices(raw);
 }
 
@@ -499,7 +529,11 @@ export function buildVizSdkGoldenLiveFrame(): VizDataFrame {
 }
 
 export function buildVizSdkGoldenLiveFailedFrame(): VizDataFrame {
-  return buildLiveFrame(withFailedUnitsView(goldenLanFixture()));
+  const state = withConnFailDevices(withFailedUnitsView(goldenLanFixture()), {
+    "10.0.0.15": 0.5,
+    "10.0.0.22": 0.35,
+  });
+  return buildLiveFrame(state);
 }
 
 export function buildVizSdkFatLiveFrame(): VizDataFrame {
@@ -507,7 +541,14 @@ export function buildVizSdkFatLiveFrame(): VizDataFrame {
 }
 
 export function buildVizSdkFatLiveFailedFrame(): VizDataFrame {
-  return buildLiveFrame(withFailedUnitsView(fatLanFixture()));
+  const base = fatLanFixture();
+  const failByIp: Record<string, number> = {};
+  for (let i = 0; i < 8; i++) {
+    const ip = base.devices[i * 11]?.ip;
+    if (ip) failByIp[ip] = 0.25 + (i % 5) * 0.1;
+  }
+  const state = withConnFailDevices(withFailedUnitsView(base), failByIp);
+  return buildLiveFrame(state);
 }
 
 /** Quiet VM capture with host idle merge (real pack path on an empty LAN). */

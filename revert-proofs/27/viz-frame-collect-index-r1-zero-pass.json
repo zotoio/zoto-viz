@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
+  "testName": "^viz link index R1 pruning > zeroing pass visits exactly 200 slots after 200\u2192400\u2192200 flows when endpoints leave talkers$",
+  "description": "Revert: refresh link index Map entry on every linkSlotForPair hit (redundant inner Map.set).",
+  "patchedAssertion": "AssertionError: expected 200 to be +0 // Object.is equality"
+}

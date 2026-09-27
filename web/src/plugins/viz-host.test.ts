@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Device, StateMsg } from "../core/types";
 import {
   VIZ_DEFAULT_MAX_BUFFERS,
@@ -10,11 +10,18 @@ import {
   VizFrameBudget,
   bindVizWriterCore,
   buildVizFrame,
+  buildVizFrameForPlugin,
   defaultVizContract,
   parseVizContract,
+  parseVizContractResult,
   pluginNeedsVizContract,
   topKByScore,
+  VIZ_CONTRACT_VERSION,
 } from "./viz-host";
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz contract", () => {
   it("requires graphWalk false and viz.idle in schema parse", () => {
@@ -37,8 +44,9 @@ describe("viz contract", () => {
     expect(c?.maxParticles).toBe(8192);
   });
 
-  it("attaches the fixed UBO layout", () => {
+  it("attaches the fixed UBO layout and defaults pack contract to v1 when omitted", () => {
     const c = parseVizContract({ graphWalk: false, idle: { fixture: "host" } });
+    expect(c?.contract).toBe(1);
     expect(c?.ubo).toEqual(VIZ_UBO);
     expect(c?.ubo.block).toBe("ZotoVizData");
     expect(c?.ubo.binding).toBe(0);
@@ -55,7 +63,57 @@ describe("viz contract", () => {
 
   it("exposes the frame budget constant", () => {
     expect(VIZ_FRAME_BUDGET_MS).toBeCloseTo(16.7, 1);
+    expect(defaultVizContract().contract).toBe(VIZ_CONTRACT_VERSION);
     expect(defaultVizContract().maxBuffers).toBe(VIZ_DEFAULT_MAX_BUFFERS);
+  });
+});
+
+describe("viz contract version negotiation", () => {
+  const base = { graphWalk: false, idle: { fixture: "host" as const } };
+
+  it("treats missing viz.contract as v1", () => {
+    const r = parseVizContractResult(base);
+    expect(r?.state).toBe("ready");
+    if (r?.state !== "ready") return;
+    expect(r.contract.contract).toBe(1);
+  });
+
+  it("accepts declared v2 packs", () => {
+    const r = parseVizContractResult({ ...base, contract: 2 });
+    expect(r?.state).toBe("ready");
+    if (r?.state === "ready") expect(r.contract.contract).toBe(2);
+  });
+
+  it("blocks unknown viz.contract with a plain-language reason", () => {
+    const r = parseVizContractResult({ ...base, contract: 9 });
+    expect(r).toEqual({
+      state: "Blocked",
+      reason: "viz.contract 9 is not supported; use 1 or 2.",
+    });
+  });
+
+  it("blocks string viz.contract values", () => {
+    const r = parseVizContractResult({ ...base, contract: "2" });
+    expect(r?.state).toBe("Blocked");
+  });
+
+  it("blocks boolean viz.contract values", () => {
+    const r = parseVizContractResult({ ...base, contract: true });
+    expect(r?.state).toBe("Blocked");
+  });
+
+  it("delivers v1 talker lifetime counts for v1 packs even when flow rates exist", () => {
+    const state = minimalState();
+    const frame = buildVizFrameForPlugin(state, 0, 0, { fixture: "host" }, 1);
+    expect(frame.contract).toBe(1);
+    expect(frame.links).toBeUndefined();
+    expect(frame.talkers[0]?.rate).toBe(50);
+  });
+
+  it("delivers v2 enrichment for v2 packs", () => {
+    const frame = buildVizFrameForPlugin(minimalState(), 0, 0, { fixture: "host" }, 2);
+    expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
+    expect(frame.talkers[0]?.failed).toBeUndefined();
   });
 });
 
