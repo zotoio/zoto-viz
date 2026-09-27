@@ -49,11 +49,6 @@ def register_install_check(check: InstallCheck) -> None:
     _INSTALL_CHECKS.append(check)
 
 
-def reset_install_locks_for_tests() -> None:
-    with _pack_lock_meta:
-        _pack_install_locks.clear()
-
-
 def _lock_for_pack(pack_id: str) -> threading.Lock:
     with _pack_lock_meta:
         lock = _pack_install_locks.get(pack_id)
