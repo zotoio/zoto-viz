@@ -1,0 +1,11 @@
+diff --git a/scripts/revert-proof.lib.test.ts b/scripts/revert-proof.lib.test.ts
+--- a/scripts/revert-proof.lib.test.ts
++++ b/scripts/revert-proof.lib.test.ts
+@@ -701,7 +701,7 @@ describe("revert-proof self-test checkout isolation (#128 catch-up)", () => {
+   it("(option-b) self-test does not read catch-up proof trees from checkout (e.g. revert-proofs/48/)", () => {
+     // After #128, main may ship baseline folders (102/, 112/, 95/) but not every merged PR’s tree.
+-    expect(fs.existsSync(path.join(repoRoot, "revert-proofs", "48"))).toBe(false);
++    expect(fs.existsSync(path.join(repoRoot, "revert-proofs"))).toBe(false);
+     // Row proofs in this bundle use temp git fixtures under os.tmpdir(), not `git ls-files revert-proofs`.
+   });
+ });

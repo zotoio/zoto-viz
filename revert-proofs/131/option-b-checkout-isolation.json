@@ -1,0 +1,7 @@
+{
+  "description": "Self-test must not require empty checkout revert-proofs/ (#128 baseline folders on main)",
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.lib.test.ts",
+  "testName": "revert-proof self-test checkout isolation (#128 catch-up) > (option-b) self-test does not read catch-up proof trees from checkout (e.g. revert-proofs/48/)",
+  "red": "AssertionError: expected true to be false // Object.is equality"
+}
