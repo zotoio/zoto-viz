@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 14224de3..b2e44ea5 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -183,7 +183,7 @@ def local_interface_hosts(port: int) -> set[str]:
+         seen.add(addr)
+         try:
+             ip = ipaddress.ip_address(addr)
+-            if ip.is_loopback or ip.is_link_local:
++            if ip.is_loopback:
+                 continue
+         except ValueError:
+             continue

@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_configure_request_guard_stamps_last_lookup_and_refresh_lock",
+  "red": "AssertionError: assert None == 1000.0",
+  "timeoutSec": 120
+}

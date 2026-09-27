@@ -1,0 +1,12 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 9c257b9f..318299eb 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -309,6 +309,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+         resp = exc
+     except Exception:
+         _log.exception("unhandled error in request handler")
+-        resp = web.Response(status=500, text=HANDLER_ERROR_BODY, content_type="text/plain")
++        resp = web.Response(status=500, text="internal server error", content_type="text/plain")
+     attach_frame_embed_policy(resp)
+     return resp

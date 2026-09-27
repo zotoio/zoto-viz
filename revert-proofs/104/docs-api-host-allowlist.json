@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_api_docs_describe_loopback_host_allowlist_not_lan_scan",
+  "red": "AssertionError: docs must not describe LAN scan as 'all local interface addresses'",
+  "description": "docs/api.md describes loopback allowlist (#104), not LAN scan.",
+  "timeoutSec": 120
+}

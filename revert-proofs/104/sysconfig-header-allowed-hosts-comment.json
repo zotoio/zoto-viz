@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_sysconfig_header_documents_allowed_hosts_key",
+  "red": "AssertionError: missing '# allowed_hosts:' in sysconfig.HEADER",
+  "description": "sys-config HEADER documents allowed_hosts.",
+  "timeoutSec": 120
+}

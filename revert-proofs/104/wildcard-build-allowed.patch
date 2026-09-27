@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 04ba3ef..06afbcb 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -147,7 +147,7 @@ def build_allowed_hosts(
+ ) -> frozenset[str]:
+     allowed: set[str] = set(_loopback_hosts(port))
+     bind = (bind or "127.0.0.1").strip()
+-    if bind and bind not in {"0.0.0.0", "::"}:
++    if bind:
+         allowed.add(_canonical_key(bind, port))
+     for item in extra or ():
+         norm = validate_allowed_host_entry(str(item))

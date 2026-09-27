@@ -1,0 +1,14 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 14224de3..b44ac2c0 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -164,8 +164,7 @@ def query_os_interface_addresses() -> list[str]:
+                 if info.get("family") not in ("inet", "inet6"):
+                     continue
+                 local = info.get("local")
+-                if local:
+-                    addrs.append(str(local))
++                addrs.append(str(local))
+         return addrs
+     except (OSError, ValueError, subprocess.TimeoutExpired, json.JSONDecodeError):
+         return []

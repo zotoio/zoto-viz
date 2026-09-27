@@ -26,10 +26,10 @@ from typing import Any, Callable
 import yaml
 
 from . import access
+from .request_guard import validate_allowed_host_entry
 from . import paths
 
 KEYS = ("root", "hostname", "iface", "monitor_iface", "ssids")
-LISTEN_KEYS = ("bind", "port", "insecure_lan", "inhibit_screensaver")
 DEFAULT_BIND = "127.0.0.1"
 DEFAULT_PORT = 7020
 DEFAULT_VIZ_FRAME_LINKS = True
@@ -43,6 +43,7 @@ HEADER = (
     "# inhibit_screensaver: true       # hold idle/sleep so the display does not blank (default on)\n"
     "# viz_frame_links: true           # emit viz frame v2 links[] + talkers[].failed (default on)\n"
     "# viz_frame_links_max: 64         # cap directional link rows per frame (1..256)\n"
+    "# allowed_hosts: []               # extra Host names (hostname, IPv4, or [IPv6], optional :port)\n"
 )
 REPO = Path(__file__).resolve().parents[1]
 Run = Callable[[list[str]], str]
@@ -115,6 +116,19 @@ def _bind(raw: Any) -> str:
     return str(raw or "").strip() or DEFAULT_BIND
 
 
+def _allowed_hosts(raw: Any) -> list[str]:
+    if raw is None:
+        return []
+    items = raw if isinstance(raw, list) else [raw]
+    out: list[str] = []
+    for item in items:
+        s = str(item or "").strip()
+        if not s:
+            continue
+        out.append(validate_allowed_host_entry(s))
+    return out
+
+
 def _inhibit_screensaver(raw: dict[str, Any]) -> bool:
     from . import idle
 
@@ -148,6 +162,7 @@ def listen_opts(cfg: dict[str, Any] | None) -> dict[str, Any]:
         "port": _port(raw.get("port")),
         "insecure_lan": True if not loopback else _bool(raw.get("insecure_lan")),
         "inhibit_screensaver": _inhibit_screensaver(raw),
+        "allowed_hosts": _allowed_hosts(raw.get("allowed_hosts")),
     }
 
 
@@ -175,6 +190,7 @@ def resolve_listen(
         "port": resolved_port,
         "insecure_lan": lan,
         "inhibit_screensaver": saver,
+        "allowed_hosts": list(opts.get("allowed_hosts") or []),
     }
 
 
@@ -223,6 +239,7 @@ def dump(cfg: dict[str, Any]) -> str:
         "inhibit_screensaver": bool(opts["inhibit_screensaver"]),
         "viz_frame_links": bool(viz_frame_opts(cfg).get("links")),
         "viz_frame_links_max": int(viz_frame_opts(cfg).get("linksMax")),
+        "allowed_hosts": list(opts.get("allowed_hosts") or []),
     }
     return HEADER + yaml.safe_dump(body, sort_keys=False, default_flow_style=False)
 

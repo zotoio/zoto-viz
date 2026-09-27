@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_sysconfig_listen_opts_includes_allowed_hosts_without_listen_keys",
+  "red": "KeyError: 'allowed_hosts'",
+  "description": "LISTEN_KEYS was removed as dead code; revert must not reintroduce it.",
+  "timeoutSec": 120
+}

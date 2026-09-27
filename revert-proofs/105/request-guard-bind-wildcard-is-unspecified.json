@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_bind_matrix.py::test_build_allowed_hosts_bind_ipv6_unspecified_wildcard_includes_stub_lan",
+  "red": "AssertionError: :: wildcard bind must allow LAN key 192.168.1.5:7020",
+  "description": "Wildcard bind must use ipaddress.is_unspecified (e.g. ::), not a 0.0.0.0 string compare alone.",
+  "timeoutSec": 120
+}

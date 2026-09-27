@@ -167,7 +167,7 @@ def attach_html_frame_policy(resp: web.StreamResponse) -> None:
 
 def bind_is_loopback(bind: str) -> bool:
     host = (bind or "").strip()
-    if host in {"127.0.0.1", "localhost", "::1"}:
+    if host.lower() == "localhost":
         return True
     try:
         return ipaddress.ip_address(host).is_loopback
@@ -259,10 +259,22 @@ def _deny(msg: str, status: int = 403) -> web.Response:
     return resp
 
 
+def attach_frame_embed_policy(resp: web.StreamResponse) -> None:
+    """Every response must not be embeddable off-origin (including errors and static files)."""
+    resp.headers["X-Frame-Options"] = "SAMEORIGIN"
+    prior = resp.headers.get("Content-Security-Policy", "")
+    frame = "frame-ancestors 'self'"
+    if prior:
+        if "frame-ancestors" not in prior:
+            resp.headers["Content-Security-Policy"] = f"{prior}; {frame}"
+    else:
+        resp.headers["Content-Security-Policy"] = frame
+
+
+
+
 @web.middleware
 async def middleware(request: web.Request, handler):  # noqa: ANN001
-    if not host_ok(request):
-        return _deny("forbidden host")
     if not origin_ok(request):
         return _deny("forbidden origin")
     if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):

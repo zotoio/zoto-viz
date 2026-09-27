@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 04ba3ef..0a81c5f 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -115,7 +115,7 @@ def normalize_host_header_key(
+         elif bound_port == 80:
+             port_str = "80"
+         else:
+-            return None
++            port_str = str(bound_port)
+     try:
+         port = int(port_str)
+     except ValueError:

@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 14224de3..d4c874a5 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -178,8 +178,6 @@ def local_interface_hosts(port: int) -> set[str]:
+     out.add(_canonical_key("::1", port))
+     seen: set[str] = set()
+     for addr in query_os_interface_addresses():
+-        if addr in seen or addr in {"0.0.0.0", "::"}:
+-            continue
+         seen.add(addr)
+         try:
+             ip = ipaddress.ip_address(addr)

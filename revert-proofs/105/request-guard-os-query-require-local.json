@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_os_query.py::test_query_os_interface_addresses_skips_addr_info_without_local",
+  "red": "AssertionError: assert ['10.1.1.1', 'None'] == ['10.1.1.1']",
+  "timeoutSec": 120
+}

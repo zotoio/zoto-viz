@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 14224de3..c1e1d0d4 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -323,7 +323,7 @@ def configure_request_guard(
+     app["request_guard_last_if_lookup"] = now
+     if app.get("request_guard_refresh_lock") is None:
+         app["request_guard_refresh_lock"] = asyncio.Lock()
+-    _refresh_allowed_hosts(app)
++    app["request_guard_allowed_hosts"] = frozenset()
+ 
+ 
+ def validated_http_origin(request: web.Request) -> str:

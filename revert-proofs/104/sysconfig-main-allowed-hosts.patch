@@ -1,0 +1,19 @@
+diff --git a/service/monitor.py b/service/monitor.py
+index 5a7fc2f..e223e0d 100644
+--- a/service/monitor.py
++++ b/service/monitor.py
+@@ -2033,14 +2033,12 @@ def main() -> None:
+             + f", {w['dwell']} s each" + ("" if w["rotate"] else ", rotation off"))
+     # shutdown_timeout bounds the wait for in-flight requests; the unit gives us 10 s in total
+     try:
+-        extra_hosts = [str(h) for h in (listen.get("allowed_hosts") or [])]
+         app = make_app(
+             state,
+             args.filter,
+             args.wifi_keys,
+             bind=str(listen["bind"]),
+             port=int(listen["port"]),
+-            allowed_hosts=extra_hosts,
+             insecure_lan=listen["insecure_lan"],
+         )
+         web.run_app(app, host=listen["bind"], port=listen["port"], **run_app_kwargs())

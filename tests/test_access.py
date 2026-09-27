@@ -3,15 +3,16 @@ from __future__ import annotations
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from service import access
+from service import access, request_guard
 from service.forensics import location_allowed
+from service.request_guard import HOST_REJECT_BODY
 
 
 def test_bind_is_loopback() -> None:
     assert access.bind_is_loopback("127.0.0.1")
     assert access.bind_is_loopback("::1")
     assert access.bind_is_loopback("localhost")
-    assert access.bind_is_loopback("127.0.0.2")
+    assert access.bind_is_loopback("127.0.0.2"), "127.0.0.2 must be treated as loopback bind"
     assert not access.bind_is_loopback("0.0.0.0")
     assert not access.bind_is_loopback("192.168.1.5")
     assert not access.bind_is_loopback("nope")
@@ -74,7 +75,7 @@ def test_host_origin_csrf_helpers() -> None:
     assert not access.header_hostname("")
     assert not access.is_loopback_name("")
     assert access.header_hostname("[::1]:7020") == "::1"
-    assert access.bind_is_loopback("127.0.0.2")
+    assert access.bind_is_loopback("127.0.0.2"), "127.0.0.2 must be treated as loopback bind"
 
 
 
@@ -86,46 +87,61 @@ class AccessMiddlewareTests(AioHTTPTestCase):
         async def poke(_: web.Request) -> web.Response:
             return web.json_response({"wrote": True})
 
-        app = web.Application(middlewares=[access.middleware])
+        app = web.Application(middlewares=[request_guard.middleware, access.middleware])
         app["csrf"] = "token-aaa"
         app["insecure_lan"] = False
+        request_guard.register_response_prepare_hook(app)
         app.router.add_get("/ok", ok)
         app.router.add_post("/poke", poke)
         app.router.add_post("/mcp", poke)
         return app
 
+    async def setUpAsync(self) -> None:
+        await super().setUpAsync()
+        request_guard.configure_request_guard(
+            self.client.app, bind="127.0.0.1", port=self.client.port,
+        )
+
+    def _host(self, host: str = "127.0.0.1") -> dict[str, str]:
+        return {"Host": f"{host}:{self.client.port}"}
+
     async def test_loopback_get_and_csrf_post(self) -> None:
-        resp = await self.client.get("/ok", headers={"Host": "127.0.0.1:7020"})
+        resp = await self.client.get("/ok", headers=self._host())
         assert resp.status == 200
         token = resp.headers.get(access.HEADER)
         assert token == "token-aaa"
 
-        denied = await self.client.post("/poke", headers={"Host": "127.0.0.1:7020"})
+        denied = await self.client.post("/poke", headers=self._host())
         assert denied.status == 403
 
         ok = await self.client.post(
             "/poke",
-            headers={"Host": "127.0.0.1:7020", access.HEADER: token or ""},
+            headers={**self._host(), access.HEADER: token or ""},
         )
         assert ok.status == 200
 
         stale = await self.client.post(
             "/poke",
-            headers={"Host": "127.0.0.1:7020", access.HEADER: "token-aaa", "Cookie": f"{access.COOKIE}=stale"},
+            headers={
+                **self._host(),
+                access.HEADER: "token-aaa",
+                "Cookie": f"{access.COOKIE}=stale",
+            },
         )
         assert stale.status == 200
 
     async def test_rebinding_host_rejected(self) -> None:
-        resp = await self.client.get("/ok", headers={"Host": "evil.example:7020"})
-        assert resp.status == 403
+        resp = await self.client.get("/ok", headers={"Host": f"evil.example:{self.client.port}"})
+        assert resp.status == 400
+        assert await resp.text() == HOST_REJECT_BODY
 
     async def test_foreign_origin_rejected(self) -> None:
         resp = await self.client.get(
             "/ok",
-            headers={"Host": "127.0.0.1:7020", "Origin": "http://evil.example"},
+            headers={**self._host(), "Origin": "http://evil.example"},
         )
         assert resp.status == 403
 
     async def test_mcp_skips_csrf(self) -> None:
-        resp = await self.client.post("/mcp", headers={"Host": "127.0.0.1:7020"})
+        resp = await self.client.post("/mcp", headers=self._host())
         assert resp.status == 200

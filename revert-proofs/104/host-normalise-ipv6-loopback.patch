@@ -1,0 +1,15 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 04ba3ef..d794a92 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -125,7 +125,9 @@ def normalize_host_header_key(
+     if host.lower() == "localhost":
+         return _canonical_key("localhost", port)
+     try:
+-        ipaddress.ip_address(host)
++        ip = ipaddress.ip_address(host)
++        if isinstance(ip, ipaddress.IPv6Address) and ip == ipaddress.ip_address("::1"):
++            return None
+     except ValueError:
+         if not _HOSTNAME.fullmatch(host):
+             return None

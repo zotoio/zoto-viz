@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_bind_matrix.py::test_build_allowed_hosts_bind_wildcard_includes_stub_lan_interface_keys",
+  "red": "AssertionError: 0.0.0.0 wildcard bind must allow LAN key 192.168.1.5:7020",
+  "description": "Wildcard bind must include stubbed LAN interface keys.",
+  "timeoutSec": 120
+}

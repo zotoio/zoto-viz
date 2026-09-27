@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_frame_embed_policy.py::FrameEmbedPolicyTests::test_api_plugin_module_js_merges_frame_ancestors",
+  "red": "AssertionError: assert \"frame-ancestors 'self'\" in \"default-src 'none'; script-src 'none'\"",
+  "description": "Plugin module.js must merge frame-ancestors into an existing CSP.",
+  "timeoutSec": 120
+}

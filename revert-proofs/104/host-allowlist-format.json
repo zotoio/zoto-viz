@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_policy.py::test_disallowed_host_rejected_with_frame_headers",
+  "red": "AssertionError: assert 200 == 400",
+  "description": "Malformed Host 400 must use HOST_REJECT_BODY and frame headers; revert returns plain bad request.",
+  "timeoutSec": 120
+}
