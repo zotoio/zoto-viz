@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 5887fc1..c5e648a 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -180,7 +180,7 @@ def local_interface_hosts(port: int, *, include_os: bool = True) -> set[str]:
+                 continue
+         except ValueError:
+             continue
+-        out.add(_canonical_key(addr, port))
++        out.add(f"{addr}:{port}")
+     return out
+ 
+ 
