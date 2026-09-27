@@ -1070,8 +1070,6 @@ export interface SceneOpts {
   tileId?: string;
   /** mosaic tile id (`plugin:…`) for lifecycle / leak tests */
   panelId?: string;
-  /** render-host tile slot id for shader fallback / pack chrome */
-  tileId?: string;
 }
 
 export class NetScene implements HostedView {
@@ -1239,7 +1237,6 @@ export class NetScene implements HostedView {
   private readonly satellite: boolean;
   readonly tileId: string;
   private panelId: string | null;
-  readonly tileId: string;
   private releasePanelRaf: (() => void) | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
   private compactLabels = false;
@@ -1308,13 +1305,8 @@ export class NetScene implements HostedView {
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
     this.paneFps = new PaneFps(container);
     this.satellite = !!opts.satellite;
-<<<<<<< HEAD
     this.tileId = opts.tileId ?? opts.panelId ?? "main";
     this.panelId = opts.panelId ?? opts.tileId ?? null;
-=======
-    this.panelId = opts.panelId ?? null;
-    this.tileId = opts.tileId ?? "main";
->>>>>>> origin/cursor/catchup-consolidation
     if (this.panelId) this.releasePanelRaf = claimPanelRaf(this.panelId);
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
