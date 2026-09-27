@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-scene.test.ts",
-  "testName": "shader fallback net scene > scene-probe-wired",
-  "redValue": "AssertionError: expected null to be 'shader failed' // Object.is equality"
-}

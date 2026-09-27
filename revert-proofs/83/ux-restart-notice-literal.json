@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/http.ux-literals.test.ts",
-  "testName": "UX copy literals > pins restart notice as exact literal",
-  "red": "AssertionError: expected '' to be 'The server restarted, so packs were reloaded.' // Object.is equality",
-  "description": "ux-restart-notice-literal",
-  "timeoutSec": 120
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-empty-links.test.ts",
-  "testName": "^viz\\ frame\\ v2\\ empty\\ links\\ contract\\ \\(item\\ 5a\\)\\ >\\ dev:\\ a\\ pack\\ push\\ on\\ empty\\ links\\ throws\\ and\\ the\\ next\\ frame\\ links\\ length\\ is\\ 0$",
-  "description": "One-line production revert: export EMPTY_VIZ_LINKS without Object.freeze (push mutates shared empty slice).",
-  "patchedAssertion": "AssertionError: expected false to be true // Object.is equality"
-}

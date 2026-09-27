@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
-  "testName": "^viz link index R1 pruning > holds exactly 8 indexed pairs after cycling 1000 endpoints in batches of 8$",
-  "description": "Revert top-K cap (return all active link indices).",
-  "patchedAssertion": "AssertionError: expected 12 to be 8 // Object.is equality"
-}

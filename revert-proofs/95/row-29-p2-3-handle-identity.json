@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-29-p2-3-handle-identity)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > a re-post during a showing returns the identical handle and dismiss clears it",
-  "red": "AssertionError: expected +0 to be 600 // Object.is equality"
-}

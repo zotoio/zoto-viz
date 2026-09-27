@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/ui/media-ask-ux.chromium.test.ts",
-  "testName": "blocks focus and click on elements behind the open dialog",
-  "description": "Revert production guard (row-23-inert-behind-dialog)",
-  "red": "AssertionError: expected true to be false // Object.is equality"
-}

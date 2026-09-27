@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-ui.test.ts",
-  "testName": "fillPluginFields > field unsaved change aria description string",
-  "description": "aria-description must be exactly Unsaved change while dirty",
-  "red": "AssertionError: expected 'Edited from default' to be 'Unsaved change' // Object.is equality"
-}

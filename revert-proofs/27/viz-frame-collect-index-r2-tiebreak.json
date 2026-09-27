@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
-  "testName": "^viz link index R2 tie-break > returns identical top links for two arrival orders of the same 400 flows$",
-  "description": "Revert tie-break polarity in topKByScore.",
-  "patchedAssertion": "AssertionError: expected [ '10.0.0.1>10.0.0.4@88.5', \u2026(2) ] to deeply equal [ '10.0.0.1>10.0.0.2@88.5', \u2026(2) ]"
-}

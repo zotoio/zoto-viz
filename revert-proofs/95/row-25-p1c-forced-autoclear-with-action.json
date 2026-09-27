@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-25-p1c-forced-autoclear-with-action)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > a same-text re-post that adds an action cancels auto-clear even with autoClearMs forced",
-  "red": "AssertionError: expected +0 to be 1 // Object.is equality"
-}

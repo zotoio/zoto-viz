@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-ui.test.ts",
-  "testName": "fillPluginFields > dirty field-dirty styling selectors target slider and toggle roots",
-  "description": "Dirty warn ring must target label.slider and label.toggle, not .slider-row",
-  "red": "AssertionError: expected false to be true // Object.is equality"
-}

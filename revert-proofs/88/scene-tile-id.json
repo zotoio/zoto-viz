@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-scene.test.ts",
-  "testName": "shader fallback net scene > scene-tile-id",
-  "redValue": "AssertionError: expected undefined to be 'pane-a' // Object.is equality"
-}

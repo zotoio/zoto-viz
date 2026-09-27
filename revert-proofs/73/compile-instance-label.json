@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/plugin.test.ts",
-  "testName": "^compilePlugin > instance label on compiled modes > uses the instance label Alt feed for graph and arcade compiles$",
-  "description": "compilePlugin uses tileDisplayName (instance label), not packName alone.",
-  "redOutput": "AssertionError: expected 'Headlines' to be 'Alt feed' // Object.is equality"
-}

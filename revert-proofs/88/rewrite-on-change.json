@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-hook.test.ts",
-  "testName": "shader fallback pack hook > rewrite-on-change",
-  "redValue": "AssertionError: expected 'first' to be 'second' // Object.is equality"
-}

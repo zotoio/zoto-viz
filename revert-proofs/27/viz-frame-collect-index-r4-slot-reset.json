@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
-  "testName": "^viz link index R4 reset on reuse > gives a reused slot a fresh rate after idle drop and a new pair$",
-  "description": "Revert zeroLinkRates slot.rate reset on indexed pairs.",
-  "patchedAssertion": "AssertionError: expected [ { src: '10.0.0.1', \u2026(2) }, \u2026(1) ] to deeply equal [ { src: '10.0.0.1', \u2026(2) } ]"
-}

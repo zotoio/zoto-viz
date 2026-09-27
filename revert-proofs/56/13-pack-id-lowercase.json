@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_id_pattern.py",
-  "testName": "test_schema_rejects_uppercase_plugin_id",
-  "description": "Plugin id schema rejects mixed-case ids (single regression node).",
-  "expectedRed": "Failed: DID NOT RAISE ValueError"
-}

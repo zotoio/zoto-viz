@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-ux.test.ts",
-  "testName": "shader fallback UX overlays > wall-notice-no-restore-literal",
-  "redValue": "AssertionError: expected '' to be 'Graphics didn\\'t come back. Reload to\u2026' // Object.is equality"
-}

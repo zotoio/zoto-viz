@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_assets_security.py::PackAssetsSecurityTests::test_valid_token_cannot_fetch_unconsented_pack",
-  "description": "Token must not bypass consent for other pack ids.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert 200 == 403"
-}

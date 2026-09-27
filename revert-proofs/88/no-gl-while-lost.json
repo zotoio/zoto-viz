@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-context-gen.test.ts",
-  "testName": "shader fallback context gen > no-gl-while-lost",
-  "redValue": "AssertionError: expected 2400 to be +0 // Object.is equality"
-}

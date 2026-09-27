@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
-  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > shows pack scope note after second pack tile is placed via slot picker$",
-  "description": "syncPackScopeNoteFromAnim must run on mosaic layout changes while the drawer is open.",
-  "redOutput": "AssertionError: expected undefined to be 'Changes apply to all 2 Settings fixtu…' // Object.is equality"
-}

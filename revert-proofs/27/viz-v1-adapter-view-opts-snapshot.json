@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-v1-frame-adapter.test.ts",
-  "testName": "^VizV1FrameAdapter > keeps view options stable across delivers until syncViewOpts replaces them$",
-  "description": "Revert shallow-copies viewOpts on scope sync so caller mutations alias the adapter snapshot.",
-  "patchedAssertion": "AssertionError: expected 'mutated' to be 'lan' // Object.is equality"
-}

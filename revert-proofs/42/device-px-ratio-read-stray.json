@@ -1,5 +1,0 @@
-{
-  "runner": "lint",
-  "kind": "lint",
-  "expectedRed": "src/graph/render-host.ts:126:17: device-px-ratio-read"
-}

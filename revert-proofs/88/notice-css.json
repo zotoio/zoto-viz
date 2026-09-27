@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-host.test.ts",
-  "testName": "tile shader fallback host > notice-css",
-  "redValue": "AssertionError: expected '' to be 'absolute' // Object.is equality"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/ui/media-ask-dismiss-storage.test.ts",
-  "testName": "clears session dismiss so re-ask after reload can reopen the dialog",
-  "description": "Revert production guard (row-14-clear-dismiss-storage)",
-  "red": "AssertionError: expected '{\"mic\":true}' to be null"
-}

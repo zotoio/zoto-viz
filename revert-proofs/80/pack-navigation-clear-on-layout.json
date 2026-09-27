@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testName": "pack navigation stop clear UX > layout change from 1×1 to 2×2 keeps stopped copy and skips reconnect",
-  "testId": "^pack navigation stop clear UX > layout change from 1×1 to 2×2 keeps stopped copy and skips reconnect$",
-  "testFile": "web/src/plugins/pack-asset-navigation-stop-clear.test.ts",
-  "description": "Layout resize must not clear navigation stop; revert clears stop on relayoutAll (wrong).",
-  "timeoutSec": 120
-}

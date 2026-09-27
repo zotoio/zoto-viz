@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/host.test.ts",
-  "testName": "PluginSandbox > does not post config when config.read is missing",
-  "description": "setConfig must respect config.read capability",
-  "red": "AssertionError: expected true to be false // Object.is equality"
-}

@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-31-p2-5-live-no-dom)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > reading live never touches the DOM",
-  "red": "AssertionError: expected \"contains\" to be called +0 times, but got 600 times"
-}

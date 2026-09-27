@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-41-s-c-queued-repost-handle)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > a re-post to a queued key updates the queued copy",
-  "red": "AssertionError: expected { dismiss: [Function dismiss], \u2026(1) } to be { dismiss: [Function dismiss], \u2026(1) } // Object.is equality"
-}

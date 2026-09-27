@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-mosaic.test.ts",
-  "testName": "shader fallback mosaic tiles > mosaic-class-scene-opts",
-  "redValue": "AssertionError: expected -1 to be greater than -1"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-ui.test.ts",
-  "testName": "fillPluginFields > renders section details open by default with no persisted collapse state",
-  "description": "Section details must start open and reload must not remember collapse",
-  "red": "AssertionError: expected false to be true // Object.is equality"
-}

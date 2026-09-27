@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_assets_sandbox_csp.py::PackAssetsSandboxCspTests::test_sandbox_bootstrap_js_csp_matches_html",
-  "red": "AssertionError: assert 0 > 0",
-  "description": "sandbox-bootstrap-csp-match",
-  "timeoutSec": 120
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/ui/media-ask-ux.test.ts",
-  "testName": "runs capture only after close with returnValue allow",
-  "description": "Revert production guard (row-20-allow-after-close)",
-  "red": "AssertionError: expected null to be { getTracks: [Function getTracks] } // Object.is equality"
-}

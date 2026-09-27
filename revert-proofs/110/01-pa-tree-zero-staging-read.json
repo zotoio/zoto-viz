@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_pa_fresh_install_zero_staging_hash_bytes",
-  "description": "Fresh install must not re-read staged files for tree hashing.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:585: AssertionError: staging tree hash read bytes"
-}

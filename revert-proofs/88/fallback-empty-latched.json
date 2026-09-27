@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-bad-pack.test.ts",
-  "testName": "shader fallback bad pack text > fallback-empty-latched",
-  "redValue": "AssertionError: expected '   ' to be 'Empty Pack can\\'t run its graphics on\u2026' // Object.is equality"
-}

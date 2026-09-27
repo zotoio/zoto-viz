@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-collect.test.ts",
-  "testName": "^viz\\ frame\\ v2\\ collector\\ >\\ stamps\\ empty\\ links\\ as\\ the\\ shared\\ EMPTY_VIZ_LINKS\\ constant\\ when\\ collection\\ is\\ on\\ but\\ no\\ pairs\\ qualify$",
-  "description": "One-line revert: omit frame.links when the collected link list is empty (breaks EMPTY_VIZ_LINKS contract).",
-  "patchedAssertion": "AssertionError: expected undefined to deeply equal []"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_normalize.py::test_host_normalisation_table[ipv6_loopback]",
-  "description": "[::1] loopback Host accepted.",
-  "timeoutSec": 60,
-  "red": "assert 400 == 200"
-}

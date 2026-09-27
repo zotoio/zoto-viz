@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-tile.test.ts",
-  "testName": "shader fallback tile overlay > tunnel-line-literal",
-  "redValue": "AssertionError: expected 'undefined 0.50 \u00b7 depth 0.60' to be 'DATA 0.50 \u00b7 depth 0.60' // Object.is equality"
-}

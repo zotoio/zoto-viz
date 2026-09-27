@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-context-gen.test.ts",
-  "testName": "shader fallback context gen > timer-cleared",
-  "redValue": "AssertionError: expected 1 to be +0 // Object.is equality"
-}

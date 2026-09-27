@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-canvas-backing.test.ts",
-  "testName": "^RenderHost canvas backing store > constructor refreshCanvasDeviceHeight matches canvas.height when syncSize skips tiny walls$",
-  "expectedRed": "AssertionError: expected 1 to be 150 // Object.is equality"
-}

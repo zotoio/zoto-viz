@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-sandbox-sdk.test.ts",
-  "testName": "plugin sandbox sdk types > ships ZotoVizPluginHost for pack authors",
-  "description": "plugins/sdk/plugin-sandbox.ts must export ZotoVizPluginHost for pack SDK authors",
-  "red": "AssertionError: expected '/**\\n * Standalone zoto iframe host A…' to match /export interface ZotoVizPluginHost</"
-}

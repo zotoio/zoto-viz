@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-hook.test.ts",
-  "testName": "shader fallback pack hook > shared-interval",
-  "redValue": "AssertionError: expected \"setInterval\" to be called 1 times, but got 2 times"
-}

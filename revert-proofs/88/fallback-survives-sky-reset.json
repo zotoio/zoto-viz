@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-wall.test.ts",
-  "testName": "shader fallback wall > fallback-survives-sky-reset",
-  "redValue": "AssertionError: expected \"dispose\" to be called +0 times, but got 1 times"
-}

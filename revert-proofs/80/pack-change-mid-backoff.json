@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-asset-retry-ux.test.ts",
-  "testName": "pack asset retry UX > changing pack mid-backoff does not paint reconnect/fail on the new pack",
-  "description": "Abort in-flight rebuild when the tile's pack changes so stale copy never lands on the new pack.",
-  "timeoutSec": 120
-}

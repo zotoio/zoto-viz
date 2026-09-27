@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-30-p2-4-dead-handle-after-clear)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > an old handle stays dead after a clear and a new post",
-  "red": "AssertionError: expected true to be false // Object.is equality"
-}

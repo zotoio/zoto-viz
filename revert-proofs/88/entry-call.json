@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-hook.test.ts",
-  "testName": "shader fallback pack hook > entry-call",
-  "redValue": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
-}

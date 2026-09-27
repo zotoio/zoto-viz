@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-ux.test.ts",
-  "testName": "shader fallback UX overlays > pack-load-during-loss-recovers",
-  "redValue": "AssertionError: expected 'shader failed' to be null"
-}

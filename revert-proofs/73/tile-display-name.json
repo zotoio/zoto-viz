@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
-  "testName": "^applyInstance instanceLabel normalisation > tileDisplayName for instance label \\{\"label\":\"Alt feed\",\"expected\":\"Alt feed\"\\}$",
-  "description": "tileDisplayName must prefer the instance label over the pack name.",
-  "redOutput": "AssertionError: expected 'Headlines' to be 'Alt feed' // Object.is equality"
-}

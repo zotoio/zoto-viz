@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/mosaic.test.ts",
-  "testName": "^mosaic unique skies > merges catalog look via pack view id when tile slot has a suffix$",
-  "description": "Revert mosaicAnimForTile lookForTile (#86).",
-  "expectedRed": "AssertionError: expected 'aurora' to be 'matrix' // Object.is equality"
-}

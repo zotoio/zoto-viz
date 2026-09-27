@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-34-s3-action-label-refresh)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > a re-post with a new action label relabels the button",
-  "red": "AssertionError: expected 'Retry' to be 'Reload' // Object.is equality"
-}

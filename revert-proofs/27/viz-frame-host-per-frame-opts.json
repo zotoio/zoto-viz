@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/viz-frame-host-tick.test.ts",
-  "testName": "^vizFrameHostPerFrameTick\\ >\\ uses\\ scope\\-synced\\ bind\\ for\\ 300\\ frame\\ ticks\\ without\\ extra\\ optsFor\\ or\\ parseSourceBind$",
-  "description": "One-line production revert: vizFrameHostPerFrameTick calls optsFor and parseSourceBind every frame.",
-  "patchedAssertion": "AssertionError: expected \"parseSourceBind\" to be called 1 times, but got 302 times"
-}

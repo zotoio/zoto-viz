@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-compile.test.ts",
-  "testName": "tile shader compile latch > compile-once",
-  "redValue": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 600 times"
-}

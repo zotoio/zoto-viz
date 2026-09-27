@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "^PackMirrorSession resource lifecycle > renderPrimary: sub-pixel CSS width clamps to 2 device pixels$",
-  "description": "Revert Math.max(2, pw) minimum in deviceSizeFromCssBoxInto (#86).",
-  "expectedRed": "AssertionError: expected +0 to be 2 // Object.is equality"
-}

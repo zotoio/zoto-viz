@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-host.test.ts",
-  "testName": "^viz\\ contract\\ version\\ negotiation\\ >\\ treats\\ missing\\ viz\\.contract\\ as\\ v1$",
-  "description": "One-line production revert: parseVizContract stamps VIZ_CONTRACT_VERSION instead of defaulting missing packs to v1.",
-  "lintRow": true,
-  "patchedAssertion": "AssertionError: expected 2 to be 1 // Object.is equality"
-}

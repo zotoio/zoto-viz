@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_block_install_guards.py",
-  "testName": "test_install_koi_refused_while_koi_block_record_stays",
-  "description": "Installer must refuse ids that case-collide with an installed/blocked pack (e.g. Koi vs koi).",
-  "patchedFailure": "E   Failed: DID NOT RAISE ValueError\n=========================== short test summary info ============================\nFAILED tests/test_pack_block_install_guards.py::test_install_koi_refused_while_koi_block_record_stays\n============================== 1 failed in 0.03s ==============================="
-}

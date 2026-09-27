@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/mosaic-set-pane-view-noop.test.ts",
-  "testName": "^mosaic setPaneView noop guard > returns false when picking the pack view a duplicate slot already shows$",
-  "description": "Revert setPaneView noop guard (#86).",
-  "expectedRed": "AssertionError: expected true to be false // Object.is equality"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > parents each notice under its lane container",
-  "description": "Revert production guard (row-10-notice-parent)",
-  "red": "AssertionError: expected <div \u2026(2)>\u2026(4)</div> to be <div \u2026(2)></div> // Object.is equality"
-}

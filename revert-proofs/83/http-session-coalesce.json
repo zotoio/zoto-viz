@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/http-notice.test.ts",
-  "testName": "server restart wall notice > parallel session refresh > coalesces three parallel stale-token refreshes into one session fetch",
-  "red": "AssertionError: expected 3 to be 1 // Object.is equality",
-  "description": "http-session-coalesce",
-  "timeoutSec": 120
-}

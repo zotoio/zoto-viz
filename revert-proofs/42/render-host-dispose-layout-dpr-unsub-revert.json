@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-dispose-layout-dpr.test.ts",
-  "testName": "^RenderHost dispose layout DPR listener > after dispose, window DPR change does not resize the host canvas$",
-  "expectedRed": "AssertionError: expected 1 to be +0 // Object.is equality"
-}

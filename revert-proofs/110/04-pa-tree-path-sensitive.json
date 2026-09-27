@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_pa_tree_hash_sensitive_to_path_layout",
-  "description": "Tree hash must include every member path, not only plugin.yml.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:630: AssertionError: staged tree all members"
-}

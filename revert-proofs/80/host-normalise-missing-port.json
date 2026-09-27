@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_normalize.py::test_host_normalisation_table[missing_port_on_7020]",
-  "description": "Host without port rejected when bind port is not 80.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert 200 == 400"
-}

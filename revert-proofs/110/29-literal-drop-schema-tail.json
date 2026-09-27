@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_local.py",
-  "testName": "test_sync_local_drop_schema_invalid_uses_literal_message",
-  "description": "Literal drop-zone schema-invalid tail.",
-  "patchedFailure": "tests/test_plugin_local.py:279: AssertionError: drop schema literal message"
-}

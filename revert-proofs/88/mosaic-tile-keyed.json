@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-mosaic.test.ts",
-  "testName": "shader fallback mosaic tiles > mosaic-tile-keyed",
-  "redValue": "AssertionError: expected +0 to be 1 // Object.is equality"
-}

@@ -1,8 +1,0 @@
-{
-  "row": "B1 row 11 flag clock revert no midnight wrap",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/nixie-wall-clock-source-rows.test.ts",
-  "testName": "^nixie wall clock source rows \\(B1 option b\\) > row 11 midnight wrap: 23:59 \\+ 61000 ms \u2192 00:00:01, tubes 12 00, one upload$",
-  "patchedAssertion": "AssertionError: expected { h: 24, m: +0, s: 1 } to deeply equal { h: +0, m: +0, s: 1 }",
-  "excerpt": "AssertionError: expected { h: 24, m: +0, s: 1 } to deeply equal { h: +0, m: +0, s: 1 }"
-}

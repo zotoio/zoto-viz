@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/scene-layout-dpr-base.test.ts",
-  "testName": "^NetScene layout DPR base > own renderer uses RenderHost-capped layout DPR instead of legacy min\\(devicePixelRatio, 1\\.5\\)$",
-  "expectedRed": "AssertionError: expected \"vi.fn()\" to be called with arguments: [ 1.25 ]"
-}

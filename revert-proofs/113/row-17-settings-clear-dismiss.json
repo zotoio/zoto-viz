@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/ui/media-ask-ux.test.ts",
-  "testName": "reopens the mic ask after Settings setMicPolicy auto and a reload",
-  "description": "Revert production guard (row-17-settings-clear-dismiss)",
-  "red": "AssertionError: expected false to be true // Object.is equality"
-}

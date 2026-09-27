@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_install.py",
-  "testName": "test_install_local_unchanged_zip_routes_through_pipeline",
-  "description": "install_local_zip verify-only fast path skips install_zip_to_runtime on unchanged zip.",
-  "patchedFailure": "E       assert 1 == 2"
-}

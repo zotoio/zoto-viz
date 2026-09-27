@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-22-post-before-mount)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > posting before mount throws wall notice region not mounted",
-  "red": "AssertionError: expected [Function] to throw an error"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_pack_asset_tokens.py::test_mint_and_verify_round_trip",
-  "description": "HMAC binding includes session and pack ids.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert False"
-}

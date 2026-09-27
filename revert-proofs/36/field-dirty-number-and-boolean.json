@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-ui.test.ts",
-  "testName": "fillPluginFields > marks dirty number sliders and boolean toggles with field-dirty",
-  "description": "Edited markers apply to number sliders and boolean toggles",
-  "red": "AssertionError: expected false to be true // Object.is equality"
-}

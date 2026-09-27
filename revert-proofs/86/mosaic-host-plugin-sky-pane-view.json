@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/mosaic-host-bindings.test.ts",
-  "testName": "^mosaic host bindings > mosaicPluginSkyPaneView strips slot suffix before sky lookup$",
-  "description": "Revert per-tile sky sync to slot id (#86).",
-  "expectedRed": "AssertionError: expected 'plugin:topology!2' to be 'plugin:topology' // Object.is equality"
-}

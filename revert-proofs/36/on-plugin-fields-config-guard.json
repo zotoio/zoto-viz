@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-sandbox-config-push.test.ts",
-  "testName": "plugin sandbox config push guards > onPluginFields path: refresh pack A yields 0 posts to B and 1 to A",
-  "description": "onPluginFields must not push config into a different loaded pack iframe",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
-}
