@@ -3,6 +3,5 @@
   "testFile": "tests/test_nasa_api.py",
   "testName": "test_resolve_fetch_url_uses_host_key_when_set",
   "description": "Revert APOD fetch_key injection",
-  "patchedAssertion": "AssertionError: assert 'api_key=fake-nasa-key-for-tests-only' in 'https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&start_date=2026-09-20&end_date=2026-09-27'",
-  "excerpt": "AssertionError: assert 'api_key=fake-nasa-key-for-tests-only' in 'https://api.nasa.gov/planetary/apod?api_key=DEMO_KEY&start_date=2026-09-20&end_date=2026-09-27'"
+  "red": "assert 'api_key=fake-nasa-key-for-tests-only' in url"
 }

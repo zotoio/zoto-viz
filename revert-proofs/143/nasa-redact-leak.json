@@ -3,6 +3,5 @@
   "testFile": "tests/test_nasa_api.py",
   "testName": "test_api_and_snapshot_never_expose_key",
   "description": "Revert monitor log redaction for NASA API key",
-  "patchedAssertion": "assert 'fake-nasa-key-for-tests-only' not in logs",
-  "excerpt": "assert 'fake-nasa-key-for-tests-only' not in logs"
+  "red": "assert FAKE_KEY not in logs"
 }
