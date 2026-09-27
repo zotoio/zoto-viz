@@ -299,7 +299,21 @@ describe("viz dogfood gates", () => {
   });
 
   it("fat-LAN live soak: all three packs under budget or honest skips", () => {
-    const result = runDogfoodSoak({ state: fatLan, framesPerPack: 120 });
+    vi.useFakeTimers({ toFake: ["Date", "performance"] });
+    vi.setSystemTime(new Date("2026-01-01T00:00:00.000Z"));
+    const stepMs = 0.05;
+    const now = () => {
+      const t = performance.now();
+      vi.advanceTimersByTime(stepMs);
+      return t;
+    };
+
+    let result: ReturnType<typeof runDogfoodSoak>;
+    try {
+      result = runDogfoodSoak({ state: fatLan, framesPerPack: 120, now });
+    } finally {
+      vi.useRealTimers();
+    }
     console.log("\n" + formatDogfoodReport(result));
 
     expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
