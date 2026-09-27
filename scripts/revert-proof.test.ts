@@ -120,6 +120,29 @@ function assertCheckoutUnchanged(
   expect(stripReport(after.porcelain)).toBe(stripReport(before.porcelain));
 }
 
+/** First output line naming the row; the full output carries temp paths and timings. */
+function rowMessage(r: { stdout: string; stderr: string }, slug: string): string | null {
+  return (r.stderr + r.stdout).split("\n").find((line) => line.startsWith(`row ${slug}: `)) ?? null;
+}
+
+function thrownMessage(fn: () => unknown): string | undefined {
+  try {
+    fn();
+  } catch (err) {
+    return err instanceof Error ? err.message : String(err);
+  }
+  return undefined;
+}
+
+/** Temp and worktree paths differ per run; red values must not. */
+function scrubPaths(text: string | undefined, replacements: Record<string, string>) {
+  let out = text;
+  for (const [from, to] of Object.entries(replacements)) {
+    out = out?.split(from).join(to);
+  }
+  return out;
+}
+
 function runRevertProof(cwd: string, prNumber: string, extraArgs: string[] = []) {
   return spawnSync(process.execPath, [scriptPath, prNumber, ...extraArgs], {
     cwd,
@@ -324,6 +347,7 @@ describe("meta spoof", () => {
   it("writes revertProofAssertion then throws TypeError", ({ task }) => {
     if (value() !== 1) {
       task.meta.revertProofAssertion = true;
+      task.meta.revertProofRed = { actual: 2, expected: 1 };
       throw new TypeError("boom: not an assertion");
     }
   });
@@ -530,7 +554,7 @@ describe("revert-proof runner (fixture repo)", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "test-only-target"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "test-only-target")).toBe(
       "row test-only-target: revert target unreachable from production: web/src/test-only-helper.ts",
     );
     assertCheckoutUnchanged(root, before);
@@ -615,7 +639,7 @@ describe("revert-proof runner (fixture repo)", () => {
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "meta-spoof"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "meta-spoof")).toBe(
       "row meta-spoof: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; non-assertion error)",
     );
     assertNoRevertProofWorktrees(root);
@@ -633,7 +657,7 @@ describe("revert-proof runner (fixture repo)", () => {
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "red-mismatch"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "red-mismatch")).toBe(
       'row red-mismatch: red value mismatch (expected {"actual":3,"expected":1}, got {"actual":2,"expected":1})',
     );
     assertNoRevertProofWorktrees(root);
@@ -739,7 +763,7 @@ describe("widget (beta)", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "stays-green"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "stays-green")).toBe(
       "row stays-green: test stayed GREEN after revert patch (expected failure)",
     );
     assertNoRevertProofWorktrees(root);
@@ -758,8 +782,8 @@ describe("widget (beta)", () => {
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "wrong-outer-ctx"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
-      "row wrong-outer-ctx: git apply --check failed: error: patch failed: packages/rp-widget/index.js:1\n",
+    expect(rowMessage(r, "wrong-outer-ctx")).toBe(
+      "row wrong-outer-ctx: git apply --check failed: error: patch failed: packages/rp-widget/index.js:1",
     );
     assertNoRevertProofWorktrees(root);
   });
@@ -777,8 +801,8 @@ describe("widget (beta)", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "bad-patch"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
-      "row bad-patch: git apply --check failed: error: patch failed: packages/rp-widget/index.js:1\n",
+    expect(rowMessage(r, "bad-patch")).toBe(
+      "row bad-patch: git apply --check failed: error: patch failed: packages/rp-widget/index.js:1",
     );
     expect(fs.existsSync(path.join(root, "packages", "rp-widget", "index.js.orig"))).toBe(
       false,
@@ -804,7 +828,7 @@ describe("widget (beta)", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "touch-test"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "touch-test")).toBe(
       "row touch-test: patch touches test files (only production reverts allowed)",
     );
     assertCheckoutUnchanged(root, before);
@@ -841,7 +865,7 @@ describe("widget", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "skipped-target"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "skipped-target")).toBe(
       "row skipped-target: baseline test selection failed (target skipped; never a pass)",
     );
     assertCheckoutUnchanged(root, before);
@@ -860,7 +884,9 @@ describe("widget", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "build-break"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain("row build-break: patch breaks build (proves nothing)\n");
+    expect(rowMessage(r, "build-break")).toBe(
+      "row build-break: patch breaks build (proves nothing)",
+    );
     assertCheckoutUnchanged(root, before);
   });
 
@@ -877,7 +903,7 @@ describe("widget", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "no-match"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "no-match")).toBe(
       "row no-match: baseline test selection failed (target not found; never a pass)",
     );
     assertCheckoutUnchanged(root, before);
@@ -916,7 +942,7 @@ describe("widget", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "two-match"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "two-match")).toBe(
       "row two-match: baseline test selection failed (multiple tests matched filter; never a pass)",
     );
     assertCheckoutUnchanged(root, before);
@@ -946,7 +972,9 @@ describe("hang", () => {
     const before = snapshotCheckout(root);
     const r = runRevertProof(root, "99", ["--row", "hang"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain("row hang: baseline timed out");
+    expect(rowMessage(r, "hang")).toBe(
+      "row hang: baseline timed out",
+    );
     expect(r.stdout + r.stderr).not.toContain("RED (expected)");
     assertCheckoutUnchanged(root, before);
   });
@@ -1033,7 +1061,7 @@ describe("other", () => {
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "phantom-leaf"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "phantom-leaf")).toBe(
       "row phantom-leaf: baseline test selection failed (target not found; never a pass)",
     );
     assertNoRevertProofWorktrees(root);
@@ -1095,7 +1123,7 @@ def test_service_live_value():
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "reach-exempt-touch"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "reach-exempt-touch")).toBe(
       "row reach-exempt-touch: test stayed GREEN after revert patch (expected failure)",
     );
   });
@@ -1119,7 +1147,7 @@ def test_service_live_value():
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "type-error"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "type-error")).toBe(
       "row type-error: patched test failed but task.meta.revertProofAssertion is not true (proves nothing; non-assertion error)",
     );
     assertNoRevertProofWorktrees(root);
@@ -1196,7 +1224,7 @@ describe("hang", () => {
       const artifactsAfter = fs
         .readdirSync(os.tmpdir())
         .filter((n) => n.startsWith("revert-proof-artifacts-"));
-      expect(artifactsAfter.length).toBe(artifactsBefore.length);
+      expect(artifactsAfter.length - artifactsBefore.length).toBe(0);
       const vitestLeft = spawnSync("pgrep", ["-f", wtMarker], { encoding: "utf8" });
       expect(vitestLeft.stdout.trim()).toBe("");
       assertCheckoutUnchanged(root, before);
@@ -1254,7 +1282,7 @@ describe("hang", () => {
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "py-raise"]);
     expect(r.status).toBe(1);
-    expect(r.stderr + r.stdout).toContain(
+    expect(rowMessage(r, "py-raise")).toBe(
       "row py-raise: patch breaks build or pytest error (proves nothing)",
     );
     assertNoRevertProofWorktrees(root);
@@ -1441,8 +1469,8 @@ describe("isolation guards", () => {
       const nm = path.join(root, "node_modules", "@scope", "pkg");
       fs.mkdirSync(path.dirname(nm), { recursive: true });
       fs.symlinkSync("/tmp", nm);
-      expect(() => assertWorkspaceLinksInWorktree(root)).toThrow(
-        `workspace link ${nm} resolves outside worktree: ${fs.realpathSync("/tmp")}`,
+      expect(scrubPaths(thrownMessage(() => assertWorkspaceLinksInWorktree(root)), { [root]: "<root>" })).toBe(
+        `workspace link <root>/node_modules/@scope/pkg resolves outside worktree: ${fs.realpathSync("/tmp")}`,
       );
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
@@ -1456,9 +1484,12 @@ describe("isolation guards", () => {
       const nm = path.join(root, "node_modules", "escape-pkg");
       fs.mkdirSync(path.dirname(nm), { recursive: true });
       fs.symlinkSync(target, nm);
-      expect(() => assertWorkspaceLinksInWorktree(root)).toThrow(
-        `workspace link ${nm} resolves outside worktree: ${fs.realpathSync(target)}`,
-      );
+      expect(
+        scrubPaths(thrownMessage(() => assertWorkspaceLinksInWorktree(root)), {
+          [root]: "<root>",
+          [fs.realpathSync(repoRoot)]: "<repo>",
+        }),
+      ).toBe("workspace link <root>/node_modules/escape-pkg resolves outside worktree: <repo>/scripts");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
@@ -1475,9 +1506,12 @@ describe("isolation guards", () => {
       const py = spawnSync("python3", ["-c", "import sys;print(sys.executable)"], {
         encoding: "utf8",
       }).stdout.trim();
-      expect(() => assertEditablePythonResolvesInWorktree(root, py, "rpfixture")).toThrow(
-        `editable Python package rpfixture resolves outside worktree (${fs.realpathSync(outside)}/rpfixture/__init__.py)`,
-      );
+      expect(
+        scrubPaths(
+          thrownMessage(() => assertEditablePythonResolvesInWorktree(root, py, "rpfixture")),
+          { [fs.realpathSync(outside)]: "<outside>" },
+        ),
+      ).toBe("editable Python package rpfixture resolves outside worktree (<outside>/rpfixture/__init__.py)");
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
       fs.rmSync(outside, { recursive: true, force: true });
