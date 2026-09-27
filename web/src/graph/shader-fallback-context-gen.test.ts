@@ -159,7 +159,9 @@ describe("shader fallback context gen", () => {
   it("timer-cleared", () => {
     const { host, wall } = hostWithGl();
     host.dispatchContextLost();
+    expect(host.gfxWallNotice.hasPendingReloadTimer).toBe(true);
     host.dispatchContextRestored();
+    expect(host.gfxWallNotice.hasPendingReloadTimer).toBe(false);
     vi.advanceTimersByTime(10_000);
     expect(wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`).length).toBe(0);
     expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
