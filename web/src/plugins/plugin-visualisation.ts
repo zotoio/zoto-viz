@@ -7,6 +7,7 @@ import { parsePluginIdle } from "./fixtures/golden-state";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
+import { ingestCatalogWorkBudget } from "./work-budget-policy";
 import type {
   PluginEngine,
   PluginLayout,
@@ -403,6 +404,14 @@ export function toPluginView(raw: unknown): PluginView {
   if (!Number.isFinite(version) || version < 1) throw new Error("plugin version is required");
 
   const engine = parseEngine(viz.engine ?? row.engine);
+  let workBudgetLimited: string | undefined;
+  let workBudgetClamped: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget | undefined;
+  const rawWorkBudget = viz.workBudget ?? (row as { workBudget?: unknown }).workBudget;
+  if (rawWorkBudget !== undefined) {
+    const ingested = ingestCatalogWorkBudget(rawWorkBudget);
+    workBudgetClamped = ingested.budget;
+    workBudgetLimited = ingested.limitedNote ?? asString((row as { workBudgetLimited?: unknown }).workBudgetLimited);
+  }
   const idle = parsePluginIdle(viz.idle);
   const vizSettings = asRecord(viz.settings);
   const rowSettings = asRecord(row.settings);
@@ -432,6 +441,8 @@ export function toPluginView(raw: unknown): PluginView {
   };
   if (settings) spec.settings = settings;
   if (idle) spec.idle = idle;
+  if (workBudgetClamped) spec.workBudget = workBudgetClamped;
+  if (workBudgetLimited) spec.workBudgetLimited = workBudgetLimited;
   if (asString(row.file)) spec.file = asString(row.file);
   if (row.runtime === "yaml" || row.runtime === "typescript") spec.runtime = row.runtime;
   if (asString(row.entry)) spec.entry = asString(row.entry);

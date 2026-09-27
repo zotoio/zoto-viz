@@ -34,6 +34,15 @@ import {
   isMetaConfigKey,
 } from "./plugin-settings";
 
+/** Pack info `.sec-hint` line (id / version / engine + optional workBudget note). */
+export function pluginPackMetaLine(spec: PluginView): string {
+  const base = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
+  if (spec.workBudgetLimited) {
+    return `${base}. ${spec.workBudgetLimited}`;
+  }
+  return base;
+}
+
 export type PluginHudCaptionSink = (spec: PluginView, caption: string | null) => void;
 
 let hudCaptionSink: PluginHudCaptionSink | null = null;
@@ -445,7 +454,7 @@ export function fillPluginFields(
   title.textContent = specCaption(spec);
   const meta = document.createElement("div");
   meta.className = "sec-hint";
-  meta.textContent = `${spec.id} · v${spec.version} · ${spec.engine ?? "yaml"}${spec.base ? ` / ${spec.base}` : ""}${spec.hint ? `. ${spec.hint}` : ""}`;
+  meta.textContent = pluginPackMetaLine(spec);
   head.append(title, meta);
   let knobs = fields;
   if (spec.id === "nest-cams") {

@@ -149,45 +149,32 @@ export function countEligibleSourceHeadlines(
   const pictured =
     (bind?.filter ?? "all") === "has-image" || bind?.filter === "image" || bind?.filter === "pictured";
   let count = 0;
-  const scanCap = FEED_HEADLINE_LIMIT + 1;
-  const bump = (text: string, image?: string): boolean => {
-    if (count >= scanCap) return true;
+  const bump = (text: string, image?: string): void => {
     const t = text.trim();
-    if (!t) return count >= scanCap;
+    if (!t) return;
     const href = (image || "").trim();
-    if (pictured && !href.startsWith("https://")) return count >= scanCap;
+    if (pictured && !href.startsWith("https://")) return;
     count += 1;
-    return count >= scanCap;
   };
   for (const live of Object.values(sources)) {
-    if (!live || live.paused || live.ok === false) continue;
-    if (want) {
-      if (live.id !== want) continue;
-    } else if (!pictured && live.feed === false) {
-      continue;
-    }
+    if (!live || live.feed === false || live.paused || live.ok === false) continue;
+    if (want && live.id !== want) continue;
     const kind = (live.kind || "").toLowerCase() || undefined;
-    const cap = want || pictured ? scanCap : FEED_TICKER_PER_SOURCE + 1;
-    let taken = 0;
     if (kind === "http" && live.json !== undefined && !(live.items && live.items.length)) {
-      for (const text of jsonStrings(live.json, cap - count)) {
-        if (taken >= cap - count) break;
-        if (bump(text)) break;
-        taken++;
+      for (const text of jsonStrings(live.json, Number.MAX_SAFE_INTEGER)) {
+        bump(text);
       }
       continue;
     }
     for (const item of live.items ?? []) {
-      if (taken >= cap - count) break;
       const title = itemField(item, titleKey) || item.title || stripMarkup(item.summary || "");
       const summary = itemField(item, captionKey) || item.summary;
       const image = itemField(item, imageKey) || item.image;
-      if (bump(title, image)) break;
-      taken++;
+      bump(title, image);
     }
-    if (count < scanCap && !live.items?.length && live.text) {
+    if (!live.items?.length && live.text) {
       for (const line of String(live.text).split(/\r?\n/)) {
-        if (bump(line, undefined)) break;
+        bump(line, undefined);
       }
     }
   }

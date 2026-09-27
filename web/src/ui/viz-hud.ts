@@ -1,4 +1,5 @@
 import type { StateMsg } from "../core/types";
+import { formatVizBudgetOverlay, vizBudgetOverlayFromStats } from "../plugins/viz-budget-overlay";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
 import type { VizTileBudgetStats } from "../plugins/viz-tile-budget";
 import { tileHudChrome, wallHudChrome } from "../plugins/viz-tile-hud";
@@ -81,6 +82,24 @@ export interface VizHudTick {
   activeTiles?: number;
   /** Per-tile budget lines when mosaic shares the wall budget. */
   tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats }[];
+  /** When set, show the frame-budget overlay (GPU/CPU ms, p95, scale). */
+  renderScale?: number | null;
+}
+
+/** v2 contract exposes talker TCP failure ratios and systemd unit pressure — host maps them to a strip badge. */
+export function vizFrameFailureBadge(frame: VizDataFrame | null): string | null {
+  if (!frame) return null;
+  let talkerPeak = 0;
+  for (const t of frame.talkers) {
+    if (typeof t.failed === "number") talkerPeak = Math.max(talkerPeak, t.failed);
+  }
+  const sysFail = frame.sys?.failed ?? 0;
+  const failedUnits = sysFail > 0 ? Math.max(1, Math.round(sysFail * 4)) : 0;
+  const parts: string[] = [];
+  if (talkerPeak > 0) parts.push(`${Math.round(talkerPeak * 100)}% TCP`);
+  if (failedUnits > 0) parts.push(`${failedUnits} unit${failedUnits === 1 ? "" : "s"}`);
+  if (!parts.length) return null;
+  return `⚠ DEGRADED ${parts.join(" · ")}`;
 }
 
 export function tileHudSkipLabel(
@@ -203,8 +222,15 @@ export class VizHud {
   private readonly metricLabelEl: HTMLElement;
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly budgetEl: HTMLElement;
+  private readonly budgetSepBefore: HTMLElement;
+  private readonly degradedEl: HTMLElement;
+  private readonly degradedSepBefore: HTMLElement;
+  private readonly degradedSepAfter: HTMLElement;
+  private readonly stageFailEl: HTMLDivElement;
   private readonly tileShareRow: HTMLElement;
   private readonly swapRow: HTMLElement;
+  private budgetVisible = false;
   private readonly packSel: Select;
   private readonly onSwap: (packId: VizDemoPackId) => void;
 
@@ -254,6 +280,22 @@ export class VizHud {
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
+    this.budgetEl = document.createElement("span");
+    this.budgetEl.className = "viz-hud-budget";
+    this.budgetEl.hidden = true;
+    this.budgetEl.title = "Present or GPU frame time (unclamped) and p95 over a rolling window";
+
+    this.degradedEl = document.createElement("span");
+    this.degradedEl.className = "viz-hud-degraded";
+    this.degradedEl.hidden = true;
+    this.degradedEl.title = "Elevated per-host TCP failure ratio and/or failed systemd units (viz contract v2)";
+
+    this.stageFailEl = document.createElement("div");
+    this.stageFailEl.className = "viz-stage-fail-label";
+    this.stageFailEl.hidden = true;
+    this.stageFailEl.setAttribute("role", "status");
+    this.stageFailEl.textContent = "⚠ DEGRADED";
+
     this.tileShareRow = document.createElement("div");
     this.tileShareRow.className = "viz-hud-tile-shares";
     this.tileShareRow.hidden = true;
@@ -275,14 +317,37 @@ export class VizHud {
       el.textContent = "·";
       return el;
     };
-    line.append(this.packEl, sep(), metric, sep(), this.skipEl, this.swapRow);
+    this.budgetSepBefore = sep();
+    this.budgetSepBefore.hidden = true;
+    this.degradedSepBefore = sep();
+    this.degradedSepAfter = sep();
+    this.degradedSepAfter.hidden = true;
+    line.append(
+      this.packEl,
+      sep(),
+      metric,
+      sep(),
+      this.skipEl,
+      this.budgetSepBefore,
+      this.budgetEl,
+      this.degradedSepBefore,
+      this.degradedEl,
+      this.degradedSepAfter,
+      this.swapRow,
+    );
     this.devBadInputEl = document.createElement("div");
     this.devBadInputEl.className = "viz-hud-dev-bad-input sec-hint";
     this.devBadInputEl.hidden = true;
     root.append(line, this.devBadInputEl, this.tileShareRow);
 
-    parent.append(root);
+    parent.append(this.stageFailEl, root);
     this.root = root;
+  }
+
+  setBudgetOverlayVisible(on: boolean): void {
+    this.budgetVisible = on;
+    this.budgetEl.hidden = !on;
+    this.budgetSepBefore.hidden = !on;
   }
 
   /** Dev dogfood flag bad-input strip (wall rebuild path only). */
@@ -303,7 +368,11 @@ export class VizHud {
     this.metricEl.hidden = false;
     this.skipEl.hidden = false;
     this.root.hidden = !this.activeId;
-    if (!this.activeId) return;
+    if (!this.activeId) {
+      this.stageFailEl.hidden = true;
+      this.stageFailEl.textContent = "⚠ DEGRADED";
+      return;
+    }
     if (changed) this.resetSkipBaseline();
     this.packBaseName = packName;
     this.renderPackLine();
@@ -424,6 +493,26 @@ export class VizHud {
       this.skipEl.classList.remove("viz-hud-skip-limited", "viz-hud-skip-fail");
     }
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
+
+    if (this.budgetVisible) {
+      const model = vizBudgetOverlayFromStats(stats, input.renderScale ?? null);
+      this.budgetEl.textContent = formatVizBudgetOverlay(model);
+    }
+
+    const failBadge = vizFrameFailureBadge(displayFrame);
+    if (failBadge) {
+      this.degradedEl.hidden = false;
+      this.degradedSepAfter.hidden = false;
+      if (this.degradedEl.textContent !== failBadge) this.degradedEl.textContent = failBadge;
+      this.stageFailEl.hidden = false;
+      if (this.stageFailEl.textContent !== failBadge) this.stageFailEl.textContent = failBadge;
+    } else {
+      this.degradedEl.hidden = true;
+      this.degradedSepAfter.hidden = true;
+      this.degradedEl.textContent = "";
+      this.stageFailEl.hidden = true;
+      this.stageFailEl.textContent = "⚠ DEGRADED";
+    }
 
     const lines = tileBudgetLines ?? [];
     for (const { tileId, tile } of lines) {
