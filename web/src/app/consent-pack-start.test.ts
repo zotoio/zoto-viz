@@ -21,6 +21,20 @@ import {
 
 const HEAT_NOTICE = "Heat map isn't approved yet. Approve it in Settings → Plugins.";
 
+function expectPackStartConsentBlocked(opts: {
+  mountView: ReturnType<typeof vi.fn>;
+  setPaneView?: ReturnType<typeof vi.fn>;
+  noticeText: string | undefined;
+}): void {
+  expect(opts.mountView).toHaveBeenCalledTimes(0);
+  if (opts.setPaneView) expect(opts.setPaneView).not.toHaveBeenCalled();
+  expect(opts.noticeText === HEAT_NOTICE).toBe(true);
+  expect(opts.noticeText === consentBlockMessage({ name: "Heat map" })).toBe(true);
+  if (opts.noticeText) {
+    expect(opts.noticeText.includes("\u2019")).toBe(false);
+  }
+}
+
 function host(over: Partial<SwitchPaneViewHost> & Pick<SwitchPaneViewHost, "tileIds">): SwitchPaneViewHost {
   return {
     focusedId: null,
@@ -126,11 +140,13 @@ describe("consent blocks pack start paths", () => {
       runMosaicPaneSwitch,
     });
     expect(result?.ok).toBe(false);
-    expect(mountView).toHaveBeenCalledTimes(0);
     expect(m.setPaneNotice).toHaveBeenCalledTimes(1);
-    const call = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(call[1] === HEAT_NOTICE).toBe(true);
-    expect(call[1] === consentBlockMessage({ name: "Heat map" })).toBe(true);
+    const notice = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+    expectPackStartConsentBlocked({
+      mountView,
+      setPaneView: m.setPaneView as ReturnType<typeof vi.fn>,
+      noticeText: notice,
+    });
   });
 
   it("tile chrome pick shows consent notice and does not mount", async () => {
@@ -148,6 +164,7 @@ describe("consent blocks pack start paths", () => {
     const built = makeMosaic(panePickDeps);
     mosaic = built.mosaic;
     const wall = built.wall;
+    const setPaneViewSpy = vi.spyOn(mosaic, "setPaneView");
     const origNotice = mosaic.setPaneNotice.bind(mosaic);
     mosaic.setPaneNotice = (id, text, recipe) => {
       if (text) notices.push(text);
@@ -158,11 +175,15 @@ describe("consent blocks pack start paths", () => {
     pick!.dispatchEvent(new Event("change", { bubbles: true }));
     await Promise.resolve();
     expect(switchCalls).toBe(1);
-    expect(mountView).toHaveBeenCalledTimes(0);
     expect(notices.length).toBe(1);
-    expect(notices[0] === HEAT_NOTICE).toBe(true);
+    expectPackStartConsentBlocked({
+      mountView,
+      setPaneView: setPaneViewSpy,
+      noticeText: notices[0],
+    });
     expect(mosaic.tileIds).toContain("plugin:topology");
     expect(mosaic.tileIds).not.toContain("plugin:heat");
+    setPaneViewSpy.mockRestore();
   });
 
   it("settings wall slot pick calls switchPaneView once and shows consent notice", async () => {
@@ -198,13 +219,13 @@ describe("consent blocks pack start paths", () => {
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
     await Promise.resolve();
     expect(switchCalls).toBe(1);
-    expect(mountView).toHaveBeenCalledTimes(0);
-    expect(m.setPaneView).not.toHaveBeenCalled();
     expect(m.setPaneNotice).toHaveBeenCalledTimes(1);
-    const notice = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]![1];
-    expect(notice === HEAT_NOTICE).toBe(true);
-    expect(notice.includes("isn't approved yet")).toBe(true);
-    expect(notice.includes("\u2019")).toBe(false);
+    const notice = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+    expectPackStartConsentBlocked({
+      mountView,
+      setPaneView: m.setPaneView as ReturnType<typeof vi.fn>,
+      noticeText: notice,
+    });
   });
 
   it("boot reconcile then switch shows consent notice and does not mount", async () => {
@@ -223,10 +244,13 @@ describe("consent blocks pack start paths", () => {
       runMosaicPaneSwitch: runSwitch(m, mountView),
     });
     expect(result?.ok).toBe(false);
-    expect(mountView).toHaveBeenCalledTimes(0);
     expect(m.setPaneNotice).toHaveBeenCalledTimes(1);
-    const call = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(call[1] === HEAT_NOTICE).toBe(true);
+    const notice = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+    expectPackStartConsentBlocked({
+      mountView,
+      setPaneView: m.setPaneView as ReturnType<typeof vi.fn>,
+      noticeText: notice,
+    });
   });
 
   it("reload header pick shows consent notice and does not mount", async () => {
@@ -246,9 +270,12 @@ describe("consent blocks pack start paths", () => {
       runMosaicPaneSwitch: runSwitch(m, mountView),
     });
     expect(result?.ok).toBe(false);
-    expect(mountView).toHaveBeenCalledTimes(0);
     expect(m.setPaneNotice).toHaveBeenCalledTimes(1);
-    const call = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]!;
-    expect(call[1] === HEAT_NOTICE).toBe(true);
+    const notice = (m.setPaneNotice as ReturnType<typeof vi.fn>).mock.calls[0]![1] as string;
+    expectPackStartConsentBlocked({
+      mountView,
+      setPaneView: m.setPaneView as ReturnType<typeof vi.fn>,
+      noticeText: notice,
+    });
   });
 });
