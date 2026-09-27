@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-rect-device-edges.test.ts",
-  "testName": "^pack-mirror rect device edges > deviceRectTopLeftCssInto rounds y1 with Math.round at fractional bottom edge$",
-  "expectedRed": "AssertionError: expected [ +0, 1, 2, 1 ] to deeply equal [ +0, 1, 2, 2 ]"
-}

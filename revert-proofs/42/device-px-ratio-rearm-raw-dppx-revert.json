@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-layout-dpr-rearm-raw.test.ts",
-  "testName": "^layout DPR matchMedia re-arm \\(raw window DPR\\) > arms resolution media query at raw 2dppx while layout DPR stays capped at 1\\.5$",
-  "expectedRed": "AssertionError: expected false to be true // Object.is equality"
-}

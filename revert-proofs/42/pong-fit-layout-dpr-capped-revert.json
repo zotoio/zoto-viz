@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/arcade/pong-layout-dpr-fit.test.ts",
-  "testName": "^pong layout DPR fit > fit uses capped layout DPR for canvas backing height$",
-  "expectedRed": "AssertionError: expected 72 to be 60 // Object.is equality"
-}

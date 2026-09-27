@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-canvas-backing.test.ts",
-  "testName": "^RenderHost canvas backing store > resizeSoftware sets canvas backing width from CSS wall × layout DPR$",
-  "expectedRed": "AssertionError: expected 400 to be 250 // Object.is equality"
-}

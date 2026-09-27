@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-fb-viewport.test.ts",
-  "testName": "^RenderHost framebuffer viewport > present returns per-edge device rect at pr 1\\.5 bottom-left css \\(pane-change readPixels uses the same vp\\)$",
-  "expectedRed": "AssertionError: expected [ 1.5, 87, 151.5, 91.5 ] to deeply equal [ 2, 87, 151, 91 ]"
-}

@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/render-host-layout-dpr-surfaces.test.ts",
-  "testName": "^layout DPR surfaces \\(RenderHost cap, stage3d \\+ feed\\) > window DPR 2: stage3d and feed backing store is CSS size \u00d7 1\\.5 after RenderHost configures cap$",
-  "expectedRed": "AssertionError: expected 200 to be 150 // Object.is equality"
-}
