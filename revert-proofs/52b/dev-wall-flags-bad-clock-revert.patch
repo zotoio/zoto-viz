@@ -1,13 +1,25 @@
 diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
-index 513ae44..26ad168 100644
+index ed1e351..a5ecf64 100644
 --- a/web/src/core/viz-dev-wall-flags.ts
 +++ b/web/src/core/viz-dev-wall-flags.ts
-@@ -71,7 +71,7 @@ function parseWallClockFlag(raw: string | null): void {
+@@ -1,4 +1,4 @@
+-import { setVizBuildCostTicksInjector } from "./viz-clock";
++import { setVizBuildCostTicksInjector, setVizWallClockInjector } from "./viz-clock";
+ import { vizClockMs } from "./viz-clock";
+ import { clearDevWallFlagClock, devWallFlagClockActive, setDevWallFlagClock } from "../plugins/nixie-wall-parts";
+ import { devVizWallFlagBadInputMessage } from "../ui/viz-copy";
+@@ -57,12 +57,13 @@ function parseWallClockFlag(raw: string | null): void {
    if (!m) return;
    const h = Number(m[1]);
    const min = Number(m[2]);
 -  if (!Number.isInteger(h) || !Number.isInteger(min) || h < 0 || h > 23 || min < 0 || min > 59) return;
-+  if (!Number.isInteger(h) || !Number.isInteger(min) ) return;
++  if (!Number.isInteger(h) || !Number.isInteger(min) || min < 0 || min > 59) return;
  
-   wallAnchorDevMs = Date.UTC(2024, 5, 15, h, min, 0, 0);
-   wallAnchorRealMs = Date.now();
+   if (trimmed === lastParsedWallClockRaw && devWallFlagClockActive()) return;
+ 
+   lastParsedWallClockRaw = trimmed;
+   setDevWallFlagClock(h, min, vizClockMs());
++  setVizWallClockInjector(() => h * 3_600_000 + min * 60_000);
+ }
+ 
+ /**

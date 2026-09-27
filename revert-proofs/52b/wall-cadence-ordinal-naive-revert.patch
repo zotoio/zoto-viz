@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/viz-copy.ts b/web/src/ui/viz-copy.ts
+index 35df708..eca79c7 100644
 --- a/web/src/ui/viz-copy.ts
 +++ b/web/src/ui/viz-copy.ts
-@@ -17,16 +17,10 @@ export function devVizWallFlagBadInputMessage(param: "vizTileCostTicks", raw: str
- 
+@@ -18,18 +18,11 @@ export function devVizWallFlagBadInputMessage(param: "vizTileCostTicks", raw: st
  /** English ordinal for cadence k (11th–13th and 21st–23rd are not naive % 10). */
  export function vizCadenceOrdinal(k: number): string {
    const n = Math.max(1, Math.floor(k));
@@ -24,3 +24,5 @@ diff --git a/web/src/ui/viz-copy.ts b/web/src/ui/viz-copy.ts
 +  if (mod === 3) return `${n}rd`;
 +  return `${n}th`;
  }
+ 
+ /** Wall LIMITED strip is shown only when {@link tileLimitedSharingLabelVisible}. */
