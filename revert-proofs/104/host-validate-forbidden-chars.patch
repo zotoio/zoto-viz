@@ -1,9 +1,9 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 1e33abf..6727aa0 100644
+index 9c257b9f..1b9d3f7b 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -22,7 +22,7 @@ HANDLER_ERROR_BODY = (
-     "Reload to try again. If it keeps happening, check the server log."
+@@ -31,7 +31,7 @@ PATH_REJECT_BODY = (
+     "zoto-viz can't open that page. Check the link and try again."
  )
  
 -_HOST_FORBIDDEN_CHARS = re.compile(r'[;,\s"\']')

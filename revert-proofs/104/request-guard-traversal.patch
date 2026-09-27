@@ -1,17 +1,15 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 04ba3ef..8806a0d 100644
+index 9c257b9f..d5ac1392 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -277,13 +277,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
+@@ -298,11 +298,6 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
      scheme = request.scheme or "http"
      request["validated_http_origin"] = f"{scheme}://{key}".rstrip("/")
  
 -    raw_path = getattr(request, "raw_path", None) or request.path or "/"
 -    _norm_path, path_err = decode_request_path(raw_path)
 -    if path_err:
--        resp = web.Response(status=400, text="bad request", content_type="text/plain")
--        attach_frame_embed_policy(resp)
--        return resp
+-        return _path_reject_response()
 -
      try:
          resp = await handler(request)
