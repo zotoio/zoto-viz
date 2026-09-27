@@ -1,7 +1,6 @@
 import type { StateMsg } from "../core/types";
-import { resetVizClockInjectors, setVizBuildCostInjector, vizClockMs } from "../core/viz-clock"
+import { setVizBuildCostInjector, vizClockMs } from "../core/viz-clock"
 import { monoMs } from "../core/viz-time";
-import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
 import { skipRatePerSec, vizHudMetric, type VizHudTick } from "../ui/viz-hud";
@@ -329,10 +328,8 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
     const packs: DogfoodPackStats[] = [];
 
     for (const packId of VIZ_DEMO_PACKS) {
-      vizTileBudgetRegistry.reset();
-      syncVizTileScope(["dogfood"]);
       const contract = DEMO_PACK_CONTRACTS[packId];
-      const budget = new VizFrameBudget(now, "dogfood");
+      const budget = new VizFrameBudget(now);
       const writer = new VizBufferWriter(contract);
       const buildTimes: number[] = [];
       let prevVizClockMs = monoMs(0);
@@ -416,9 +413,7 @@ export function runPackSwapPreserve(
   const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS[fromPack]);
   writer.writeBuffer(0, [1, 2, 3, 4]);
 
-  vizTileBudgetRegistry.reset();
-  syncVizTileScope(["swap"]);
-  const budget = new VizFrameBudget(now, "swap");
+  const budget = new VizFrameBudget(now);
   let prevClock = monoMs(0);
   const tick1 = dogfoodTick(fromPack, state, prevClock, 0.1, budget, writer);
   prevClock = monoMs(now());

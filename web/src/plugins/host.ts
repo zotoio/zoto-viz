@@ -1,4 +1,3 @@
-import { syncVizTileScope } from "./viz-tile-budget";
 import { PLUGIN_SDK } from "./sdk";
 import type { VizDataFrame, VizPluginContract, VizUniformValue } from "./viz-host";
 
@@ -82,7 +81,6 @@ export class PluginSandbox {
   unload(): void {
     this.iframe?.remove();
     this.iframe = null;
-    syncVizTileScope(["main"]);
   }
 
   async load(

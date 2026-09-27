@@ -12,8 +12,6 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
-import { syncVizTileScope } from "../plugins/viz-tile-budget";
-
 export { centerSplit } from "./mosaic-layout";
 
 /** Wall palette for every tile, or the next unused theme (plugin look wins when free). */
@@ -501,7 +499,6 @@ export class Mosaic {
       if (!ids.includes(id)) this.dropPane(id);
     }
     for (const id of ids) this.ensurePane(id);
-    syncVizTileScope(ids.length ? ids : ["main"]);
   }
 
   private paneBound(id: string): boolean {
@@ -1037,7 +1034,6 @@ export class Mosaic {
   }
 
   private teardown(): void {
-    syncVizTileScope([]);
     for (const e of this.extras) e.scene.dispose();
     this.extras = [];
     for (const id of [...this.tileArcade.keys()]) this.releaseArcade(id);

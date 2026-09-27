@@ -71,7 +71,8 @@ import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
 import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
 import {
-  VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract,
+  VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
+  buildVizFrameForPlugin, defaultVizContract,
 } from "../plugins/viz-host";
 import {
   TypeSafeHost,
@@ -79,9 +80,7 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
-import { mainVizDeliver, mainVizBuildFrame } from "./viz-main-deliver";
 import { runPackFrameHandler, syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
-import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -97,12 +96,7 @@ import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
-import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
 import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
-import {
-  bindMosaicTileBudgetLines,
-  mosaicTileBudgetLines,
-} from "./main-viz-tile-lines";
 import { vizClockMs } from "../core/viz-clock";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
@@ -352,21 +346,6 @@ const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameClockMs: MonoMs = monoMs(0);
 const vizBudget = new VizFrameBudget();
-let vizTileScopeKey = "";
-
-function syncVizBudgetTileScope(): void {
-  const ids = mosaic?.on ? mosaic.tileIds : ["main"];
-  const scopeIds = ids.length ? ids : ["main"];
-  const key = scopeIds.join("\0");
-  if (key === vizTileScopeKey) return;
-  vizTileScopeKey = key;
-  applyDevVizWallFlagsOnBuild(location.search, scopeIds);
-  vizHud.syncDevWallBadInputMessage(devVizWallTileCostBadInputMessage());
-  syncVizTileScope(scopeIds);
-  vizBudget.setTileId(mosaic?.on ? (mosaic.mainMode || scopeIds[0] || "main") : "main");
-  if (mosaic?.on) vizHud.syncMosaicTileHudLines(scopeIds);
-  else vizHud.syncMosaicTileHudLines([]);
-}
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
@@ -1022,40 +1001,22 @@ function feed(m: StateMsg): void {
     const bind = packId === "hn-rain" || packId === "hn-term"
       ? illustratedSourceBind(optsFor(mode))
       : parseSourceBind(optsFor(mode));
-    syncVizBudgetTileScope();
-    const buildFrame = (s: StateMsg, pt: MonoMs, a: number) => mainVizBuildFrame(s, pt, a, idle, bind);
-    const scopeTileIds = mosaic?.on && mosaic.tileIds.length ? mosaic.tileIds : ["main"];
-    const primaryTileId = mosaic?.on ? (mosaic.mainMode || scopeTileIds[0] || "main") : "main";
-    vizBudget.setTileId(primaryTileId);
-    const delivered = mainVizDeliver({
-      budget: vizBudget,
-      prevClockMs: vizFrameClockMs,
-      state: shown,
-      audio,
-      buildFrame,
-      onFrame: (f) => {
-        if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
-        sandbox.frame(f);
-        if (packId) {
-          syncVizPackRenderCanvas(renderHost.bufferPixelSize());
-          runPackFrameHandler(packId, f, {
-            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-          }, optsFor(mode));
-        }
-      },
-    });
-    vizFrameClockMs = delivered.nextClockMs;
-    const frame = delivered.frame;
-    if (mosaic?.on && scopeTileIds.length > 1) {
-      const primaryTile = vizTileBudgetRegistry.getTile(primaryTileId);
-      for (const id of scopeTileIds) {
-        const t = vizTileBudgetRegistry.getTile(id);
-        t.shedding = primaryTile.shedding;
-        if (frame) t.lastDeliveredFrame = frame;
+    const buildFrame = idle
+      ? (s: StateMsg, pt: MonoMs, a: number) => buildVizFrameForPlugin(s, pt, a, idle, bind)
+      : (s: StateMsg, pt: MonoMs, a: number) => buildVizFrame(s, pt, a, bind);
+    const frame = vizBudget.deliver(shown, vizFrameClockMs, audio, (f) => {
+      if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
+      sandbox.frame(f);
+      if (packId) {
+        syncVizPackRenderCanvas(renderHost.bufferPixelSize());
+        runPackFrameHandler(packId, f, {
+          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+        }, optsFor(mode));
       }
-    }
+    }, buildFrame);
+    if (frame) vizFrameClockMs = monoMs(vizClockMs());
     if (frame) {
       if (packId === "hn-rain" || packId === "hn-term") {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
@@ -1066,11 +1027,6 @@ function feed(m: StateMsg): void {
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
     }
-    const activeTiles = vizTileBudgetRegistry.activeTileCount();
-    const budgetTileId = mosaic?.on ? (mosaic.mainMode || mosaic.tileIds[0] || "main") : "main";
-    const tileLinesRaw = mosaic?.on ? mosaicTileBudgetLines(mosaic.tileIds) : undefined;
-    if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
-    const tileLines = tileLinesRaw;
     vizHud.tick({
       packId,
       packName: active?.name ?? packId ?? "",
@@ -1078,9 +1034,6 @@ function feed(m: StateMsg): void {
       frame: vizBudget.lastBuilt,
       state: shown,
       now: vizClockMs(),
-      tileBudget: vizTileBudgetRegistry.getTile(budgetTileId),
-      activeTiles,
-      tileBudgetLines: tileLines,
     });
   }
 
@@ -1122,11 +1075,7 @@ function setRedaction(on: boolean): void {
 }
 setRedaction(localStorage.getItem("zoto-viz.redact") === "1");
 {
-  const bootScope: readonly string[] = ["main"];
-  vizTileScopeKey = bootScope.join("\0");
   bootNixieRealWallClock();
-  applyDevVizWallFlagsOnBuild(location.search, bootScope);
-  vizHud.syncDevWallBadInputMessage(devVizWallTileCostBadInputMessage());
 }
 
 // ---------------------------------------------------------------- settings cog: allow/block filters + the moved show / privacy switches

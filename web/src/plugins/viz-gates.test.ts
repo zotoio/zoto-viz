@@ -1,7 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { setVizBuildCostTicksInjector } from "../core/viz-clock"
 import { monoMs } from "../core/viz-time";
-import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import { toPluginView } from "./plugin-visualisation";
 import {
   VIZ_FRAME_BUDGET_MS,
@@ -23,23 +21,19 @@ describe("viz merge gates", () => {
     expect(fatLan.flows.length).toBeGreaterThanOrEqual(1000);
 
     const sandbox = { frame: vi.fn() };
-    vizTileBudgetRegistry.reset();
-    syncVizTileScope(["gate"]);
-    let mono = 0;
-    const budget = new VizFrameBudget(() => mono, "gate");
-    setVizBuildCostTicksInjector((i) => (i === 0 ? 1200 : 15000));
+    const times = [0, 5, 0, VIZ_FRAME_BUDGET_MS + 3];
+    let tick = 0;
+    const budget = new VizFrameBudget(() => times[tick++] ?? 999);
 
     const ok = budget.deliver(fatLan, monoMs(0), 0, (f) => sandbox.frame(f), buildVizFrame);
     expect(ok).not.toBeNull();
     expect(sandbox.frame).toHaveBeenCalledTimes(1);
 
-    mono += 17;
-    budget.deliver(fatLan, monoMs(mono), 0, (f) => sandbox.frame(f), buildVizFrame);
-    const skipped = budget.deliver(fatLan, monoMs(mono), 0, (f) => sandbox.frame(f), buildVizFrame);
-    setVizBuildCostTicksInjector(undefined);
+    const skipped = budget.deliver(fatLan, monoMs(ok!.t), 0, (f) => sandbox.frame(f), buildVizFrame);
     expect(skipped).toBeNull();
+    expect(budget.stats.overBudget).toBe(1);
     expect(budget.stats.skipped).toBe(1);
-    expect(sandbox.frame).toHaveBeenCalledTimes(2);
+    expect(sandbox.frame).toHaveBeenCalledTimes(1);
   });
 
   it("talker-storm refuses more than 512 particles", () => {
