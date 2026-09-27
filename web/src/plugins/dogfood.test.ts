@@ -83,6 +83,36 @@ function runFatLanSpyRowHnTermPack(): number[] {
 /** Non-space glyph cells in the final hn-term pack buffer after 120 frames at `t = i/30`. */
 const FAT_LAN_SPY_ROW_HN_TERM_TYPED_CHARS = 19;
 
+const HN_TERM_DT_GUARD_SEGMENT_FRAMES = 60;
+const HN_TERM_DT_GUARD_FRAME_STEP = 1 / 30;
+
+function runHnTermBackwardFrameTRow(): number[] {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  let captured: number[] = [];
+  const handlers = {
+    writeBuffer: (_slot: number, data: number[]) => {
+      captured = Array.from(data);
+    },
+    writeUniform: () => {},
+    writeParticles: () => {},
+  };
+  const tickSegment = () => {
+    for (let i = 0; i < HN_TERM_DT_GUARD_SEGMENT_FRAMES; i++) {
+      const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+      frame.t = i * HN_TERM_DT_GUARD_FRAME_STEP;
+      runPackFrameHandler("hn-term", frame, handlers);
+    }
+  };
+  tickSegment();
+  tickSegment();
+  return captured;
+}
+
+/** Two segments of 60 at `t = i/30` with `frame.t` rewound without `resetHnTermPack`. */
+const HN_TERM_DT_GUARD_TYPED_CHARS = 18;
+
 function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
   vi.useFakeTimers({ toFake: ["Date", "performance"] });
   vi.setSystemTime(new Date(FAT_LAN_SOAK_CLOCK_START_MS));
@@ -153,6 +183,11 @@ it("fat-LAN live soak: exact delivered counts on fake time", () => {
     expect(pack.delivered).toBe(FAT_LAN_SOAK_FRAMES);
     expect(pack.skipped).toBe(0);
   }
+});
+
+it("hn-term frame.t backward step: dt guard uses 1/60 fallback", () => {
+  const buf = runHnTermBackwardFrameTRow();
+  expect(hnTermPackBufferTypedCharCount(buf)).toBe(HN_TERM_DT_GUARD_TYPED_CHARS);
 });
 
 it("fat-LAN live soak: termNow must not read wall clock", () => {

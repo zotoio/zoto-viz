@@ -53,6 +53,12 @@ function termNow(frame: VizDataFrame): number {
   return frame.t;
 }
 
+function hnTermDt(now: number): number {
+  let dt = termLastT > 0 ? Math.min(1, Math.max(0, now - termLastT)) : 1 / 60;
+  if (!Number.isFinite(dt) || dt <= 0) dt = 1 / 60;
+  return dt;
+}
+
 function hnTermFrameBuffer(frame: VizDataFrame): number[] {
   const next = scriptFromStories(preferHnStories(frame.headlines));
   if (next !== termScript) {
@@ -60,7 +66,7 @@ function hnTermFrameBuffer(frame: VizDataFrame): number[] {
     termTyped = Math.min(termTyped, termScript.length);
   }
   const now = termNow(frame);
-  const dt = termLastT > 0 ? Math.min(1, Math.max(0, now - termLastT)) : 1 / 60;
+  const dt = hnTermDt(now);
   termLastT = now;
   termTyped += dt * (28 + frame.audio * 18);
   if (termScript.length > 0 && termTyped > termScript.length + 40) termTyped = 0;

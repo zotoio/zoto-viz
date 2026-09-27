@@ -1,7 +1,7 @@
 diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
 --- a/web/src/plugins/viz-pack-host.ts
 +++ b/web/src/plugins/viz-pack-host.ts
-@@ -50,7 +50,7 @@ export function resetHnTermPack(): void {
+@@ -49,7 +49,7 @@ export function resetHnTermPack(): void {
  }
  
  function termNow(frame: VizDataFrame): number {
@@ -9,4 +9,4 @@ diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
 +  return typeof performance !== "undefined" ? performance.now() / 1000 : frame.t;
  }
  
- function hnTermFrameBuffer(frame: VizDataFrame): number[] {
+ function hnTermDt(now: number): number {

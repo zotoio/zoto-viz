@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/viz-pack-host.ts b/web/src/plugins/viz-pack-host.ts
+--- a/web/src/plugins/viz-pack-host.ts
++++ b/web/src/plugins/viz-pack-host.ts
+@@ -55,7 +55,7 @@ function termNow(frame: VizDataFrame): number {
+ 
+ function hnTermDt(now: number): number {
+   let dt = termLastT > 0 ? Math.min(1, Math.max(0, now - termLastT)) : 1 / 60;
+-  if (!Number.isFinite(dt) || dt <= 0) dt = 1 / 60;
++  if (Number.isNaN(dt)) dt = 1 / 60;
+   return dt;
+ }
+ 
