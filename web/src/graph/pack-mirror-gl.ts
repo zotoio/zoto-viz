@@ -295,6 +295,7 @@ export class PackMirrorSession {
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
     renderer.setRenderTarget(prev);
+    rt.texture.flipY = true;
     this.rendered = true;
     return rt.texture;
   }
