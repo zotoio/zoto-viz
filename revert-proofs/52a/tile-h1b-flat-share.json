@@ -2,6 +2,7 @@
   "row": "H1 revert B flat tile share",
   "runner": "vitest",
   "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
-  "testName": "^tile HUD rows \\(half-open window \\(now−300000, now\\] in ticks\\) > layout shares: 1×1/2×2/2×3/2×4 → 5010/1252/835/626$",
-  "excerpt": "AssertionError: expected 5010 to be 1252 // Object.is equality"
+  "testName": "^tile HUD rows \\(half-open window \\(now\u2212300000, now\\] in ticks\\) > layout shares: 1\u00d71/2\u00d72/2\u00d73/2\u00d74 \u2192 5010/1252/835/626$",
+  "excerpt": "AssertionError: expected 5010 to be 1252 // Object.is equality",
+  "patchedAssertion": "AssertionError: expected 5010 to be 1252 // Object.is equality"
 }

@@ -2,6 +2,7 @@
   "row": "F5 (iii) revert wall clock drops HH:MM range check",
   "runner": "vitest",
   "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
-  "testName": "^dev viz wall flags > F5 \\(iii\\) bad wall clock: 24:00 — real clock$",
-  "excerpt": "AssertionError: expected 1718467200000 to be 1700000000123"
+  "testName": "^dev viz wall flags > F5 \\(iii\\) bad wall clock: 24:00 \u2014 real clock$",
+  "excerpt": "AssertionError: expected 1718467200000 to be 1700000000123",
+  "patchedAssertion": "AssertionError: expected 1718467200000 to be 1700000000123"
 }

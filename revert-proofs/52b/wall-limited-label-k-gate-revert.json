@@ -1,7 +1,8 @@
 {
-  "row": "Amendment 6a revert — drop k >= 2 gate shows every 1st frame",
+  "row": "Amendment 6a revert \u2014 drop k >= 2 gate shows every 1st frame",
   "runner": "vitest",
   "testFile": "src/ui/tile-hud-label.test.ts",
-  "testName": "^tile HUD LIMITED label \\(60 fps, per line\\) > Amendment 6a gate: k=1 → no label \\(revert shows every 1st frame\\)$",
-  "excerpt": "AssertionError: expected 'LIMITED · sharing the frame with 4 tiles · updating every 1st frame' to be null"
+  "testName": "^tile HUD LIMITED label \\(60 fps, per line\\) > Amendment 6a gate: k=1 \u2192 no label \\(revert shows every 1st frame\\)$",
+  "excerpt": "AssertionError: expected 'LIMITED \u00b7 sharing the frame with 4 tiles \u00b7 updating every 1st frame' to be null",
+  "patchedAssertion": "AssertionError: expected 'LIMITED \u00b7 sharing the frame with 4 tiles \u00b7 updating every 1st frame' to be null"
 }

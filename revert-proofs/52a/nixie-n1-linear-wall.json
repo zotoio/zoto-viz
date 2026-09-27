@@ -1,6 +1,7 @@
 {
   "row": "N1 revert linear wall ms",
-  "testName": "^nixie wall clock rows > N1: 600 frames — format at \\[0,60,…,540\\], one formatter, stable buffer$",
+  "testName": "^nixie wall clock rows > N1: 600 frames \u2014 format at \\[0,60,\u2026,540\\], one formatter, stable buffer$",
   "excerpt": "AssertionError: expected 1700000000016.6667 to be 1700000000016 // Object.is equality",
-  "testFile": "web/src/plugins/nixie-wall-clock.test.ts"
+  "testFile": "web/src/plugins/nixie-wall-clock.test.ts",
+  "patchedAssertion": "AssertionError: expected 1700000000016.6667 to be 1700000000016 // Object.is equality"
 }
