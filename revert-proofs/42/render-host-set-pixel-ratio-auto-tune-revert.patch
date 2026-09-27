@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index 092435e..03b4ee5 100644
+index e7a40f6..0ef9411 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -224,8 +224,8 @@ export class RenderHost {
+@@ -370,8 +370,8 @@ export class RenderHost {
      this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
      this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);
      if (!this.software) {
