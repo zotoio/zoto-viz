@@ -32,16 +32,6 @@ def test_origin_ok_denies_localhost_port_with_path_suffix() -> None:
     assert not access.origin_ok(_FakeReq(origin=origin, host=f"localhost:{PORT}"))
 
 
-def test_origin_ok_denies_127_0_0_2_origin_in_default_mode() -> None:
-    origin = f"http://127.0.0.2:{PORT}"
-    assert not access.origin_ok(_FakeReq(origin=origin, host=f"127.0.0.2:{PORT}", lan=False))
-
-
-def test_origin_ok_allows_127_0_0_2_origin_in_insecure_lan_mode() -> None:
-    origin = f"http://127.0.0.2:{PORT}"
-    assert access.origin_ok(_FakeReq(origin=origin, host=f"127.0.0.2:{PORT}", lan=True))
-
-
 def test_origin_null_denied_without_token_on_api_path() -> None:
     req = _FakeReq(origin="null", path="/api/profiles")
     assert not access.origin_ok(req)

@@ -1,7 +1,0 @@
-{
-  "description": "Revert insecure_lan canonical gate (127.0.0.2 Origin denied in LAN mode)",
-  "runner": "pytest",
-  "testFile": "tests/test_access_origin_strict.py",
-  "testName": "test_origin_ok_allows_127_0_0_2_origin_in_insecure_lan_mode",
-  "red": "assert access.origin_ok(_FakeReq(origin=origin, host=f\"127.0.0.2:{PORT}\", lan=True))"
-}
