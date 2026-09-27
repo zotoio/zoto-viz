@@ -1,0 +1,8 @@
+{
+  "description": "Revert production guard (entry-mode-picker-apply)",
+  "runner": "vitest",
+  "project": "web",
+  "testFile": "src/app/__tests__/main-entry.mode-picker.test.ts",
+  "testName": "persists the picked view through applyMode on change",
+  "redLine": "AssertionError: expected 'plugin:harness-alt' to be 'plugin:harness-entry' // Object.is equality"
+}

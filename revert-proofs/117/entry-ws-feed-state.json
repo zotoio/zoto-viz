@@ -1,0 +1,8 @@
+{
+  "description": "Revert production guard (entry-ws-feed-state)",
+  "runner": "vitest",
+  "project": "web",
+  "testFile": "src/app/__tests__/main-entry.feed.test.ts",
+  "testName": "applies websocket state to the demo LAN counters",
+  "redLine": "AssertionError: expected 0 to be greater than 0"
+}
