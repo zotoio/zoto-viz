@@ -143,8 +143,8 @@ def main() -> None:
 
     print("=== QE rule 1: failure buckets (suites at HEAD) ===")
     print(
-        "Full `pnpm exec vitest run` + `pytest -q` at each split HEAD and at `origin/main` "
-        "on this machine: **zero failures** (no entries in categories (a)(b)(c))."
+        "Full `pnpm exec vitest run` + `pytest -q` at each split HEAD and at `6520b01` "
+        "(compare test name + error text for category (a), e.g. fat-LAN soak vs TSE #101)."
     )
     print("See `.cursor/27-split-qe-bodies.md` per-PR paste blocks.\n")
 
