@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/host-mesh-lane.ts b/web/src/graph/host-mesh-lane.ts
-index 481df945..9158dd32 100644
+index e54a4d28..67c18d45 100644
 --- a/web/src/graph/host-mesh-lane.ts
 +++ b/web/src/graph/host-mesh-lane.ts
-@@ -173,7 +173,7 @@ export class HostMeshLane {
+@@ -190,7 +190,7 @@ export class HostMeshLane {
        t.template.removeFromParent();
        disposeHostMeshObject3D(t.template);
      }

@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/host-mesh-lane.ts b/web/src/graph/host-mesh-lane.ts
-index 481df945..d253ab20 100644
+index e54a4d28..8e3f14a4 100644
 --- a/web/src/graph/host-mesh-lane.ts
 +++ b/web/src/graph/host-mesh-lane.ts
-@@ -171,7 +171,7 @@ export class HostMeshLane {
+@@ -188,7 +188,7 @@ export class HostMeshLane {
      this.clearLive();
      for (const t of this.templates.values()) {
        t.template.removeFromParent();
