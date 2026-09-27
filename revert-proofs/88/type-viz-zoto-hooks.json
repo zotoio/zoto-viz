@@ -1,5 +1,0 @@
-{
-  "testFile": "src/plugins/shader-fallback-contracts.test.ts",
-  "testName": "shader fallback contract typecheck > type-viz-zoto-hooks",
-  "redValue": "AssertionError: expected 1 to be +0 // Object.is equality"
-}

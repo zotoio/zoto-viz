@@ -1,5 +1,0 @@
-{
-  "testFile": "src/app/plugin-sky-load.contract.test.ts",
-  "testName": "plugin sky load wiring > plugin-sky-mosaic-look",
-  "redValue": "AssertionError: expected -1 to be greater than -1"
-}

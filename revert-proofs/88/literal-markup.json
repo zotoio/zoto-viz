@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-hook.test.ts",
-  "testName": "shader fallback pack hook > literal-markup",
-  "redValue": "AssertionError: expected '' to be '<img src=x onerror=alert(1)>' // Object.is equality"
-}

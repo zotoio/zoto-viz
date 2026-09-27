@@ -1,7 +1,0 @@
-{
-  "row": "N1 revert per-frame parseNixieLook in pack-host",
-  "testName": "^nixie wall clock rows > N1: 600 frames \u2014 format at \\[0,60,\u2026,540\\], one formatter, stable buffer$",
-  "excerpt": "AssertionError: expected \"parseNixieLook\" to not be called at all, but actually been called 1 times",
-  "testFile": "web/src/plugins/nixie-wall-clock.test.ts",
-  "patchedAssertion": "AssertionError: expected \"parseNixieLook\" to not be called at all, but actually been called 1 times"
-}

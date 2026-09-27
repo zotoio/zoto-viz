@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/backdrop.test.ts",
-  "testName": "plugin sky contract > plugin-sky-not-bound-outside-plugin-kind",
-  "redValue": "AssertionError: expected 'demo' to be null"
-}

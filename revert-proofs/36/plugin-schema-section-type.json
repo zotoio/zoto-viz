@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_schema.py",
-  "testName": "test_plugin_config_field_section_rejects_non_string",
-  "description": "plugin.yml config field section must be type string",
-  "red": "E           AssertionError: section 123 must be rejected"
-}

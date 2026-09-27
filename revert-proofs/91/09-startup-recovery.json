@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_install.py",
-  "testName": "test_startup_recovery_runs_in_fresh_process",
-  "description": "Startup recovery does not restore .bak runtimes.",
-  "patchedFailure": "tests/test_plugin_install.py:655: AssertionError"
-}

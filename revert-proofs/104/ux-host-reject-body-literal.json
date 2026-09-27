@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_host_reject_disallowed_body",
-  "red": "AssertionError: HOST_REJECT_BODY drift: \"This zoto-viz server doesn't accept the address it was opened with. Open it by its IP address, or add this name to `allowed_hosts` in the server config.\"",
-  "description": "Disallowed Host 400 must match HOST_REJECT_BODY exactly (full equality).",
-  "timeoutSec": 120
-}

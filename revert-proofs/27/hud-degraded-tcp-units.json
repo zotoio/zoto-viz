@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/ui/viz-hud.test.ts",
-  "testName": "^viz\\ hud\\ helpers\\ >\\ keeps\\ systemd\\ unit\\ count\\ separate\\ from\\ TCP\\ failure\\ percentage$",
-  "description": "One-line production revert: vizFrameFailureBadge uses max(sys.failed, talkerPeak) for one percentage.",
-  "patchedAssertion": "AssertionError: expected '\u26a0 DEGRADED 60% TCP \u00b7 60 units' to be '\u26a0 DEGRADED 60% TCP \u00b7 1 unit' // Object.is equality"
-}

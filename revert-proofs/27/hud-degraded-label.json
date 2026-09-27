@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/ui/viz-hud.test.ts",
-  "testName": "^viz\\ hud\\ helpers\\ >\\ uses\\ DEGRADED\\ prefix\\ on\\ strip\\ failure\\ badge$",
-  "description": "One-line production revert: strip badge text uses fail NN% TCP instead of ⚠ DEGRADED prefix.",
-  "patchedAssertion": "AssertionError: expected 'fail 40% TCP' to be '⚠ DEGRADED 40% TCP' // Object.is equality"
-}

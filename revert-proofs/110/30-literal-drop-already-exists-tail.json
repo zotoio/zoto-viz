@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_local.py",
-  "testName": "test_sync_local_drop_already_exists_uses_literal_message",
-  "description": "Literal drop-zone already-exists tail.",
-  "patchedFailure": "tests/test_plugin_local.py:309: AssertionError: drop already exists literal message"
-}

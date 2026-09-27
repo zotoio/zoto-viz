@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_qe_staged_pack_guard_registry",
-  "description": "go-live consumes validator-issued StagedPack instances.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:747: AssertionError: staged pack guard registry"
-}

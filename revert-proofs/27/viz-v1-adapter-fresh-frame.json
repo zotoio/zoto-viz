@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-v1-frame-adapter.test.ts",
-  "testName": "^VizV1FrameAdapter\\ >\\ gives\\ each\\ pack\\ the\\ same\\ frame\\ instance\\ every\\ deliver\\ and\\ different\\ instances\\ across\\ packs$",
-  "description": "One-line production revert: allocate a fresh v1 pack frame on every deliver instead of reusing the load-time frame.",
-  "patchedAssertion": "AssertionError: expected { contract: 1, t: +0, dt: +0, \u2026(6) } to be { contract: 1, t: +0, dt: 0.016, \u2026(6) } // Object.is equality"
-}

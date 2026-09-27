@@ -424,18 +424,8 @@ def install_staged_to_runtime(
     lock = _lock_for_pack(pid)
     lock.acquire()
     try:
-<<<<<<< HEAD
-        if not force:
-            blocked = zip_block_for_sha(incoming)
-            if blocked is not None:
-                msg = str(blocked.get("message") or "This zip install is blocked.")
-                reason = str(blocked.get("blockReason") or blocked.get("error") or "blocked")
-                raise InstallStartFailedError(msg, reason=reason)
-        return _install_zip_to_runtime_locked(
-=======
         return _install_staged_to_runtime_locked(
             staged,
->>>>>>> 15c39c4b
             zip_path,
             dest_zip,
             runtime,

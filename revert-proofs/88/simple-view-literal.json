@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-tile.test.ts",
-  "testName": "shader fallback tile overlay > simple-view-literal",
-  "redValue": "AssertionError: expected '' to be 'Simple view' // Object.is equality"
-}

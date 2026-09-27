@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_os_query.py::test_local_interface_hosts_skips_wildcard_os_addresses",
-  "red": "AssertionError: unspecified 0.0.0.0 must not become allowlist key 0.0.0.0:7020",
-  "timeoutSec": 120
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_host_header_invalid_malformed_and_duplicate",
-  "red": "AssertionError: invalid Host body mismatch: \"This zoto-viz server doesn't accept the address it was opened with. Open it by its IP address instead, or add this host name to allowed_hosts in the server config.\"",
-  "description": "Malformed or duplicate Host 400 must match HOST_HEADER_INVALID_BODY; revert collapses to HOST_REJECT_BODY.",
-  "timeoutSec": 120
-}

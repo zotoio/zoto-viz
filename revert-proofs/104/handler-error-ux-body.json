@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_ux_literals.py::test_ux_literal_handler_500_body",
-  "red": "AssertionError: 500 body mismatch: 'internal server error'",
-  "description": "Handler 500 UX copy must match the agreed literal exactly (full equality).",
-  "timeoutSec": 120
-}

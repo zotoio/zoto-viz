@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_install.py",
-  "testName": "test_start_failed_zip_hash_blocks_rescan_notice_once",
-  "description": "Failed start does not persist sha256 install block.",
-  "patchedFailure": "E       AssertionError: assert None is not None"
-}

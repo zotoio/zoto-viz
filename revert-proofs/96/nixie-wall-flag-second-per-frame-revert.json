@@ -1,8 +1,0 @@
-{
-  "row": "B1 row 10 flag clock revert one second per frame",
-  "runner": "vitest",
-  "testFile": "web/src/plugins/nixie-wall-clock-source-rows.test.ts",
-  "testName": "^nixie wall clock source rows \\(B1 option b\\) > row 10 flag clock step: 01:05 \\+ 3500 ms mono \u2192 \\{1,5,3\\} and one upload$",
-  "patchedAssertion": "AssertionError: expected { h: 1, m: 5, s: 1 } to deeply equal { h: 1, m: 5, s: 3 }",
-  "excerpt": "AssertionError: expected { h: 1, m: 5, s: 1 } to deeply equal { h: 1, m: 5, s: 3 }"
-}

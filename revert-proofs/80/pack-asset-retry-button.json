@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-asset-retry-ux.test.ts",
-  "testName": "pack asset retry UX > (a) after cap shows focusable Retry under couldn't-start copy",
-  "description": "Post-cap failed tile must expose an accessible Retry control with couldn't-start copy.",
-  "timeoutSec": 120
-}

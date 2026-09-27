@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "^PackTexturePresenter > keeps material\\.version stable over 300 draws with the same texture$",
-  "description": "Material needsUpdate only when map reference changes. Patched vitest: expected 300 to be 1 // Object.is equality",
-  "expectedRed": "AssertionError: expected 300 to be 1 // Object.is equality"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/duplicate-slot-scope-note-live.test.ts",
-  "testName": "^duplicate slot shared config > scope note follows live tile count while drawer stays open > returns focus once to the Layout button when the last pack tile leaves and the drawer was opened from Layout$",
-  "description": "Keep the view drawer open when the last pack tile is removed from the wall.",
-  "redOutput": "AssertionError: expected true to be false // Object.is equality"
-}

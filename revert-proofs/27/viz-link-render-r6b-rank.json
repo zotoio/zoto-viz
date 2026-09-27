@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
-  "testName": "^viz link render R6 \\(collector draft \u2014 fade rows deferred\\) > R6\\(b\\): render key and colour are pure functions of \\(src, dst\\)$",
-  "description": "Revert keys render key by rank instead of (src, dst) hash.",
-  "patchedAssertion": "AssertionError: expected '10.0.0.1\\u000010.0.0.2#1' to be '10.0.0.1\\u000010.0.0.2#0' // Object.is equality"
-}

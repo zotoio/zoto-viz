@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-host.test.ts",
-  "testName": "tile shader fallback host > host-generic-copy",
-  "redValue": "AssertionError: expected '' to be 'Packet Tunnel can\\'t run its graphics\u2026' // Object.is equality"
-}

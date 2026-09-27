@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_security.py::test_multiple_host_headers_rejected",
-  "red": "AssertionError: assert 200 == 400",
-  "description": "Reject multiple Host headers.",
-  "timeoutSec": 120
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-ui.test.ts",
-  "testName": "fillPluginFields > shows Edited on collapsed section summary when a field inside is dirty",
-  "description": "Collapsed section summary shows the same Edited marker when fields inside are dirty",
-  "red": "AssertionError: expected undefined to be 'Edited' // Object.is equality"
-}

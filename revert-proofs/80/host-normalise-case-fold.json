@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_normalize.py::test_host_normalisation_table[case_fold_localhost]",
-  "description": "LOCALHOST case fold must be accepted.",
-  "timeoutSec": 60,
-  "red": "assert 400 == 200"
-}

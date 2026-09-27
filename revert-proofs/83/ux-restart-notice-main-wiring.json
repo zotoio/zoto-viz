@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/main.wiring.test.ts",
-  "testName": "main entry wiring > shows the restart strip when the server-restart event fires after entry bind",
-  "red": "",
-  "description": "ux-restart-notice-main-wiring",
-  "timeoutSec": 120
-}

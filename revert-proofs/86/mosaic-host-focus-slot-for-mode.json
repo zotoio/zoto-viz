@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/mosaic-host-bindings.test.ts",
-  "testName": "^mosaic host bindings > mosaicFocusSlotForMode picks the duplicate slot carrying the mode id$",
-  "description": "Revert mode focus to first tile slot (#86).",
-  "expectedRed": "AssertionError: expected 'plugin:y' to be 'plugin:x!1' // Object.is equality"
-}

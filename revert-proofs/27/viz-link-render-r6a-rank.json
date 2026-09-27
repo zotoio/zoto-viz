@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-collect-index.test.ts",
-  "testName": "^viz link render R6 \\(collector draft \u2014 fade rows deferred\\) > R6\\(a\\): link record identity follows \\(src, dst\\) regardless of output rank$",
-  "description": "Revert keys link record identity by output rank instead of (src, dst).",
-  "patchedAssertion": "AssertionError: expected '10.0.0.1\\u000010.0.0.2#0' to be '10.0.0.1\\u000010.0.0.2#1' // Object.is equality"
-}

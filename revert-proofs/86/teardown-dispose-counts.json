@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/graph/pack-mirror-lifecycle.test.ts",
-  "testName": "^PackMirrorSession resource lifecycle > teardown disposes RT, geometry, and material; single tile creates nothing$",
-  "description": "Dropping below two tiles disposes RT and quad resources. Patched vitest: expected +0 to be 1 // Object.is equality",
-  "expectedRed": "AssertionError: expected +0 to be 1 // Object.is equality"
-}

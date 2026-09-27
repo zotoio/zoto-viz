@@ -1,5 +1,0 @@
-{
-  "testFile": "src/plugins/nixie-fallback.test.ts",
-  "testName": "nixie shader fallback text > nixie-write-on-change",
-  "redValue": "AssertionError: expected 600 to be 10 // Object.is equality"
-}

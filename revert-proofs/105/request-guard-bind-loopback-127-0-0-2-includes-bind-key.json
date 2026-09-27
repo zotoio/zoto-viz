@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_bind_matrix.py::test_build_allowed_hosts_bind_127_0_0_2_includes_that_loopback_key",
-  "red": "AssertionError: 127.0.0.2 bind must allow Host key 127.0.0.2:7020",
-  "description": "Non-canonical loopback bind address must appear in its own allowlist.",
-  "timeoutSec": 120
-}

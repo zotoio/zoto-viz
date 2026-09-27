@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-ui.test.ts",
-  "testName": "fillPluginFields > leaves unsectioned-only knobs in a flat sec, not collapsible details",
-  "description": "Fields without section must not be wrapped in details.sec-collapsible",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
-}

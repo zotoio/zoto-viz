@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-v1-frame-adapter.test.ts",
-  "testName": "^VizV1FrameAdapter\\ >\\ isolates\\ talker\\ writes\\ between\\ packs$",
-  "description": "One-line production revert: second v1 pack reuses the first pack's preallocated frame slot instead of its own.",
-  "patchedAssertion": "AssertionError: expected -1 to be 100 // Object.is equality"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/ui/media-ask-focus.test.ts",
-  "testName": "pins the microphone heading copy byte-for-byte",
-  "description": "Revert production guard (row-08-copy-heading)",
-  "red": "AssertionError: expected '' to be 'Allow the microphone' // Object.is equality"
-}

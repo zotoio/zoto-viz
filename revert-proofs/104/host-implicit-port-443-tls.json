@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_normalize.py::test_implicit_port_443_when_tls_and_host_omits_port",
-  "red": "AssertionError: assert None == '127.0.0.1:443'",
-  "description": "TLS Host without port must default to 443, not 80.",
-  "timeoutSec": 120
-}

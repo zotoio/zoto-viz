@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-manifest-blocked.test.ts",
-  "testName": "renders blocked message and retry control",
-  "description": "Render blocked card title instead of plain-words message",
-  "redOutput": "\n RUN  v5.0.0 /workspace/web\n\n \u276f src/plugins/plugin-manifest-blocked.test.ts (2 tests | 1 failed) 367ms\n   \u276f manifest blocked catalog UI (2)\n     \u00d7 renders blocked message and retry control 5ms\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af Failed Tests 1 \u23af\u23af\u23af\u23af\u23af\u23af\u23af\n\n FAIL  src/plugins/plugin-manifest-blocked.test.ts > manifest blocked catalog UI > renders blocked message and retry control\nAssertionError: expected 'Marble RunMarble RunRetry' to match /marble-run/\n\n- Expected:\n/marble-run/\n\n+ Received:\n\"Marble RunMarble RunRetry\"\n\n \u276f src/plugins/plugin-manifest-blocked.test.ts:26:30\n     24|     const host = document.createElement(\"div\");\n     25|     renderManifestBlockedPanel(host);\n     26|     expect(host.textContent).toMatch(/marble-run/);\n       |                              ^\n     27|     expect(host.textContent).toMatch(/dataMapping/);\n     28|     expect(host.textContent).toMatch(/workBudget/);\n\n\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af\u23af[1/1]\u23af\n\n\n Test Files  1 failed (1)\n      Tests  1 failed | 1 passed (2)\n   Start at  18:43:02\n   Duration  704ms (tests 60%, environment 34%, transform 5%, setup 1%)\n\n"
-}

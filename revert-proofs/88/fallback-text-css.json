@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-host.test.ts",
-  "testName": "tile shader fallback host > fallback-text-css",
-  "redValue": "AssertionError: expected '' to be '364px' // Object.is equality"
-}

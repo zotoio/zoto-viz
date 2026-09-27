@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_os_query.py::test_query_os_interface_addresses_nonzero_returncode_is_empty",
-  "red": "AssertionError: assert ['203.0.113.1'] == []",
-  "timeoutSec": 120
-}

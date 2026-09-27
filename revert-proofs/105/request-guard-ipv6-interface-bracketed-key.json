@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_bind_matrix.py::test_build_allowed_hosts_wildcard_brackets_global_ipv6_and_accepts_host",
-  "red": "AssertionError: wildcard bind must accept bracketed global IPv6 Host with HTTP 200",
-  "description": "OS global IPv6 interface keys must be bracketed in the allowlist.",
-  "timeoutSec": 120
-}

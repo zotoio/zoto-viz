@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/viz-frame-empty-links.test.ts",
-  "testName": "^viz\\ frame\\ v2\\ empty\\ links\\ contract\\ \\(item\\ 5a\\)\\ >\\ dev:\\ tile\\ 1\\ push\\ on\\ empty\\ links\\ leaves\\ tile\\ 2\\ callback\\ exactly\\ once$",
-  "description": "One-line production revert: remove per-tile try/catch in deliverVizFrameToPackTiles (tile 1 throw aborts before tile 2).",
-  "patchedAssertion": "AssertionError: expected +0 to be 1 // Object.is equality"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-ui.test.ts",
-  "testName": "fillPluginFields > field edited cue clears when value returns to default",
-  "description": "Edited cue must clear when value returns to default (dirty-always-on mutant)",
-  "red": "AssertionError: expected true to be false // Object.is equality"
-}

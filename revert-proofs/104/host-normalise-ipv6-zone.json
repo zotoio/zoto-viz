@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_security.py::test_normalize_host_rejects_ipv6_zone_identifier",
-  "description": "IPv6 zone identifier in Host must be rejected during normalization.",
-  "timeoutSec": 120,
-  "red": "AssertionError: assert '[fe80::1%eth0]:7020' is None"
-}

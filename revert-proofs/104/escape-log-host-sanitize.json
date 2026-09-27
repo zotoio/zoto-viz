@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_security.py::test_escape_log_host_sanitizes_control_characters",
-  "red": "AssertionError: assert 'evil\\r\\ninjected' == 'evil\\\\r\\\\ninjected'",
-  "description": "escape_log_host escapes control characters for logs.",
-  "timeoutSec": 120
-}

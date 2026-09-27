@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_wildcard_bind.py::test_wildcard_bind_rejects_unlisted_hosts[0.0.0.0]",
-  "description": "Wildcard bind rejects unlisted Host values.",
-  "timeoutSec": 120,
-  "red": "AssertionError: assert 200 == 400"
-}

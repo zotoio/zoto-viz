@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/ui/media-ask-focus.test.ts",
-  "testName": "returns focus to the header mic toggle on a fresh load after close",
-  "description": "Revert production guard (row-06-focus-return-fresh-mic)",
-  "red": "AssertionError: expected '' to be 'mic' // Object.is equality"
-}

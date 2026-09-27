@@ -1,9 +1,0 @@
-diff --git a/web/src/app/mosaic-switch-consent.ts b/web/src/app/mosaic-switch-consent.ts
---- a/web/src/app/mosaic-switch-consent.ts
-+++ b/web/src/app/mosaic-switch-consent.ts
-@@ -2,5 +2,4 @@ import { setPreserveVizUbo } from "./viz-ubo-preserve";
- 
- /** Called from switchPaneView when ensureReviewed fails (mosaic/header/settings picks). */
- export function onMosaicSwitchConsentDenied(): void {
--  setPreserveVizUbo(false);
- }

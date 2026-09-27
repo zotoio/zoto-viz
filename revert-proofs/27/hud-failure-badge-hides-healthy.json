@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/ui/viz-hud.test.ts",
-  "testName": "^viz\\ hud\\ helpers\\ >\\ hides\\ failure\\ badge\\ on\\ healthy\\ idle\\ frames$",
-  "description": "One-line production revert: healthy peak returns fail 0% instead of null in vizFrameFailureBadge.",
-  "patchedAssertion": "AssertionError: expected '\u26a0 DEGRADED' to be null"
-}

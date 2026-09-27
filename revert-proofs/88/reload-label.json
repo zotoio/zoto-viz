@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-notice.test.ts",
-  "testName": "shader fallback gfx wall notice > reload-label",
-  "redValue": "AssertionError: expected '' to be 'Reload' // Object.is equality"
-}

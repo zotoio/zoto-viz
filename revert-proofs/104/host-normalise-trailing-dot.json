@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_normalize.py::test_host_normalisation_table[trailing_dot_reject]",
-  "description": "Trailing dot Host rejected.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert 200 == 400"
-}

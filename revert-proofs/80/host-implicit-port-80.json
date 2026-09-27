@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_normalize.py::test_implicit_port_80_when_bound_port_is_80",
-  "description": "Implicit :80 when bound to port 80.",
-  "timeoutSec": 60,
-  "red": "assert 400 == 200"
-}

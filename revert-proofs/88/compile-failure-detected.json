@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-compile.test.ts",
-  "testName": "tile shader compile latch > compile-failure-detected",
-  "redValue": "AssertionError: expected +0 to be 1 // Object.is equality"
-}

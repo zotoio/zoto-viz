@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_wildcard_bind_performs_startup_os_interface_lookup",
-  "red": "AssertionError: configure: at least one startup lookup",
-  "description": "Wildcard configure must call OS interface lookup at startup.",
-  "timeoutSec": 120
-}

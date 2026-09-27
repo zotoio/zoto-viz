@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-tile.test.ts",
-  "testName": "shader fallback tile overlay > swap-resets-latch",
-  "redValue": "AssertionError: expected false to be true // Object.is equality"
-}

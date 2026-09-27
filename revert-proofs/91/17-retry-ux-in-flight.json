@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-install-retry.test.ts",
-  "testName": "pack install retry UX > in flight: disables button and shows Retrying\u2026; second submit is a no-op",
-  "description": "in flight: disables button and shows Retrying\u2026; second submit is a no-op",
-  "patchedFailure": "AssertionError: expected { disabled: false, label: 'Retry' } to deeply equal { disabled: true, label: 'Retrying\u2026' }"
-}

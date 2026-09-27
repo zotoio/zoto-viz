@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "web/src/plugins/plugin-ui.test.ts",
-  "testName": "fillPluginFields > does not mark fields dirty while still at schema default",
-  "description": "Dirty markers must not show at schema default (inverted comparison mutant)",
-  "red": "AssertionError: expected true to be false // Object.is equality"
-}

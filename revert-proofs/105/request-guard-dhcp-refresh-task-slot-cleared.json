@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_refresh_task_slot_cleared_after_shared_refresh",
-  "red": "AssertionError: request_guard_refresh_task slot not cleared after shared refresh",
-  "description": "Shared refresh must clear request_guard_refresh_task when finished.",
-  "timeoutSec": 120
-}

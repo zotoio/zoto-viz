@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-hook.test.ts",
-  "testName": "shader fallback pack hook > no-hook",
-  "redValue": "AssertionError: expected 'nope' to be 'Quiet Pack can\\'t run its graphics on\u2026' // Object.is equality"
-}

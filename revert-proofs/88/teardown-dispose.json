@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-hook.test.ts",
-  "testName": "shader fallback pack hook > teardown-dispose",
-  "redValue": "AssertionError: expected 1 to be +0 // Object.is equality"
-}

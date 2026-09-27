@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/http-notice.test.ts",
-  "testName": "server restart wall notice > failed retry > replaces the restart notice with a retry-failed strip",
-  "red": "AssertionError: expected +0 to be 1 // Object.is equality",
-  "description": "ux-restart-notice-retry-failed",
-  "timeoutSec": 120
-}

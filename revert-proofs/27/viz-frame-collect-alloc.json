@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/fixtures/viz-collect-equivalence.test.ts",
-  "testName": "^viz\\ collector\\ rewrite\\ allocation\\ >\\ reuses\\ link\\ pool\\ slot\\ 0\\ and\\ talker\\-id\\ Set\\ over\\ 600\\ steady\\ frames\\ \\(collector\\ has\\ no\\ join/sort\\)$",
-  "description": "Lint row: simulate missing stable index by clearing link map each zero pass (inject).",
-  "lintRow": true,
-  "patchedAssertion": "AssertionError: expected 19174 to be 6 // Object.is equality"
-}

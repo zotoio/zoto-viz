@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-notice.test.ts",
-  "testName": "shader fallback gfx wall notice > reload-click",
-  "redValue": "AssertionError: expected \"reload\" to be called 1 times, but got 0 times"
-}

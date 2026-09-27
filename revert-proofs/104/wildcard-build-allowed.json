@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_wildcard_bind.py::test_build_allowed_hosts_wildcard_bind_excludes_bind_address",
-  "description": "Wildcard bind must not add 0.0.0.0/:: to allowlist.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert ['0.0.0.0:7020'] == []"
-}

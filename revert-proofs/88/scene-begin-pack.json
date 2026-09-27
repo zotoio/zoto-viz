@@ -1,5 +1,0 @@
-{
-  "testFile": "src/graph/shader-fallback-scene.test.ts",
-  "testName": "shader fallback net scene > scene-begin-pack",
-  "redValue": "AssertionError: expected \"beginTilePack\" to be called 1 times, but got 0 times"
-}

@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/http-notice.test.ts",
-  "testName": "server restart wall notice > retry button > replays the failed mutation when Retry is clicked",
-  "red": "AssertionError: expected 2 to be 3 // Object.is equality",
-  "description": "http-retry-closure",
-  "timeoutSec": 120
-}
