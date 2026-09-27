@@ -485,10 +485,10 @@ def run_check(
                 lines.append(f"  {v.path}: {v.reason}")
             return 1, lines
         lines.append(
-            "pack-boundary: not a pack PR "
-            f"(multiple pack folders: {pack_list}); check passed."
+            "pack-boundary: FAILED — pack PR must not touch multiple "
+            f"plugins/src/<pack>/ folders ({pack_list})"
         )
-        return 0, lines
+        return 1, lines
 
     pack = next(iter(packs))
     lines.append(f"pack-boundary: validating pack PR for {pack!r}.")
