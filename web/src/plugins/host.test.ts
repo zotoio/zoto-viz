@@ -40,6 +40,7 @@ describe("hash consent and TypeScript allow", () => {
 
 describe("PluginSandbox", () => {
   it("posts config updates to the iframe when config.read is allowed", async () => {
+    expect.hasAssertions();
     const box = new PluginSandbox();
     const posted: unknown[] = [];
     await box.load("cfg-pack", "globalThis.ok = true;", ["config.read"], { a: "1" });

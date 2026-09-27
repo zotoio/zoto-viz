@@ -48,6 +48,7 @@ describe("fillPluginFields", () => {
   });
 
   it("groups config fields by plugin.yml section and marks non-default values", () => {
+    expect.hasAssertions();
     const host = document.createElement("div");
     const spec: PluginView = {
       id: "demo", name: "Demo", version: 1, engine: "graph",
@@ -63,6 +64,25 @@ describe("fillPluginFields", () => {
     fillPluginFields(host2, spec, spec.config!, () => {}, { skipEmpty: true });
     expect(host2.querySelector(".field-dirty")).toBeTruthy();
     localStorage.removeItem("zoto-viz.plugin.demo.a");
+  });
+
+  it("drops field-dirty when a slider returns to its default", () => {
+    expect.hasAssertions();
+    const spec: PluginView = {
+      id: "demo", name: "Demo", version: 1, engine: "graph",
+      config: [{ key: "gain", label: "gain", type: "number", default: 3, min: 0, max: 10 }],
+    };
+    const host = document.createElement("div");
+    fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
+    const range = host.querySelector('input[type="range"]') as HTMLInputElement | null;
+    expect(range).toBeTruthy();
+    const row = range!.closest(".slider") as HTMLElement;
+    range!.value = "7";
+    range!.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(row.classList.contains("field-dirty")).toBe(true);
+    range!.value = "3";
+    range!.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(row.classList.contains("field-dirty")).toBe(false);
   });
 
   it("renders nest-cams layout and camera chips instead of a pane slider", () => {

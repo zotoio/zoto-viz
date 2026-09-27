@@ -113,7 +113,12 @@
     "style": { "$ref": "#/$defs/style" },
     "layout": { "$ref": "#/$defs/layout" },
     "options": { "$ref": "#/$defs/freeMap" },
-    "config": { "$ref": "#/$defs/freeMap" },
+    "config": {
+      "oneOf": [
+        { "$ref": "#/$defs/freeMap" },
+        { "$ref": "#/$defs/pluginConfigList" }
+      ]
+    },
     "produces": {
       "type": "array",
       "maxItems": 16,
@@ -193,9 +198,44 @@
       "description": "Graph wrap target when engine is graph. Known values today: topology, talkers, services, protocols, layers, drone-show, watch, wifi, bluetooth, cpu, cores, load, sources, memory, disk, gpu, sockets, cgroups, units, udev, bridge. Open so new wrap targets do not need a schema bump."
     },
     "freeMap": {
-      "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims. Config array entries may include section (string) for grouped settings UI.",
+      "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims. Prefer pluginConfigList for typed config arrays.",
       "type": ["object", "array"],
       "additionalProperties": true
+    },
+    "pluginConfigField": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["key", "label", "type"],
+      "properties": {
+        "key": { "type": "string", "maxLength": 64 },
+        "label": { "type": "string", "maxLength": 64 },
+        "type": { "type": "string", "enum": ["boolean", "select", "number", "text", "textarea"] },
+        "section": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48,
+          "description": "Settings drawer section title (collapsible group)."
+        },
+        "hint": { "type": "string", "maxLength": 280 },
+        "default": {},
+        "min": { "type": "number" },
+        "max": { "type": "number" },
+        "step": { "type": "number" },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "pluginConfigList": {
+      "type": "array",
+      "maxItems": 64,
+      "items": { "$ref": "#/$defs/pluginConfigField" }
     },
     "look": {
       "type": "object",

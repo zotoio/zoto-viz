@@ -330,6 +330,24 @@ def test_plugin_config_field_section_validates() -> None:
     })
 
 
+def test_plugin_config_field_section_rejects_non_string() -> None:
+    with pytest.raises(ValidationError):
+        _validator().validate({
+            "id": "sections-bad",
+            "name": "Sections",
+            "version": 1,
+            "config": [
+                {
+                    "key": "gain",
+                    "label": "gain",
+                    "type": "number",
+                    "default": 1,
+                    "section": 12,
+                },
+            ],
+        })
+
+
 def test_viz_graph_walk_true_fails_schema() -> None:
     with pytest.raises(ValidationError):
         _validator().validate({

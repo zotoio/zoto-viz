@@ -101,6 +101,7 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import { sandboxConfigPushAllowed } from "../plugins/plugin-config-sync";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
@@ -495,8 +496,9 @@ function onPluginFields(): void {
   else scene.setMode(m, opts);
   renderLegend(m, opts);
   void syncWifiWatch();
-  if (tsWatchId) {
-    const spec = pluginSpecs.find((p) => p.id === tsWatchId);
+  const loadedStore = sandboxLoadedConfigStoreId();
+  if (loadedStore) {
+    const spec = pluginSpecs.find((p) => configStoreId(p) === loadedStore);
     if (spec?.capabilities?.includes("config.read")) {
       const fields = pluginViewKnobs(spec, spec.config);
       sandbox.setConfig(loadPluginConfig(spec, fields));
@@ -566,7 +568,15 @@ function bindThisView(modeId: string): void {
 
 let tsWatch = 0;
 let tsWatchId = "";
+let tsWatchStoreId = "";
 let tsWatchHash = "";
+
+function sandboxLoadedConfigStoreId(): string | null {
+  if (!tsWatchStoreId) return null;
+  const spec = pluginSpecs.find((p) => configStoreId(p) === tsWatchStoreId);
+  if (!spec?.capabilities?.includes("config.read")) return null;
+  return tsWatchStoreId;
+}
 
 async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   if (!spec || !pluginNeedsReview(spec)) return true;
@@ -604,6 +614,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
+    tsWatchStoreId = spec ? configStoreId(spec) : "";
     return;
   }
   if (!tsPluginsAllowed()) {
@@ -611,6 +622,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
+    tsWatchStoreId = spec ? configStoreId(spec) : "";
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
@@ -618,6 +630,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
+    tsWatchStoreId = "";
     return;
   }
   try {
@@ -626,6 +639,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
     tsWatchId = spec.id;
+    tsWatchStoreId = configStoreId(spec);
     tsWatchHash = spec.hash;
     const m = modeById(modeSel.value);
     if (m.pluginId === spec.id) {
@@ -1090,7 +1104,12 @@ settings = new Settings({
 });
 settings.onPluginChange = (storeId, values) => {
   const spec = pluginSpecs.find((p) => configStoreId(p) === storeId);
-  if (spec?.capabilities?.includes("config.read")) sandbox.setConfig(values);
+  if (
+    spec?.capabilities?.includes("config.read")
+    && sandboxConfigPushAllowed(sandboxLoadedConfigStoreId(), storeId)
+  ) {
+    sandbox.setConfig(values);
+  }
   onPluginFields();
   if (!mosaic?.on) return;
   const focus = mosaic.focusedId;

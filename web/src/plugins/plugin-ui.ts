@@ -11,9 +11,12 @@ function appendFieldControl(
   persist: () => void,
 ): void {
   const current = values[f.key] ?? fieldDefault(f);
-  const dirty = String(current) !== String(fieldDefault(f));
+  const syncDirty = (el: HTMLElement) => {
+    const cur = values[f.key] ?? fieldDefault(f);
+    el.classList.toggle("field-dirty", String(cur) !== String(fieldDefault(f)));
+  };
   const wrap = (el: HTMLElement) => {
-    if (dirty) el.classList.add("field-dirty");
+    syncDirty(el);
     el.setAttribute("data-field-key", f.key);
     row.append(el);
   };
@@ -22,7 +25,11 @@ function appendFieldControl(
       label: f.label,
       title: f.hint,
       checked: current === "1" || current === "true",
-      onChange: (on) => { values[f.key] = on ? "1" : "0"; persist(); },
+      onChange: (on) => {
+        values[f.key] = on ? "1" : "0";
+        syncDirty(t.el);
+        persist();
+      },
     });
     wrap(t.el);
   } else if (f.type === "select" && f.values?.length) {
@@ -31,7 +38,11 @@ function appendFieldControl(
       title: f.hint,
       options: f.values.map(([value, label]) => ({ value, label })),
       value: current,
-      onChange: (v) => { values[f.key] = v; persist(); },
+      onChange: (v) => {
+        values[f.key] = v;
+        syncDirty(s.el);
+        persist();
+      },
     });
     wrap(s.el);
   } else if (f.type === "number") {
@@ -44,7 +55,11 @@ function appendFieldControl(
       max,
       step: f.step ?? 1,
       value: Number(current),
-      onInput: (v) => { values[f.key] = String(v); persist(); },
+      onInput: (v) => {
+        values[f.key] = String(v);
+        syncDirty(sl.el);
+        persist();
+      },
     });
     wrap(sl.el);
   } else {
@@ -53,7 +68,11 @@ function appendFieldControl(
       title: f.hint,
       placeholder: f.default !== undefined ? String(f.default) : undefined,
       value: current,
-      onInput: (v) => { values[f.key] = v; persist(); },
+      onInput: (v) => {
+        values[f.key] = v;
+        syncDirty(tf.el);
+        persist();
+      },
     });
     wrap(tf.el);
   }
