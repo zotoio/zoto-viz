@@ -67,6 +67,11 @@ export type CatalogRow = {
   parts?: unknown;
   frontend?: unknown;
   instances?: unknown;
+  settings?: unknown;
+  presets?: unknown;
+  presetField?: unknown;
+  hud?: unknown;
+  sections?: unknown;
   has_frontend?: unknown;
   has_sky?: unknown;
   has_sky_shader?: unknown;
@@ -120,9 +125,11 @@ function asField(key: string, raw: unknown): PluginField | undefined {
   if (!rec) return undefined;
   const id = asString(rec.key) ?? key;
   if (!id) return undefined;
-  const type = rec.type === "boolean" || rec.type === "select" || rec.type === "number" || rec.type === "text" || rec.type === "textarea"
+  const values = asPairs(rec.values);
+  let type: PluginField["type"] = rec.type === "boolean" || rec.type === "select" || rec.type === "number" || rec.type === "text" || rec.type === "textarea"
     ? rec.type
     : "text";
+  if (type === "text" && values.length) type = "select";
   const field: PluginField = {
     key: id,
     label: asString(rec.label) ?? id,
@@ -130,14 +137,116 @@ function asField(key: string, raw: unknown): PluginField | undefined {
   };
   if (asString(rec.hint)) field.hint = asString(rec.hint);
   if (rec.default !== undefined) field.default = rec.default as string | number | boolean;
-  const values = asPairs(rec.values);
   if (values.length) field.values = values;
   if (typeof rec.min === "number") field.min = rec.min;
   if (typeof rec.max === "number") field.max = rec.max;
   if (typeof rec.step === "number") field.step = rec.step;
   const section = asString(rec.section);
   if (section) field.section = section;
+  if (asString(rec.section)) field.section = asString(rec.section);
+  if (rec.randomise === false) field.randomise = false;
+  else if (rec.randomise === true) field.randomise = true;
+  if (Array.isArray(rec.randomRange) && rec.randomRange.length >= 2
+    && typeof rec.randomRange[0] === "number" && typeof rec.randomRange[1] === "number") {
+    field.randomRange = [rec.randomRange[0], rec.randomRange[1]];
+  }
   return field;
+}
+
+export interface PluginPreset {
+  id: string;
+  label: string;
+  values: Record<string, string | number | boolean>;
+}
+
+export interface PluginHudDecl {
+  labelFields?: string[];
+}
+
+export interface PluginSectionDecl {
+  title: string;
+  collapsed?: boolean;
+}
+
+export interface PluginSettingsDecl {
+  presets?: PluginPreset[];
+  presetField?: string;
+  hud?: PluginHudDecl;
+  sections?: PluginSectionDecl[];
+}
+
+function parsePreset(raw: unknown): PluginPreset | undefined {
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  const id = asString(rec.id);
+  const label = asString(rec.label);
+  const values = asRecord(rec.values);
+  if (!id || !label || !values) return undefined;
+  if (id === "custom") throw new Error("preset id 'custom' is reserved");
+  const out: Record<string, string | number | boolean> = {};
+  for (const [k, v] of Object.entries(values)) {
+    if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") out[k] = v;
+  }
+  if (!Object.keys(out).length) return undefined;
+  return { id, label, values: out };
+}
+
+function parseSectionDecl(raw: unknown): PluginSectionDecl | undefined {
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  const title = asString(rec.title);
+  if (!title) return undefined;
+  return { title, collapsed: rec.collapsed === true };
+}
+
+export function parsePluginSettings(raw: unknown): PluginSettingsDecl | undefined {
+  const rec = asRecord(raw);
+  if (!rec) return undefined;
+  const settings: PluginSettingsDecl = {};
+  const presetField = asString(rec.presetField);
+  if (presetField) settings.presetField = presetField;
+  const hudRec = asRecord(rec.hud);
+  if (hudRec && Array.isArray(hudRec.labelFields)) {
+    const labelFields = hudRec.labelFields
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .map((x) => x.trim());
+    if (labelFields.length) settings.hud = { labelFields };
+  }
+  if (Array.isArray(rec.presets)) {
+    const presets = rec.presets.map(parsePreset).filter((p): p is PluginPreset => !!p);
+    if (presets.length) {
+      settings.presets = presets;
+      if (!settings.presetField) {
+        throw new Error("settings.presetField is required when presets are declared");
+      }
+    }
+  }
+  if (Array.isArray(rec.sections)) {
+    const sections = rec.sections.map(parseSectionDecl).filter((s): s is PluginSectionDecl => !!s);
+    if (sections.length) settings.sections = sections;
+  }
+  return Object.keys(settings).length ? settings : undefined;
+}
+
+/** Reject invalid config field declarations (throws on bad catalog). */
+export function assertConfigFields(fields: PluginField[]): void {
+  for (const f of fields) {
+    if (f.randomRange) {
+      if (f.type !== "number") {
+        throw new Error(`config field ${f.key} randomRange is only valid on number fields`);
+      }
+      if (f.min === undefined || f.max === undefined) {
+        throw new Error(`config field ${f.key} with randomRange requires min and max`);
+      }
+      const [lo, hi] = f.randomRange;
+      if (lo < f.min || hi > f.max || lo > hi) {
+        throw new Error(`config field ${f.key} randomRange [${lo}, ${hi}] outside min..max [${f.min}, ${f.max}]`);
+      }
+    }
+    if (f.type === "number" && f.randomRange && (f.min === undefined || f.max === undefined)) {
+      throw new Error(`config field ${f.key} with randomRange requires min and max`);
+    }
+  }
 }
 
 function asListOrMap<T>(raw: unknown, parse: (key: string, value: unknown) => T | undefined): T[] {
@@ -308,6 +417,18 @@ export function toPluginView(raw: unknown): PluginView {
     workBudgetLimited = ingested.limitedNote ?? asString((row as { workBudgetLimited?: unknown }).workBudgetLimited);
   }
   const idle = parsePluginIdle(viz.idle);
+  const vizSettings = asRecord(viz.settings);
+  const rowSettings = asRecord(row.settings);
+  const settings = parsePluginSettings({
+    ...vizSettings,
+    ...rowSettings,
+    presets: rowSettings?.presets ?? row.presets ?? vizSettings?.presets ?? viz.presets,
+    presetField: rowSettings?.presetField ?? row.presetField ?? vizSettings?.presetField ?? viz.presetField,
+    hud: rowSettings?.hud ?? row.hud ?? vizSettings?.hud ?? viz.hud,
+    sections: rowSettings?.sections ?? row.sections ?? vizSettings?.sections ?? viz.sections,
+  });
+  const configFields = parseConfig(viz.config ?? row.config) ?? [];
+  assertConfigFields(configFields);
   const spec: PluginView = {
     id,
     packName: name,
@@ -316,12 +437,13 @@ export function toPluginView(raw: unknown): PluginView {
     engine,
     base: asString(viz.base) ?? asString(row.base),
     options: parseOptions(viz.options ?? row.options),
-    config: parseConfig(viz.config ?? row.config),
+    config: configFields,
     style: parseStyle(viz.style ?? row.style),
     layout: parseLayout(viz.layout ?? row.layout),
     look: parseLook(viz.look ?? row.look),
     instances: parseInstances(row.instances),
   };
+  if (settings) spec.settings = settings;
   if (idle) spec.idle = idle;
   if (workBudgetClamped) spec.workBudget = workBudgetClamped;
   if (workBudgetLimited) spec.workBudgetLimited = workBudgetLimited;

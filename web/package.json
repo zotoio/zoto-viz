@@ -16,6 +16,8 @@
     "test:coverage": "pnpm asbuild && vitest run --coverage",
     "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",
     "lint": "node scripts/lint-brand-casts-core.mjs"
+    "test:backrooms-smoke": "node scripts/backrooms-smoke.test.mjs",
+    "test:sandbox-plugin-smoke": "node scripts/sandbox-plugin-smoke.test.mjs"
   },
   "dependencies": {
     "d3-force-3d": "^3.0.6",
@@ -24,13 +26,17 @@
   },
   "devDependencies": {
     "@testing-library/user-event": "^14.6.7",
+    "@types/node": "22.18.12",
     "@types/three": "^0.185.4",
     "@vitest/coverage-v8": "^5.0.0",
     "assemblyscript": "^0.28.20",
     "esbuild": "^0.28.2",
     "happy-dom": "^20.14.5",
+    "playwright": "^1.63.0",
+    "pngjs": "^7.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "yaml": "^2.9.1"
   }
 }

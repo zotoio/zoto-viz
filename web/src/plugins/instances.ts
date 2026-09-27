@@ -1,7 +1,10 @@
 import type { PluginField } from "../core/modes";
 import { parseMosaicSlotId } from "../graph/mosaic-tile-id";
 import { perTilePackScopeNoteMessage } from "./pack-shared-copy";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import type { PluginView } from "./plugin";
+
+export { mosaicTileViewId } from "../graph/mosaic-tile-id";
 
 export type PluginInstance = {
   id: string;
@@ -13,6 +16,8 @@ export type PluginInstance = {
   image?: string;
   link?: string;
   filter?: string;
+  /** Per-instance config defaults applied before pack-wide fallback. */
+  defaults?: Record<string, string | number | boolean>;
 };
 
 const BIND_DEFAULTS: Record<string, string> = {
@@ -42,6 +47,9 @@ export function parsePluginId(modeId: string): string | null {
   const { viewId } = parseMosaicSlotId(modeId);
   if (!viewId.startsWith("plugin:")) return null;
   return viewId.slice("plugin:".length).split(":")[0] || null;
+  if (!modeId.startsWith("plugin:")) return null;
+  const canonical = mosaicTileViewId(modeId);
+  return canonical.slice("plugin:".length).split(":")[0] || null;
 }
 
 export function parsePluginInstance(modeId: string): string | null {
@@ -52,10 +60,12 @@ export function parsePluginInstance(modeId: string): string | null {
   return i >= 0 ? rest.slice(i + 1) || null : null;
 }
 
+/** localStorage namespace for plugin config (per catalog instance row). */
 export function configStoreId(spec: Pick<PluginView, "id" | "instanceId">): string {
   return spec.instanceId && spec.instanceId !== spec.id ? `${spec.id}:${spec.instanceId}` : spec.id;
 }
 
+/** True when each mosaic/catalog instance has its own config store id. */
 export function configStoredPerTile(spec: Pick<PluginView, "id" | "instanceId">): boolean {
   return !!(spec.instanceId && spec.instanceId !== spec.id);
 }
@@ -73,6 +83,15 @@ export function configStoreIdForMode(modeId: string): string | null {
 }
 
 function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly string[]): number {
+  const canonical = mosaicTileViewId(modeId);
+  const packId = parsePluginId(canonical);
+  if (!packId) return null;
+  const inst = parsePluginInstance(canonical);
+  return inst && inst !== packId ? `${packId}:${inst}` : packId;
+}
+
+/** Tiles on the wall that share this spec's config store (not merely the same pack id). */
+export function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly string[]): number {
   const mine = configStoreId(spec);
   let n = 0;
   for (const modeId of tileModeIds) {
@@ -88,6 +107,14 @@ export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): strin
   const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
   if (shared < 2) return null;
   return `Changes apply to all ${shared} ${spec.packName} tiles on this wall.`;
+/** Host note under plugin settings (null = hide). */
+export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
+  if (configStoredPerTile(spec)) {
+    return "Settings apply to this tile only. Instance defaults override shared pack values.";
+  }
+  const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
+  if (shared < 2) return null;
+  return `Applies to all ${spec.name} tiles on this wall. Shared pack storage.`;
 }
 
 export function parseInstances(raw: unknown): PluginInstance[] | undefined {
@@ -103,6 +130,14 @@ export function parseInstances(raw: unknown): PluginInstance[] | undefined {
       const val = rec[key];
       if (typeof val === "string" && val.trim()) inst[key] = val.trim();
     }
+    const defs = rec.defaults;
+    if (defs && typeof defs === "object" && !Array.isArray(defs)) {
+      const map: Record<string, string | number | boolean> = {};
+      for (const [k, v] of Object.entries(defs)) {
+        if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") map[k] = v;
+      }
+      if (Object.keys(map).length) inst.defaults = map;
+    }
     out.push(inst);
   }
   return out.length ? out : undefined;
@@ -117,6 +152,7 @@ export function applyInstance(spec: PluginView, inst: PluginInstance): PluginVie
     hint: inst.hint || spec.hint,
     look: spec.look,
     config,
+    instanceDefaults: inst.defaults,
   };
 }
 

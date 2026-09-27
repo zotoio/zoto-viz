@@ -282,6 +282,9 @@ export {
   parsePluginId,
   parsePluginInstance,
   pluginSpecForStoreId,
+  configStoreIdForMode,
+  parsePluginId,
+  parsePluginInstance,
   pluginViewId,
 } from "./instances";
 
@@ -396,6 +399,7 @@ export function encodeStoredConfigValue(
 ): string {
   if (field?.type === "boolean") {
     return value === true || value === "true" || value === "1" ? "1" : "0";
+    return value === true || value === 1 || value === "true" || value === "1" ? "1" : "0";
   }
   return String(value);
 }

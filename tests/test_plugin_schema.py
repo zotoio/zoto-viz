@@ -142,6 +142,51 @@ def test_minimal_plugin_yml_validates() -> None:
     _validator().validate(MINIMAL)
 
 
+def test_merged_semantics_reject_schema_valid_bad_preset_field(tmp_path: Path) -> None:
+    home = tmp_path / "bad-merged"
+    home.mkdir()
+    (home / "plugin.yml").write_text(
+        "id: bad-merged\nname: Bad\nversion: 1\n",
+        encoding="utf-8",
+    )
+    (home / "visualisation.yml").write_text(
+        "engine: graph\n"
+        "settings:\n"
+        "  presetField: nope\n"
+        "  presets:\n"
+        "    - id: a\n"
+        "      label: A\n"
+        "      values: {gain: 1, preset: a}\n"
+        "config:\n"
+        "  - key: preset\n"
+        "    type: select\n"
+        "    values: [[a, A]]\n"
+        "  - key: gain\n"
+        "    type: number\n"
+        "    min: 0\n"
+        "    max: 10\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="presetField"):
+        plugins.validate_plugin_home(home)
+
+
+def test_legacy_options_list_in_plugin_yml_validates() -> None:
+    doc = {
+        **MINIMAL,
+        "engine": "graph",
+        "options": [
+            {
+                "key": "group",
+                "label": "group",
+                "default": "each",
+                "values": [["each", "each"]],
+            },
+        ],
+    }
+    plugins.validate_doc(doc)
+
+
 def test_maximal_plugin_and_parts_validate() -> None:
     _validator().validate(MAX_PLUGIN)
     _def_validator("visualisation").validate(MAX_VISUALISATION)
