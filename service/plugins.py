@@ -772,6 +772,14 @@ def _file_token(path: Path) -> tuple[str, int, int]:
         return (str(path), -1, -1)
 
 
+def _zip_token(path: Path) -> tuple[str, str]:
+    """Content hash for zip memo keys (mtime/size miss same-length repacks)."""
+    try:
+        return (str(path), pz.plugin_sha256(path))
+    except OSError:
+        return (str(path), "")
+
+
 def _iter_watch_files(root: Path):
     if not root.is_dir():
         return
@@ -807,15 +815,15 @@ def _catalog_token(root: Path | None) -> tuple[Any, ...]:
     if layout is not None:
         src_dir, zips_dir, runtime_dir = layout
         parts.extend(_dir_token(src_dir))
-        parts.extend(_file_token(z) for z in _zip_files(zips_dir))
+        parts.extend(_zip_token(z) for z in _zip_files(zips_dir))
         parts.extend(_dir_token(runtime_dir))
         local_dir = paths.plugin_local_dir()
-        parts.extend(_file_token(z) for z in _zip_files(local_dir))
+        parts.extend(_zip_token(z) for z in _zip_files(local_dir))
         parts.extend(_dir_token(paths.plugin_local_runtime_dir()))
     else:
         zips_dir, runtime_dir, mode = _scan_roots(root)
         if mode == "zips":
-            parts.extend(_file_token(z) for z in _zip_files(zips_dir))
+            parts.extend(_zip_token(z) for z in _zip_files(zips_dir))
             parts.extend(_dir_token(runtime_dir))
         else:
             parts.extend(_dir_token(zips_dir))
