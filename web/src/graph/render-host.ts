@@ -364,21 +364,6 @@ export class RenderHost {
     this.markMirrorScopeDirty();
   }
 
-  /** Force a WebGL context loss so panes can rebuild GL state (tile heal ladder). */
-  recreateContext(): void {
-    if (this.software) return;
-    const r = this.renderer as THREE.WebGLRenderer;
-    try {
-      r.forceContextLoss();
-    } catch { /* already lost */ }
-    requestAnimationFrame(() => {
-      try {
-        r.forceContextRestore();
-      } catch { /* extension missing */ }
-      this.dirty = true;
-    });
-  }
-
   /** Pack-mirror tile metadata changed without add/remove (mosaic coalesce). */
   markMirrorScopeDirty(): void {
     this.mirrorScopeDirty = true;

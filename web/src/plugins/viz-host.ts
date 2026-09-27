@@ -89,8 +89,6 @@ export interface VizPluginContract {
   idle: VizIdleConfig;
   /** When true, host delivers {@link VizPresentTick} once per sandbox per display frame. */
   presentTick?: boolean;
-  /** Tile-health: pack may render a static sky without changing pixels every frame. */
-  mayBeStatic?: boolean;
 }
 
 export type {

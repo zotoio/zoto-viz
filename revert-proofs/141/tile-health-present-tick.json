@@ -1,8 +1,0 @@
-{
-  "description": "Revert bindTileHealthPresentTick present listener registration",
-  "runner": "vitest",
-  "testFile": "src/app/tile-health-present.test.ts",
-  "testName": "tile health present tick > bindTileHealthPresentTick registers a present listener that ticks tile health",
-  "red": "AssertionError: expected [] to have a length of 1 but got +0",
-  "project": "web"
-}
