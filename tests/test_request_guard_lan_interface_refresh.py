@@ -5,7 +5,12 @@ import asyncio
 
 from aiohttp import ClientSession
 
-from tests.lan_guard_test_util import LAN_STUB_IFACE_IP, LanOsStubState, stub_lan_os_interfaces
+from tests.lan_guard_test_util import (
+    LAN_STUB_IFACE_IP,
+    LAN_STUB_OTHER_IP,
+    LanOsStubState,
+    stub_lan_os_interfaces,
+)
 from tests.monitor_app_test_util import make_app_server
 
 
@@ -134,5 +139,88 @@ def test_dhcp_refresh_uses_asyncio_to_thread(stub_lan_os_interfaces: LanOsStubSt
                 assert to_thread_calls == 1
         finally:
             asyncio.to_thread = original  # type: ignore[method-assign]
+
+    asyncio.run(run())
+
+
+async def _one_session(port: int, ip: str, host: str) -> int:
+    async with ClientSession() as session:
+        async with session.get(
+            f"http://{ip}:{port}/api/session",
+            headers={"Host": f"{host}:{port}"},
+        ) as resp:
+            return resp.status
+
+
+def test_dhcp_refresh_single_flight_fifty_concurrent_lookups(
+    stub_lan_os_interfaces: LanOsStubState,
+) -> None:
+    t0 = 1000.0
+    now = t0
+    gate = stub_lan_os_interfaces["gate"]
+    assert gate is not None
+
+    def clock() -> float:
+        return now
+
+    async def run() -> None:
+        nonlocal now
+        async with make_app_server(
+            bind="0.0.0.0",
+            insecure_lan=True,
+            listen_port=18453,
+            clock=clock,
+        ) as (ip, port, _runner):
+            startup = stub_lan_os_interfaces["query_calls"]
+            assert startup == 1
+            now = t0 + 31.0
+            gate.clear()
+            tasks = [
+                asyncio.create_task(_one_session(port, ip, LAN_STUB_OTHER_IP))
+                for _ in range(50)
+            ]
+            await asyncio.sleep(0.05)
+            gate.set()
+            statuses = await asyncio.gather(*tasks)
+            assert all(s == 200 for s in statuses)
+            assert stub_lan_os_interfaces["query_calls"] == startup + 1
+
+    asyncio.run(run())
+
+
+def test_dhcp_refresh_failure_keeps_last_good_set_and_retries(
+    stub_lan_os_interfaces: LanOsStubState,
+) -> None:
+    t0 = 1000.0
+    now = t0
+
+    def clock() -> float:
+        return now
+
+    async def run() -> None:
+        nonlocal now
+        async with make_app_server(
+            bind="0.0.0.0",
+            insecure_lan=True,
+            listen_port=18454,
+            clock=clock,
+        ) as (ip, port, _runner):
+            startup = stub_lan_os_interfaces["query_calls"]
+            assert startup == 1
+            now = t0 + 31.0
+            stub_lan_os_interfaces["fail_refresh"] = True
+            tasks = [
+                asyncio.create_task(_one_session(port, ip, "evil.example"))
+                for _ in range(50)
+            ]
+            statuses = await asyncio.gather(*tasks)
+            assert all(s == 400 for s in statuses)
+            assert stub_lan_os_interfaces["query_calls"] == startup + 1
+            ok = await _one_session(port, ip, LAN_STUB_IFACE_IP)
+            assert ok == 200
+            stub_lan_os_interfaces["fail_refresh"] = False
+            now = t0 + 62.0
+            assert await _one_session(port, ip, LAN_STUB_OTHER_IP) == 200
+            assert stub_lan_os_interfaces["query_calls"] == startup + 2
 
     asyncio.run(run())

@@ -274,6 +274,8 @@ def configure_request_guard(
     clk = app.get("request_guard_clock", time.monotonic)
     now = clk()
     app["request_guard_last_if_lookup"] = now
+    if app.get("request_guard_refresh_lock") is None:
+        app["request_guard_refresh_lock"] = asyncio.Lock()
     _refresh_allowed_hosts(app)
 
 
@@ -294,6 +296,34 @@ def _host_header_values(request: web.Request) -> list[str]:
         return [single] if single else []
 
 
+async def _run_refresh_task(app: web.Application) -> None:
+    clock = app.get("request_guard_clock", time.monotonic)
+    try:
+        await asyncio.to_thread(_refresh_allowed_hosts, app)
+        app["request_guard_last_if_lookup"] = clock()
+    except Exception:
+        _log.exception("request guard OS interface refresh failed")
+        raise
+    finally:
+        app["request_guard_refresh_task"] = None
+
+
+async def _await_shared_refresh(app: web.Application) -> None:
+    lock = app.get("request_guard_refresh_lock")
+    if lock is None:
+        lock = asyncio.Lock()
+        app["request_guard_refresh_lock"] = lock
+    async with lock:
+        task = app.get("request_guard_refresh_task")
+        if task is None or task.done():
+            task = asyncio.create_task(_run_refresh_task(app))
+            app["request_guard_refresh_task"] = task
+    try:
+        await task
+    except Exception:
+        pass
+
+
 async def _lookup_allowed(app: web.Application, key: str) -> bool:
     allowed: frozenset[str] = app.get("request_guard_allowed_hosts") or frozenset()
     if key in allowed:
@@ -303,8 +333,7 @@ async def _lookup_allowed(app: web.Application, key: str) -> bool:
     last = float(app.get("request_guard_last_if_lookup") or 0.0)
     if now - last < 30.0:
         return False
-    app["request_guard_last_if_lookup"] = now
-    await asyncio.to_thread(_refresh_allowed_hosts, app)
+    await _await_shared_refresh(app)
     allowed = app.get("request_guard_allowed_hosts") or frozenset()
     return key in allowed
 
