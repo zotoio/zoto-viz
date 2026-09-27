@@ -1,0 +1,13 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 6dd9a32..154bae6 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -150,8 +150,6 @@ def query_os_interface_addresses() -> list[str]:
+         addrs: list[str] = []
+         for iface in data:
+             for info in iface.get("addr_info") or []:
+-                if info.get("family") not in ("inet", "inet6"):
+-                    continue
+                 local = info.get("local")
+                 if local:
+                     addrs.append(str(local))

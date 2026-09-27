@@ -29,32 +29,6 @@ async def _many_reject(n: int, port: int, ip: str, host: str) -> None:
                 assert resp.status == 400
 
 
-def test_hundred_unknown_hosts_zero_fresh_lookups_within_30s_after_one_startup_lookup(
-    stub_lan_os_interfaces: LanOsStubState,
-) -> None:
-    async def run() -> None:
-        async with make_app_server(bind="0.0.0.0", insecure_lan=True) as (ip, port, _runner):
-            startup = stub_lan_os_interfaces["query_calls"]
-            assert startup == 1, "configure: 1 startup lookup"
-            await _many_reject(100, port, ip, "evil.example")
-            fresh = stub_lan_os_interfaces["query_calls"] - startup
-            assert fresh == 0, "100 unknown hosts within 30s: 0 fresh lookups"
-
-    asyncio.run(run())
-
-
-def test_thousand_accepted_requests_one_os_lookup_at_startup(
-    stub_lan_os_interfaces: LanOsStubState,
-) -> None:
-    async def run() -> None:
-        async with make_app_server(bind="0.0.0.0", insecure_lan=True) as (ip, port, _runner):
-            assert stub_lan_os_interfaces["query_calls"] == 1
-            await _many_ok(1000, port, ip, LAN_STUB_IFACE_IP)
-
-    asyncio.run(run())
-    assert stub_lan_os_interfaces["query_calls"] == 1
-
-
 def test_dhcp_miss_within_30s_does_not_refresh_os_interfaces(
     stub_lan_os_interfaces: LanOsStubState,
 ) -> None:
@@ -69,13 +43,14 @@ def test_dhcp_miss_within_30s_does_not_refresh_os_interfaces(
         async with make_app_server(
             bind="0.0.0.0",
             insecure_lan=True,
+            listen_port=18450,
             clock=clock,
         ) as (ip, port, _runner):
-            assert stub_lan_os_interfaces["query_calls"] == 1
             startup = stub_lan_os_interfaces["query_calls"]
             assert startup == 1, "configure: 1 startup lookup"
             await _many_reject(100, port, ip, "evil.example")
-            assert stub_lan_os_interfaces["query_calls"] == startup
+            fresh = stub_lan_os_interfaces["query_calls"] - startup
+            assert fresh == 0, "100 unknown hosts within 30s: 0 fresh lookups"
             now = t0 + 29.0
             await _many_reject(1, port, ip, "evil.example")
             assert stub_lan_os_interfaces["query_calls"] == startup, (
@@ -83,6 +58,22 @@ def test_dhcp_miss_within_30s_does_not_refresh_os_interfaces(
             )
 
     asyncio.run(run())
+
+
+def test_thousand_accepted_requests_one_os_lookup_at_startup(
+    stub_lan_os_interfaces: LanOsStubState,
+) -> None:
+    async def run() -> None:
+        async with make_app_server(
+            bind="0.0.0.0",
+            insecure_lan=True,
+            listen_port=18451,
+        ) as (ip, port, _runner):
+            assert stub_lan_os_interfaces["query_calls"] == 1
+            await _many_ok(1000, port, ip, LAN_STUB_IFACE_IP)
+
+    asyncio.run(run())
+    assert stub_lan_os_interfaces["query_calls"] == 1
 
 
 def test_dhcp_miss_after_30s_refreshes_os_interfaces_once(
@@ -99,13 +90,49 @@ def test_dhcp_miss_after_30s_refreshes_os_interfaces_once(
         async with make_app_server(
             bind="0.0.0.0",
             insecure_lan=True,
+            listen_port=18450,
             clock=clock,
         ) as (ip, port, _runner):
-            assert stub_lan_os_interfaces["query_calls"] == 1
+            startup = stub_lan_os_interfaces["query_calls"]
+            assert startup >= 1
             await _many_reject(1, port, ip, "evil.example")
-            assert stub_lan_os_interfaces["query_calls"] == 1
+            assert stub_lan_os_interfaces["query_calls"] == startup
             now = t0 + 31.0
             await _many_reject(1, port, ip, "evil.example")
-            assert stub_lan_os_interfaces["query_calls"] == 2
+            assert stub_lan_os_interfaces["query_calls"] == startup + 1
+
+    asyncio.run(run())
+
+
+def test_dhcp_refresh_uses_asyncio_to_thread(stub_lan_os_interfaces: LanOsStubState) -> None:
+    t0 = 1000.0
+    now = t0
+    to_thread_calls = 0
+    real_to_thread = asyncio.to_thread
+
+    async def tracking_to_thread(func, *args, **kwargs):  # noqa: ANN001
+        nonlocal to_thread_calls
+        to_thread_calls += 1
+        return await real_to_thread(func, *args, **kwargs)
+
+    def clock() -> float:
+        return now
+
+    async def run() -> None:
+        nonlocal now
+        original = asyncio.to_thread
+        asyncio.to_thread = tracking_to_thread  # type: ignore[method-assign]
+        try:
+            async with make_app_server(
+                bind="0.0.0.0",
+                insecure_lan=True,
+                listen_port=18452,
+                clock=clock,
+            ) as (ip, port, _runner):
+                now = t0 + 31.0
+                await _many_reject(1, port, ip, "evil.example")
+                assert to_thread_calls == 1
+        finally:
+            asyncio.to_thread = original  # type: ignore[method-assign]
 
     asyncio.run(run())

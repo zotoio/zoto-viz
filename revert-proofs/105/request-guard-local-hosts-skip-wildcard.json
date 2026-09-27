@@ -1,0 +1,6 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_os_query.py::test_local_interface_hosts_filters_stubbed_os_addresses",
+  "red": "AssertionError: assert {'0.0.0.0:702...calhost:7020'} == {'10.0.0.5:70...calhost:7020'}",
+  "timeoutSec": 120
+}

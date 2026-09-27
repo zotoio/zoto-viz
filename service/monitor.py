@@ -34,8 +34,6 @@ from typing import Iterable
 from aiohttp import WSCloseCode, web
 
 from . import access, request_guard
-from . import pack_assets
-from . import static_paths
 from . import agent
 from . import agent_assets
 from . import cursor_agent
