@@ -11,6 +11,12 @@ import {
   type VizPresentTick,
   isHostBootChannel,
 } from "./sandbox-channel";
+import {
+  emptyVizWriteBatch,
+  splitVizWriteBatch,
+  validateVizWriteBatch,
+  type VizWriteBatchPayload,
+} from "./viz-write-batch";
 
 const PACK_ASSETS = "/pack-assets/";
 const TOKEN_REDACT = "<sandbox-token>";
@@ -177,19 +183,10 @@ function vizAllowed(cap: string): boolean {
   return allowed.has(cap);
 }
 
-type VizWriteBatchPayload = {
-  buffers: { slot: number; data: number[] }[];
-  uniforms: { name: string; value: unknown }[];
-  particles?: { data: number[]; stride?: number };
-};
-
 let vizBatch: VizWriteBatchPayload | null = null;
 let vizBatchDepth = 0;
 
-function flushVizBatch(): void {
-  if (!vizBatch) return;
-  const batch = vizBatch;
-  vizBatch = null;
+function emitVizWriteChunk(batch: VizWriteBatchPayload): void {
   const messages = batch.buffers.length + batch.uniforms.length + (batch.particles ? 1 : 0);
   if (messages === 0) return;
   if (messages === 1 && batch.buffers.length === 1 && !batch.uniforms.length && !batch.particles) {
@@ -202,12 +199,34 @@ function flushVizBatch(): void {
     send(runtime, "writeUniform", { name: u.name, value: u.value });
     return;
   }
+  if (messages === 1 && batch.particles && !batch.buffers.length && !batch.uniforms.length) {
+    const p = batch.particles;
+    send(runtime, "writeParticles", { data: p.data, stride: p.stride });
+    return;
+  }
   send(runtime, "writeBatch", batch);
+}
+
+function flushVizBatchContents(): void {
+  if (!vizBatch) return;
+  const chunks = splitVizWriteBatch(vizBatch);
+  if (vizBatchDepth > 0) vizBatch = emptyVizWriteBatch();
+  else vizBatch = null;
+  for (const chunk of chunks) emitVizWriteChunk(chunk);
+}
+
+function flushVizBatch(): void {
+  flushVizBatchContents();
+}
+
+function ensureVizBatchCapacity(trial: VizWriteBatchPayload): void {
+  if (!vizBatch || validateVizWriteBatch(trial) === null) return;
+  flushVizBatchContents();
 }
 
 function beginVizBatch(): void {
   vizBatchDepth++;
-  if (vizBatchDepth === 1) vizBatch = { buffers: [], uniforms: [] };
+  if (vizBatchDepth === 1) vizBatch = emptyVizWriteBatch();
 }
 
 function endVizBatch(): void {
@@ -223,7 +242,9 @@ function patchVizWriters(): void {
     if (!vizAllowed("viz.write")) return;
     const arr = Array.isArray(data) ? data : Array.from(data);
     if (vizBatchDepth > 0 && vizBatch) {
-      vizBatch.buffers.push({ slot, data: arr });
+      const entry = { slot, data: arr };
+      ensureVizBatchCapacity({ ...vizBatch, buffers: [...vizBatch.buffers, entry] });
+      vizBatch!.buffers.push(entry);
       return;
     }
     send(runtime, "writeBuffer", { slot, data: arr });
@@ -231,7 +252,9 @@ function patchVizWriters(): void {
   zoto.writeUniform = (name, value) => {
     if (!vizAllowed("viz.write")) return;
     if (vizBatchDepth > 0 && vizBatch) {
-      vizBatch.uniforms.push({ name, value });
+      const entry = { name, value };
+      ensureVizBatchCapacity({ ...vizBatch, uniforms: [...vizBatch.uniforms, entry] });
+      vizBatch!.uniforms.push(entry);
       return;
     }
     send(runtime, "writeUniform", { name, value });
@@ -240,7 +263,12 @@ function patchVizWriters(): void {
     if (!vizAllowed("viz.write")) return;
     const arr = Array.isArray(data) ? data : Array.from(data);
     if (vizBatchDepth > 0 && vizBatch) {
-      vizBatch.particles = { data: arr, stride: stride || 4 };
+      const entry = { data: arr, stride: stride || 4 };
+      ensureVizBatchCapacity({
+        ...vizBatch,
+        particles: entry,
+      });
+      vizBatch!.particles = entry;
       return;
     }
     send(runtime, "writeParticles", { data: arr, stride: stride || 4 });

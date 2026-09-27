@@ -25,8 +25,12 @@ export function emptyVizWriteBatch(): VizWriteBatchPayload {
   return { buffers: [], uniforms: [] };
 }
 
+export function vizWriteBatchMessageCount(batch: VizWriteBatchPayload): number {
+  return batch.buffers.length + batch.uniforms.length + (batch.particles ? 1 : 0);
+}
+
 export function validateVizWriteBatch(batch: VizWriteBatchPayload): string | null {
-  const messages = batch.buffers.length + batch.uniforms.length + (batch.particles ? 1 : 0);
+  const messages = vizWriteBatchMessageCount(batch);
   if (messages > VIZ_WRITE_BATCH_MAX_MESSAGES) {
     return `viz write batch ${messages} messages exceeds cap ${VIZ_WRITE_BATCH_MAX_MESSAGES}`;
   }
@@ -35,6 +39,55 @@ export function validateVizWriteBatch(batch: VizWriteBatchPayload): string | nul
     return `viz write batch ${bytes} bytes exceeds cap ${VIZ_WRITE_BATCH_MAX_BYTES}`;
   }
   return null;
+}
+
+/** Split an accumulated frame batch into consecutive host-legal writeBatch payloads. */
+export function splitVizWriteBatch(batch: VizWriteBatchPayload): VizWriteBatchPayload[] {
+  type Item =
+    | { kind: "buffer"; slot: number; data: number[] }
+    | { kind: "uniform"; name: string; value: VizUniformValue }
+    | { kind: "particles"; data: number[]; stride?: number };
+
+  const items: Item[] = [];
+  for (const b of batch.buffers) items.push({ kind: "buffer", slot: b.slot, data: b.data });
+  for (const u of batch.uniforms) items.push({ kind: "uniform", name: u.name, value: u.value });
+  if (batch.particles) {
+    items.push({
+      kind: "particles",
+      data: batch.particles.data,
+      stride: batch.particles.stride,
+    });
+  }
+
+  const append = (dst: VizWriteBatchPayload, item: Item): VizWriteBatchPayload => {
+    if (item.kind === "buffer") {
+      return { ...dst, buffers: [...dst.buffers, { slot: item.slot, data: item.data }] };
+    }
+    if (item.kind === "uniform") {
+      return { ...dst, uniforms: [...dst.uniforms, { name: item.name, value: item.value }] };
+    }
+    return { ...dst, particles: { data: item.data, stride: item.stride } };
+  };
+
+  const out: VizWriteBatchPayload[] = [];
+  let cur = emptyVizWriteBatch();
+  for (const item of items) {
+    const trial = append(cur, item);
+    if (validateVizWriteBatch(trial) !== null) {
+      if (vizWriteBatchMessageCount(cur) > 0) out.push(cur);
+      const single = append(emptyVizWriteBatch(), item);
+      if (validateVizWriteBatch(single) !== null) {
+        out.push(single);
+        cur = emptyVizWriteBatch();
+      } else {
+        cur = single;
+      }
+      continue;
+    }
+    cur = trial;
+  }
+  if (vizWriteBatchMessageCount(cur) > 0) out.push(cur);
+  return out;
 }
 
 export function applyVizWriteBatch(

@@ -18,6 +18,7 @@ import {
 } from "./sandbox-frame";
 import { defaultVizContract } from "./viz-host";
 import type { VizWriteBatchPayload } from "./viz-write-batch";
+import { validateVizWriteBatch } from "./viz-write-batch";
 
 const FRAME_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -109,8 +110,10 @@ describe("sandbox write path (PluginSandbox + sandbox-frame port)", () => {
     expect(box.sandboxHostPort()).not.toBeNull();
 
     box.deliverPresentTick(16, "host-mesh-demo");
-    await vi.waitFor(() => writeBatch.mock.calls.length === 1, { timeout: 2_000 });
-    expect(writeBatch).toHaveBeenCalledWith({
+    await expect.poll(
+      () => writeBatch.mock.calls[0]?.[0],
+      { timeout: 3_000 },
+    ).toEqual({
       buffers: [{ slot: 2, data: [1, 2, 3] }],
       uniforms: [{ name: "uMeshA", value: 1 }, { name: "uMeshB", value: 2 }],
     });
@@ -144,14 +147,52 @@ describe("sandbox write path (PluginSandbox + sandbox-frame port)", () => {
     );
     disarm();
 
-    const port = box.sandboxHostPort()!;
     box.frame({ packets: [], talkers: [], links: [], headlines: [] } as never);
-    await vi.waitFor(() => writeBatch.mock.calls.length === 1, { timeout: 2_000 });
-    expect(writeBatch).toHaveBeenCalledWith({
+    await expect.poll(
+      () => writeBatch.mock.calls[0]?.[0],
+      { timeout: 3_000 },
+    ).toEqual({
       buffers: [{ slot: 0, data: [9] }, { slot: 1, data: [8] }],
       uniforms: [],
     });
     expect(singles).toHaveLength(0);
+
+    box.unload();
+  });
+
+  it("splits 40 frame writes into consecutive host-legal writeBatch messages", async () => {
+    const writeBatch = vi.fn();
+    const writeBuffer = vi.fn();
+    const box = new PluginSandbox();
+    box.handlers = { writeBatch, writeBuffer };
+
+    const plugin = `
+      zoto.onFrame = () => {
+        for (let i = 0; i < 40; i++) zoto.writeBuffer(i, [i]);
+      };
+    `;
+
+    const disarm = armSandboxHandshake();
+    await box.loadModuleUrl(
+      pluginDataUrl(plugin),
+      ["viz.write", "viz.read"],
+      {},
+      defaultVizContract(),
+    );
+    disarm();
+
+    box.frame({ packets: [], talkers: [], links: [], headlines: [] } as never);
+
+    let applied = 0;
+    await vi.waitFor(() => {
+      applied = writeBatch.mock.calls.reduce((n, c) => n + c[0].buffers.length, 0)
+        + writeBuffer.mock.calls.length;
+      return applied === 40;
+    }, { timeout: 3_000 });
+
+    for (const call of writeBatch.mock.calls) {
+      expect(validateVizWriteBatch(call[0]!)).toBeNull();
+    }
 
     box.unload();
   });
