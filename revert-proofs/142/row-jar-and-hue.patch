@@ -1,5 +1,5 @@
 diff --git a/plugins/src/marble-run/frontend/sim.ts b/plugins/src/marble-run/frontend/sim.ts
-index fe68ac6f..7ad0540d 100644
+index fe68ac6f..ff6b8a7b 100644
 --- a/plugins/src/marble-run/frontend/sim.ts
 +++ b/plugins/src/marble-run/frontend/sim.ts
 @@ -77,7 +77,7 @@ export function pieceKindAt(u: number, complexity: number, seed: number): number
@@ -7,7 +7,7 @@ index fe68ac6f..7ad0540d 100644
  export function jarIndexForRouteKey(routeKey: string, jarCount: number): number {
    if (!routeKey || jarCount <= 0) return 0;
 -  return Math.min(jarCount - 1, Math.floor(hash01(routeKey) * jarCount * 0.999));
-+  return 0;
++  return (jarCount - 1);
  }
  
  export class MarbleSim {

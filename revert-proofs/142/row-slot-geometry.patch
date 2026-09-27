@@ -1,13 +1,13 @@
 diff --git a/plugins/src/marble-run/frontend/pack.ts b/plugins/src/marble-run/frontend/pack.ts
-index e3feca6f..f124ef5c 100644
+index e3feca6f..78412fb1 100644
 --- a/plugins/src/marble-run/frontend/pack.ts
 +++ b/plugins/src/marble-run/frontend/pack.ts
-@@ -228,7 +228,7 @@ export function packMarbleSlots(frame: VizDataFrame): { slot0: number[]; slot1:
+@@ -226,7 +226,7 @@ function cameraPose(s: MarbleSim, o: MarbleOptions, t: number): { cx: number; cy
+ export function packMarbleSlots(frame: VizDataFrame): { slot0: number[]; slot1: number[] } {
+   const s = marbleSim();
    const o = marbleOpts();
-   const slot0 = new Array<number>(MR_SLOT0).fill(0);
+-  const slot0 = new Array<number>(MR_SLOT0).fill(0);
++  const slot0 = new Array<number>(MR_SLOT0 - 1).fill(0);
    const slot1 = new Array<number>(MR_MARBLES_PER_SLOT * MR_MARBLE_FLOATS).fill(0);
--  slot0[MR_SLOT.mark] = 1;
-+  slot0[MR_SLOT.mark] = 0;
+   slot0[MR_SLOT.mark] = 1;
    slot0[MR_SLOT.seedNorm] = (o.seed % 10000) / 10000;
-   slot0[MR_SLOT.simTime] = s.time();
-   slot0[MR_SLOT.jarCount] = o.jarCount;

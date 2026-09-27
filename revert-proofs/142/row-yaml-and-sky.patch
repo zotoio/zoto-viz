@@ -1,13 +1,13 @@
-diff --git a/plugins/src/marble-run/frontend/work-budget.ts b/plugins/src/marble-run/frontend/work-budget.ts
-index 73d884e2..f60a8de8 100644
---- a/plugins/src/marble-run/frontend/work-budget.ts
-+++ b/plugins/src/marble-run/frontend/work-budget.ts
-@@ -38,7 +38,7 @@ const SHIPPED_WORK_BUDGET_SNIPPET = `workBudget:
+diff --git a/plugins/src/marble-run/visualisation.yml b/plugins/src/marble-run/visualisation.yml
+index 959fc36c..ecdbd034 100644
+--- a/plugins/src/marble-run/visualisation.yml
++++ b/plugins/src/marble-run/visualisation.yml
+@@ -34,7 +34,7 @@ workBudget:
    maxInstances: 48
    maxGpuBytes: 8388608
    maxSimStepsPerFrame: 4
 -  maxPacketsPerFrame: 8
-+  maxPacketsPerFrame: 0
- `;
- 
- let hostBudget: MarbleWorkBudget | null = null;
++  maxPacketsPerFrame: 7
+ config:
+   - key: preset
+     label: preset

@@ -1,13 +1,10 @@
 diff --git a/plugins/src/marble-run/frontend/pack.ts b/plugins/src/marble-run/frontend/pack.ts
-index e3feca6f..1417b5f6 100644
 --- a/plugins/src/marble-run/frontend/pack.ts
 +++ b/plugins/src/marble-run/frontend/pack.ts
-@@ -305,7 +305,7 @@ export function marbleDeterminismDigest(t: number, o: MarbleOptions): number {
-     headlines: [],
-     demo: true,
-   };
--  for (let i = 0; i < 120; i++) ingestFrame({ ...frame, t: i * SIM_DT, dt: SIM_DT });
-+  for (let i = 0; i < 1; i++) ingestFrame({ ...frame, t: i * SIM_DT, dt: SIM_DT });
+@@ -308,6 +308,7 @@ export function marbleDeterminismDigest(t: number, o: MarbleOptions): number {
    const { slot0, slot1 } = packMarbleSlots({ ...frame, t });
    let h = 0;
    for (const v of [...slot0, ...slot1]) h = (h * 31 + Math.round(v * 1e5)) | 0;
++  h ^= marbleSim().time() > 0 ? 1 : 0;
+   return h;
+ }
