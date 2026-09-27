@@ -3,5 +3,6 @@
   "testFile": "src/plugins/viz-host.test.ts",
   "testName": "^viz\\ contract\\ version\\ negotiation\\ >\\ delivers\\ v1\\ talker\\ lifetime\\ counts\\ for\\ v1\\ packs\\ even\\ when\\ flow\\ rates\\ exist$",
   "description": "One-line production revert: v1 packs run through applyVizFrameContractV2 (contract stamped v2).",
+  "lintRow": true,
   "patchedAssertion": "AssertionError: expected 2 to be 1 // Object.is equality"
 }

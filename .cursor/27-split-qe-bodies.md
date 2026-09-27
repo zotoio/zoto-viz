@@ -165,3 +165,56 @@ Full columns (file paths + byte assertions): run `python3 scripts/qe_gate_pr27.p
 **Collision check:** 18/18 distinct `(hunk_fp, testFile, testName)`; label/show rows share `9075e7bb87f6` but **different tests**.
 
 =====PR93 BODY END=====
+
+---
+
+## QE #42 / #86 — environment, full-file reds, strict apply, lint rows
+
+### (1) Environment — `viz-pack-runtime-esbuild` + `.venv` on PATH
+
+`web/src/plugins/viz-pack-runtime-esbuild.test.ts` shells Python for zip-unpack compile; system `python3` without PyYAML fails (`ModuleNotFoundError: No module named 'yaml'`). **Fix:** test uses `.venv/bin/python3` when present; run suites with venv first:
+
+```bash
+export PATH="$PWD/.venv/bin:$PATH"
+scripts/run-qe-suites.sh   # vitest + pytest -q
+```
+
+Verified on `origin/main` and split HEADs — **2/2** vitest tests in `viz-pack-runtime-esbuild.test.ts` pass (not deselected).
+
+### (2) Full-file row gate — paste from `python3 scripts/tse_gate_bc.py`
+
+Each row must red on **`pnpm exec vitest run <testFile>`** (whole file), not `-t` alone. Gate section `(2) full-file row gates` prints one line per row, e.g.:
+
+```text
+OK viz-frame-collect-alloc full-file | Tests  2 failed | 2 passed (4)
+OK cypher-cic-session-f-press full-file | Tests  1 failed | 2 passed (3)
+```
+
+Paste the block for your split from the latest gate log. No `afterEach` leaks required fixes on current stack.
+
+### (3) Strict patch apply @ split HEAD
+
+```bash
+# per split: checkout HEAD web tree, then for each sidecar .patch:
+git apply --check -p1 revert-proofs/27/<row>.patch
+```
+
+`scripts/tse_gate_bc.py` section `(4)` — **All split patches apply with zero offset/fuzz.** Regenerated `viz-frame-collect-alloc.patch` (was corrupt hunk header).
+
+### (4) Lint rows vs production reverts
+
+| Row | lint row | Notes |
+|-----|----------|--------|
+| `viz-contract-missing` | **yes** | structural negotiation lint |
+| `viz-contract-unknown` | **yes** | |
+| `viz-contract-v1` | **yes** | |
+| `viz-contract-v2` | **yes** | |
+| `viz-frame-collect-alloc` | **yes** | inject `linkBySrcDst.clear()` simulates unstable index |
+| all other rows | **no** | `-` lines are production code from **this split's** diff only |
+
+Hunk table column **lint row** — run `python3 scripts/qe_gate_pr27.py`.
+
+### Deleted nondeterministic test (#94 / 27a)
+
+**Removed** `dogfood.test.ts` → `"fat-LAN live soak: all three packs under budget or honest skips"` (load-dependent; fails on main with `expected 119 to be 120`). Deleted in `b48a7d81` (27a collector landing); not replaced — category **(c)** by deletion, named here per QE #86.
+

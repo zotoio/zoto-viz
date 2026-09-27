@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 import subprocess
 import sys
@@ -9,6 +10,7 @@ from pathlib import Path
 
 ROOT = Path("/workspace")
 WEB = ROOT / "web"
+VENV = ROOT / ".venv/bin"
 SPLITS = [
     ("27a", "6520b01", "4a1e647d"),
     ("27b", "4a1e647d", "e4d64961"),
@@ -16,8 +18,11 @@ SPLITS = [
 ]
 
 
-def run(cmd: list[str], cwd: Path = ROOT, timeout: int = 600):
-    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+def run(cmd: list[str], cwd: Path = ROOT, timeout: int = 600, env: dict | None = None):
+    base = {**os.environ, **(env or {})}
+    if VENV.is_dir():
+        base["PATH"] = f"{VENV}:{base.get('PATH', '')}"
+    return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout, env=base)
 
 
 def checkout_web(ref: str) -> None:
@@ -30,13 +35,51 @@ def sidecars(base: str, head: str) -> list[Path]:
     return sorted(ROOT / ln for ln in out.splitlines() if ln.endswith(".json"))
 
 
+def test_name_pat(raw: str) -> re.Pattern[str]:
+    s = raw
+    if s.startswith("^"):
+        s = s[1:]
+    if s.endswith("$"):
+        s = s[:-1]
+    return re.compile(s)
+
+
+def vitest_run(tf: str, extra: list[str] | None = None) -> tuple[int, str]:
+    cmd = ["pnpm", "exec", "vitest", "run", tf, *(extra or [])]
+    r = run(cmd, cwd=WEB, timeout=300)
+    return r.returncode, r.stdout + r.stderr
+
+
+def assertion_for_test(out: str, tn: str) -> str | None:
+    pat = test_name_pat(tn)
+    for block in re.split(r"\n(?= FAIL )", out):
+        if " FAIL " not in block:
+            continue
+        header = block.split("\n", 1)[0]
+        if not pat.search(header):
+            continue
+        m = re.search(r"(AssertionError: .+)", block)
+        if m:
+            return m.group(1).rstrip()
+    return None
+
+
 def vitest_row(tf: str, tn: str) -> tuple[int, str | None]:
-    r = run(["pnpm", "exec", "vitest", "run", tf, "-t", tn], cwd=WEB, timeout=300)
-    out = r.stdout + r.stderr
-    if r.returncode == 0:
+    code, out = vitest_run(tf, ["-t", tn])
+    if code == 0:
         return 0, None
     m = re.search(r"(AssertionError: .+)", out)
-    return r.returncode, (m.group(1).rstrip() if m else None)
+    return code, (m.group(1).rstrip() if m else None)
+
+
+def vitest_full_file(tf: str, tn: str) -> tuple[int, str, str | None]:
+    code, out = vitest_run(tf)
+    summary = ""
+    for ln in out.splitlines():
+        if ln.strip().startswith("Test Files") or ln.strip().startswith("Tests "):
+            summary = ln.strip()
+    measured = assertion_for_test(out, tn)
+    return code, summary, measured
 
 
 def patch_minus_plus(patch: Path) -> tuple[list[str], list[str]]:
@@ -49,11 +92,15 @@ def patch_minus_plus(patch: Path) -> tuple[list[str], list[str]]:
     return minus, plus
 
 
-def validate_patch(row: str, patch: Path) -> list[str]:
-    errs = []
+def validate_patch(row: str, patch: Path, sc: Path) -> list[str]:
+    errs: list[str] = []
+    d = json.loads(sc.read_text())
+    lint = bool(d.get("lintRow"))
     minus, plus = patch_minus_plus(patch)
-    if not minus:
-        errs.append(f"{row}: no `-` hunk lines")
+    if not minus and not lint:
+        errs.append(f"{row}: no `-` hunk lines (not lint row)")
+    if lint and not minus and not plus:
+        errs.append(f"{row}: lint row has no `-` or `+` lines")
     m = re.search(r"^\+\+\+ b/(\S+)", patch.read_text(), re.M)
     if not m:
         return errs
@@ -64,6 +111,19 @@ def validate_patch(row: str, patch: Path) -> list[str]:
     return errs
 
 
+def strict_apply_check(split_rows: list[Path], head: str) -> list[str]:
+    errs: list[str] = []
+    checkout_web(head)
+    for sc in split_rows:
+        patch = sc.with_suffix(".patch")
+        if not patch.exists():
+            continue
+        r = run(["git", "apply", "--check", "-p1", str(patch)])
+        if r.returncode != 0:
+            errs.append(f"{sc.stem}: git apply --check failed: {r.stderr.strip()[:120]}")
+    return errs
+
+
 def main() -> None:
     dup = run(["bash", "-lc", "sha256sum revert-proofs/27/*.patch | sort | uniq -D -w64"]).stdout.strip()
     print("=== (b) sha256sum revert-proofs/27/*.patch | sort | uniq -D -w64 ===")
@@ -71,7 +131,17 @@ def main() -> None:
     if dup:
         sys.exit(1)
 
+    print("\n=== (4) strict git apply --check @ split HEAD web trees ===")
+    apply_errs: list[str] = []
+    for split, base, head in SPLITS:
+        rows = sidecars(base, head)
+        apply_errs.extend(f"{split}: {e}" for e in strict_apply_check(rows, head))
+    print("\n".join(apply_errs) if apply_errs else "All split patches apply with zero offset/fuzz.")
+    if apply_errs:
+        sys.exit(4)
+
     mismatches: list[tuple[str, str, str]] = []
+    fullfile_fails: list[str] = []
     shape: list[str] = []
 
     for split, base, head in SPLITS:
@@ -82,37 +152,65 @@ def main() -> None:
             if not patch.exists():
                 continue
             row = sc.stem
-            shape.extend(validate_patch(row, patch))
+            shape.extend(validate_patch(row, patch, sc))
             d = json.loads(sc.read_text())
             expected = d["patchedAssertion"]
             tf, tn = d["testFile"], d["testName"]
             checkout_web(head)
-            if run(["patch", "-p1", "-i", str(patch)]).returncode != 0:
+            if run(["git", "apply", "-p1", str(patch)]).returncode != 0:
                 mismatches.append((row, expected, "PATCH_APPLY_FAILED"))
                 continue
             _, measured = vitest_row(tf, tn)
             checkout_web(head)
             if not measured:
                 mismatches.append((row, expected, "NO_ASSERTION"))
-                print(f"FAIL {row}: no AssertionError")
+                print(f"FAIL {row}: no AssertionError (-t)")
             elif measured != expected:
                 print(f"MISMATCH {row}\n  sidecar:   {expected}\n  measured:  {measured}")
                 mismatches.append((row, expected, measured))
             else:
                 print(f"OK {row}")
 
+        print(f"\n=== (2) full-file row gates {split} @ {head[:8]} ===")
+        checkout_web(head)
+        for sc in sidecars(base, head):
+            patch = sc.with_suffix(".patch")
+            if not patch.exists():
+                continue
+            row = sc.stem
+            d = json.loads(sc.read_text())
+            expected = d["patchedAssertion"]
+            tf, tn = d["testFile"], d["testName"]
+            checkout_web(head)
+            if run(["git", "apply", "-p1", str(patch)]).returncode != 0:
+                fullfile_fails.append(f"{row}: apply failed")
+                continue
+            code, summary, measured = vitest_full_file(tf, tn)
+            checkout_web(head)
+            if code == 0:
+                fullfile_fails.append(f"{row}: full-file GREEN ({summary})")
+                print(f"FAIL {row}: full-file GREEN ({summary})")
+            elif not measured:
+                fullfile_fails.append(f"{row}: no matching AssertionError ({summary})")
+                print(f"FAIL {row}: no assertion in full-file ({summary})")
+            elif measured != expected:
+                print(f"MISMATCH {row} full-file\n  sidecar:  {expected}\n  measured: {measured}\n  {summary}")
+                fullfile_fails.append(f"{row}: full-file assertion mismatch")
+            else:
+                print(f"OK {row} full-file | {summary}")
+
     if shape:
-        print("\n=== (b) patch shape ===")
+        print("\n=== patch shape ===")
         for e in shape:
             print(e)
     if mismatches:
-        for row, exp, got in mismatches:
-            if got not in ("PATCH_APPLY_FAILED", "NO_ASSERTION"):
-                print(f"\n--- {row} ---\n sidecar:  {exp}\n measured: {got}")
         sys.exit(2)
+    if fullfile_fails:
+        print("\nFull-file gate failures:", len(fullfile_fails))
+        sys.exit(5)
     if shape:
         sys.exit(3)
-    print("\nAll TSE (b)(c) gates passed")
+    print("\nAll TSE (b)(c) + full-file gates passed")
     qe = run(["python3", str(ROOT / "scripts" / "qe_gate_pr27.py")])
     print(qe.stdout)
     if qe.returncode != 0:
