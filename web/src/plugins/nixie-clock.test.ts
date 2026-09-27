@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   digitsOf, packNixieBuffer, parseNixieLook, DEFAULT_LOOK,
-} from "../../../plugins/src/nixie-clock/frontend/tubes";
+} from "../../../shared/nixie-tubes";
 
 function at(h: number, m: number, s: number, ms = 0): Date {
   return new Date(2026, 8, 20, h, m, s, ms);
