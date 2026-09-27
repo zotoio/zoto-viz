@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_consent_survives_pack_tree_hash_migration",
-  "description": "Consent tree hash migrated once per record (boot2 reads 0 bytes).",
-  "patchedFailure": "E       AssertionError: assert ['pack tree hash migrated for sample'] == []\nE         \nE         Left contains one more item: 'pack tree hash migrated for sample'\nE         \nE         Full diff:\nE         - []\nE         + [\nE         +     'pack tree hash migrated for sample',\nE         + ]\n\ntests/test_pack_safe_zip_install.py:849: AssertionError\n=========================== short test summary info ============================"
-}

@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_qe_staged_bytes_match_and_outside_staging_untouched",
-  "description": "On-disk staging bytes must match entry digests from validate.",
-  "patchedFailure": "E           AssertionError: assert '75895fa2901a382dd6f4e8f7288f2f641b409123defe4594977e78d3cd9da95a' == '4f0ee50214ef04649453ed961a2fe4a09b3fceba08d57a955e9abf7f8090b67a'\nE             \nE             - 4f0ee50214ef04649453ed961a2fe4a09b3fceba08d57a955e9abf7f8090b67a\nE             + 75895fa2901a382dd6f4e8f7288f2f641b409123defe4594977e78d3cd9da95a\n\ntests/test_pack_safe_zip_install.py:222: AssertionError\n=========================== short test summary info ============================"
-}

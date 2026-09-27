@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_pa_tree_hash_sensitive_to_path_layout",
-  "description": "Tree hash must include every member path, not only plugin.yml.",
-  "patchedFailure": "E       AssertionError: assert '7a6dbc5276ffac9829638b64b8b72fee11809f2074982fd2efc7851927990e11' == 'dacfc863cf251e12b7eb101a284d3695a86e2d8e0373c957e730051c02ec4918'\nE         \nE         - dacfc863cf251e12b7eb101a284d3695a86e2d8e0373c957e730051c02ec4918\nE         + 7a6dbc5276ffac9829638b64b8b72fee11809f2074982fd2efc7851927990e11\n\ntests/test_pack_safe_zip_install.py:705: AssertionError\n=========================== short test summary info ============================"
-}

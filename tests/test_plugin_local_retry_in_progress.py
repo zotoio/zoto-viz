@@ -8,7 +8,7 @@ import pytest
 
 from service import plugin_local
 from service.pack_install_retry import RETRY_RESULT_IN_PROGRESS
-from service.plugin_install import _install_staged_to_runtime_locked, pack_install_lock
+from service.plugin_install import _install_zip_to_runtime_locked, pack_install_lock
 
 from tests.test_plugin_install import _blocked_v2_setup
 
@@ -38,7 +38,7 @@ def test_concurrent_retry_blocked_zip_serializes_with_barrier(
     enter_install = threading.Event()
     release_install = threading.Event()
     install_calls = 0
-    real_install = _install_staged_to_runtime_locked
+    real_install = _install_zip_to_runtime_locked
 
     def gated_install(*args: object, **kwargs: object) -> object:
         nonlocal install_calls
@@ -48,10 +48,9 @@ def test_concurrent_retry_blocked_zip_serializes_with_barrier(
         return real_install(*args, **kwargs)
 
     monkeypatch.setattr(
-        "service.plugin_install._install_staged_to_runtime_locked",
+        "service.plugin_install._install_zip_to_runtime_locked",
         gated_install,
     )
-    monkeypatch.setattr(plugin_local, "_install_staged_to_runtime_locked", gated_install)
     results: list[dict] = []
     errors: list[BaseException] = []
 

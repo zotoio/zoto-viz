@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_safe_zip_install.py",
-  "testName": "test_qe_size_cap_uses_inflated_bytes_exact",
-  "description": "Inflated-byte cap uses actual inflated size.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:249: AssertionError\n=========================== short test summary info ============================\nFAILED tests/test_pack_safe_zip_install.py::test_qe_size_cap_uses_inflated_bytes_exact - assert \"zip entry 'payload.txt': uncompressed size exceeds 50\" == \"zip entry 'payload.txt': uncompressed size exceeds 15\"\n  \n  - zip entry 'payload.txt': uncompressed size exceeds 15\n  ?                                                    -\n  + zip entry 'payload.txt': uncompressed size exceeds 50\n  ?                                                     +\n============================== 1 failed in 0.04s ==============================="
-}

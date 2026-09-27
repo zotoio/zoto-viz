@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_install_staged.py",
-  "testName": "test_blocked_update_keeps_old_version",
-  "description": "Rejected update must not mutate live zip or runtime before validators pass."
-}

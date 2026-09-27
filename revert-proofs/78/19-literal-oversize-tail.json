@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_pack_zip_install_ux.py",
-  "testName": "test_zip_ux_literal_oversize_tail",
-  "description": "Literal oversize zip tail copy.",
-  "patchedFailure": "E       AssertionError: assert '' == 'It unpacks to more than packs are allowed.'\nE         \nE         - It unpacks to more than packs are allowed.\n\ntests/test_pack_zip_install_ux.py:41: AssertionError\n=========================== short test summary info ============================"
-}

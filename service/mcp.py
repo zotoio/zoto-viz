@@ -34,6 +34,7 @@ from . import paths
 from . import plugin_migration as pmg
 from . import plugin_zip as pz
 from . import plugin_local
+from .pack_boundary import PackBundleBoundaryError
 from . import plugins
 from . import profiles
 
@@ -666,7 +667,6 @@ def install_catalog_zip(
     *,
     overwrite: bool = False,
     force: bool = False,
-    zip_display_name: str | None = None,
 ) -> dict[str, Any]:
     """Validate, write ``plugins/<id>.zip``, unpack. Never git-add or git-commit."""
     tmp_path: Path | None = None
@@ -675,42 +675,40 @@ def install_catalog_zip(
     tmp_path = Path(tmp_name)
     try:
         tmp_path.write_bytes(raw)
-        from . import pack_safe_zip as psz
-
-        try:
-            pack_read = psz.read_pack_zip(tmp_path)
-        except ValueError as e:
-            return plugin_local._zip_blocked_result(e, zip_display_name=zip_display_name, zip_path=tmp_path)
-        doc = plugins.validate_doc(pack_read.manifest)
+        manifest = pz.inspect_zip(tmp_path)
+        doc = plugins.validate_doc(manifest.plugin)
         pid = str(doc["id"])
         dest = paths.plugin_zips_dir() / f"{pid}.zip"
-        pack_read, doc, dest, reminted_from = plugin_local.remint_pack_read(
-            pack_read,
-            dest,
-            overwrite=overwrite,
-            incoming_sha=pz.plugin_sha256(tmp_path),
-        )
+        raw, doc, dest, reminted_from = plugin_local.remint_zip(raw, dest, overwrite=overwrite)
         pid = str(doc["id"])
-        if reminted_from:
-            tmp_path.write_bytes(plugin_local.zip_bytes_from_staged(pack_read))
+        tmp_path.write_bytes(raw)
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
+        dirty = pmg.dirty_tree_paths(pid)
+        if dirty and not force:
+            raise pmg.DirtyTreeError(dirty, pid)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        from .plugin_install import install_zip_to_runtime
+
+        upgrade = dest.is_file() and runtime.is_dir()
         if dest.is_file() and pz.plugin_sha256(dest) == incoming and not force:
-            unpacked = pz.unpack_zip(dest, runtime)
+            unpacked = install_zip_to_runtime(
+                dest,
+                dest,
+                runtime,
+                doc,
+                rel=str(dest),
+                sha256=incoming,
+                upgrade=upgrade,
+                force=False,
+            )
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
                 info["remintedFrom"] = reminted_from
             _refresh_plugin_python(info)
             return info
-        dirty = pmg.dirty_tree_paths(pid)
-        if dirty and not force:
-            raise pmg.DirtyTreeError(dirty, pid)
-        if dest.is_file() and not overwrite:
+        if dest.is_file() and not overwrite and not force:
             raise ValueError(f"plugin {pid!r} already exists (pass overwrite: true)")
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        from .plugin_install import install_zip_to_runtime
-
-        upgrade = dest.is_file() and runtime.is_dir()
         unpacked = install_zip_to_runtime(
             tmp_path,
             dest,
@@ -720,7 +718,6 @@ def install_catalog_zip(
             sha256=incoming,
             upgrade=upgrade,
             force=force,
-            pack_read=pack_read,
         )
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
@@ -1048,14 +1045,10 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             return _tool_text(info, is_error=not info.get("ok"))
         if name == "install_plugin_zip":
             raw = decode_zip_b64(str(args.get("zip_b64") or ""))
-            zip_name = args.get("zip_name") or args.get("filename")
-            display = str(zip_name).strip() if isinstance(zip_name, str) and zip_name.strip() else None
-            force = bool(args.get("force"))
             info = install_catalog_zip(
                 raw,
-                overwrite=bool(args.get("overwrite")) or force,
-                force=force,
-                zip_display_name=display,
+                overwrite=bool(args.get("overwrite")),
+                force=bool(args.get("force")),
             )
             return _tool_text(info, is_error=bool(info.get("consentRequired")))
         return _tool_text({"error": f"unknown tool {name}"}, is_error=True)
@@ -1073,6 +1066,8 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             "paths": e.paths,
             "hint": "pass force: true to write despite uncommitted catalog changes",
         }, is_error=True)
+    except PackBundleBoundaryError as e:
+        return _tool_text({"ok": False, **e.block.to_dict()}, is_error=True)
     except ValueError as e:
         return _tool_text({"error": str(e)}, is_error=True)
 
