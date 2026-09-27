@@ -49,6 +49,11 @@ export function resetHnTermPack(): void {
   termScript = "";
 }
 
+/** Host teletype progress after the last hn-term frame (for dogfood / soak guards). */
+export function hnTermPackTyped(): number {
+  return termTyped;
+}
+
 function termNow(frame: VizDataFrame): number {
   return frame.t;
 }
