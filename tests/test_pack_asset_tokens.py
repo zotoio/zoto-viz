@@ -42,9 +42,10 @@ def test_parse_rejects_frame_id_not_matching_uuid_regex() -> None:
 
 
 def test_verify_rejects_non_ascii_pack_id() -> None:
-    tok = mint("demo-pack", SESSION)
+    bad_id = "dem\u00f6-pack"
+    tok = pack_asset_tokens.mint_pack_asset_token(SECRET, SESSION, bad_id, DEFAULT_FRAME)
     assert not pack_asset_tokens.verify_pack_asset_token(
-        SECRET, "dem\u00f6", tok, session_id=SESSION, frame_live=True,
+        SECRET, bad_id, tok, session_id=SESSION, frame_live=True,
     )
 
 
