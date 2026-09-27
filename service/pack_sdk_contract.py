@@ -23,6 +23,15 @@ def sdk_manifest_cache_path(runtime_parent: Path, pack_id: str) -> Path:
     return runtime_parent / ".pack-sdk" / f"{pack_id}.json"
 
 
+def runtime_parent_for_sdk_cache(home: Path) -> Path:
+    resolved = home.resolve()
+    parts = resolved.parts
+    if ".staging" in parts:
+        idx = parts.index(".staging")
+        return Path(*parts[:idx])
+    return resolved.parent
+
+
 def read_pack_sdk_manifest(home: Path) -> int | None:
     path = home / _LEGACY_MANIFEST
     if not path.is_file():

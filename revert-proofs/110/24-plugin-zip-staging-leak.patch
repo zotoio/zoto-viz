@@ -1,0 +1,16 @@
+diff --git a/service/plugin_zip.py b/service/plugin_zip.py
+index 0f67f7e..1c75e79 100644
+--- a/service/plugin_zip.py
++++ b/service/plugin_zip.py
+@@ -297,10 +297,7 @@ def _parse_plugin_yml(raw: bytes) -> dict[str, Any]:
+ 
+ def _extract_files(path: Path) -> dict[str, bytes]:
+     read = psz.read_pack_zip(Path(path))
+-    try:
+-        return read.members
+-    finally:
+-        psz.cleanup_staging_dir(read.staging_dir)
++    return dict(read.members)
+ 
+ 
+ def _read_src_files(src: Path) -> dict[str, bytes]:

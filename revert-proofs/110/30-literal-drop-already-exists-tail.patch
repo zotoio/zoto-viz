@@ -1,0 +1,13 @@
+diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
+index 3b65b11..9d56274 100644
+--- a/service/pack_install_copy.py
++++ b/service/pack_install_copy.py
+@@ -19,7 +19,7 @@ ZIP_UX_OVERSIZE_TAIL = "It unpacks to more than packs are allowed."
+ 
+ ZIP_UX_INSTALL_FAILED = "Couldn't install {stem}.zip. {tail}"
+ ZIP_UX_DROP_SCHEMA_TAIL = "The plugin id in this pack isn't valid."
+-ZIP_UX_DROP_ALREADY_EXISTS_TAIL = "This pack is already in the drop zone."
++ZIP_UX_DROP_ALREADY_EXISTS_TAIL = ""
+ BLOCKED_MESSAGE = (
+     "{label} was blocked. {body} Nothing was installed and the current wall is unchanged."
+ )

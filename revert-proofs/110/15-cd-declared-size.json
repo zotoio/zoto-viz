@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_safe_zip_install.py",
+  "testName": "test_qe_cd_declared_size_larger_than_actual",
+  "description": "Reject zip entries whose declared size exceeds inflated bytes.",
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:262: AssertionError: cd declared size"
+}

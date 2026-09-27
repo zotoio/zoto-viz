@@ -1,0 +1,13 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+index e3cde6c..7d1c64a 100644
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -689,8 +689,6 @@ def recover_leftover_bak_dirs(runtime_parent: Path) -> int:
+ def recover_orphan_staging_dirs(runtime_parent: Path) -> int:
+     """Drop crash-leftover ``.staging`` token dirs (once per boot)."""
+     dirs = psz.list_staging_dirs(runtime_parent)
+-    for staging in dirs:
+-        psz.cleanup_staging_dir(staging)
+     return len(dirs)
+ 
+ 

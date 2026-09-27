@@ -144,8 +144,9 @@ def test_blocked_pack_module_route_404(
     plugins.reset_bundles()
     pack_id = "pack-boundary-host-escape"
     raw = _zip_tree(_pack_fixture("host-escape"))
-    with pytest.raises(Exception):
-        plugin_local.install_local_zip(raw)
+    out = plugin_local.install_local_zip(raw)
+    assert out.get("ok") is False
+    assert out.get("error") == "pack_boundary"
     assert plugins.bundle_for(pack_id) is None
 
     class Req:
@@ -176,8 +177,9 @@ def test_upgrade_blocked_preserves_v1_bundle(
     assert runtime.is_dir()
     assert (runtime / "frontend/sdk/marker.ts").is_file()
 
-    with pytest.raises(Exception):
-        plugin_local.install_local_zip(v2, overwrite=True)
+    blocked = plugin_local.install_local_zip(v2, overwrite=True)
+    assert blocked.get("ok") is False
+    assert "v2 was blocked" in str(blocked.get("message") or "")
 
     digest_after, bytes_after = plugins.bundle_for(pid)
     assert digest_after == digest_v1
