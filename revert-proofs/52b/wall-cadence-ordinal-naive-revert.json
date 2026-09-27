@@ -3,6 +3,6 @@
   "runner": "vitest",
   "testFile": "src/ui/viz-copy.test.ts",
   "testName": "^vizCadenceOrdinal \\(Amendment 6 L3\\) > k=11 \u2192 11th$",
-  "excerpt": "AssertionError: expected '11st' to be '11th'",
-  "patchedAssertion": "AssertionError: expected '11st' to be '11th'"
+  "excerpt": "AssertionError: expected '11st' to be '11th' // Object.is equality",
+  "patchedAssertion": "AssertionError: expected '11st' to be '11th' // Object.is equality"
 }
