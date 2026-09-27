@@ -1,0 +1,33 @@
+diff --git a/service/pack_zip_blocks.py b/service/pack_zip_blocks.py
+index 0032c45..e427c61 100644
+--- a/service/pack_zip_blocks.py
++++ b/service/pack_zip_blocks.py
+@@ -65,27 +65,7 @@ def _invalidate_cache() -> None:
+ 
+ def _atomic_write_json(path: Path, payload: dict[str, Any]) -> None:
+     path.parent.mkdir(parents=True, exist_ok=True)
+-    fd, tmp_name = tempfile.mkstemp(prefix=f"{path.name}.", suffix=".tmp", dir=path.parent)
+-    tmp = Path(tmp_name)
+-    try:
+-        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+-            handle.write(json.dumps(payload, indent=2) + "\n")
+-            handle.flush()
+-            os.fsync(handle.fileno())
+-        if _after_block_write_before_replace is not None:
+-            _after_block_write_before_replace()
+-        os.replace(tmp, path)
+-        dir_fd = os.open(path.parent, os.O_RDONLY)
+-        try:
+-            os.fsync(dir_fd)
+-        finally:
+-            os.close(dir_fd)
+-    except Exception:
+-        try:
+-            tmp.unlink(missing_ok=True)
+-        except OSError:
+-            pass
+-        raise
++    path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+ 
+ 
+ def _migrate_legacy_store() -> None:
