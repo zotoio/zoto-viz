@@ -486,13 +486,12 @@ const noopPatch = `--- a/packages/rp-widget/index.js
 
 const testTouchPatch = `--- a/web/revert-proof/widget.test.ts
 +++ b/web/revert-proof/widget.test.ts
-@@ -5,7 +5,7 @@
+@@ -5,4 +5,4 @@
  describe("widget", () => {
    it("returns one", () => {
 -    expect(value()).toBe(1);
 +    expect(value()).toBe(9);
    });
- });
 `;
 
 const syntaxBreakPatch = `--- a/packages/rp-widget/index.js
@@ -1376,21 +1375,24 @@ describe("revert-proof-lib guards", () => {
 
   it("(timeoutSec) rejects invalid timeoutSec", async () => {
     const lib = await import("./revert-proof-lib.mjs");
-    expect(() => lib.parseTimeoutSec(0, "x")).toThrow(/positive finite/);
-    expect(() => lib.parseTimeoutSec(-1, "x")).toThrow(/positive finite/);
-    expect(() => lib.parseTimeoutSec("abc" as unknown as number, "x")).toThrow(
-      /positive finite/,
+    const message = "row x: timeoutSec must be a positive finite number";
+    expect(thrownMessage(() => lib.parseTimeoutSec(0, "x"))).toBe(message);
+    expect(thrownMessage(() => lib.parseTimeoutSec(-1, "x"))).toBe(message);
+    expect(thrownMessage(() => lib.parseTimeoutSec("abc" as unknown as number, "x"))).toBe(
+      message,
     );
   });
 
   it("(pr-number) rejects path traversal PR numbers", async () => {
     const lib = await import("./revert-proof-lib.mjs");
-    expect(() => lib.validatePrNumber("../..")).toThrow(/invalid PR number/);
+    expect(thrownMessage(() => lib.validatePrNumber("../.."))).toBe("invalid PR number: ../..");
   });
 
   it("(pythonModule) rejects injection in pythonModule", async () => {
     const lib = await import("./revert-proof-lib.mjs");
-    expect(() => lib.validatePythonModule('os;print("x")#')).toThrow(/invalid pythonModule/);
+    expect(thrownMessage(() => lib.validatePythonModule('os;print("x")#'))).toBe(
+      'invalid pythonModule: os;print("x")#',
+    );
   });
 
   it("(pytest-no-k) buildPytestArgv never uses -k or junitxml", async () => {
