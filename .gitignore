@@ -9,7 +9,7 @@ data/
 out/
 web/node_modules/
 web/dist/
-docs/node_modules/
+node_modules/
 service/cursor-bridge/node_modules/
 docs/.vitepress/dist/
 docs/.vitepress/cache/
@@ -27,3 +27,4 @@ sys-config.yml
 plugins/.runtime/
 plugins/*.zip
 dist/
+
