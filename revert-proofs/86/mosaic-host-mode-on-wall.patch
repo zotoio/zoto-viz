@@ -1,0 +1,13 @@
+diff --git a/web/src/app/mosaic-host-bindings.ts b/web/src/app/mosaic-host-bindings.ts
+index a24e82d3..135184c9 100644
+--- a/web/src/app/mosaic-host-bindings.ts
++++ b/web/src/app/mosaic-host-bindings.ts
+@@ -19,7 +19,7 @@ export function mosaicFocusSlotForMode(tileIds: readonly string[], modeId: strin
+ 
+ /** Mode switch skips pane swap when the view is already placed on the wall. */
+ export function mosaicModeAlreadyOnWall(tileIds: readonly string[], modeId: string): boolean {
+-  return mosaicWallUsesView(tileIds, modeId);
++  return tileIds.includes(modeId);
+ }
+ 
+ /** Agent patch with lockLayout: rewrite focused tile when mode is not on the wall. */

@@ -1,0 +1,13 @@
+diff --git a/web/src/app/mosaic-host-bindings.ts b/web/src/app/mosaic-host-bindings.ts
+index a24e82d3..6bf91f20 100644
+--- a/web/src/app/mosaic-host-bindings.ts
++++ b/web/src/app/mosaic-host-bindings.ts
+@@ -28,7 +28,7 @@ export function agentPatchTilesWhenViewOffWall(
+   focusedId: string | null | undefined,
+   viewId: string,
+ ): string[] | null {
+-  if (mosaicWallUsesView(tileIds, viewId)) return null;
++  if (tileIds.includes(viewId)) return null;
+   const tiles = [...tileIds];
+   const at = Math.max(0, tiles.indexOf(focusedId ?? ""));
+   const from = tiles[at] ?? tiles[0];
