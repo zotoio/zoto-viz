@@ -175,9 +175,16 @@ PY""",
         "nixie shader fallback text > nixie-per-tile-cache",
         r"""python3 - <<'PY'
 from pathlib import Path
-p = Path('plugins/src/nixie-clock/frontend/index.ts')
+p = Path('plugins/src/nixie-clock/frontend/tubes.ts')
 t = p.read_text()
-t = t.replace('const NIXIE_CACHE = { key: -1, text: "" };', 'let NIXIE_CACHE_KEY = -1;\\nlet NIXIE_CACHE_TEXT = "";\\nconst NIXIE_CACHE = { get key(){return NIXIE_CACHE_KEY;}, set key(v){NIXIE_CACHE_KEY=v;}, get text(){return NIXIE_CACHE_TEXT;}, set text(v){NIXIE_CACHE_TEXT=v;} };')
+needle = 'export function formatNixieFallbackLine('
+inject = 'const NIXIE_FORMAT_SHARED = { key: -1, text: "" };\n'
+if inject not in t:
+    t = t.replace(needle, inject + needle)
+t = t.replace(
+  '  if (key === cache.key) return cache.text;\n',
+  '  cache = NIXIE_FORMAT_SHARED;\n  if (key === cache.key) return cache.text;\n',
+)
 p.write_text(t)
 PY""",
     ),
@@ -281,7 +288,18 @@ PY""",
         "fallback-survives-sky-reset",
         "src/graph/shader-fallback-wall.test.ts",
         "shader fallback wall > fallback-survives-sky-reset",
-        "sed -i '/if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;/d' web/src/graph/render-host.ts",
+        r"""python3 - <<'PY'
+from pathlib import Path
+p = Path('web/src/graph/render-host.ts')
+old = '''    if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;
+    this.untrackFallback(slot.fallback);
+    slot.fallback?.dispose();'''
+new = '''    if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;'''
+t = p.read_text()
+if old not in t:
+    raise SystemExit('mountShaderFallback dispose block missing')
+p.write_text(t.replace(old, new))
+PY""",
     ),
     (
         "drive-writes-tile",

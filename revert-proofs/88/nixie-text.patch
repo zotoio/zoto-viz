@@ -1,5 +1,5 @@
 diff --git a/plugins/src/nixie-clock/frontend/tubes.ts b/plugins/src/nixie-clock/frontend/tubes.ts
-index 08f81d5..51a3b07 100644
+index 08f81d5a..51a3b075 100644
 --- a/plugins/src/nixie-clock/frontend/tubes.ts
 +++ b/plugins/src/nixie-clock/frontend/tubes.ts
 @@ -97,7 +97,7 @@ export function formatNixieFallbackLine(

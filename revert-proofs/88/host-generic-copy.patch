@@ -1,12 +1,12 @@
 diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
-index 1d182a2..e334121 100644
+index 895b86db..6fc8f7aa 100644
 --- a/web/src/graph/tile-shader-fallback.ts
 +++ b/web/src/graph/tile-shader-fallback.ts
-@@ -45,7 +45,6 @@ export class TileShaderFallback {
-     this.chip.className = SHADER_FALLBACK_CHIP_CLASS;
+@@ -38,7 +38,6 @@ export class TileShaderFallback {
+     this.chip = document.createElement("span");
+     this.chip.className = "tile-shader-fallback-chip";
      this.chip.textContent = "Simple view";
-     if (this.showChip) this.root.appendChild(this.chip);
 -    mount.appendChild(this.root);
-     if (this.genericOnly) {
-       this.writeText(genericShaderFallbackMessage(this.packName));
-     }
+     if (this.contextLoss) {
+       this.reveal();
+       this.setShowChip(true);

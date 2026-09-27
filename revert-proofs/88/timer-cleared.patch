@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/gfx-wall-notice.ts b/web/src/graph/gfx-wall-notice.ts
-index 4d2d349..53901a6 100644
+index 89c90aa1..b805d633 100644
 --- a/web/src/graph/gfx-wall-notice.ts
 +++ b/web/src/graph/gfx-wall-notice.ts
-@@ -36,10 +36,6 @@ export class GfxWallNotice {
+@@ -45,10 +45,6 @@ export class GfxWallNotice {
    }
  
    onContextRestored(): void {
@@ -10,6 +10,6 @@ index 4d2d349..53901a6 100644
 -      clearTimeout(this.restoreTimer);
 -      this.restoreTimer = null;
 -    }
-     this.el?.remove();
-     this.el = null;
-     this.shown = false;
+     const btn = this.el?.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement | null;
+     const focusOnReload = btn !== null && document.activeElement === btn;
+     const hadLateReload = this.reloadOffered;

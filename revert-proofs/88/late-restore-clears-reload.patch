@@ -1,20 +1,16 @@
 diff --git a/web/src/graph/gfx-wall-notice.ts b/web/src/graph/gfx-wall-notice.ts
-index 89c90aa..aa73c63 100644
+index 89c90aa1..98cf3c4b 100644
 --- a/web/src/graph/gfx-wall-notice.ts
 +++ b/web/src/graph/gfx-wall-notice.ts
-@@ -50,16 +50,14 @@ export class GfxWallNotice {
+@@ -49,17 +49,11 @@ export class GfxWallNotice {
+       clearTimeout(this.restoreTimer);
        this.restoreTimer = null;
      }
-     const btn = this.el?.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement | null;
+-    const btn = this.el?.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement | null;
 -    const focusOnReload = btn !== null && document.activeElement === btn;
      const hadLateReload = this.reloadOffered;
--    this.el?.remove();
--    this.el = null;
-+    if (btn) btn.remove();
-+    else {
-+      this.el?.remove();
-+      this.el = null;
-+    }
+     this.el?.remove();
+     this.el = null;
      this.shown = false;
      this.reloadOffered = false;
 -    if (focusOnReload) {

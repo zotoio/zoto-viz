@@ -1,27 +1,12 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index 48c5704..e4ba6ed 100644
+index e3e3e83d..8fb3ab04 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
-@@ -119,6 +119,7 @@ export class RenderHost {
-   private readonly tileShaders = new Map<string, TileShaderSlot>();
-   private readonly gfxNotice: GfxWallNotice;
-   private glContextLost = false;
-+  private globalShaderDead = false;
- 
-   constructor(readonly wall: HTMLElement, opts: { dpr?: number; software?: boolean } = {}) {
-     const dpr = opts.dpr ?? Math.min(devicePixelRatio || 1, 1.5);
-@@ -234,10 +235,13 @@ export class RenderHost {
- 
-   /** Compile + link a tile fragment once at wall build. Returns false when the GL path is latched off. */
-   buildTileShader(tileId: string, frag: string, log: (msg: string) => void = () => {}): boolean {
-+    if (this.globalShaderDead) return false;
-     if (this.software) return true;
-     const gl = this.gl;
-     if (!gl) return false;
--    return this.tileSlot(tileId).build(gl, frag, log);
-+    const ok = this.tileSlot(tileId).build(gl, frag, log);
-+    if (!ok) this.globalShaderDead = true;
-+    return ok;
+@@ -258,6 +258,7 @@ export class RenderHost {
+     supportsPackFallback = false,
+   ): void {
+     this.tileSlot(tileId).swapPack(packKey, packId, packName, mount, supportsPackFallback);
++    if (supportsPackFallback) this.mountShaderFallback(tileId);
    }
  
-   tileShaderDead(tileId: string): boolean {
+   /**

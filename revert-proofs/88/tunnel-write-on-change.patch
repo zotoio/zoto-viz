@@ -1,5 +1,5 @@
 diff --git a/plugins/src/packet-tunnel/frontend/tunnel.ts b/plugins/src/packet-tunnel/frontend/tunnel.ts
-index 225210a..73d01b7 100644
+index 225210a1..73d01b7f 100644
 --- a/plugins/src/packet-tunnel/frontend/tunnel.ts
 +++ b/plugins/src/packet-tunnel/frontend/tunnel.ts
 @@ -44,7 +44,6 @@ export function packetTunnelFallbackText(frame: Pick<VizDataFrame, "t" | "packet

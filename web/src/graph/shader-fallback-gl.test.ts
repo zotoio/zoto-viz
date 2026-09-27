@@ -63,6 +63,7 @@ describe("shader fallback gl context", () => {
     host.dispatchContextLost();
     host.dispatchContextRestored();
     expect(wall.querySelectorAll(`.${GFX_WALL_NOTICE_CLASS}`).length).toBe(0);
+    expect(host.tileSlot("dead").latch.dead).toBe(false);
     expect(host.compilePluginSky("t", {} as never, {} as never)).toBe(true);
     expect(compile.mock.calls.length - deadBefore).toBe(1);
     expect(host.compilePluginSky("dead", {} as never, {} as never)).toBe(false);

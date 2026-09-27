@@ -1,13 +1,17 @@
-diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
-index 1d182a2..9122398 100644
---- a/web/src/graph/tile-shader-fallback.ts
-+++ b/web/src/graph/tile-shader-fallback.ts
-@@ -77,7 +77,7 @@ export class TileShaderFallback {
-         this.latchGeneric();
-         return;
-       }
--      if (next !== this.lastWritten) this.writeText(next);
-+      this.writeText(next);
-     } catch {
-       this.latchGeneric();
-     }
+diff --git a/plugins/src/nixie-clock/frontend/tubes.ts b/plugins/src/nixie-clock/frontend/tubes.ts
+index 08f81d5a..56b89224 100644
+--- a/plugins/src/nixie-clock/frontend/tubes.ts
++++ b/plugins/src/nixie-clock/frontend/tubes.ts
+@@ -93,11 +93,10 @@ export function formatNixieFallbackLine(
+   const key = ((scratch.h * 3600 + scratch.m * 60 + (look.seconds ? scratch.s : 0)) << 2)
+     | (look.hour12 ? 2 : 0)
+     | (look.seconds ? 1 : 0);
+-  if (key === cache.key) return cache.text;
+   cache.key = key;
+   const parts = [nixiePair(scratch.h), nixiePair(scratch.m)];
+   if (look.seconds) parts.push(nixiePair(scratch.s));
+-  cache.text = parts.join(" ");
++  cache.text = parts.join(" ") + String(Math.random());
+   return cache.text;
+ }
+ 

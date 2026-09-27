@@ -31,15 +31,43 @@ describe("shader fallback context gen", () => {
     const panes = new Map<string, HTMLElement>();
     for (const id of tileIds) {
       const pane = document.createElement("div");
+      Object.defineProperty(pane, "clientWidth", { value: 160 });
+      Object.defineProperty(pane, "clientHeight", { value: 120 });
       wall.appendChild(pane);
       panes.set(id, pane);
     }
     document.body.appendChild(wall);
     const host = new RenderHost(wall);
+    const rect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 160,
+        height: 120,
+        right: 160,
+        bottom: 120,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
+    for (const pane of panes.values()) pane.getBoundingClientRect = rect;
+    host.canvas.getBoundingClientRect = () =>
+      ({
+        left: 0,
+        top: 0,
+        width: 320,
+        height: 240,
+        right: 320,
+        bottom: 240,
+        x: 0,
+        y: 0,
+        toJSON: () => ({}),
+      }) as DOMRect;
     vi.spyOn(host, "compilePluginSky").mockReturnValue(true);
     Object.defineProperty(host, "software", { value: false });
     const gl = {
       fenceSync: () => null,
+      getExtension: () => null,
     };
     vi.spyOn(host, "gl", "get").mockReturnValue(gl as WebGL2RenderingContext);
     const render = vi.fn();

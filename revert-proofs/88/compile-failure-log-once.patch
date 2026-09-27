@@ -1,5 +1,5 @@
 diff --git a/web/src/graph/render-host.ts b/web/src/graph/render-host.ts
-index f5081bbc..faa02951 100644
+index e3e3e83d..3c0c3ada 100644
 --- a/web/src/graph/render-host.ts
 +++ b/web/src/graph/render-host.ts
 @@ -280,7 +280,6 @@ export class RenderHost {

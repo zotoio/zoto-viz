@@ -1,1 +1,1 @@
-{"testFile":"src/plugins/nixie-shader-fallback.test.ts","testName":"nixie shader fallback text > nixie-write-on-change","redValue":600}
+{"testFile":"src/plugins/nixie-fallback.test.ts","testName":"nixie shader fallback text > nixie-write-on-change","redValue":600}

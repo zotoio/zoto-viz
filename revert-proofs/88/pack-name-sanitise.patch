@@ -1,5 +1,5 @@
 diff --git a/web/src/graph/sanitize-pack-name.ts b/web/src/graph/sanitize-pack-name.ts
-index b40e452..a2e86ca 100644
+index b40e452e..a2e86cae 100644
 --- a/web/src/graph/sanitize-pack-name.ts
 +++ b/web/src/graph/sanitize-pack-name.ts
 @@ -1,6 +1,5 @@

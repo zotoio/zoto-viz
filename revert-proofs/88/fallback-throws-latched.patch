@@ -1,10 +1,10 @@
 diff --git a/web/src/graph/tile-shader-fallback.ts b/web/src/graph/tile-shader-fallback.ts
-index 1d182a2..c5f6752 100644
+index 895b86db..435dadc1 100644
 --- a/web/src/graph/tile-shader-fallback.ts
 +++ b/web/src/graph/tile-shader-fallback.ts
-@@ -79,7 +79,7 @@ export class TileShaderFallback {
-       }
-       if (next !== this.lastWritten) this.writeText(next);
+@@ -96,7 +96,7 @@ export class TileShaderFallback {
+       if (this.packPush) this.setShowChip(true);
+       this.writeText(text);
      } catch {
 -      this.latchGeneric();
 +      /* no latch */
