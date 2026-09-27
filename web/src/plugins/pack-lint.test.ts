@@ -29,7 +29,8 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const fixtureRoot = path.join(repoRoot, "plugins/sdk/pack-lint-fixtures");
 const hostFixtureRoot = path.join(repoRoot, "plugins/sdk/host-lint-fixtures");
 const FIXTURE_PACK_ID = "lint-fixture-pack";
-const HOST_FIXTURE_REL = "web/src/plugins/fractal-config-ui.ts";
+/** Synthetic host path for host-lint-fixtures scans (not a shipped module). */
+const HOST_FIXTURE_REL = "web/src/plugins/pack-lint-host-fixture.ts";
 const OFF_ALLOWLIST_ZOTO_FIXTURE = "plugins/sdk/pack-lint-fixtures/off-allowlist-inline-zoto.ts";
 const OFF_ALLOWLIST_PACK_REPO_REL = "plugins/src/not-on-legacy-allowlist/frontend/index.ts";
 
