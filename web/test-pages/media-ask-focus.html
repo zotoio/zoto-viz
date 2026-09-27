@@ -5,15 +5,22 @@
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <div id="wall">
-      <button type="button" class="wall-notice-action" id="reload-notice">Reload</button>
-    </div>
+    <div id="wall"></div>
     <header id="bar">
       <label class="toggle"><input type="checkbox" id="mic" /><span class="track"><span class="knob"></span></span><span class="txt">mic</span></label>
       <button type="button" id="header-btn">Settings</button>
     </header>
     <script type="module">
       import { askUserMedia, resetMediaAsk } from "/src/ui/media-ask.ts";
+      import { mountWallNoticeRegion, postWallNotice } from "/src/core/wall-notice-region.ts";
+
+      const wall = document.getElementById("wall");
+      mountWallNoticeRegion(wall);
+      postWallNotice({
+        key: "context-not-restored",
+        text: "Context not restored.",
+        action: { label: "Reload", onClick: () => {} },
+      });
 
       const gum = () => new Promise(() => { /* hang until Allow */ });
       Object.defineProperty(navigator, "mediaDevices", {
