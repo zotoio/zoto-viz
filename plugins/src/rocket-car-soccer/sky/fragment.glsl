@@ -1,5 +1,3 @@
-// Rocket Car Soccer — readable stylised arena (raymarch + guaranteed sky/floor base).
-
 float sl(int s, float fi) {
   float i = floor(fi);
   float q = floor(i * 0.25);
@@ -30,9 +28,20 @@ float smin(float a, float b, float k) {
   return mix(b, a, h) - k * h * (1.0 - h);
 }
 
+float softShadow(vec3 p, vec3 lightDir);
+
 float box2(vec2 p, vec2 b) {
   vec2 d = abs(p) - b;
   return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
+}
+
+vec3 shadePBR(vec3 n, vec3 albedo, float rough, float metal, vec3 rd, vec3 lightDir) {
+  vec3 h = normalize(lightDir - rd);
+  float ndl = clamp(dot(n, lightDir), 0.0, 1.0);
+  float spec = pow(clamp(dot(n, h), 0.0, 1.0), mix(128.0, 8.0, rough));
+  vec3 diff = albedo * ndl * (1.0 - metal);
+  vec3 spe = mix(vec3(0.04), albedo, metal) * spec * (1.0 - rough * 0.65);
+  return diff + spe;
 }
 
 float digitSeg(vec2 uv, int seg) {
@@ -95,7 +104,7 @@ float scene(vec3 p) {
   vec3 bp = p - vec3(sl(1, 0.0), sl(1, 1.0), sl(1, 2.0));
   if (mark < 0.5) bp = vec3(0.0, 1.1, 0.0);
   d = smin(d, sdSphere(bp, 1.18 * ballS), 0.15);
-  for (int i = 0; i < 6; i++) {
+  for (int i = 0; i < 8; i++) {
     if (float(i) < carN) {
       float base = 6.0 + float(i) * 9.0;
       vec3 c = p - vec3(sl(1, base), sl(1, base + 1.0) + 0.35, sl(1, base + 2.0));
@@ -107,6 +116,18 @@ float scene(vec3 p) {
     }
   }
   return d;
+}
+
+float softShadow(vec3 p, vec3 lightDir) {
+  float sh = 1.0;
+  float t = 0.08;
+  for (int i = 0; i < 5; i++) {
+    float h = scene(p + lightDir * t);
+    sh = min(sh, 8.0 * h / t);
+    t += clamp(h, 0.04, 0.35);
+    if (sh < 0.05) break;
+  }
+  return clamp(sh, 0.0, 1.0);
 }
 
 void main() {
@@ -140,8 +161,26 @@ void main() {
         scene(p + vec3(0.0, 0.002, 0.0)) - scene(p - vec3(0.0, 0.002, 0.0)),
         scene(p + vec3(0.0, 0.0, 0.002)) - scene(p - vec3(0.0, 0.0, 0.002))
       ));
-      vec3 turf = mix(vec3(0.12, 0.38, 0.2), vec3(0.08, 0.14, 0.26), step(0.5, theme));
-      vec3 hit = mix(turf, uAccent, 0.25) * (0.35 + 0.65 * clamp(dot(n, normalize(vec3(0.3, 0.95, 0.2))), 0.0, 1.0));
+      vec3 lightDir = normalize(vec3(0.35, 0.92, 0.18));
+      vec3 skyLight = normalize(vec3(-0.25, 0.55, 0.82));
+      float sh = softShadow(p + n * 0.02, lightDir);
+      vec3 turf = mix(vec3(0.1, 0.42, 0.22), vec3(0.06, 0.12, 0.24), step(0.5, theme));
+      vec3 albedo = turf;
+      float rough = 0.72;
+      float metal = 0.05;
+      vec3 bp = vec3(sl(1, 0.0), sl(1, 1.0), sl(1, 2.0));
+      if (length(p - bp) < 1.6 * max(0.75, sl(0, 23.0))) {
+        albedo = mix(vec3(0.92, 0.94, 0.98), vec3(0.95, 0.55, 0.15), 0.35);
+        rough = 0.35;
+        metal = 0.15;
+      } else if (p.y > 1.2) {
+        albedo = mix(vec3(0.55, 0.58, 0.62), vec3(0.12, 0.14, 0.18), 0.4);
+        rough = 0.55;
+        metal = 0.08;
+      }
+      vec3 hit = shadePBR(n, albedo, rough, metal, rd, lightDir) * (0.35 + 0.65 * sh);
+      hit += shadePBR(n, albedo, rough + 0.15, metal, rd, skyLight) * 0.22;
+      hit += uAccent * 0.08 * (1.0 - rough);
       float failAHit = sl(0, 28.0);
       if (failAHit > 0.05 && abs(p.y) > 2.0) {
         hit = mix(hit, zotoFail, clamp(failAHit, 0.0, 1.0) * 0.55);

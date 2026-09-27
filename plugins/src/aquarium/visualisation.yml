@@ -180,3 +180,8 @@ config:
     label: anemone/coral
     type: boolean
     default: true
+  - key: modelGlb
+    label: designer model (GLB)
+    type: text
+    default: ""
+    hint: Optional glTF/GLB under pack assets/ (ZotoDesigner). Empty keeps procedural tank art.

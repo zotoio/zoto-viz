@@ -1,8 +1,9 @@
 /** Rocket Car Soccer — sandbox driver (pack clock via viz frame time). */
 
-import { hexToRgb, parseRcsOptions, themeBgAccent, type RcsOptions } from "./pack";
+import { hexToRgb, parseRcsOptions, themeBgAccent, RCS_SLOT, type RcsOptions } from "./pack";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { rcsMount, rcsTick, rcsUnmount, setRcsOptions } from "./match";
+import { PackModelSlotController } from "../../../sdk/pack-model-slot";
 
 declare const zoto: {
   onFrame: ((frame: VizDataFrame) => void) | null;
@@ -21,6 +22,7 @@ let mounted = false;
 /** Host `frame.t` is wall/unix; orbit/ball cameras cannot use it as sim seconds. */
 let simClock = 0;
 let simStarted = false;
+const modelSlot = new PackModelSlotController(zoto.getConfig?.());
 
 function mergeHostDelta(cfg: Record<string, string>): void {
   for (const key of Object.keys(cfg)) {
@@ -42,6 +44,7 @@ function ensureMounted(): void {
 function applyConfig(cfg: Record<string, string>): void {
   mergeHostDelta(cfg);
   opts = setRcsOptions(mergedCfg);
+  modelSlot.setConfig(mergedCfg);
   const theme = themeBgAccent(opts.theme);
   const orange = hexToRgb(opts.teamOrange);
   const blue = hexToRgb(opts.teamBlue);
@@ -79,6 +82,7 @@ zoto.onFrame = (frame) => {
     simClock += feedDt;
   }
   const out = rcsTick(frame, simClock, feedDt, aspect);
+  out.slot0[RCS_SLOT.modelFlags] = modelSlot.slotFloat();
   zoto.writeBuffer(0, out.slot0);
   zoto.writeBuffer(1, out.slot1);
   zoto.writeBuffer(2, out.slot2);
@@ -101,6 +105,7 @@ export function rcsFrontendTeardown(): ReturnType<typeof rcsUnmount> {
   mounted = false;
   simClock = 0;
   simStarted = false;
+  modelSlot.dispose();
   return rcsUnmount();
 }
 

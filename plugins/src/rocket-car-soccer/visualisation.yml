@@ -38,9 +38,9 @@ config:
     type: number
     default: 3
     min: 2
-    max: 3
+    max: 4
     step: 1
-    hint: Players per team (2v2 or 3v3). Hard cap of three per side for mosaic walls.
+    hint: Players per team (2v2–4v4). Hard cap of four per side for mosaic walls.
   - key: teamOrange
     label: orange team colour
     type: text
@@ -88,7 +88,7 @@ config:
   - key: camera
     label: camera mode
     type: select
-    default: director
+    default: ballcam
     values:
       - [broadcast, broadcast side]
       - [ballcam, ball cam]
@@ -146,3 +146,8 @@ config:
     type: boolean
     default: false
     hint: Disables camera shake and slows director cuts.
+  - key: modelGlb
+    label: designer model (GLB)
+    type: text
+    default: ""
+    hint: Optional glTF/GLB under pack assets/ (ZotoDesigner). Empty keeps procedural cars and arena.

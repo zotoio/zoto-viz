@@ -19,7 +19,7 @@ viz:
     fixture: host
   maxBuffers: 3
   maxBufferFloats: 64
-  maxParticles: 16
+  maxParticles: 24
   uniforms:
     - uTime
     - uAudio

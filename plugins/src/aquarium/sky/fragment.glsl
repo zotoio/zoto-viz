@@ -119,6 +119,7 @@ float mapFishAt(
   float df = sdEllipsoid(lp, rad);
   if (df < 1e2) {
     col = fishColor(sp, vig);
+    col += vec3(1.0) * pow(max(0.0, dot(normalize(lp), normalize(vec3(0.2, 0.6, -0.4)))), 12.0) * 0.35;
     glow = 0.15 + vig * 0.25;
   }
   return df;
@@ -208,6 +209,9 @@ void main() {
   else if (lightMode > 0.5) sun = normalize(vec3(0.1, 0.55, -0.82));
 
   vec3 halfExt = vec3(1.22, 0.82, 1.02);
+  float waterVol = slotF(0, 4.0);
+  vec3 waterTint = mix(vec3(0.05, 0.35, 0.42), vec3(0.02, 0.12, 0.28), reef);
+  waterTint = mix(waterTint, vec3(0.08, 0.22, 0.38), murk * 0.45);
   vec2 tHit = intersectTank(ro, dir, halfExt);
   float t = tHit.x;
   float tEnd = tHit.y;
@@ -245,6 +249,7 @@ void main() {
     float dens = exp(-d * 18.0);
     float fog = exp(-t * (0.35 + murk * 1.2));
     col += mcol * dens * fog * trans * (0.55 + glow);
+    col = mix(col, waterTint, dens * fog * trans * 0.08 * (0.6 + waterVol));
     trans *= 1.0 - dens * 0.22;
     t += max(d, 0.012);
     dist = t;
@@ -252,8 +257,9 @@ void main() {
   }
 
   vec3 pFloor = ro + dir * 2.1;
-  float caust = noise3(pFloor * vec3(2.0, 0.2, 2.0) + vec3(sun.xy * simTime * 0.4, 0.0));
-  col += vec3(0.35, 0.75, 0.95) * caust * 0.12 * day * (1.0 - murk);
+  float caust = fbm(pFloor * vec3(2.0, 0.2, 2.0) + vec3(sun.xy * simTime * 0.4, 0.0));
+  float caustFine = noise3(pFloor * vec3(6.0, 0.15, 6.0) + vec3(simTime * 0.6, 0.0, 0.0));
+  col += waterTint * (caust * 0.18 + caustFine * 0.08) * day * (1.0 - murk);
 
   float beam = pow(max(0.0, dot(dir, sun)), 6.0) * (0.25 + day * 0.35);
   col += mix(uAccent, vec3(0.2, 0.6, 1.0), reef) * beam * (1.0 - murk * 0.6);
@@ -298,8 +304,11 @@ void main() {
     col += fcol * exp(-df * 80.0) * feed;
   }
 
-  float glass = smoothstep(0.02, 0.0, abs(sdRoundBox(ro + dir * 2.4, vec3(1.28, 0.88, 1.08), 0.04)));
-  col = mix(col, vec3(0.85, 0.95, 1.0), glass * 0.12);
+  float glassShell = sdRoundBox(ro + dir * min(dist, 2.6), halfExt + vec3(0.05), 0.035);
+  float glass = smoothstep(0.035, 0.0, abs(glassShell));
+  float rim = smoothstep(0.12, 0.0, abs(glassShell)) * 0.35;
+  col = mix(col, vec3(0.88, 0.96, 1.0), glass * 0.16 + rim * 0.12);
+  col = mix(col, waterTint * 0.35, (1.0 - glass) * murk * 0.15);
   col = mix(col, vec3(0.45, 0.06, 0.1), murk * 0.72);
   col = mix(col, vec3(0.25, 0.04, 0.08), murk * murk * 0.35);
   if (fail > 0.5) {

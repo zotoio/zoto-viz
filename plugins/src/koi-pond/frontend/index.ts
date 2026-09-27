@@ -6,9 +6,11 @@ import {
   configActionEdges,
   hostTileSizeFromConfig,
   KoiPondSim,
+  KOI_SLOT,
   parseKoiPondOptions,
   type KoiPondOptions,
 } from "./koi-pond";
+import { PackModelSlotController } from "../../../sdk/pack-model-slot";
 
 declare const zoto: {
   getConfig?: () => Record<string, string>;
@@ -22,6 +24,7 @@ declare const zoto: {
 let options: KoiPondOptions = parseKoiPondOptions(zoto.getConfig?.());
 let tileSize = hostTileSizeFromConfig(zoto.getConfig?.());
 const sim = new KoiPondSim(options);
+const modelSlot = new PackModelSlotController(zoto.getConfig?.());
 sim.mountTile();
 
 const buf0 = new Float32Array(64);
@@ -38,6 +41,8 @@ function applyLiveConfig(cfg: Record<string, string>): void {
   tileSize = hostTileSizeFromConfig(cfg);
   const parsed = parseKoiPondOptions(cfg);
   options = applyConfigActions(sim, cfg, parsed, edges);
+  modelSlot.setConfig(cfg);
+  sim.setModelSlotFloat(modelSlot.slotFloat());
 }
 
 zoto.onConfig = (cfg) => {

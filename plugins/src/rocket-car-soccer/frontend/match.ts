@@ -95,6 +95,17 @@ interface SimState {
   vacantUntil: Map<number, number>;
   carAssignedAt: Map<number, number>;
   maxSpeedSeen: number;
+  camSmooth: {
+    x: number;
+    y: number;
+    z: number;
+    yaw: number;
+    pitch: number;
+    dist: number;
+    fov: number;
+    roll: number;
+    ready: boolean;
+  };
 }
 
 let options: RcsOptions = { ...RCS_DEFAULTS };
@@ -233,6 +244,17 @@ export function resetRcsSim(seed = options.seed): void {
     vacantUntil: new Map(),
     carAssignedAt: new Map(),
     maxSpeedSeen: 0,
+    camSmooth: {
+      x: 0,
+      y: 14,
+      z: 28,
+      yaw: 0.75,
+      pitch: -0.35,
+      dist: 14,
+      fov: 0.95,
+      roll: 0,
+      ready: false,
+    },
   };
   for (let i = 0; i < 16; i++) {
     particlePool.emit(
@@ -563,42 +585,93 @@ function sampleReplay(st: SimState, t: number): Snap | null {
   return st.historyPrealloc[idx % HISTORY_LEN] ?? null;
 }
 
-function cameraFromState(st: SimState, snap: Snap | null): {
-  x: number; y: number; z: number; yaw: number; pitch: number; roll: number; fov: number;
-} {
+function dampScalar(cur: number, target: number, dt: number, tau: number): number {
+  const k = 1 - Math.exp(-Math.max(0, dt) / Math.max(0.05, tau));
+  return cur + (target - cur) * k;
+}
+
+function cameraTargetFromState(
+  st: SimState,
+  snap: Snap | null,
+): { x: number; y: number; z: number; yaw: number; pitch: number; roll: number; fov: number; dist: number } {
   const rm = options.reducedMotion;
   const camMode = rm ? "broadcast" : options.camera;
   const ball = snap?.ball.pos ?? st.ball.pos;
+  const vel = snap?.ball.vel ?? st.ball.vel;
+  const speed = Math.hypot(vel.x, vel.z);
   let yaw = snap?.camYaw ?? 0.7;
   let pitch = snap?.camPitch ?? -0.38;
-  let dist = snap?.camDist ?? 30;
+  let dist = snap?.camDist ?? 14;
   let roll = 0;
+  const fov = 0.92 + Math.min(0.08, speed * 0.002);
+
+  const followBall = (): { x: number; y: number; z: number; yaw: number; pitch: number; roll: number; fov: number; dist: number } => {
+    const speed = Math.hypot(vel.x, vel.z);
+    const yaw = speed > 0.45 ? Math.atan2(-vel.x, -vel.z + 1e-4) : 0.72 + ball.x * 0.01;
+    const pitch = clamp(-0.44, -0.2, -0.3 - speed * 0.004);
+    const dist = 11.5 + speed * 0.07;
+    const cx = ball.x - Math.sin(yaw) * dist;
+    const cz = ball.z - Math.cos(yaw) * dist;
+    const cy = ball.y - Math.sin(pitch) * dist * 0.62 + 6.2;
+    return { x: cx, y: cy, z: cz, yaw, pitch, roll: 0, fov: 0.92 + Math.min(0.1, speed * 0.0025), dist };
+  };
 
   if (camMode === "broadcast" || (camMode === "director" && st.directorCam === 0)) {
-    yaw = 0.75;
-    pitch = -0.4;
-    dist = 32;
+    yaw = 0.72 + ball.x * 0.008;
+    pitch = -0.36;
+    dist = 30;
   } else if (camMode === "ballcam" || (camMode === "director" && st.directorCam === 1)) {
-    const h = st.cars[0]!;
-    yaw = h.yaw + Math.PI;
-    pitch = -0.22;
-    dist = 10;
+    return followBall();
   } else if (camMode === "orbit" || (camMode === "director" && st.directorCam === 2)) {
-    yaw = st.simTime * (rm ? 0.04 : 0.12);
-    pitch = -0.5;
-    dist = 34;
+    yaw = st.simTime * (rm ? 0.04 : 0.1) + ball.x * 0.02;
+    pitch = -0.48;
+    dist = 32;
   }
 
   if (st.phase === PHASE_REPLAY && snap) {
     pitch = -0.55;
-    dist = 20;
-    yaw = snap.camYaw;
+    dist = 18;
+    yaw = snap.camYaw + st.simTime * 0.08;
   }
 
   const cx = ball.x - Math.sin(yaw) * dist;
   const cz = ball.z - Math.cos(yaw) * dist;
   const cy = ball.y - Math.sin(pitch) * dist * 0.65 + 7;
-  return { x: cx, y: cy, z: cz, yaw, pitch, roll, fov: 0.95 };
+  return { x: cx, y: cy, z: cz, yaw, pitch, roll, fov, dist };
+}
+
+function cameraFromState(
+  st: SimState,
+  snap: Snap | null,
+  dt: number,
+): {
+  x: number; y: number; z: number; yaw: number; pitch: number; roll: number; fov: number;
+} {
+  const target = cameraTargetFromState(st, snap);
+  const sm = st.camSmooth;
+  const tauPos = options.reducedMotion ? 0.55 : 0.28;
+  const tauAng = options.reducedMotion ? 0.65 : 0.22;
+  if (!sm.ready) {
+    sm.x = target.x;
+    sm.y = target.y;
+    sm.z = target.z;
+    sm.yaw = target.yaw;
+    sm.pitch = target.pitch;
+    sm.dist = target.dist;
+    sm.fov = target.fov;
+    sm.roll = target.roll;
+    sm.ready = true;
+  } else {
+    sm.x = dampScalar(sm.x, target.x, dt, tauPos);
+    sm.y = dampScalar(sm.y, target.y, dt, tauPos);
+    sm.z = dampScalar(sm.z, target.z, dt, tauPos);
+    sm.yaw = dampScalar(sm.yaw, target.yaw, dt, tauAng);
+    sm.pitch = dampScalar(sm.pitch, target.pitch, dt, tauAng);
+    sm.dist = dampScalar(sm.dist, target.dist, dt, tauPos);
+    sm.fov = dampScalar(sm.fov, target.fov, dt, tauAng);
+    sm.roll = dampScalar(sm.roll, target.roll, dt, tauAng);
+  }
+  return { x: sm.x, y: sm.y, z: sm.z, yaw: sm.yaw, pitch: sm.pitch, roll: sm.roll, fov: sm.fov };
 }
 
 export interface RcsTickOut {
@@ -693,7 +766,7 @@ export function rcsTick(frame: VizDataFrame | undefined, simTime: number, dt: nu
   if (st.celebrationT > 0) st.celebrationT = Math.max(0, st.celebrationT - dt);
 
   const snap = st.phase === PHASE_REPLAY ? sampleReplay(st, 1 - clamp(st.phaseT / 2.5, 0, 1)) : null;
-  const cam = cameraFromState(st, snap);
+  const cam = cameraFromState(st, snap, dt);
 
   const failShown = st.failDisplay;
   const rm = options.reducedMotion ? 1 : 0;
@@ -928,6 +1001,12 @@ export function rcsObservedMaxCarSpeed(): number {
 
 export function rcsTestSkipKickoff(): void {
   if (state) state.kickoff = 0;
+}
+
+export function rcsCamSmoothForTest(): { x: number; y: number; z: number; ready: boolean } {
+  if (!state) return { x: 0, y: 0, z: 0, ready: false };
+  const c = state.camSmooth;
+  return { x: c.x, y: c.y, z: c.z, ready: c.ready };
 }
 
 export function rcsRunBoostSteps(steps: number): number {

@@ -8,6 +8,7 @@ import {
   parseAquariumOptions,
   type AquariumOptions,
 } from "./aquarium";
+import { PackModelSlotController } from "../../../sdk/pack-model-slot";
 
 type AquariumFrame = Pick<
   VizDataFrame,
@@ -28,6 +29,7 @@ let hostConfigCache: Record<string, string> = {};
 
 let options: AquariumOptions = parseAquariumOptions();
 const sim = new AquariumSim(options);
+const modelSlot = new PackModelSlotController(hostConfigCache);
 sim.mountTile();
 
 const buf0 = new Float32Array(64);
@@ -55,6 +57,8 @@ function applyLiveConfig(cfg: Record<string, string>): void {
   actionLatch.undo = next.undo;
   const parsed = parseAquariumOptions(cfg);
   options = applyConfigActions(sim, cfg, parsed, edges);
+  modelSlot.setConfig(cfg);
+  sim.setModelSlotFloat(modelSlot.slotFloat());
 }
 
 zoto.onConfig = (cfg) => {

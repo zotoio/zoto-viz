@@ -144,7 +144,7 @@ describe("aquarium shipped pack", () => {
     const keys = [...VIS.matchAll(/- key: (\w+)/g)].map((m) => m[1]!);
     const a = JSON.stringify(parseAquariumOptions({}));
     for (const key of keys) {
-      if (key === "preset" || key.startsWith("sp_") || key === "randomise" || key === "undoRandom" || key === "resetSettings") continue;
+      if (key === "preset" || key.startsWith("sp_") || key === "randomise" || key === "undoRandom" || key === "resetSettings" || key === "modelGlb") continue;
       const block = VIS.split(`key: ${key}`)[1]!.split("- key:")[0]!;
       const def = block.match(/default: (\S+)/)?.[1] ?? "";
       const flip = /true|false/.test(def)

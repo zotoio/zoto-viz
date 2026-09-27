@@ -3,11 +3,11 @@
  */
 
 export const RCS_CAPS = {
-  maxCars: 6,
-  maxTeam: 3,
-  maxParticles: 48,
-  maxTrailSegments: 24,
-  maxPhysicsSubsteps: 4,
+  maxCars: 8,
+  maxTeam: 4,
+  maxParticles: 96,
+  maxTrailSegments: 48,
+  maxPhysicsSubsteps: 6,
 } as const;
 
 export const RCS_MAX_CARS = RCS_CAPS.maxCars;
@@ -62,6 +62,7 @@ export const RCS_SLOT = {
   flowMetric: 30,
   presetCode: 31,
   hudSeed: 32,
+  modelFlags: 33,
 } as const;
 
 export const RCS_BALL_BASE = 0;
@@ -104,7 +105,7 @@ export const RCS_DEFAULTS: RcsOptions = {
   aggress: 55,
   gameSpeed: 100,
   trail: "soft",
-  camera: "director",
+  camera: "ballcam",
   minCutSec: 4,
   explode: "shockwave",
   replay: true,
@@ -220,7 +221,7 @@ const RCS_VIZ_FORM_DEFAULTS: Record<string, string> = {
   aggress: "55",
   gameSpeed: "100",
   trail: "soft",
-  camera: "director",
+  camera: "ballcam",
   minCutSec: "4",
   explode: "shockwave",
   replay: "true",

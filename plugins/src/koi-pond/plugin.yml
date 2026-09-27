@@ -9,7 +9,7 @@ description: >-
   packet events spawn ripples. Endpoints
   appear as lily pads and lotus flowers that open with activity. SYS failures
   tint the water murky with a steady corner fail chip (no flashing).
-  Work budget: raymarch steps ≤64, koi ≤16, pads ≤12, particles ≤24, 1 draw call.
+  Work budget: raymarch steps ≤68, koi ≤16, pads ≤14, particles ≤36, 1 draw call.
   Demo schools when the host idle fixture is active — label shows demo.
 capabilities:
   - viz.read
@@ -21,7 +21,7 @@ viz:
     fixture: host
   maxBuffers: 3
   maxBufferFloats: 64
-  maxParticles: 24
+  maxParticles: 36
   uniforms:
     - uTime
     - uAudio
