@@ -34,7 +34,9 @@ describe("mosaic viz tile guard H6", () => {
       s.applyAnim(profileAnim);
       expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(bytesBefore);
       expect(s.lastMosaicTileLimitMessage).toBe(bootMsg);
-      expect(s.el.querySelector(".mosaic-wall-status")).toBeNull();
+      const status = s.el.querySelector<HTMLElement>(".mosaic-wall-status");
+      expect(status?.hidden).toBe(false);
+      expect(status?.textContent).toBe(bootMsg);
       expect(s.animSettings.mosaic).toBe("off");
       expect(s.animSettings.mosaicTiles).toEqual([]);
       expect(s.animSettings.mosaic).toBe(DEFAULT_DREAM.mosaic);
@@ -57,7 +59,7 @@ describe("mosaic viz tile guard H6", () => {
 
     const tab1 = new Settings({ storePrefix: prefix, onChange: () => {} });
     expect(tab1.lastMosaicTileLimitMessage).toBe(bootMsg);
-    expect(tab1.el.querySelector(".mosaic-wall-status")).toBeNull();
+    expect(tab1.el.querySelector<HTMLElement>(".mosaic-wall-status")?.textContent).toBe(bootMsg);
     expect(localStorage.getItem(`${prefix}.anim.mosaicTiles`)).toBe(bytesBefore);
 
     const tab2 = new Settings({ storePrefix: prefix, onChange: () => {} });
@@ -107,10 +109,12 @@ describe("mosaic viz tile guard H6", () => {
       mosaicTiles: [...eight, "i"],
     });
 
-    expect(s.lastMosaicTileLimitMessage).toBe(
-      "Couldn't load this wall layout. It has 9 tiles and the limit is 8, so your current wall is still showing.",
-    );
-    expect(s.el.querySelector(".mosaic-wall-status")).toBeNull();
+    const refusedMsg =
+      "Couldn't load this wall layout. It has 9 tiles and the limit is 8, so your current wall is still showing.";
+    expect(s.lastMosaicTileLimitMessage).toBe(refusedMsg);
+    const status = s.el.querySelector<HTMLElement>(".mosaic-wall-status");
+    expect(status?.hidden).toBe(false);
+    expect(status?.textContent).toBe(refusedMsg);
     expect(s.lastMosaicTileLimitMessage).toBe(mosaicWallLayoutRefusedMessage(9, 8));
     expect(s.animSettings.mosaicTiles).toEqual(eight);
     expect(s.animSettings.mosaic).toBe("8");
