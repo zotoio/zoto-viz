@@ -28,27 +28,18 @@ void main() {
 
 let sharedBrowser: Browser | null = null;
 
-/** Chromium defaults include --disable-software-rasterizer, which blocks SwiftShader WebGL2 on GPU-less CI. */
-const PLUGIN_SKY_SMOKE_LAUNCH_ARGS = [
-  "--use-gl=angle",
-  "--use-angle=swiftshader",
-  "--enable-unsafe-swiftshader",
-  "--hide-scrollbars",
-  "--mute-audio",
-] as const;
-
-/** Playwright launch options for headless plugin-sky draws (SwiftShader on GPU-less hosts). */
-export function buildPluginSkySmokeBrowserLaunchOptions(): Parameters<typeof chromium.launch>[0] {
-  return {
-    headless: true,
-    ignoreDefaultArgs: ["--disable-software-rasterizer"],
-    args: [...PLUGIN_SKY_SMOKE_LAUNCH_ARGS],
-  };
-}
-
 async function browser(): Promise<Browser> {
   if (!sharedBrowser) {
-    sharedBrowser = await chromium.launch(buildPluginSkySmokeBrowserLaunchOptions());
+    sharedBrowser = await chromium.launch({
+      headless: true,
+      args: [
+        "--use-gl=angle",
+        "--use-angle=swiftshader",
+        "--enable-unsafe-swiftshader",
+        "--hide-scrollbars",
+        "--mute-audio",
+      ],
+    });
   }
   return sharedBrowser;
 }

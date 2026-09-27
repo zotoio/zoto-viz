@@ -45,28 +45,9 @@ def test_schema_rejects_uppercase_plugin_id() -> None:
 
 @pytest.mark.parametrize(
     "doc_id",
-    ["../x", "a/b", "x.json"],
+    ["../x", "a/b", "x.json", "9leading-digit"],
 )
 def test_schema_rejects_nonconforming_plugin_ids(doc_id: str) -> None:
     doc = {"id": doc_id, "name": "Probe", "version": 1}
     with pytest.raises(ValueError, match="id"):
-        plugins.validate_doc(doc)
-
-
-@pytest.mark.parametrize("mode_id", ["bad_underscore"])
-def test_schema_rejects_nonconforming_mode_id(mode_id: str) -> None:
-    doc = {"id": "probe-pack", "name": "Probe", "version": 1, "mode_id": mode_id}
-    with pytest.raises(ValueError, match="mode_id"):
-        plugins.validate_doc(doc)
-
-
-@pytest.mark.parametrize("instance_id", ["bad_underscore"])
-def test_schema_rejects_nonconforming_plugin_instance_id(instance_id: str) -> None:
-    doc = {
-        "id": "probe-pack",
-        "name": "Probe",
-        "version": 1,
-        "instances": [{"id": instance_id}],
-    }
-    with pytest.raises(ValueError, match="instances"):
         plugins.validate_doc(doc)

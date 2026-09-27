@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_sdk_contract_still_checked_on_install",
+  "description": "SDK contract is not enforced on install.",
+  "patchedFailure": "E       Failed: DID NOT RAISE ValueError"
+}

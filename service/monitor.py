@@ -1903,6 +1903,10 @@ async def on_startup(app: web.Application) -> None:
     # running it after bind (even in a worker thread) starves HTTP so curl
     # connects and hangs with 0 bytes. The watch loop then hits the mtime memo.
     try:
+        from .plugin_install import recover_all_runtime_roots
+
+        for msg in recover_all_runtime_roots():
+            log(msg)
         _sync_plugin_services()
     except Exception as e:  # noqa: BLE001
         log(f"plugin service load: {e}")
@@ -2004,6 +2008,7 @@ def make_app(state: State, bpf: str, wifi_keys: Path = WIFI_KEYS_FILE, *, insecu
     app.router.add_delete("/api/ai/memories", agent.api_memories)
     app.router.add_post("/api/ai/plugin", agent.api_draft_plugin)
     app.router.add_post("/api/ai/plugin/local", plugin_local.api_publish_local)
+    app.router.add_post("/api/ai/plugin/local/blocked/retry", plugin_local.api_retry_blocked_zip)
     app.router.add_post("/api/ai/sky", agent.api_sky)
     app.router.add_post("/api/ai/stereo", agent.api_stereo)
     app.router.add_post("/api/ai/speak", agent.api_speak)

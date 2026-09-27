@@ -1,0 +1,16 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+index bc5dea97..15d35a54 100644
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -539,10 +539,4 @@ def _guess_zip_for_runtime(runtime_parent: Path, pid: str) -> Path | None:
+ 
+ 
+ def recover_all_runtime_roots() -> list[str]:
+-    msgs: list[str] = []
+-    msgs.extend(recover_interrupted_swaps(paths.plugin_local_runtime_dir()))
+-    try:
+-        msgs.extend(recover_interrupted_swaps(paths.plugin_runtime_dir()))
+-    except RuntimeError:
+-        pass
+-    return msgs
++    return []

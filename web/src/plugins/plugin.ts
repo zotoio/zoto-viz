@@ -23,6 +23,15 @@ import {
 } from "./instances";
 import type { PluginInstance } from "./instances";
 import {
+  blockedCatalogEntries,
+  blockedViewSelectRow,
+  catalogErrorLooksBlocked,
+  consumePackInstallNotices,
+  queuePackInstallBlockedNotice,
+  syncBlockedCatalogFromErrors,
+  takePackInstallBlockedNotice,
+} from "./pack-install-surface";
+import {
   engineDispatch,
   mergeOverlayPins,
   partitionCatalog,
@@ -256,8 +265,9 @@ export interface PluginList {
   dir: string;
   schema: string;
   plugins: PluginView[];
-  errors: { file: string; error: string }[];
+  errors: { file: string; error: string; message?: string; id?: string; name?: string; import?: string }[];
   blocked?: ManifestBlockedPlugin[];
+  installNotices?: { error: string; message: string }[];
   pythonService?: boolean;
 }
 
@@ -693,10 +703,12 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
   if (blockedRow) rows.push(blockedRow);
   rows.sort((a, b) => (CATALOG_GROUP_RANK[a.group] ?? 9) - (CATALOG_GROUP_RANK[b.group] ?? 9)
     || a.label.localeCompare(b.label));
-  return rows.map((row, i) => ({
+  const numbered = rows.map((row, i) => ({
     ...row,
     hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : row.group,
   }));
+  const blocked = blockedViewSelectRow(blockedCatalogEntries());
+  return blocked ? [...numbered, blocked] : numbered;
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
@@ -736,6 +748,8 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
   return modes;
 }
 
+export { takePackInstallBlockedNotice } from "./pack-install-surface";
+
 export async function installPlugins(): Promise<PluginView[]> {
   try {
     bumpPluginCatalogRevision();
@@ -743,7 +757,29 @@ export async function installPlugins(): Promise<PluginView[]> {
     clearPluginSettingsUiState();
     const data = await fetchPlugins();
     setManifestBlockedCatalog((data.blocked ?? []) as ManifestBlockedPlugin[]);
-    for (const e of data.errors) console.warn("zoto-viz plugin:", e.file, e.error);
+    consumePackInstallNotices(data.installNotices);
+    syncBlockedCatalogFromErrors(data.errors as Record<string, unknown>[]);
+    for (const e of data.errors) {
+      const err = String(e.error || "");
+      const msg = e.message ?? (catalogErrorLooksBlocked(err) ? err : "");
+      if (
+        e.error === "pack_boundary"
+        || e.error === "pack_sdk_contract"
+        || e.error === "pack_install_blocked"
+        || e.error === "pack_install_start_failed"
+        || e.error === "pack_install_interrupted"
+        || catalogErrorLooksBlocked(msg)
+        || catalogErrorLooksBlocked(err)
+      ) {
+        queuePackInstallBlockedNotice({
+          ok: false,
+          ...e,
+          error: String(e.error || "pack_boundary"),
+          message: String(msg || err || e.message || ""),
+        });
+      }
+      console.warn("zoto-viz plugin:", e.file, err || msg);
+    }
     const specs: PluginView[] = [];
     for (const raw of data.plugins) {
       try {
@@ -759,6 +795,7 @@ export async function installPlugins(): Promise<PluginView[]> {
     setManifestBlockedCatalog([]);
     looks = new Map();
     setPluginModes([]);
+    syncBlockedCatalogFromErrors([]);
     return [];
   }
 }
