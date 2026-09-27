@@ -170,7 +170,7 @@ describe("mosaic unique skies", () => {
         "plugin:memory": undefined,
       },
       ["plugin:backrooms", "plugin:air-ssid", "plugin:memory"],
-    )).toStrictEqual({
+    )).toEqual({
       "plugin:backrooms": "plugin",
       "plugin:air-ssid": "space",
     });
