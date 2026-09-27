@@ -1,10 +1,10 @@
 diff --git a/web/src/graph/render-host-gl-adapter.ts b/web/src/graph/render-host-gl-adapter.ts
-index f730eb5..f82f76f 100644
+index 2a5062a..77d7446 100644
 --- a/web/src/graph/render-host-gl-adapter.ts
 +++ b/web/src/graph/render-host-gl-adapter.ts
-@@ -48,3 +48,5 @@ export function applyHostViewBoxToGlRenderer(
-   applyDeviceRectToGlRenderer(renderer, dev, canvasDeviceHeight, glScratch);
-   return dev;
+@@ -23,3 +23,5 @@ export function applyDeviceRectToGlRenderer(
+   renderer.setViewport(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
+   renderer.setScissor(glScratch.x, glScratch.y, glScratch.w, glScratch.h);
  }
 +
 +void (null as DeviceRect);
