@@ -110,7 +110,9 @@ def normalize_host_header_key(
     if host.endswith("."):
         return None
     if not port_str:
-        if not tls and bound_port == 80:
+        if tls:
+            port_str = "443"
+        elif bound_port == 80:
             port_str = "80"
         else:
             return None

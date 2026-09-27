@@ -105,6 +105,10 @@ def test_sysconfig_header_documents_allowed_hosts_key() -> None:
     assert "# allowed_hosts:" in sysconfig.HEADER
 
 
+def test_sysconfig_does_not_define_unused_listen_keys_constant() -> None:
+    assert "LISTEN_KEYS" not in Path(sysconfig.__file__).read_text(encoding="utf-8")
+
+
 def test_allowed_hosts_round_trips_through_dump_and_load(tmp_path) -> None:
     from pathlib import Path
 
