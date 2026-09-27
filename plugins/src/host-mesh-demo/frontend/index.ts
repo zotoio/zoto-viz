@@ -1,11 +1,7 @@
 import type { VizDataFrame, VizPresentTick } from "../../../sdk/viz-contract";
+import { getVizZoto } from "plugins/sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  onPresent: ((tick: VizPresentTick) => void) | null;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number) => void;
-};
+const host = getVizZoto();
 
 let t = 0;
 
@@ -22,13 +18,13 @@ function matrixSlot(clock: number): number[] {
   ];
 }
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame: VizDataFrame) => {
   t = frame.t;
 };
 
-zoto.onPresent = (tick) => {
+host.onPresent = (tick: VizPresentTick) => {
   const clock = typeof tick.pluginClock === "number" ? tick.pluginClock : t + tick.frameMs * 0.001;
-  zoto.writeBuffer(2, matrixSlot(clock));
-  zoto.writeUniform("uBright", 0.95);
-  zoto.writeUniform("uOpacity", 1);
+  host.writeBuffer(2, matrixSlot(clock));
+  host.writeUniform("uBright", 0.95);
+  host.writeUniform("uOpacity", 1);
 };
