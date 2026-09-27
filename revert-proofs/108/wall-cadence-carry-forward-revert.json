@@ -1,0 +1,8 @@
+{
+  "row": "Amendment 5 P1 carry-forward revert \u2014 cadence skip path stops incrementing skipped",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-wall-limited-harness.test.ts",
+  "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > D positive: ceil\\(4\u00d73000/5010\\)=3 cadence \u2014 600 frames 2\u00d72 \u2192 200 runs, 400 skips, 1 wall LIMITED$",
+  "patchedAssertion": "AssertionError: expected +0 to be 400 // Object.is equality",
+  "excerpt": "AssertionError: expected +0 to be 400 // Object.is equality"
+}

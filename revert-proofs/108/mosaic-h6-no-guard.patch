@@ -1,0 +1,40 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index d5f5a34..f3624e2 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1739,33 +1739,8 @@ export class Settings {
+       mosaicUniqueSkies: a.mosaicUniqueSkies,
+       mosaicSkies: a.mosaicSkies,
+     });
+-    const forGuard: DreamAnim = {
+-      ...candidate,
+-      mosaicTiles: Array.isArray(a.mosaicTiles) ? a.mosaicTiles : candidate.mosaicTiles,
+-    };
+-    const { anim, refused, message } = applyDreamAnimWithTileLimit(forGuard, this.anim);
+-    if (refused) {
+-      this.lastMosaicTileLimitMessage = message
+-        ?? mosaicWallLayoutRefusedMessage(
+-          countMosaicTiles(candidate),
+-          VIZ_MAX_ACTIVE_TILES,
+-        );
+-      this.renderMosaicWallStatus();
+-      return;
+-    }
+-    if (!this.mosaicBootRefusedTilesRaw) {
+-      this.lastMosaicTileLimitMessage = "";
+-    } else {
+-      try {
+-        const raw = JSON.parse(this.mosaicBootRefusedTilesRaw) as unknown;
+-        const n = Array.isArray(raw) ? raw.filter((t) => typeof t === "string" && t.trim()).length : 0;
+-        this.lastMosaicTileLimitMessage = mosaicWallLayoutBootRefusedMessage(n, VIZ_MAX_ACTIVE_TILES);
+-      } catch {
+-        this.lastMosaicTileLimitMessage = mosaicWallLayoutBootRefusedMessage(0, VIZ_MAX_ACTIVE_TILES);
+-      }
+-    }
+-    this.renderMosaicWallStatus();
+-    this.anim = anim;
++    this.lastMosaicTileLimitMessage = "";
++    this.anim = candidate;
+     this.syncAnimUi();
+     this.syncTheme();
+     this.persistAnim();

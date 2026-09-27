@@ -1,0 +1,23 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index d5f5a34..28382c1 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -1769,7 +1769,6 @@ export class Settings {
+     this.syncAnimUi();
+     this.syncTheme();
+     this.persistAnim();
+-    this.restoreBootRefusedMosaicTilesInStorage();
+   }
+ 
+   private restoreBootRefusedMosaicTilesInStorage(): void {
+@@ -2117,9 +2116,7 @@ export class Settings {
+     if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
+     else localStorage.removeItem(`${p}.anim.mosaicTree`);
+     localStorage.setItem(`${p}.anim.mosaicMaxId`, a.mosaicMaxId || "");
+-    if (this.mosaicBootRefusedTilesRaw !== null) {
+-      localStorage.setItem(`${p}.anim.mosaicTiles`, this.mosaicBootRefusedTilesRaw);
+-    } else if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
++    if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
+     else localStorage.removeItem(`${p}.anim.mosaicTiles`);
+     localStorage.setItem(`${p}.anim.mosaicSharedTheme`, a.mosaicSharedTheme ? "1" : "0");
+     if (a.mosaicUniqueSkies === true) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "1");
