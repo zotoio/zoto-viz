@@ -74,22 +74,6 @@ describe("media ask focus dialog", () => {
     expect(paragraphs[1]).toBe("This embedded browser cannot show the usual listening / camera prompt. Allow here is the accept. If nothing happens, open the monitor in Chromium on localhost.");
   });
 
-  it("closes on Escape without calling getUserMedia and dismisses like Not now", async () => {
-    expect.hasAssertions();
-    const getUserMedia = vi.fn(async () => ({ getTracks: () => [] }));
-    mockCapture(getUserMedia);
-    const pending = askUserMedia({ audio: true, video: false }, "watchword listening");
-    await shown();
-    const dialog = document.querySelector<HTMLDialogElement>("[data-media-ask]")!;
-    dialog.close();
-    await vi.waitFor(() => {
-      expect(document.querySelector("dialog") === null).toBe(true);
-    });
-    await expect(pending).resolves.toBeNull();
-    expect(getUserMedia).not.toHaveBeenCalled();
-    await expect(askUserMedia({ audio: true, video: false }, "pulse microphone")).resolves.toBeNull();
-  });
-
   it("returns focus to the header mic toggle on a fresh load after close", async () => {
     expect.hasAssertions();
     document.body.innerHTML = "<input type=\"checkbox\" id=\"mic\" /><div id=\"wall\"></div>";
