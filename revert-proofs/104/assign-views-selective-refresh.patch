@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
-index 271ba28b..1703b652 100644
+index 5586cd9c..0517ce64 100644
 --- a/web/src/graph/mosaic.ts
 +++ b/web/src/graph/mosaic.ts
-@@ -456,7 +456,7 @@ export class Mosaic {
+@@ -457,7 +457,7 @@ export class Mosaic {
      this.placeTree();
      this.applyLooks(this.cfg.sync().anim);
      this.paintPanes(this.cfg.sync().theme);
