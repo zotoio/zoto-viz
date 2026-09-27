@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|-------|
-| `proven_at` | `22bfc5004132e4dc25de15f8fdef10008ccd516a` |
-| `tree` | `22bfc5004132e4dc25de15f8fdef10008ccd516a` |
+| `proven_at` | `b769ea9715df8d4cc21a4874e10614ae441d3c4c` |
+| `tree` | `b769ea9715df8d4cc21a4874e10614ae441d3c4c` |
 
 Three pytest revert rows (`origin-userinfo`, `origin-path-suffix`, `origin-null-no-token`).
 
