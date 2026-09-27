@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf1..d32df6d 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -164,7 +164,7 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
+   alertContainer = document.createElement("div");
+   alertContainer.className = "wall-notice-alert";
+   alertContainer.setAttribute("role", "alert");
+-  regionNode.append(statusContainer, alertContainer);
++  regionNode.append(alertContainer, statusContainer);
+   root.appendChild(regionNode);
+ }
+ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {

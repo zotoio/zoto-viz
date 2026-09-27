@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf1..f0fdb55 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -138,7 +138,6 @@ function dismissEntry(e: Entry): void {
+     return;
+   }
+   if (queue.get(e.key) === e) {
+-    e.cleared = true;
+     queue.delete(e.key);
+     syncQueueCount();
+   }

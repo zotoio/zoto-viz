@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-36-s5-mount-tabindex)",
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > the mount root is made programmatically focusable",
+  "red": "AssertionError: expected null to be '-1' // Object.is equality"
+}
