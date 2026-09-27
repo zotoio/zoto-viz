@@ -4,11 +4,6 @@
   "audio": 0.12,
   "packets": [
     {
-      "proto": "tcp",
-      "size": 4950,
-      "field": 0.7389385852662969
-    },
-    {
       "proto": "arp",
       "size": 3600,
       "field": 0.711284624274257
@@ -42,6 +37,11 @@
       "proto": "udp",
       "size": 2700,
       "field": 0.6863049168374902
+    },
+    {
+      "proto": "tcp",
+      "size": 2550,
+      "field": 0.681342091721958
     }
   ],
   "rf": [
@@ -68,124 +68,123 @@
   ],
   "talkers": [
     {
-      "id": "host-01",
-      "rate": 273,
-      "role": "internet",
-      "failed": 0.25
-    },
-    {
-      "id": "host-04",
-      "rate": 202.8,
+      "id": "host-114",
+      "rate": 209,
       "role": "lan"
     },
     {
-      "id": "host-115",
-      "rate": 129,
+      "id": "host-309",
+      "rate": 209,
       "role": "lan"
     },
     {
-      "id": "host-182",
-      "rate": 57,
+      "id": "host-113",
+      "rate": 208,
+      "role": "internet"
+    },
+    {
+      "id": "host-308",
+      "rate": 208,
       "role": "lan"
     },
     {
-      "id": "host-09",
-      "rate": 21,
+      "id": "host-112",
+      "rate": 207,
       "role": "lan"
     },
     {
-      "id": "host-25",
-      "rate": 21,
+      "id": "host-307",
+      "rate": 207,
       "role": "lan"
     },
     {
-      "id": "host-38",
-      "rate": 21,
+      "id": "host-111",
+      "rate": 206,
       "role": "lan"
     },
     {
-      "id": "host-42",
-      "rate": 21,
+      "id": "host-306",
+      "rate": 206,
+      "role": "internet"
+    },
+    {
+      "id": "host-110",
+      "rate": 205,
       "role": "lan"
     },
     {
-      "id": "host-58",
-      "rate": 21,
+      "id": "host-304",
+      "rate": 205,
       "role": "lan"
     },
     {
-      "id": "host-75",
-      "rate": 21,
+      "id": "host-109",
+      "rate": 204,
       "role": "lan"
     },
     {
-      "id": "host-91",
-      "rate": 21,
+      "id": "host-303",
+      "rate": 204,
       "role": "lan"
     },
     {
       "id": "host-108",
-      "rate": 21,
+      "rate": 203,
       "role": "lan"
     },
     {
-      "id": "host-125",
-      "rate": 21,
+      "id": "host-302",
+      "rate": 203,
       "role": "lan"
     },
     {
-      "id": "host-142",
-      "rate": 21,
+      "id": "host-107",
+      "rate": 202,
       "role": "lan"
     },
     {
-      "id": "host-158",
-      "rate": 21,
+      "id": "host-301",
+      "rate": 202,
       "role": "lan"
     },
     {
-      "id": "host-180",
-      "rate": 21,
+      "id": "host-106",
+      "rate": 201,
       "role": "lan"
     },
     {
-      "id": "host-197",
-      "rate": 21,
+      "id": "host-300",
+      "rate": 201,
       "role": "lan"
     },
     {
-      "id": "host-213",
-      "rate": 21,
+      "id": "host-105",
+      "rate": 200,
       "role": "lan"
     },
     {
-      "id": "host-230",
-      "rate": 21,
+      "id": "host-299",
+      "rate": 200,
       "role": "lan"
     },
     {
-      "id": "host-246",
-      "rate": 21,
-      "role": "internet"
-    },
-    {
-      "id": "host-175",
-      "rate": 20,
-      "role": "internet"
-    },
-    {
-      "id": "host-264",
-      "rate": 20,
+      "id": "host-103",
+      "rate": 199,
       "role": "lan"
     },
     {
-      "id": "host-283",
-      "rate": 20,
+      "id": "host-298",
+      "rate": 199,
       "role": "lan"
     },
     {
-      "id": "host-343",
-      "rate": 20,
+      "id": "host-102",
+      "rate": 198,
+      "role": "lan"
+    },
+    {
+      "id": "host-297",
+      "rate": 198,
       "role": "lan"
     }
   ],
@@ -203,66 +202,5 @@
     "udev": 0
   },
   "contract": 2,
-  "links": [
-    {
-      "src": "host-01",
-      "dst": "host-04",
-      "rate": 93
-    },
-    {
-      "src": "host-01",
-      "dst": "host-115",
-      "rate": 90
-    },
-    {
-      "src": "host-01",
-      "dst": "host-182",
-      "rate": 90
-    },
-    {
-      "src": "host-04",
-      "dst": "host-115",
-      "rate": 90
-    },
-    {
-      "src": "host-04",
-      "dst": "host-182",
-      "rate": 90
-    },
-    {
-      "src": "host-115",
-      "dst": "host-182",
-      "rate": 90
-    },
-    {
-      "src": "host-04",
-      "dst": "host-01",
-      "rate": 15.6
-    },
-    {
-      "src": "host-115",
-      "dst": "host-01",
-      "rate": 15
-    },
-    {
-      "src": "host-115",
-      "dst": "host-04",
-      "rate": 15
-    },
-    {
-      "src": "host-182",
-      "dst": "host-01",
-      "rate": 15
-    },
-    {
-      "src": "host-182",
-      "dst": "host-04",
-      "rate": 15
-    },
-    {
-      "src": "host-182",
-      "dst": "host-115",
-      "rate": 15
-    }
-  ]
+  "links": []
 }

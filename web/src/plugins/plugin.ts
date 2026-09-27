@@ -46,7 +46,6 @@ import {
 } from "./plugin-manifest-blocked";
 import { PluginSandbox, pluginModuleUrl } from "./host";
 import type { PluginIdleConfig } from "./fixtures/golden-state";
-import type { RenderScaleConfig } from "./render-scale-governor";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
@@ -183,10 +182,7 @@ export type PluginCapability =
 
 export interface PluginView {
   id: string;
-  /** Pack display name from plugin.yml; never overwritten by instance rows. */
-  readonly packName: string;
-  /** Optional instance row label; set only in applyInstance. */
-  readonly instanceLabel?: string;
+  name: string;
   version: number;
   hint?: string;
   /** Catalog row when this spec was expanded from plugin.yml instances. */
@@ -210,12 +206,6 @@ export interface PluginView {
   /** visualisation.yml idle golden mock — graph / arcade when capture is quiet. */
   idle?: PluginIdleConfig;
   viz?: VizPluginContract;
-  /** Host-clamped visualisation.yml workBudget (#45). */
-  workBudget?: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget;
-  /** Set when the host clamped workBudget below what the pack asked for. */
-  workBudgetLimited?: string;
-  /** Host adaptive render-scale governor steps (from plugin.yml render.scale). */
-  renderScale?: RenderScaleConfig;
   typesafe?: TypeSafeContract;
   hash?: string;
   service?: string;
@@ -230,14 +220,8 @@ export interface PluginView {
   shader_sha256?: string;
   sky_available?: boolean;
   sky_error?: string;
-  /** Host refused plugin.yml viz.contract — pack stays blocked until fixed. */
-  viz_block?: string;
   /** Host drawer: presets, HUD label fields, section order (from plugin.yml / visualisation.yml). */
   settings?: import("./plugin-visualisation").PluginSettingsDecl;
-}
-
-export function tileDisplayName(spec: Pick<PluginView, "packName" | "instanceLabel">): string {
-  return spec.instanceLabel ?? spec.packName;
 }
 
 const LOOK_ANIM_KEYS = [
@@ -279,9 +263,6 @@ export interface PluginList {
 
 export {
   configStoreId,
-  parsePluginId,
-  parsePluginInstance,
-  pluginSpecForStoreId,
   configStoreIdForMode,
   parsePluginId,
   parsePluginInstance,
@@ -325,14 +306,7 @@ export async function attachPluginFrontend(
     sandbox.unload();
     return false;
   }
-  await sandbox.loadModule(
-    spec!.id,
-    spec!.capabilities ?? [],
-    config,
-    spec!.hash,
-    spec!.viz,
-    spec!.workBudget,
-  );
+  await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
   return true;
 }
 
@@ -398,7 +372,6 @@ export function encodeStoredConfigValue(
   value: string | number | boolean,
 ): string {
   if (field?.type === "boolean") {
-    return value === true || value === "true" || value === "1" ? "1" : "0";
     return value === true || value === 1 || value === "true" || value === "1" ? "1" : "0";
   }
   return String(value);
@@ -529,7 +502,7 @@ function compileGraph(spec: PluginView): ViewMode {
   const mode: ViewMode = {
     ...base,
     id: pluginViewId(spec.id, spec.instanceId),
-    label: tileDisplayName(spec),
+    label: spec.name,
     hint: spec.hint || base.hint,
     pluginId: spec.id,
     kind: catalogKindOf(spec),
@@ -632,7 +605,7 @@ function compileArcade(spec: PluginView): ViewMode {
   return {
     ...base,
     id: pluginViewId(spec.id, spec.instanceId),
-    label: tileDisplayName(spec),
+    label: spec.name,
     hint: spec.hint || base.hint,
     pluginId: spec.id,
     kind: catalogKindOf(spec),
@@ -674,7 +647,7 @@ export function specCaption(spec: PluginView): string {
   const dispatch = engineDispatch(spec);
   return viewCaption({
     id: spec.id,
-    label: tileDisplayName(spec),
+    label: spec.name,
     graphBase: dispatch.graphBase,
     arcadeId: dispatch.arcadeId,
   });

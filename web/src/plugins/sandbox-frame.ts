@@ -19,21 +19,6 @@ export type VizPresentTick = {
   pluginClock?: number;
 };
 
-type HostBoot = {
-  source: "zoto-viz-host";
-  type: "boot";
-  caps: string[];
-  config: Record<string, string>;
-  viz?: unknown;
-  moduleSrc: string;
-};
-
-type HostMsg =
-  | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: unknown }
-  | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
-  | { source: "zoto-viz-host"; type: "frame"; frame: unknown }
-  | { source: "zoto-viz-host"; type: "present"; tick: VizPresentTick }
-  | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
 const PACK_ASSETS = "/pack-assets/";
 const TOKEN_REDACT = "<sandbox-token>";
 
@@ -133,9 +118,6 @@ export type SandboxZoto = {
 };
 
 let allowed = new Set<string>();
-
-function send(type: string, payload?: unknown): void {
-  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, "*");
 let bootDone = false;
 let postTargetOrigin = "";
 let hostPort: MessagePort | null = null;
@@ -223,11 +205,6 @@ function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: 
 
 /** Host → sandbox dispatch (unit-tested; hot path passes message tick by reference). */
 export function handleSandboxHostMessage(
-  d: HostMsg | HostBoot | undefined,
-  caps: Set<string>,
-  api: SandboxZoto,
-): void {
-  if (!d || d.source !== "zoto-viz-host") return;
   d: HostMsg | HostBootPayload | undefined,
   caps: Set<string>,
   api: SandboxZoto,
@@ -249,19 +226,6 @@ export function handleSandboxHostMessage(
   }
 }
 
-window.addEventListener("message", (ev) => {
-  handleSandboxHostMessage(ev.data as HostMsg | HostBoot | undefined, allowed, zoto);
-});
-
-window.addEventListener("message", async (ev) => {
-  const d = ev.data as HostBoot | undefined;
-  if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") return;
-  applyInit(d);
-  try {
-    await import(/* @vite-ignore */ d.moduleSrc);
-    send("ready");
-  } catch (e) {
-    send("log", String(e));
 export function handleSandboxBootChannel(
   ev: MessageEvent,
   opts: { bootNonce: string; bootDone: boolean },

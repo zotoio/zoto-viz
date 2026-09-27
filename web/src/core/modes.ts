@@ -40,6 +40,8 @@ export interface PluginField {
   step?: number;
   /** Settings drawer section title (collapsible groups). */
   section?: string;
+  randomise?: boolean;
+  randomRange?: [number, number];
 }
 export interface Legend { color: string; label: string; line?: boolean }
 export interface Overlay { id: string; x: number; y: number; z: number; html: string }

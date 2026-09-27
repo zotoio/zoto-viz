@@ -21,7 +21,6 @@ export function bindThisView(deps: BindThisViewDeps, modeId: string): void {
     spec ? m.config : undefined,
     deps.lookForMode(m.id) ?? spec?.look,
     deps.arcadeControls?.(m),
-    modeId,
   );
   deps.paintViewAuth?.(m, spec);
 }

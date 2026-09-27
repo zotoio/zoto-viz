@@ -1,5 +1,3 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setPackAssetTokenForTests } from "../core/http";
 import * as packAssetFrame from "./pack-asset-frame";

@@ -65,8 +65,7 @@
     {
       "id": "host-03",
       "rate": 4,
-      "role": "lan",
-      "failed": 0.5
+      "role": "lan"
     },
     {
       "id": "host-07",
@@ -76,8 +75,7 @@
     {
       "id": "host-04",
       "rate": 3,
-      "role": "lan",
-      "failed": 0.35
+      "role": "lan"
     },
     {
       "id": "host-08",
@@ -140,73 +138,73 @@
   "contract": 2,
   "links": [
     {
-      "src": "host-02",
-      "dst": "host-09",
+      "src": "10.0.0.1",
+      "dst": "104.16.0.1",
       "rate": 7
     },
     {
-      "src": "host-06",
-      "dst": "host-02",
+      "src": "10.0.0.42",
+      "dst": "10.0.0.1",
       "rate": 6
     },
     {
-      "src": "host-05",
-      "dst": "host-10",
+      "src": "10.0.0.33",
+      "dst": "8.8.8.8",
       "rate": 5
     },
     {
-      "src": "host-03",
-      "dst": "host-02",
+      "src": "10.0.0.15",
+      "dst": "10.0.0.1",
       "rate": 4
     },
     {
-      "src": "host-07",
-      "dst": "host-01",
+      "src": "10.0.0.51",
+      "dst": "1.1.1.1",
       "rate": 4
     },
     {
-      "src": "host-04",
-      "dst": "host-02",
+      "src": "10.0.0.22",
+      "dst": "10.0.0.1",
       "rate": 3
     },
     {
-      "src": "host-08",
-      "dst": "host-02",
+      "src": "10.0.0.77",
+      "dst": "10.0.0.1",
       "rate": 2
     },
     {
-      "src": "host-09",
-      "dst": "host-02",
+      "src": "104.16.0.1",
+      "dst": "10.0.0.1",
       "rate": 1.75
     },
     {
-      "src": "host-02",
-      "dst": "host-06",
+      "src": "10.0.0.1",
+      "dst": "10.0.0.42",
       "rate": 1.5
     },
     {
-      "src": "host-10",
-      "dst": "host-05",
+      "src": "8.8.8.8",
+      "dst": "10.0.0.33",
       "rate": 1.25
     },
     {
-      "src": "host-01",
-      "dst": "host-07",
+      "src": "1.1.1.1",
+      "dst": "10.0.0.51",
       "rate": 1
     },
     {
-      "src": "host-02",
-      "dst": "host-03",
+      "src": "10.0.0.1",
+      "dst": "10.0.0.15",
       "rate": 1
     },
     {
-      "src": "host-02",
-      "dst": "host-04",
+      "src": "10.0.0.1",
+      "dst": "10.0.0.22",
       "rate": 0.75
     },
     {
-      "src": "host-02",
-      "dst": "host-08",
+      "src": "10.0.0.1",
+      "dst": "10.0.0.77",
       "rate": 0.5
     }
   ]

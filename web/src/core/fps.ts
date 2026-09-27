@@ -94,8 +94,6 @@ export class PaneFps {
   private stamps: number[] = [];
   private lastTs = -1;
   private shown = "";
-  private fpsSuffix = "";
-  private budgetLine: string | null = null;
   private changes = 0;
 
   constructor(parent: HTMLElement) {
@@ -111,29 +109,6 @@ export class PaneFps {
     this.el.title = text;
   }
 
-  /** Compact adaptive render-scale readout on mosaic tiles. */
-  setRenderScaleBadge(scale: number | null): void {
-    if (scale == null) {
-      this.fpsSuffix = "";
-      if (!this.budgetLine) this.paint(performance.now());
-      return;
-    }
-    this.budgetLine = null;
-    const s = scale >= 0.999 ? "1" : scale.toFixed(2).replace(/0+$/, "").replace(/\.$/, "");
-    this.fpsSuffix = ` · ${s}`;
-    this.paint(performance.now());
-  }
-
-  /** Full frame-budget overlay on the header / focused pane when mosaic hides the viz HUD. */
-  setBudgetLine(line: string | null): void {
-    if (!line) {
-      this.budgetLine = null;
-      this.paint(performance.now());
-      return;
-    }
-    this.budgetLine = line;
-    this.fpsSuffix = "";
-    this.set(line);
   /** Monotonic count of picture changes (tile health stillness probe). */
   get changeCount(): number {
     return this.changes;
@@ -170,13 +145,12 @@ export class PaneFps {
   }
 
   private paint(now: number): void {
-    if (this.budgetLine) return;
     const loop = this.loopFps(now);
     if (loop == null) {
-      if (this.lastTs >= 0 && now - this.lastTs >= SHOW_MS) this.set(`0 fps${this.fpsSuffix}`);
+      if (this.lastTs >= 0 && now - this.lastTs >= SHOW_MS) this.set("0 fps");
       return;
     }
-    this.set(`${Math.round(loop)} fps${this.fpsSuffix}`);
+    this.set(`${Math.round(loop)} fps`);
   }
 
   private set(next: string): void {

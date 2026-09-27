@@ -190,34 +190,6 @@ export function mapLeaves(n: MosaicNode, ids: string[]): MosaicNode {
   return walk(cloneNode(n));
 }
 
-/** Set one pane to a view id, allocating a new tile slot when needed. */
-export function placePaneTileView(ids: string[], fromSlot: string, viewId: string): string[] {
-  const i = ids.indexOf(fromSlot);
-  if (i < 0 || !viewId) return ids;
-  const next = ids.slice();
-  next[i] = allocateMosaicTileSlot(viewId, next.filter((_, j) => j !== i));
-  return next;
-}
-
-/** Pane ids whose view binding, sky hold, or mode refresh must run (swap touches both swapped ids). */
-export function mosaicPaneIdsWithViewChange(prev: string[], next: string[]): string[] {
-  const out = new Set<string>();
-  const prevSet = new Set(prev);
-  const nextSet = new Set(next);
-  for (const id of prev) if (!nextSet.has(id)) out.add(id);
-  for (const id of next) if (!prevSet.has(id)) out.add(id);
-  const n = Math.max(prev.length, next.length);
-  for (let i = 0; i < n; i++) {
-    if (prev[i] !== next[i]) {
-      if (prev[i]) out.add(prev[i]);
-      if (next[i]) out.add(next[i]);
-    }
-  }
-  return [...out];
-/** Drawer / wall pane pick: allocate another tile slot for the same catalog view when needed. */
-export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
-  if (!viewId || fromSlot === viewId) return ids;
-  if (mosaicTileViewId(fromSlot) === viewId) return ids;
 /** Swap two tile slots (leaf ids). */
 export function movePaneTileView(ids: string[], fromSlot: string, otherSlot: string): string[] {
   const i = ids.indexOf(fromSlot);

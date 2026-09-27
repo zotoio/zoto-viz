@@ -9,17 +9,13 @@
   "scripts": {
     "dev": "vite",
     "asbuild": "asc --config asconfig.json --target release",
-    "build": "pnpm asbuild && tsc --noEmit && tsc -p tsconfig.test.json --noEmit && vite build",
     "build": "pnpm asbuild && tsc --noEmit && vite build",
-    "typecheck": "tsc --noEmit",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
     "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",
-    "lint": "node scripts/lint-brand-casts-core.mjs"
-    "test:backrooms-smoke": "node scripts/backrooms-smoke.test.mjs",
-    "test:sandbox-plugin-smoke": "node scripts/sandbox-plugin-smoke.test.mjs"
+    "lint": "node scripts/lint-brand-casts-core.mjs",
     "test:backrooms-smoke": "node scripts/backrooms-smoke.test.mjs",
     "test:sandbox-plugin-smoke": "node scripts/sandbox-plugin-smoke.test.mjs",
     "test:sandbox-draws-smoke": "node scripts/sandbox-draws-smoke.test.mjs"

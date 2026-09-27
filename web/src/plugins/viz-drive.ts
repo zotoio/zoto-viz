@@ -39,7 +39,6 @@ function recomputeSandbox(tileId: string): void {
 export function bindVizDriveElement(tileId: string, el: HTMLElement | null): void {
   let row = tiles.get(tileId);
   if (!row) {
-    row = { el: null, drive: "none" };
     row = { el: null, drive: "none", sandboxWrote: false };
     tiles.set(tileId, row);
   }

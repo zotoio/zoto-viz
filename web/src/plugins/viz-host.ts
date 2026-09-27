@@ -1,40 +1,12 @@
 import type { Device, Flow, StateMsg } from "../core/types";
-import type { Device, StateMsg } from "../core/types";
-import { vizClockMs, vizFrameEpochSec } from "../core/viz-clock";
-import { type MonoMs, monoMs, monoMsDeltaSec } from "../core/viz-time";
 import { parseSourceBind, sourceHeadlines, type SourceBind } from "../core/sources";
-import type { Device, StateMsg } from "../core/types";
-import { vizClockMs } from "../core/viz-clock";
-import {
-  countEligibleSourceHeadlines,
-  parseSourceBind,
-  sourceHeadlines,
-  type SourceBind,
-} from "../core/sources";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { applyVizFrameContractV2, resolveVizFrameCollectOpts } from "./viz-frame-collect";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
-import {
-  bumpFlowProtoVisit,
-  bumpFlowVisit,
-  bumpFrameObject,
-  bumpPacketObject,
-  bumpRateCall,
-  bumpTalkerObject,
-  resetVizBuildCounters,
-} from "./viz-build-counters";
-import {
-  recordHeadlineDecimation,
-  recordPacketDecimation,
-  recordRfDecimation,
-  recordTalkerDecimation,
-  resetVizDecimationDropStats,
-  takeVizDecimationDropStats,
-  type VizDecimationDropStats,
-} from "./viz-decimation-stats";
 
 /** Target frame budget for viz plugin work (60 fps). */
 export const VIZ_FRAME_BUDGET_MS = 16.7;
+export const FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING = 28_500;
 
 export const VIZ_DEFAULT_MAX_BUFFERS = 4;
 export const VIZ_DEFAULT_MAX_BUFFER_FLOATS = 64;
@@ -52,8 +24,6 @@ export type PackVizContractVersion = (typeof SUPPORTED_PACK_VIZ_CONTRACTS)[numbe
 export type VizContractParseResult =
   | { state: "ready"; contract: VizPluginContract }
   | { state: "Blocked"; reason: string };
-/** Seeded fat-LAN JSON frame ceiling — update only when contract output shape changes. */
-export const FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING = 28_500;
 
 /** Fixed std140 UBO layout — locked in schema `$defs/vizUboLayout`. */
 export const VIZ_UBO = {
@@ -98,8 +68,6 @@ export interface VizPluginContract {
   uniforms: VizSkyUniform[];
   ubo: typeof VIZ_UBO;
   idle: VizIdleConfig;
-  /** Pack may hold a still picture with detail; host skips the stillness empty rule. */
-  mayBeStatic?: boolean;
 }
 
 export type {
@@ -181,36 +149,14 @@ export interface VizParticleWriteResult extends VizBufferWriteResult {
   written: number;
 }
 
-export type VizBudgetTimingSource = "gpu" | "cpu";
-
 export interface VizFrameBudgetStats {
   lastMs: number;
-  p95Ms: number;
   overBudget: number;
   skipped: number;
   total: number;
-  timingSource: VizBudgetTimingSource;
-  hasSamples: boolean;
-}
-
-const BUDGET_SAMPLE_CAP = 120;
-
-function percentileSorted(sorted: ArrayLike<number>, len: number, p: number): number {
-  if (len <= 0) return 0;
-  const idx = Math.min(len - 1, Math.max(0, Math.ceil(p * len) - 1));
-  return sorted[idx] as number;
-}
-
-function insertionSortInPlace(buf: Float32Array, len: number): void {
-  for (let i = 1; i < len; i++) {
-    const v = buf[i]!;
-    let j = i - 1;
-    while (j >= 0 && buf[j]! > v) {
-      buf[j + 1] = buf[j]!;
-      j--;
-    }
-    buf[j + 1] = v;
-  }
+  timingSource?: "cpu" | "gpu";
+  hasSamples?: boolean;
+  p95Ms?: number;
 }
 
 const SKY_UNIFORM_SET = new Set<string>(PLUGIN_SKY_UNIFORMS);
@@ -407,8 +353,6 @@ export function parseVizContractResult(raw: unknown): VizContractParseResult | u
 export function parseVizContract(raw: unknown): VizPluginContract | undefined {
   const parsed = parseVizContractResult(raw);
   return parsed?.state === "ready" ? parsed.contract : undefined;
-  const mayBeStatic = doc.mayBeStatic === true;
-  return { maxBuffers, maxBufferFloats, maxParticles, graphWalk: false, uniforms, ubo: VIZ_UBO, idle, mayBeStatic };
 }
 
 function clampInt(raw: unknown, lo: number, hi: number, fallback: number): number {
@@ -450,7 +394,6 @@ export function topKByScore<T>(
 
   for (const item of items) {
     if (skip(item)) continue;
-    bumpRateCall();
     const s = score(item);
     if (s <= 0) continue;
     if (buf.length < limit) {
@@ -512,22 +455,6 @@ function topTalkers(devices: Device[], flows: Flow[], limit: number, forceLifeti
     (d) => talkerScore(d, rates, liveMode) <= 0,
     (a, b) => (a.ip < b.ip ? -1 : a.ip > b.ip ? 1 : 0),
   ).map((d) => ({ id: d.ip, rate: talkerScore(d, rates, liveMode), role: d.role }));
-function topTalkers(devices: Device[], limit: number): VizTalkerSample[] {
-  let eligible = 0;
-  const talkers = topKByScore(
-    devices,
-    limit,
-    (d) => d.packets,
-    (d) => {
-      if (d.packets > 0) eligible++;
-      return d.packets <= 0;
-    },
-  ).map((d) => {
-    bumpTalkerObject();
-    return { id: d.ip, rate: d.packets, role: d.role };
-  });
-  recordTalkerDecimation(eligible, talkers.length);
-  return talkers;
 }
 
 function rssiFromAliases(aliases: string[] | undefined): number {
@@ -539,11 +466,7 @@ function rssiFromAliases(aliases: string[] | undefined): number {
 
 function rfBeacons(state: StateMsg, limit: number): VizRfBeacon[] {
   const wifi = state.views?.wifi;
-  if (!wifi?.watch?.ssids?.length) {
-    recordRfDecimation(0, 0);
-    return [];
-  }
-  const eligible = wifi.watch.ssids.length;
+  if (!wifi?.watch?.ssids?.length) return [];
   const out: VizRfBeacon[] = [];
   for (const ssid of wifi.watch.ssids.slice(0, limit)) {
     const dev = wifi.devices.find((d) => d.ssid === ssid || (d.names ?? []).includes(ssid));
@@ -553,7 +476,6 @@ function rfBeacons(state: StateMsg, limit: number): VizRfBeacon[] {
       channel: dev?.chan ?? 0,
     });
   }
-  recordRfDecimation(eligible, out.length);
   return out;
 }
 
@@ -580,22 +502,17 @@ function packetSamples(state: StateMsg, limit: number): VizPacketSample[] {
   const counts = new Map<string, number>();
   const top: ProtoTop[] = [];
   for (const flow of state.flows) {
-    bumpFlowVisit();
     for (const proto of flow.protos ?? []) {
-      bumpFlowProtoVisit();
       const count = (counts.get(proto) ?? 0) + flow.packets;
       counts.set(proto, count);
       upsertProtoTop(top, limit, proto, count);
     }
   }
-  const eligible = counts.size;
-  if (top.length > 1) top.sort((a, b) => b.count - a.count);
-  const rows = top.map(({ proto, count }) => {
-    bumpPacketObject();
-    return { proto, size: count, field: packetField(count) };
-  });
-  recordPacketDecimation(eligible, rows.length);
-  return rows;
+  if (top.length <= 1) {
+    return top.map(({ proto, count }) => ({ proto, size: count, field: packetField(count) }));
+  }
+  top.sort((a, b) => b.count - a.count);
+  return top.map(({ proto, count }) => ({ proto, size: count, field: packetField(count) }));
 }
 
 /**
@@ -632,27 +549,8 @@ function buildVizFrameCore(
   forceLifetimeTalkerRates = false,
 ): VizDataFrame {
   const t = state.ts || Date.now() / 1000;
-): VizDataFrame {
-  resetVizBuildCounters();
-  resetVizDecimationDropStats();
-  const t = state.ts || vizClockMs() / 1000;
   const dt = prevTs > 0 ? Math.max(0, t - prevTs) : 0;
-/**
- * @param prevVizClockMs previous {@link vizClockMs} sample from the last delivered frame (ms), not wall epoch.
- */
-export function buildVizFrame(
-  state: StateMsg,
-  prevVizClockMs: MonoMs = monoMs(0),
-  audio = 0,
-  bind?: SourceBind | Record<string, string>,
-): VizDataFrame {
-  const t = vizFrameEpochSec(state.ts);
-  const nowClock = vizClockMs();
-  const dt = prevVizClockMs > monoMs(0) ? monoMsDeltaSec(prevVizClockMs, nowClock) : 0;
   const parsed = bind && "source" in bind ? parseSourceBind(bind as Record<string, string>) : bind;
-  const headlineEligible = countEligibleSourceHeadlines(state.sources, parsed);
-  const rawHeadlines = sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed);
-  recordHeadlineDecimation(headlineEligible, rawHeadlines.length);
   return {
     t,
     dt,
@@ -661,8 +559,6 @@ export function buildVizFrame(
     rf: rfBeacons(state, VIZ_MAX_RF_SAMPLES),
     talkers: topTalkers(state.devices, state.flows, VIZ_MAX_TALKER_SAMPLES, forceLifetimeTalkerRates),
     headlines: sourceHeadlines(state.sources, VIZ_MAX_HEADLINE_SAMPLES, parsed).map((h) => ({
-    talkers: topTalkers(state.devices, VIZ_MAX_TALKER_SAMPLES),
-    headlines: rawHeadlines.map((h) => ({
       id: h.id,
       label: h.label,
       text: h.text.slice(0, 240),
@@ -674,21 +570,10 @@ export function buildVizFrame(
   };
 }
 
-export function buildVizFrame(
-  state: StateMsg,
-  prevTs = 0,
-  audio = 0,
-  bind?: SourceBind | Record<string, string>,
-): VizDataFrame {
-  const frame = buildVizFrameCore(state, prevTs, audio, bind);
-  bumpFrameObject();
-  return frame;
-}
-
 /** Build a live frame and merge idle demo slices when monitor traffic is absent. */
 export function buildVizFrameForPlugin(
   state: StateMsg,
-  prevVizClockMs: MonoMs,
+  prevTs: number,
   audio: number,
   idle: VizIdleConfig,
   packContract: PackVizContractVersion | number = 1,
@@ -704,63 +589,32 @@ export function buildVizFrameForPlugin(
     return merged;
   }
   return applyVizFrameContractV2(merged, state, resolveVizFrameCollectOpts(state));
-  const frame = mergeVizIdleFrame(buildVizFrameCore(state, prevTs, audio, bind), idle);
-  bumpFrameObject();
-  return frame;
-  return mergeVizIdleFrame(buildVizFrame(state, prevVizClockMs, audio, bind), idle);
 }
 
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
 export class VizFrameBudget {
-  private _p95Ms = 0;
+  private _lastMs = 0;
   private _overBudget = 0;
   private _skipped = 0;
   private _total = 0;
   private _lastBuilt: VizDataFrame | null = null;
   private _lastPresent = -1;
   private readonly now: () => number;
-  private readonly cpuSamples = new Float32Array(BUDGET_SAMPLE_CAP);
-  private cpuSampleLen = 0;
-  private cpuSampleStart = 0;
-  private readonly gpuSamples = new Float32Array(BUDGET_SAMPLE_CAP);
-  private gpuSampleLen = 0;
-  private gpuSampleStart = 0;
-  private _gpuAvailable = false;
-  private _timingSource: VizBudgetTimingSource = "cpu";
-  private _lastCpuMs = 0;
-  private _lastGpuMs = 0;
-  private readonly scratch = new Float32Array(BUDGET_SAMPLE_CAP);
 
-  constructor(now: () => number = vizClockMs) {
+  constructor(now: () => number = () => performance.now()) {
     this.now = now;
   }
 
   get stats(): VizFrameBudgetStats {
-    const active = this.activeSamples();
-    const lastMs = active.source === "gpu" ? this._lastGpuMs : this._lastCpuMs;
     return {
-      lastMs,
-      p95Ms: this._p95Ms,
+      lastMs: this._lastMs,
       overBudget: this._overBudget,
       skipped: this._skipped,
       total: this._total,
-      timingSource: this._timingSource,
-      hasSamples: active.len > 0,
+      timingSource: "cpu",
+      hasSamples: this._total > 0,
+      p95Ms: this._lastMs,
     };
-  }
-
-  /** Mark whether GPU timer queries are supported on the active GL context. */
-  setGpuTimerAvailable(ok: boolean): void {
-    this._gpuAvailable = ok;
-    if (!ok && this._timingSource === "gpu") this._timingSource = "cpu";
-  }
-
-  /** Record a GPU draw duration (ms) once the timer query resolves. */
-  noteGpuMs(ms: number): void {
-    if (!Number.isFinite(ms) || ms <= 0) return;
-    this.pushRing(this.gpuSamples, ms, "gpu");
-    this._lastGpuMs = ms;
-    this.refreshP95();
   }
 
   /** Last frame built by deliver(), including over-budget skips (for CPU HUD metrics). */
@@ -771,64 +625,12 @@ export class VizFrameBudget {
   /** Record a measured duration; returns true when over budget. */
   record(ms: number): boolean {
     this._total++;
-    this._lastCpuMs = ms;
-    this.pushRing(this.cpuSamples, ms, "cpu");
-    this.refreshP95();
+    this._lastMs = ms;
     if (ms > VIZ_FRAME_BUDGET_MS) {
       this._overBudget++;
       return true;
     }
     return false;
-  }
-
-  /** p95 of the active timing source (GPU when available and sampled, else CPU). */
-  p95ForGovernor(): number {
-    const active = this.activeSamples();
-    if (!active.len) return 0;
-    return this._p95Ms;
-  }
-
-  private activeSamples(): { buf: Float32Array; len: number; source: VizBudgetTimingSource } {
-    if (this._gpuAvailable && this.gpuSampleLen > 0) {
-      return { buf: this.gpuSamples, len: this.gpuSampleLen, source: "gpu" };
-    }
-    return { buf: this.cpuSamples, len: this.cpuSampleLen, source: "cpu" };
-  }
-
-  private pushRing(buf: Float32Array, ms: number, source: "cpu" | "gpu"): void {
-    const cap = buf.length;
-    const isGpu = source === "gpu";
-    let len = isGpu ? this.gpuSampleLen : this.cpuSampleLen;
-    let start = isGpu ? this.gpuSampleStart : this.cpuSampleStart;
-    if (len < cap) {
-      buf[(start + len) % cap] = ms;
-      len++;
-    } else {
-      buf[start] = ms;
-      start = (start + 1) % cap;
-    }
-    if (isGpu) {
-      this.gpuSampleLen = len;
-      this.gpuSampleStart = start;
-    } else {
-      this.cpuSampleLen = len;
-      this.cpuSampleStart = start;
-    }
-  }
-
-  private refreshP95(): void {
-    const active = this.activeSamples();
-    this._timingSource = active.source;
-    if (!active.len) {
-      this._p95Ms = 0;
-      return;
-    }
-    const n = active.len;
-    const cap = active.buf.length;
-    const start = active.buf === this.gpuSamples ? this.gpuSampleStart : this.cpuSampleStart;
-    for (let i = 0; i < n; i++) this.scratch[i] = active.buf[(start + i) % cap]!;
-    insertionSortInPlace(this.scratch, n);
-    this._p95Ms = percentileSorted(this.scratch, n, 0.95);
   }
 
   /**
@@ -851,13 +653,13 @@ export class VizFrameBudget {
    */
   deliver(
     state: StateMsg,
-    prevVizClockMs: MonoMs,
+    prevTs: number,
     audio: number,
     onFrame: (frame: VizDataFrame) => void,
-    build: (state: StateMsg, prevVizClockMs: MonoMs, audio: number) => VizDataFrame = buildVizFrame,
+    build: (state: StateMsg, prevTs: number, audio: number) => VizDataFrame = buildVizFrame,
   ): VizDataFrame | null {
     const t0 = this.now();
-    const frame = build(state, prevVizClockMs, audio);
+    const frame = build(state, prevTs, audio);
     this._lastBuilt = frame;
     const over = this.record(this.now() - t0);
     if (over) {
@@ -869,19 +671,20 @@ export class VizFrameBudget {
   }
 
   reset(): void {
-    this._lastCpuMs = 0;
-    this._lastGpuMs = 0;
-    this._p95Ms = 0;
+    this._lastMs = 0;
     this._overBudget = 0;
     this._skipped = 0;
     this._total = 0;
     this._lastBuilt = null;
     this._lastPresent = -1;
-    this.cpuSampleLen = 0;
-    this.cpuSampleStart = 0;
-    this.gpuSampleLen = 0;
-    this.gpuSampleStart = 0;
-    this._timingSource = "cpu";
+  }
+
+  setGpuTimerAvailable(_ok: boolean): void {}
+
+  noteGpuMs(_ms: number): void {}
+
+  p95ForGovernor(): number {
+    return this._lastMs;
   }
 }
 
@@ -921,12 +724,6 @@ export class VizBufferWriter {
   private readonly lengths: Uint16Array;
   private readonly particles: Float32Array;
   private particleCount = 0;
-  private writes = 0;
-
-  /** Increments on any successful buffer / uniform / particle write. */
-  get writeGeneration(): number {
-    return this.writes;
-  }
 
   constructor(contract: VizPluginContract) {
     this.contract = contract;
@@ -953,7 +750,6 @@ export class VizBufferWriter {
     for (let i = 0; i < len; i++) buf[i] = Number(data[i]) || 0;
     for (let i = len; i < buf.length; i++) buf[i] = 0;
     this.lengths[slot] = len;
-    this.writes++;
     return { ok: true };
   }
 
@@ -965,13 +761,11 @@ export class VizBufferWriter {
       if (!Array.isArray(value) || value.length !== 3) {
         return { ok: false, error: `${name} requires vec3` };
       }
-      this.writes++;
       return { ok: true };
     }
     if (typeof value !== "number" || !Number.isFinite(value)) {
       return { ok: false, error: `${name} requires float` };
     }
-    this.writes++;
     return { ok: true };
   }
 
@@ -986,7 +780,6 @@ export class VizBufferWriter {
     const n = count * stride;
     for (let i = 0; i < n; i++) this.particles[i] = Number(data[i]) || 0;
     this.particleCount = count;
-    this.writes++;
     return { ok: true, written: count };
   }
 

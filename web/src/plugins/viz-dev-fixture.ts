@@ -48,7 +48,7 @@ export function buildVizDevFixtureFrame(
   switch (name) {
     case "idle": {
       const state = emptyMonitorState(t);
-      const raw = buildVizFrameForPlugin(state, t - dt, audio, VIZ_SDK_HOST_IDLE, 2);
+      const raw = buildVizFrameForPlugin(state, t - dt, audio, VIZ_SDK_HOST_IDLE, 2 as const);
       return withClock(scrubVizDataFrame(raw, scrubMapForFrame(state, raw)), t, dt, audio);
     }
     case "idle-failed":

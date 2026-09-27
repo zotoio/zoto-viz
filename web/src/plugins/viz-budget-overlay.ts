@@ -32,9 +32,9 @@ export function vizBudgetOverlayFromStats(
   governorEnabled = false,
 ): VizBudgetOverlayModel {
   return {
-    timingSource: stats.timingSource,
+    timingSource: stats.timingSource ?? "cpu",
     lastMs: stats.hasSamples ? stats.lastMs : null,
-    p95Ms: stats.hasSamples ? stats.p95Ms : null,
+    p95Ms: stats.hasSamples ? (stats.p95Ms ?? stats.lastMs) : null,
     renderScale,
     governorEnabled,
   };

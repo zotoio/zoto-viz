@@ -4,12 +4,9 @@ import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, parseGraphSpace } from "../graph/fabric";
 import { parseGraphLayout, parseGraphLinks } from "../graph/graph-layouts";
 import { parsePluginIdle } from "./fixtures/golden-state";
-import { parseVizContract, parseVizContractResult } from "./viz-host";
-import { parseRenderScaleConfig } from "./render-scale-governor";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
-import { ingestCatalogWorkBudget } from "./work-budget-policy";
 import type {
   PluginEngine,
   PluginLayout,
@@ -58,7 +55,6 @@ export type CatalogRow = {
   entry?: unknown;
   capabilities?: unknown;
   viz?: unknown;
-  render?: unknown;
   typesafe?: unknown;
   hash?: unknown;
   service?: unknown;
@@ -141,8 +137,6 @@ function asField(key: string, raw: unknown): PluginField | undefined {
   if (typeof rec.min === "number") field.min = rec.min;
   if (typeof rec.max === "number") field.max = rec.max;
   if (typeof rec.step === "number") field.step = rec.step;
-  const section = asString(rec.section);
-  if (section) field.section = section;
   if (asString(rec.section)) field.section = asString(rec.section);
   if (rec.randomise === false) field.randomise = false;
   else if (rec.randomise === true) field.randomise = true;
@@ -408,14 +402,6 @@ export function toPluginView(raw: unknown): PluginView {
   if (!Number.isFinite(version) || version < 1) throw new Error("plugin version is required");
 
   const engine = parseEngine(viz.engine ?? row.engine);
-  let workBudgetLimited: string | undefined;
-  let workBudgetClamped: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget | undefined;
-  const rawWorkBudget = viz.workBudget ?? (row as { workBudget?: unknown }).workBudget;
-  if (rawWorkBudget !== undefined) {
-    const ingested = ingestCatalogWorkBudget(rawWorkBudget);
-    workBudgetClamped = ingested.budget;
-    workBudgetLimited = ingested.limitedNote ?? asString((row as { workBudgetLimited?: unknown }).workBudgetLimited);
-  }
   const idle = parsePluginIdle(viz.idle);
   const vizSettings = asRecord(viz.settings);
   const rowSettings = asRecord(row.settings);
@@ -431,7 +417,7 @@ export function toPluginView(raw: unknown): PluginView {
   assertConfigFields(configFields);
   const spec: PluginView = {
     id,
-    packName: name,
+    name,
     version,
     hint: asString(viz.hint) ?? asString(row.hint),
     engine,
@@ -445,8 +431,6 @@ export function toPluginView(raw: unknown): PluginView {
   };
   if (settings) spec.settings = settings;
   if (idle) spec.idle = idle;
-  if (workBudgetClamped) spec.workBudget = workBudgetClamped;
-  if (workBudgetLimited) spec.workBudgetLimited = workBudgetLimited;
   if (asString(row.file)) spec.file = asString(row.file);
   if (row.runtime === "yaml" || row.runtime === "typescript") spec.runtime = row.runtime;
   if (asString(row.entry)) spec.entry = asString(row.entry);
@@ -459,19 +443,8 @@ export function toPluginView(raw: unknown): PluginView {
       c === "graph.read" || c === "graph.style" || c === "ui.overlay" || c === "config.read"
       || c === "viz.read" || c === "viz.write" || c === "typesafe");
   }
-  const vizParsed = parseVizContractResult(row.viz);
-  if (vizParsed?.state === "Blocked") {
-    spec.viz_block = vizParsed.reason;
-    spec.sky_available = false;
-    spec.sky_error = vizParsed.reason;
-  } else if (vizParsed?.state === "ready") {
-    spec.viz = vizParsed.contract;
-  }
   const vizContract = parseVizContract(row.viz);
   if (vizContract) spec.viz = vizContract;
-  const render = asRecord(row.render);
-  const renderScale = parseRenderScaleConfig(render?.scale);
-  if (renderScale) spec.renderScale = renderScale;
   const typesafeContract = parseTypeSafeContract(row.typesafe);
   if (typesafeContract) spec.typesafe = typesafeContract;
   if (asString(row.hash)) spec.hash = asString(row.hash);

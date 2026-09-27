@@ -1,6 +1,4 @@
 import type { PluginField } from "../core/modes";
-import { parseMosaicSlotId } from "../graph/mosaic-tile-id";
-import { perTilePackScopeNoteMessage } from "./pack-shared-copy";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import type { PluginView } from "./plugin";
 
@@ -44,18 +42,14 @@ export function pluginViewId(id: string, instanceId?: string | null): string {
 }
 
 export function parsePluginId(modeId: string): string | null {
-  const { viewId } = parseMosaicSlotId(modeId);
-  if (!viewId.startsWith("plugin:")) return null;
-  return viewId.slice("plugin:".length).split(":")[0] || null;
   if (!modeId.startsWith("plugin:")) return null;
   const canonical = mosaicTileViewId(modeId);
   return canonical.slice("plugin:".length).split(":")[0] || null;
 }
 
 export function parsePluginInstance(modeId: string): string | null {
-  const { viewId } = parseMosaicSlotId(modeId);
-  if (!viewId.startsWith("plugin:")) return null;
-  const rest = viewId.slice("plugin:".length);
+  if (!modeId.startsWith("plugin:")) return null;
+  const rest = modeId.slice("plugin:".length);
   const i = rest.indexOf(":");
   return i >= 0 ? rest.slice(i + 1) || null : null;
 }
@@ -76,13 +70,6 @@ export type PackWallScope = {
 };
 
 export function configStoreIdForMode(modeId: string): string | null {
-  const packId = parsePluginId(modeId);
-  if (!packId) return null;
-  const inst = parsePluginInstance(modeId);
-  return inst && inst !== packId ? `${packId}:${inst}` : packId;
-}
-
-function countTilesSharingConfigStore(spec: PluginView, tileModeIds: readonly string[]): number {
   const canonical = mosaicTileViewId(modeId);
   const packId = parsePluginId(canonical);
   if (!packId) return null;
@@ -100,13 +87,6 @@ export function countTilesSharingConfigStore(spec: PluginView, tileModeIds: read
   return n;
 }
 
-export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
-  if (configStoredPerTile(spec)) {
-    return perTilePackScopeNoteMessage(spec.packName);
-  }
-  const shared = wall?.mosaicOn ? countTilesSharingConfigStore(spec, wall.tileModeIds) : 0;
-  if (shared < 2) return null;
-  return `Changes apply to all ${shared} ${spec.packName} tiles on this wall.`;
 /** Host note under plugin settings (null = hide). */
 export function packScopeNoteText(spec: PluginView, wall?: PackWallScope): string | null {
   if (configStoredPerTile(spec)) {
@@ -148,7 +128,7 @@ export function applyInstance(spec: PluginView, inst: PluginInstance): PluginVie
   return {
     ...spec,
     instanceId: inst.id,
-    instanceLabel: inst.name?.trim() || undefined,
+    name: inst.name || spec.name,
     hint: inst.hint || spec.hint,
     look: spec.look,
     config,
@@ -167,16 +147,6 @@ function patchField(field: PluginField, inst: PluginInstance): PluginField {
 export function expandPluginInstances(spec: PluginView): PluginView[] {
   const rows = spec.instances?.length ? spec.instances : [{ id: spec.id }];
   return rows.map((inst) => applyInstance(spec, { ...inst, id: inst.id || spec.id }));
-}
-
-/** Resolve a persisted config store id (catalog or `id:instance`) to the expanded plugin spec. */
-export function pluginSpecForStoreId(specs: PluginView[], storeId: string): PluginView | null {
-  for (const raw of specs) {
-    for (const expanded of expandPluginInstances(raw)) {
-      if (configStoreId(expanded) === storeId) return expanded;
-    }
-  }
-  return null;
 }
 
 export function bindDefaults(inst?: PluginInstance): Record<string, string> {

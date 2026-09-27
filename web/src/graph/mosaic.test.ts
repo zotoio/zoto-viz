@@ -1,18 +1,17 @@
-import { afterEach, describe, expect, it } from "vitest";
-import { assignMosaicSkies, mosaicAnimForTile, mosaicIds, mosaicIsGraph, mosaicPaneMode, mosaicShouldLift, mosaicTileTheme, pinPluginTileSkies, shouldUniqueMosaicSkies } from "./mosaic";
-import { applyPluginCatalog } from "../plugins/plugin";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assignMosaicSkies,
-  mosaicAnimForTile,
   assignParsedMosaicTree,
+  mosaicAnimForTile,
   mosaicIds,
   mosaicIsGraph,
   mosaicPaneMode,
   mosaicShouldLift,
   mosaicTileTheme,
+  pinPluginTileSkies,
   shouldUniqueMosaicSkies,
 } from "./mosaic";
+import { applyPluginCatalog } from "../plugins/plugin";
 import { defaultTree, leafIds } from "./mosaic-layout";
 import { mosaicTileViewId } from "./mosaic-tile-id";
 import * as plugin from "../plugins/plugin";

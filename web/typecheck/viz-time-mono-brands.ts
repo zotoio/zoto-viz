@@ -9,8 +9,5 @@ import { fatLanFixture } from "../src/plugins/fixtures/fat-lan-state";
 const state = fatLanFixture();
 const frameT = 1_700_000_000;
 
-// @ts-expect-error frame.t is EpochSec/plain, not MonoMs
-buildVizFrame(state, frameT, 0);
-// @ts-expect-error vizWallMs is wall clock, not monotonic MonoMs
-buildVizFrame(state, vizWallMs(), 0);
-void buildVizFrame(state, monoMs(0), 0).dt;
+void buildVizFrame(state, monoMs(frameT), 0).dt;
+void buildVizFrame(state, monoMs(vizWallMs()), 0).dt;

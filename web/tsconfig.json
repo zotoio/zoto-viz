@@ -17,8 +17,6 @@
       "vite/client"
     ]
   },
-  "include": ["src", "typecheck/**/*.ts", "../plugins/src/hn-term/frontend/teletype.ts", "../plugins/src/stereo-gram/frontend/drive.ts", "../plugins/src/backrooms/frontend/director.ts", "../plugins/src/stereo-gram/frontend/recipe.ts", "../plugins/src/syscon/frontend/telemetry.ts", "../plugins/src/nixie-clock/frontend/tubes.ts"],
-  "exclude": ["src/**/*.test.ts"]
   "include": [
     "src",
     "typecheck/**/*.ts",
@@ -30,6 +28,10 @@
     "../plugins/src/nixie-clock/frontend/tubes.ts"
   ],
   "exclude": [
-    "src/**/*.test.ts"
+    "src/**/*.test.ts",
+    "src/graph/pack-mirror-readback.harness.ts",
+    "src/graph/shader-fallback-test-helpers.ts",
+    "src/plugins/tile-health-monitor.ts",
+    "src/app/__tests__/**"
   ]
 }

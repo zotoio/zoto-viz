@@ -570,6 +570,5 @@
     "rf": true,
     "talkers": true
   },
-  "contract": 2,
-  "links": []
+  "contract": 1
 }

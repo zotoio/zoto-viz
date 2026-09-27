@@ -10,12 +10,6 @@ import {
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
 import { getSurfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
-import type { RenderScalePane } from "../plugins/render-scale-host";
-import { RenderScaleViewState } from "../plugins/render-scale-host";
-import type { RenderScaleConfig } from "../plugins/render-scale-governor";
-import { formatVizBudgetOverlay, vizBudgetOverlayFromStats } from "../plugins/viz-budget-overlay";
-import { hostRenderScaleGovernorEnabled } from "../plugins/render-scale-governor-enable";
-import { claimPanelRaf, releasePanelView } from "./panel-view-lifecycle";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -1066,15 +1060,12 @@ export interface SceneOpts {
   satellite?: boolean;
   /** draw through a shared context (one canvas for the whole wall) instead of owning a canvas */
   host?: RenderHost;
-  /** mosaic pane id (or `main` for the solo scene) — keys tile shader fallback state on the host */
-  tileId?: string;
 }
 
-export class NetScene implements HostedView, RenderScalePane {
+export class NetScene implements HostedView {
   readonly renderer: HostGpu;
   /** shared renderer this scene draws through, or null when it owns `renderer` */
   private readonly host: RenderHost | null;
-  readonly tileId: string;
   /** where pointer / wheel listeners live: the shared host's pane container, or this scene's canvas */
   private readonly inputEl: HTMLElement;
   /** viewport of the last present() through the host, framebuffer pixels */
@@ -1231,9 +1222,6 @@ export class NetScene implements HostedView, RenderScalePane {
   private readonly dragVel = new THREE.Vector3();
   private readonly baseFov = 55;
   private readonly satellite: boolean;
-  /** mosaic tile id when this scene is the main graph on a pane (`main` or `plugin:…`). */
-  private mosaicPanelId: string | null = null;
-  private releasePanelRaf: (() => void) | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
   private compactLabels = false;
   private raf = 0;
@@ -1302,7 +1290,6 @@ export class NetScene implements HostedView, RenderScalePane {
     this.paneFps = new PaneFps(container);
     this.satellite = !!opts.satellite;
     this.host = opts.host ?? null;
-    this.tileId = opts.tileId ?? "main";
     this.clearHex = this.theme.scene.clear;
     if (this.host) {
       // shared context: the host's canvas covers the wall; this pane is a transparent window onto it
@@ -1312,7 +1299,6 @@ export class NetScene implements HostedView, RenderScalePane {
       this.inputEl = container;
       container.classList.add("hosted");
       this.host.add(this);
-      this.syncRenderScaleGpuProbe();
     } else {
       const capped = layoutDevicePxRatio();
       this.baseDpr = this.satellite
@@ -1571,65 +1557,12 @@ export class NetScene implements HostedView, RenderScalePane {
 
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: number): void { this.animate(ts); }
-
-  readonly renderScaleState = new RenderScaleViewState();
-  get renderScaleActive(): boolean { return this.active; }
-
-  configureRenderScale(config: RenderScaleConfig | null | undefined): void {
-    this.renderScaleState.configure(config);
-    if (!config) this.applyRenderScale(1);
-    else this.applyRenderScale(this.renderScaleState.renderScale);
-  }
-
-  applyRenderScale(scale: number): void {
-    this.backdrop.setPluginRenderScale(scale);
-    this.syncTuneDpr();
-  }
-
-  setPluginSkyContract(uniforms: readonly string[] | undefined): void {
-    this.backdrop.setPluginSkyContract(uniforms);
-  }
-
-  noteFrameCost(ms: number): void {
-    this.paneFps.noteGpu(ms);
-    this.renderScaleState.noteGpuMs(ms);
-  }
   noteFrameCost(ms: number): void { this.paneFps.noteGpu(ms); }
-  private _gpuContextLost = false;
-
-  /** True after webglcontextlost until restored. */
-  get gpuContextLost(): boolean {
-    return this._gpuContextLost;
-  }
-
-  get pictureSerial(): number {
-    return this.paneFps.changeCount;
-  }
-
-  get lastViewport(): Viewport | null {
-    return this.lastVp;
-  }
-
   hostContextLost(): void {
-    this._gpuContextLost = true;
     this.lumaProbe.reset();
     this.changeProbe.reset();
   }
-  hostContextRestored(): void {
-    this.syncRenderScaleGpuProbe();
-    this.relayout();
-  }
-
-  private syncRenderScaleGpuProbe(): void {
-    const gl = this.host?.gl
-      ?? (this.renderer instanceof THREE.WebGLRenderer
-        ? this.renderer.getContext() as WebGL2RenderingContext | null : null);
-    const ok = !!gl?.getExtension("EXT_disjoint_timer_query_webgl2");
-    this.renderScaleState.setGpuTimerAvailable(ok);
-  }
-    this._gpuContextLost = false;
-    this.relayout();
-  }
+  hostContextRestored(): void { this.relayout(); }
 
   get software(): boolean {
     return this.host?.software ?? this.renderer instanceof SoftwareGpu;
@@ -2040,39 +1973,8 @@ export class NetScene implements HostedView, RenderScalePane {
   }
 
   /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */
-  setPluginShader(
-    opts: { id: string; source: string } | null,
-    meta?: {
-      packId: string;
-      packName: string;
-      look?: Record<string, string>;
-      packKey?: string;
-      isShaderPack?: boolean;
-    },
-  ): string | null {
-    if (opts && meta && this.host) {
-      this.host.beginTilePack(
-        this.tileId,
-        meta.packKey ?? meta.packId,
-        meta.packId,
-        this.container,
-        meta.packName,
-        meta.isShaderPack ?? true,
-      );
-    }
-    const gpuProbe = this.host && opts && meta
-      ? () => this.host!.probeTileSky(
-        this.tileId,
-        this.scene,
-        this.camera,
-        (m) => console.warn("zoto-viz tile shader:", m),
-      )
-      : undefined;
-    if (!opts) {
-      this.host?.clearShaderFallback(this.tileId);
-      return this.backdrop.setPluginShader(null, gpuProbe);
-    }
-    return this.backdrop.setPluginShader(opts, gpuProbe);
+  setPluginShader(opts: { id: string; source: string } | null): string | null {
+    return this.backdrop.setPluginShader(opts);
   }
 
   setPluginUniform(name: string, value: number | [number, number, number]): boolean {
@@ -2160,36 +2062,15 @@ export class NetScene implements HostedView, RenderScalePane {
 
   private syncTuneDpr(): void {
     const k = this.tune?.dprK ?? 0;
-    const govScale = hostRenderScaleGovernorEnabled() && this.renderScaleState.hasGovernor
-      ? this.renderScaleState.renderScale
-      : 1;
-    const want = (this.baseDpr + (1 - this.baseDpr) * k) * govScale;
+    const want = this.baseDpr + (1 - this.baseDpr) * k;
     if (Math.abs(want - this.lastTuneDpr) < 0.04) return;
     this.lastTuneDpr = want;
     if (this.host) {
       // one canvas for the wall: only the main pane's auto-tune steers its pixel ratio
       if (!this.satellite) this.host.setPixelRatio(want);
-      this.resize();
       return;
     }
     this.renderer.setPixelRatio(want);
-  }
-
-  private syncRenderScaleHud(): void {
-    const rs = this.renderScaleState;
-    if (!rs.hasGovernor) {
-      this.paneFps.setBudgetLine(null);
-      this.paneFps.setRenderScaleBadge(null);
-      return;
-    }
-    const enabled = hostRenderScaleGovernorEnabled();
-    const scale = enabled ? rs.renderScale : 1;
-    if (this.satellite) {
-      this.paneFps.setBudgetLine(null);
-      this.paneFps.setRenderScaleBadge(enabled ? scale : null);
-      return;
-    }
-    this.paneFps.setBudgetLine(formatVizBudgetOverlay(vizBudgetOverlayFromStats(rs.stats(), scale, enabled)));
   }
 
   private applyWeights(): void {
@@ -2760,16 +2641,6 @@ export class NetScene implements HostedView, RenderScalePane {
       this.lumaProbe.tick(gl, gl.drawingBufferWidth / 2, gl.drawingBufferHeight / 2);
     }
     this.sampledLuma = this.lumaProbe.value;
-  }
-
-  /**
-   * Shared async 16×16 RGBA with {@link LumaProbe} (no synchronous readPixels).
-   * Null while a PBO read is still in flight — tile-health must skip that check.
-   */
-  tileHealthRgba(gl: WebGL2RenderingContext, now = performance.now()): Uint8Array | null {
-    const vp = this.lastVp;
-    if (!vp || vp.w < 4 || vp.h < 4) return null;
-    return this.lumaProbe.sampleForHealth(gl, vp, now);
   }
 
   /** Ease sky/floor dimming and blending toward the visibility tool's fix. Overlay only. */
@@ -3708,7 +3579,6 @@ export class NetScene implements HostedView, RenderScalePane {
       this.present();
       return;
     }
-    if (this.renderScaleActive) this.renderScaleState.onPaneFrame(ts);
     if (!this.satellite) {
       tickPerf(ts, this.anim.autoTune !== false, this.anim.moveEase);
       const s = perfStress();
@@ -3723,7 +3593,6 @@ export class NetScene implements HostedView, RenderScalePane {
         + ` · layout: ${this.layout.backend}/${this.layout.kernel}`
         + (this.software ? " · canvas 2D (this browser has no WebGL)" : ""));
     }
-    this.syncRenderScaleHud();
     this.tune = perfOverlay(this.anim, perfStress());
     this.syncTuneDpr();
     if (this.tune.labelCount !== this.lastTuneLabels) {
@@ -4146,12 +4015,7 @@ export class NetScene implements HostedView, RenderScalePane {
     const w = this.container.clientWidth, h = this.container.clientHeight;
     if (w < 2 || h < 2) return;
     const firstBox = this.viewW < 2 || this.viewH < 2 || !Number.isFinite(this.camera.aspect);
-    const dpr = this.host?.pixelRatio
-      ?? (this.renderer instanceof SoftwareGpu ? this.renderer.getPixelRatio() : (this.renderer as THREE.WebGLRenderer).getPixelRatio());
-    if (w === this.viewW && h === this.viewH && !firstBox) {
-      this.backdrop.setViewport(w, h, dpr);
-      return;
-    }
+    if (w === this.viewW && h === this.viewH && !firstBox) return;
     this.viewW = w;
     this.viewH = h;
     this.camera.aspect = w / h;
@@ -4169,7 +4033,7 @@ export class NetScene implements HostedView, RenderScalePane {
       }
     }
     this.labelLayer.setSize(w, h);
-    this.backdrop.setViewport(w, h, dpr);
+    this.backdrop.setViewport(w, h);
     this.applyViewShift();
     this.updateSpread();
   }
@@ -4224,20 +4088,8 @@ export class NetScene implements HostedView, RenderScalePane {
     return base / Math.sqrt(Math.max(1, this.spreadX));
   }
 
-  /** Mosaic tile id moved onto the main scene element — retarget rAF lease. */
-  retargetPanel(panelId: string | null): void {
-    this.releasePanelRaf?.();
-    this.releasePanelRaf = null;
-    if (this.mosaicPanelId) releasePanelView(this.mosaicPanelId);
-    this.mosaicPanelId = panelId;
-    if (panelId) this.releasePanelRaf = claimPanelRaf(panelId);
-  }
-
   dispose(): void {
     this.active = false;
-    this.releasePanelRaf?.();
-    this.releasePanelRaf = null;
-    if (this.mosaicPanelId) releasePanelView(this.mosaicPanelId);
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     window.removeEventListener("resize", this.onWinResize);
