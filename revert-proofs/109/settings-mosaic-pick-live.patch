@@ -1,5 +1,4 @@
 diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 4dd54309..b34fc99e 100644
 --- a/web/src/ui/settings.ts
 +++ b/web/src/ui/settings.ts
 @@ -1772,10 +1772,7 @@ export class Settings {
@@ -10,7 +9,7 @@ index 4dd54309..b34fc99e 100644
 -          const fail = () => fillViewSelect(sel, from);
 -          if (ret instanceof Promise) void ret.then((ok) => { if (ok === false) fail(); });
 -          else if (ret === false) fail();
-+          return;
++          if (!this.onMosaicPanePick(from, to)) fillViewSelect(sel, from);
          } else {
            const next = nextPaneTiles(ids, from, to);
            this.anim.mosaicTiles = parseMosaicTiles(next);

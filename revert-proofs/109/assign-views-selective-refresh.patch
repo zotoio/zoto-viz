@@ -1,7 +1,7 @@
 diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
 --- a/web/src/graph/mosaic.ts
 +++ b/web/src/graph/mosaic.ts
-@@ -454,7 +454,7 @@ export class Mosaic {
+@@ -453,7 +453,7 @@ export class Mosaic {
      this.placeTree();
      this.applyLooks(this.cfg.sync().anim);
      this.paintPanes(this.cfg.sync().theme);
