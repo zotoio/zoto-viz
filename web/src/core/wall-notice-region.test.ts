@@ -64,6 +64,8 @@ describe("wall notice region", () => {
     expect(cs.flexDirection).toBe("column");
     expect(cs.gap).toBe("6px");
     expect(cs.marginBottom).toBe("10px");
+    postWallNotice({ key: "install-failed", text: "x", action: { label: "Retry", onClick: () => {} } });
+    expect(getComputedStyle(document.querySelector(".wall-notice-row")!).pointerEvents).toBe("auto");
   });
 
   it("routes all ten NoticeKey values via NOTICE_ROUTE", () => {
@@ -172,6 +174,8 @@ describe("wall notice region", () => {
     boot();
     postWallNotice({ key: "install-failed", text: "Install failed.", action: { label: "Retry", onClick: () => {} } });
     expect(document.querySelector<HTMLButtonElement>(".wall-notice-action")!.tabIndex).toBe(0);
+    expect(document.querySelector<HTMLButtonElement>(".wall-notice-action")!.type).toBe("button");
+    expect(document.querySelector('[data-notice-key="install-failed"]')!.className).toBe("wall-notice-row");
   });
 
   it("returns focus to the mount root when dismissing a focused notice", () => {
@@ -242,6 +246,7 @@ describe("wall notice region", () => {
     postWallNotice({ key: "layout-refused-boot", text: "q2" });
     q.dismiss();
     expect(region.dataset.queueCount).toBe("1");
+    expect(q.live).toBe(false);
   });
 
   it("posting before mount throws wall notice region not mounted", async () => {
@@ -290,6 +295,9 @@ describe("wall notice region", () => {
     expect(vi.getTimerCount()).toBe(0);
     vi.advanceTimersByTime(10_000);
     expect(rows("server-restarted")).toBe(1);
+    postWallNotice({ key: "server-restarted", text: "Server restarted.", autoClearMs: 5000 });
+    vi.advanceTimersByTime(5000);
+    expect(rows("server-restarted")).toBe(0);
   });
 
   it("live turns false when the timer clears the notice", () => {
@@ -379,6 +387,9 @@ describe("wall notice region", () => {
     expect(wall.querySelector(".wall-notice-region")).toBe(region);
   });
 
+  it("tsconfig include lists the typecheck proofs", () => {
+    expect(JSON.parse(fs.readFileSync(path.join(webRoot, "tsconfig.json"), "utf8")).include[1]).toBe("typecheck/**/*.ts");
+  });
   it("the mount root is made programmatically focusable", () => {
     const { wall } = boot();
     expect(wall.getAttribute("tabindex")).toBe("-1");
@@ -389,8 +400,8 @@ describe("wall notice region", () => {
     const first = postWallNotice({ key: "context-not-restored", text: "e1" });
     postWallNotice({ key: "retry-failed", text: "e2" });
     postWallNotice({ key: "install-failed", text: "e3" });
-    postWallNotice({ key: "context-lost", text: "q1" });
-    postWallNotice({ key: "context-lost", text: "q2" });
+    const q1 = postWallNotice({ key: "context-lost", text: "q1" });
+    expect(postWallNotice({ key: "context-lost", text: "q2" })).toBe(q1);
     first.dismiss();
     expect(document.querySelector('[data-notice-key="context-lost"]')!.textContent).toBe("q2");
   });

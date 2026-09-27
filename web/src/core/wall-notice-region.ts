@@ -152,8 +152,6 @@ export function mountWallNoticeRegion(root: HTMLElement): void {
     for (const e of [...visible, ...queue.values()]) removeLiveNotice(e);
     queue.clear();
     syncQueueCount();
-    statusContainer!.replaceChildren();
-    alertContainer!.replaceChildren();
     root.appendChild(regionNode);
     return;
   }
