@@ -64,6 +64,14 @@ function fixturePython(root: string): string {
 
 function ensureFixtureVenv(root: string) {
   const venvDir = path.join(root, ".venv");
+  const repoVenv = path.join(repoRoot, ".venv");
+  if (
+    fs.existsSync(path.join(repoVenv, "bin", "python3")) &&
+    !fs.existsSync(path.join(venvDir, "bin", "python3"))
+  ) {
+    fs.symlinkSync(repoVenv, venvDir, "dir");
+    return;
+  }
   if (!fs.existsSync(path.join(venvDir, "bin", "python3"))) {
     const create = spawnSync("python3", ["-m", "venv", venvDir], {
       cwd: root,

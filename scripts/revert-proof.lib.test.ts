@@ -553,8 +553,9 @@ describe("strict git apply", () => {
       "utf8",
     );
     const stalePatch = good.replace(
-      "@@ -271,7 +271,7 @@",
-      "@@ -281,7 +281,7 @@",
+      /@@ -(\d+),(\d+) \+(\d+),\2 @@/,
+      (_, start, count, plusStart) =>
+        `@@ -${Number(start) + 10},${count} +${Number(plusStart) + 10},${count} @@`,
     );
     expect(() => gitApplyPatchStrict(repoRoot, stalePatch)).toThrow(/offset or fuzz/i);
   });
@@ -631,6 +632,12 @@ describe("sidecar red value", () => {
         validateRowMeta({ ...meta, red: { actual: 2, expected: 1 } }, "r"),
       ),
     ).toBe("row r: red must be a single-line string, not an object (got structured sidecar)");
+  });
+
+  it("(5-red-shape) vitest red empty string is rejected", () => {
+    expect(thrownMessage(() => validateRowMeta({ ...meta, red: "" }, "r"))).toBe(
+      'row r: sidecar JSON missing string field "red"',
+    );
   });
 
   it("(5-red-shape) pytest red must be assert source", () => {

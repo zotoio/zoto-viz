@@ -366,7 +366,7 @@ export function classifyPatchedVitest(run) {
   if (!sel?.ok || !sel.target) return "not single assertion failure";
   if (sel.target.status === "passed") return "green";
   if (sel.target.status !== "failed") return "build break";
-  return sel.target.revertProofAssertion ? "assertion" : "build break";
+  return sel.target.revertProofAssertion !== undefined ? "assertion" : "build break";
 }
 
 /**

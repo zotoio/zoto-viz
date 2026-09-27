@@ -1,5 +1,5 @@
 diff --git a/scripts/revert-proof-vitest-brand.mjs b/scripts/revert-proof-vitest-brand.mjs
-index 78f5370..c1ffa38 100644
+index 78f5370..0000000 100644
 --- a/scripts/revert-proof-vitest-brand.mjs
 +++ b/scripts/revert-proof-vitest-brand.mjs
 @@ -20,8 +20,8 @@ function brandIfAssertion(err, isAssertion) {

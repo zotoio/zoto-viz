@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 4b69613..85ec6d6 100644
+index b913228..0000000 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -311,13 +311,7 @@ export function parseVitestJsonReport(report) {
+@@ -316,13 +316,7 @@ export function parseVitestJsonReport(report) {
          status: t.status,
          revertProofAssertion: t.meta?.revertProofAssertion === true,
          revertProofNodeAssert: t.meta?.revertProofNodeAssert === true,

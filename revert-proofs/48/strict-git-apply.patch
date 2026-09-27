@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 4b69613..a60376b 100644
+index b913228..0000000 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -967,11 +967,6 @@ export function assertGitApplyCheckStrict(wtRoot, patchText) {
+@@ -1076,11 +1076,6 @@ function assertGitApplyCheckStrict(wtRoot, patchText) {
      if (check.status !== 0) {
        throw new Error(`git apply --check failed: ${verbose.trim()}`);
      }

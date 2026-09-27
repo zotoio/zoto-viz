@@ -1,5 +1,5 @@
 diff --git a/scripts/revert_proof_pytest_plugin.py b/scripts/revert_proof_pytest_plugin.py
-index 466ff50..151db91 100644
+index 466ff50..0000000 100644
 --- a/scripts/revert_proof_pytest_plugin.py
 +++ b/scripts/revert_proof_pytest_plugin.py
 @@ -24,9 +24,7 @@ def _rewritten_assert_in_test(excinfo, item) -> tuple[bool, str | None]:

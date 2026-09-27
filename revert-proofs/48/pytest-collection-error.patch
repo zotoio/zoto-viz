@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 4b69613..e14e42c 100644
+index b913228..0000000 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -385,7 +385,7 @@ function normalizePytestPluginTest(t) {
+@@ -390,7 +390,7 @@ function normalizePytestPluginTest(t) {
  /** @returns {{ tests: PytestPluginTest[], collectionError: boolean }} */
  export function parsePytestPluginJson(text, pytestExitCode) {
    if (!text?.trim()) {
