@@ -31,7 +31,12 @@
   "exclude": [
     "src/**/*.test.ts",
     "src/graph/pack-mirror-readback.harness.ts",
+    "src/graph/pack-mirror-readback-chrome.ts",
+    "src/graph/photo-sky-registry.ts",
     "src/graph/shader-fallback-test-helpers.ts",
+    "src/plugins/plugin-sky-smoke-render.ts",
+    "src/plugins/starter-pack-pipeline.ts",
+    "src/plugins/test/**",
     "src/plugins/tile-health-monitor.ts",
     "src/app/__tests__/**"
   ]
