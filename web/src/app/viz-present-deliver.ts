@@ -24,6 +24,7 @@ import {
 } from "./main-viz-tile-lines";
 import { STEREO_BINS } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { normalizeVizDemoPackId, type VizHud } from "../ui/viz-hud";
+import { vizHudGovernorTickFields, type RenderScaleGovernorHost } from "./render-scale-governor-wiring";
 import type { ViewMode } from "../core/modes";
 import { notePackSandboxFrame, packPerfEnabled } from "../core/pack-host-perf";
 
@@ -48,6 +49,7 @@ export interface VizPresentDeliverHost {
   getVizFrameClockMs: () => MonoMs;
   setVizFrameClockMs: (ms: MonoMs) => void;
   syncVizBudgetTileScope: () => void;
+  renderScaleGovernor: RenderScaleGovernorHost;
 }
 
 /** One viz budget deliver + sandbox frame (display cadence, not websocket cadence). */
@@ -131,15 +133,18 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
   const budgetTileId = host.mosaic?.on ? (host.mosaic.mainMode || host.mosaic.tileIds[0] || "main") : "main";
   const tileLinesRaw = host.mosaic?.on ? mosaicTileBudgetLines(host.mosaic.tileIds) : undefined;
   if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
+  const govFields = vizHudGovernorTickFields(host.renderScaleGovernor, host.vizBudget.stats);
   host.vizHud.tick({
     packId,
     packName: active?.name ?? packId ?? "",
-    stats: host.vizBudget.stats,
+    stats: govFields.stats,
     frame: host.vizBudget.lastBuilt,
     state: shown,
     now: vizClockMs(),
     tileBudget: vizTileBudgetRegistry.getTile(budgetTileId),
     activeTiles,
     tileBudgetLines: tileLinesRaw,
+    renderScale: govFields.renderScale,
+    governorEnabled: govFields.governorEnabled,
   });
 }

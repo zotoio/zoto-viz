@@ -56,9 +56,17 @@ import {
 import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import {
   loadVizGovernorSetting,
-  refreshHostRenderScaleGovernorEnabled,
   setVizGovernorSetting,
 } from "../plugins/render-scale-governor-enable";
+import {
+  applyHostRenderScaleGovernor,
+  bootRenderScaleGpuTimer,
+  createVizGovernorToggle,
+  refreshRenderScaleGovernorFromUrl,
+  runRenderScaleGovernorPresentTick,
+  syncHostRenderGovernorForSpec,
+  type RenderScaleGovernorHost,
+} from "./render-scale-governor-wiring";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
 import { cycleSkyPool } from "../graph/backdrop";
@@ -257,6 +265,7 @@ const renderHost = new RenderHost($("wall"));
 mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
+bootRenderScaleGpuTimer(scene, renderHost.gl);
 const hostMeshBridge = createHostMeshBridge(scene);
 scene.retargetPanel("main");
 const panel = new Panel($("panel"), scene);
@@ -479,6 +488,13 @@ function syncVizBudgetTileScope(): void {
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
+const renderScaleGovernorHost: RenderScaleGovernorHost = {
+  scene,
+  get mosaic() { return mosaic; },
+  pluginSpecForMode,
+  vizHud,
+};
+refreshRenderScaleGovernorFromUrl();
 const pluginHudCaptions = new Map<string, string | null>();
 
 function mosaicHudOn(): boolean {
@@ -515,6 +531,7 @@ function refreshPluginDriveForMode(spec: PluginView | null, modeId: string): voi
 }
 
 addPresentListener((ts) => {
+  runRenderScaleGovernorPresentTick(renderScaleGovernorHost, ts);
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
@@ -586,6 +603,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   }
   if (writer && preserveUbo && !resetFrameTs) broadcastPluginUbo(scene, writer.ubo, mosaic?.on ? mosaic : null);
   refreshPluginDriveForMode(spec ?? activePluginSpec, modeSel.value);
+  syncHostRenderGovernorForSpec(renderScaleGovernorHost, spec);
   void hostMeshBridge.mountPack(spec);
 }
 function swapVizPack(packId: VizDemoPackId): void {
@@ -674,6 +692,7 @@ const vizPresentHost: VizPresentDeliverHost = {
   getVizFrameClockMs: () => vizFrameClockMs,
   setVizFrameClockMs: (ms) => { vizFrameClockMs = ms; },
   syncVizBudgetTileScope,
+  renderScaleGovernor: renderScaleGovernorHost,
 };
 
 function shownForVizDeliver(): StateMsg | null {
@@ -2016,7 +2035,8 @@ const autoconsentToggle = new Toggle({
     touch();
   },
 });
-const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle]);
+const vizGovernorToggle = createVizGovernorToggle(renderScaleGovernorHost);
+const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle, vizGovernorToggle]);
 $("settingsBox").appendChild(settings.el);
 settings.attachViewCog($("modeBox"), () => bindThisView(modeSel.value));
 agent.mountSettings(settings.agentHost());
@@ -2490,8 +2510,8 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   if (s.camera) settings.setCamPolicy(s.camera);
   if (s.mic) settings.setMicPolicy(s.mic);
   settings.setSoundOn(!!s.sound);
-  setVizGovernorSetting(!!s.vizGovernor);
-  refreshHostRenderScaleGovernorEnabled();
+  applyHostRenderScaleGovernor(s.vizGovernor === true, renderScaleGovernorHost);
+  vizGovernorToggle.checked = s.vizGovernor === true;
   if (activeArcade) {
     arcade[activeArcade].view.stop();
     arcade[activeArcade].el.hidden = true;

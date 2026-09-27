@@ -84,6 +84,8 @@ export interface VizHudTick {
   tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats }[];
   /** When set, show the frame-budget overlay (GPU/CPU ms, p95, scale). */
   renderScale?: number | null;
+  /** Host adaptive render-scale governor (off unless enabled in settings or `?vizGovernor=1`). */
+  governorEnabled?: boolean;
 }
 
 /** v2 contract exposes talker TCP failure ratios and systemd unit pressure — host maps them to a strip badge. */
@@ -494,7 +496,11 @@ export class VizHud {
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
 
     if (this.budgetVisible) {
-      const model = vizBudgetOverlayFromStats(stats, input.renderScale ?? null);
+      const model = vizBudgetOverlayFromStats(
+        stats,
+        input.renderScale ?? null,
+        input.governorEnabled ?? false,
+      );
       this.budgetEl.textContent = formatVizBudgetOverlay(model);
     }
 
