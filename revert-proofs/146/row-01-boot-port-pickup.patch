@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/sandbox-frame.ts b/web/src/plugins/sandbox-frame.ts.revert-patched
+index b28a8346..4187882b 100644
+--- a/web/src/plugins/sandbox-frame.ts
++++ b/web/src/plugins/sandbox-frame.ts
+@@ -444,7 +444,7 @@ export function handleSandboxBootChannelMessage(
+   if (!nonce || ev.data.bootNonce !== nonce) return;
+   const port = ev.ports[0];
+   if (!port) return;
+-  attachSandboxHostPort(port, rt, api);
++  void port; /* revert-proof */
+ }
+ 
+ /** Listen for `boot-channel` on a jsdom iframe `contentWindow` (e2e tests). */

@@ -1,0 +1,9 @@
+{
+  "description": "Revert boot-channel port adoption in sandbox-frame (row-01-boot-port-pickup)",
+  "runner": "vitest",
+  "testFile": "src/plugins/sandbox-write-path.counts.test.ts",
+  "testName": "sandbox write path counts (#129) > 1 boot ready and timeout counts > reaches ready with 0 timeouts; +15s fake time still 0 timeouts",
+  "red": "Error: sandbox ready timeout",
+  "project": "web",
+  "timeoutSec": 30
+}

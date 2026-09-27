@@ -1,0 +1,8 @@
+{
+  "description": "Revert boot-channel event.source === parent guard (row-02-boot-channel-parent-source)",
+  "runner": "vitest",
+  "testFile": "src/plugins/sandbox-write-path.counts.test.ts",
+  "testName": "sandbox write path counts (#129) > 2 boot-channel source === parent > ignores boot-channel when event.source is not parent (0 ports adopted)",
+  "red": "AssertionError: expected false to be true // Object.is equality",
+  "project": "web"
+}

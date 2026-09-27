@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/sandbox-frame.ts b/web/src/plugins/sandbox-frame.ts.revert-patched
+index b28a8346..26370586 100644
+--- a/web/src/plugins/sandbox-frame.ts
++++ b/web/src/plugins/sandbox-frame.ts
+@@ -269,7 +269,7 @@ function emitVizWriteChunk(batch: VizWriteBatchPayload): void {
+ 
+ function flushVizBatchContents(): void {
+   if (!vizBatch) return;
+-  const chunks = splitVizWriteBatch(vizBatch);
++  const chunks = [vizBatch];
+   if (vizBatchDepth > 0) clearVizBatchInPlace(vizBatch);
+   else vizBatch = null;
+   for (const chunk of chunks) emitVizWriteChunk(chunk);

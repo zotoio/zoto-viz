@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/sandbox-frame.ts b/web/src/plugins/sandbox-frame.ts.revert-patched
+index b28a8346..859d3a41 100644
+--- a/web/src/plugins/sandbox-frame.ts
++++ b/web/src/plugins/sandbox-frame.ts
+@@ -282,7 +282,7 @@ function flushVizBatch(): void {
+ function beginVizBatch(): void {
+   vizBatchDepth++;
+   if (vizBatchDepth === 1) {
+-    vizBatch = vizBatchAllocateFreshForTests ? emptyVizWriteBatch() : vizBatchShell;
++    vizBatch = emptyVizWriteBatch();
+     clearVizBatchInPlace(vizBatch);
+     vizBatchBeginIdentity = vizBatch;
+   }

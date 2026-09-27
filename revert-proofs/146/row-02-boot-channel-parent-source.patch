@@ -1,0 +1,20 @@
+diff --git a/web/src/plugins/sandbox-frame.ts b/web/src/plugins/sandbox-frame.ts.revert-patched
+index b28a8346..fe21844e 100644
+--- a/web/src/plugins/sandbox-frame.ts
++++ b/web/src/plugins/sandbox-frame.ts
+@@ -439,11 +439,14 @@ export function handleSandboxBootChannelMessage(
+   api: SandboxZoto = zoto,
+ ): void {
+   if (!isHostBootChannel(ev.data)) return;
+-  if (ev.source !== window.parent) return;
+   const nonce = bootNonceFromLocation(rt.locationHref);
+   if (!nonce || ev.data.bootNonce !== nonce) return;
+   const port = ev.ports[0];
+   if (!port) return;
++  if (ev.source !== window.parent) {
++    rt.pluginPort = port;
++    return;
++  }
+   attachSandboxHostPort(port, rt, api);
+ }
+ 
