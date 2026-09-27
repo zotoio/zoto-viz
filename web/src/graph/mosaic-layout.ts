@@ -204,6 +204,23 @@ export function nextPaneTiles(ids: string[], fromId: string, toId: string): stri
   return next;
 }
 
+/** Pane ids whose view binding, sky hold, or mode refresh must run (swap touches both swapped ids). */
+export function mosaicPaneIdsWithViewChange(prev: string[], next: string[]): string[] {
+  const out = new Set<string>();
+  const prevSet = new Set(prev);
+  const nextSet = new Set(next);
+  for (const id of prev) if (!nextSet.has(id)) out.add(id);
+  for (const id of next) if (!prevSet.has(id)) out.add(id);
+  const n = Math.max(prev.length, next.length);
+  for (let i = 0; i < n; i++) {
+    if (prev[i] !== next[i]) {
+      if (prev[i]) out.add(prev[i]);
+      if (next[i]) out.add(next[i]);
+    }
+  }
+  return [...out];
+}
+
 /** Put `want` onto existing cells in order. Extra / missing ids keep the leftover leaves. */
 export function assignTiles(n: MosaicNode, want: string[]): MosaicNode {
   const cur = leafIds(n);
