@@ -23,6 +23,17 @@ import { letterboxInnerRectInto, paintLetterboxBarsInto, type SurfaceLetterboxFi
 import { probeWebGL } from "./webgl";
 import { observeResize } from "../core/resize";
 import { harvestGpu, timeGpu } from "../core/gpu-time";
+import { TileShaderLatch } from "./tile-shader-latch";
+import { GfxWallNotice } from "./gfx-wall-notice";
+import { TileShaderFallback } from "./tile-shader-fallback";
+import { genericShaderFallbackMessage } from "./shader-fallback-copy";
+import {
+  resolveShaderFallbackLine,
+  SHADER_FALLBACK_TICK_MS,
+  shaderPackForId,
+  type ShaderPack,
+} from "./shader-pack-fallback";
+
 import {
   PackMirrorRegistry,
   type LetterboxBarScratch,
@@ -99,6 +110,43 @@ export class SoftwareGpu {
 
 export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
+class TileShaderSlot {
+  readonly latch = new TileShaderLatch();
+  fallback: TileShaderFallback | null = null;
+  packKey = "";
+  packId = "";
+  packName = "";
+  mount: HTMLElement | null = null;
+  /** Manifest marks a plugin sky (GLSL) pack — only these enter simple-view fallback. */
+  isShaderPack = false;
+  shaderPack: ShaderPack = {};
+  compileFailed = false;
+  mountedFallbackPackKey = "";
+
+  /** New pack on this pane — clears fallback and compile latch. */
+  swapPack(
+    packKey: string,
+    packId: string,
+    packName: string,
+    mount: HTMLElement,
+    isShaderPack = false,
+  ): void {
+    if (this.packKey !== packKey) {
+      this.packKey = packKey;
+      this.packId = packId;
+      this.latch.reset();
+      this.compileFailed = false;
+      this.fallback?.dispose();
+      this.fallback = null;
+      this.mountedFallbackPackKey = "";
+    }
+    this.packName = packName;
+    this.mount = mount;
+    this.isShaderPack = isShaderPack;
+    this.shaderPack = isShaderPack ? shaderPackForId(packId) : {};
+  }
+}
+
 function copyViewBox(dst: SoftRect, out: CssRectLoose): CssRect {
   out.x = dst.x;
   out.y = dst.y;
@@ -122,6 +170,11 @@ export class RenderHost {
   private readonly frame: (ts: number) => void;
   private disposed = false;
   private pr: number;
+  private readonly tileShaders = new Map<string, TileShaderSlot>();
+  private readonly gfxNotice: GfxWallNotice;
+  private glContextLost = false;
+  private readonly fallbackTileIds = new Set<string>();
+  private fallbackTick: ReturnType<typeof setInterval> | null = null;
   private layoutDevicePxRatio: DevicePxRatio;
   readonly packMirrors = new PackMirrorRegistry();
   private readonly letterboxScratch = {
@@ -215,11 +268,14 @@ export class RenderHost {
     this.canvas.className = "render-host";
     this.canvas.setAttribute("aria-hidden", "true");
     if (this.software) this.canvas.dataset.softgl = "";
+    this.gfxNotice = new GfxWallNotice(wall, { onDismissLateReload: () => this.invalidate() });
     this.canvas.addEventListener("webglcontextlost", (e) => {
       e.preventDefault();
+      this.onSharedContextLost();
       for (const v of this.views) v.hostContextLost();
     });
     this.canvas.addEventListener("webglcontextrestored", () => {
+      this.onSharedContextRestored();
       this.dirty = true;
       this.refreshContextAntialias();
       this.markMirrorScopeDirty();
@@ -258,6 +314,7 @@ export class RenderHost {
   get pixelRatio(): number { return this.pr; }
 
   get viewCount(): number { return this.views.length; }
+  get contextLost(): boolean { return this.glContextLost; }
 
   /** WebGL2 context, or null when lost / unavailable. */
   get gl(): WebGL2RenderingContext | null {
@@ -282,6 +339,186 @@ export class RenderHost {
   invalidate(): void {
     this.dirty = true;
     this.markMirrorScopeDirty();
+  }
+
+  private tileSlot(tileId: string): TileShaderSlot {
+    let slot = this.tileShaders.get(tileId);
+    if (!slot) {
+      slot = new TileShaderSlot();
+      this.tileShaders.set(tileId, slot);
+    }
+    return slot;
+  }
+
+  beginTilePack(
+    tileId: string,
+    packKey: string,
+    packId: string,
+    mount: HTMLElement,
+    packName: string,
+    isShaderPack = false,
+  ): void {
+    const slot = this.tileSlot(tileId);
+    if (slot.packKey !== packKey) this.stopFallbackTile(tileId, slot);
+    slot.swapPack(packKey, packId, packName, mount, isShaderPack);
+  }
+
+  /**
+   * Probe plugin sky compile for one tile (used from NetScene / backdrop wiring).
+   * Returns a GPU error string, or null when compile succeeded or was skipped.
+   */
+  probeTileSky(
+    tileId: string,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    log: (msg: string) => void = () => {},
+  ): string | null {
+    if (this.contextLost) return null;
+    const ok = this.compilePluginSky(tileId, scene, camera, log);
+    if (!ok) {
+      this.onTileShaderCompileFailed(tileId);
+      return "shader failed";
+    }
+    this.onTileShaderCompileOk(tileId);
+    return null;
+  }
+
+  /**
+   * Compile a plugin sky for one tile and mount or clear the shader fallback overlay.
+   */
+  /**
+   * Compile the plugin sky material already on the scene (one Three.js compile).
+   * Returns false when latched after a shader error.
+   */
+  compilePluginSky(
+    tileId: string,
+    scene: THREE.Scene,
+    camera: THREE.Camera,
+    log: (msg: string) => void = () => {},
+  ): boolean {
+    if (this.software) return true;
+    if (this.glContextLost) return false;
+    const rd = this.renderer as THREE.WebGLRenderer;
+    if (typeof rd.compile !== "function") return true;
+    const slot = this.tileSlot(tileId);
+    const latch = slot.latch;
+    if (latch.dead) return false;
+    if (latch.isFresh()) return true;
+
+    if (!rd.debug) {
+      rd.debug = { checkShaderErrors: true, onShaderError: null };
+    }
+    const prevCheck = rd.debug.checkShaderErrors;
+    const prevOn = rd.debug.onShaderError;
+    rd.debug.checkShaderErrors = true;
+    rd.debug.onShaderError = (gl, program, _vs, fs) => {
+      const msg = (
+        gl.getShaderInfoLog(fs)
+        || gl.getProgramInfoLog(program)
+        || "shader failed"
+      ).trim();
+      latch.fail(msg || "shader failed", log);
+    };
+    try {
+      rd.compile(scene, camera);
+    } finally {
+      rd.debug.checkShaderErrors = prevCheck;
+      rd.debug.onShaderError = prevOn;
+    }
+    if (latch.dead) return false;
+    latch.markCompiled();
+    return true;
+  }
+
+  onTileShaderCompileFailed(tileId: string): void {
+    this.mountShaderFallback(tileId);
+  }
+
+  onTileShaderCompileOk(tileId: string): void {
+    this.clearShaderFallback(tileId);
+  }
+
+  private mountShaderFallback(tileId: string): void {
+    const slot = this.tileSlot(tileId);
+    if (!slot.isShaderPack) return;
+    slot.compileFailed = true;
+    if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) {
+      this.refreshShaderFallbackText(tileId);
+      return;
+    }
+    this.stopFallbackTile(tileId, slot);
+    slot.fallback?.dispose();
+    const initialText = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
+    const showChip = typeof slot.shaderPack.fallbackText === "function"
+      && initialText !== genericShaderFallbackMessage(slot.packName);
+    slot.fallback = new TileShaderFallback(slot.mount!, {
+      packName: slot.packName,
+      showChip,
+      initialText,
+    });
+    slot.mountedFallbackPackKey = slot.packKey;
+    this.startFallbackTile(tileId);
+  }
+
+  clearShaderFallback(tileId: string): void {
+    const slot = this.tileShaders.get(tileId);
+    if (!slot) return;
+    this.stopFallbackTile(tileId, slot);
+    slot.fallback?.dispose();
+    slot.fallback = null;
+    slot.mountedFallbackPackKey = "";
+    slot.compileFailed = false;
+  }
+
+  private refreshShaderFallbackText(tileId: string): void {
+    const slot = this.tileShaders.get(tileId);
+    if (!slot?.fallback) return;
+    const line = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
+    slot.fallback.applyText(line);
+  }
+
+  private startFallbackTile(tileId: string): void {
+    this.fallbackTileIds.add(tileId);
+    if (this.fallbackTick !== null) return;
+    this.fallbackTick = setInterval(() => {
+      for (const id of this.fallbackTileIds) this.refreshShaderFallbackText(id);
+    }, SHADER_FALLBACK_TICK_MS);
+  }
+
+  private stopFallbackTile(tileId: string, _slot: TileShaderSlot): void {
+    this.fallbackTileIds.delete(tileId);
+    if (this.fallbackTileIds.size === 0 && this.fallbackTick !== null) {
+      clearInterval(this.fallbackTick);
+      this.fallbackTick = null;
+    }
+  }
+
+  private clearAllShaderFallbacks(): void {
+    if (this.fallbackTick !== null) {
+      clearInterval(this.fallbackTick);
+      this.fallbackTick = null;
+    }
+    this.fallbackTileIds.clear();
+    for (const slot of this.tileShaders.values()) {
+      slot.fallback?.dispose();
+      slot.fallback = null;
+      slot.mountedFallbackPackKey = "";
+      slot.compileFailed = false;
+    }
+  }
+
+  private onSharedContextLost(): void {
+    if (this.glContextLost) return;
+    this.glContextLost = true;
+    this.gfxNotice.onContextLost();
+  }
+
+  private onSharedContextRestored(): void {
+    this.glContextLost = false;
+    this.gfxNotice.onContextRestored();
+    for (const slot of this.tileShaders.values()) {
+      slot.latch.reset();
+    }
   }
 
   /** Pack-mirror tile metadata changed without add/remove (mosaic coalesce). */
@@ -557,6 +794,7 @@ export class RenderHost {
     this.unsubLayoutDpi?.();
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
+    this.clearAllShaderFallbacks();
     this.views = [];
     if (!this.software) this.packMirrors.dispose();
     this.renderer.forceContextLoss();

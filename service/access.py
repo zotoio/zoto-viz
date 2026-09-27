@@ -202,6 +202,13 @@ def origin_hostname(origin: str) -> str:
     return (urlparse(origin).hostname or "").lower()
 
 
+def host_ok(request: web.Request) -> bool:
+    host = header_hostname(request.headers.get("Host", ""))
+    if request.app.get("insecure_lan"):
+        return bool(host)
+    return is_loopback_name(host)
+
+
 def host_header_raw(request: web.Request) -> str:
     return (request.headers.get("Host") or "").strip()
 
@@ -254,6 +261,8 @@ def _deny(msg: str, status: int = 403) -> web.Response:
 
 @web.middleware
 async def middleware(request: web.Request, handler):  # noqa: ANN001
+    if not host_ok(request):
+        return _deny("forbidden host")
     if not origin_ok(request):
         return _deny("forbidden origin")
     if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):

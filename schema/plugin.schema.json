@@ -31,7 +31,7 @@
     },
     "hint": {
       "type": "string",
-      "maxLength": 280
+      "maxLength": 512
     },
     "frontend": {
       "type": "object",
@@ -171,7 +171,6 @@
       "$ref": "#/$defs/layout"
     },
     "options": {
-      "$ref": "#/$defs/freeMap",
       "oneOf": [
         {
           "$ref": "#/$defs/freeMap"
@@ -188,9 +187,6 @@
         },
         {
           "$ref": "#/$defs/freeObject"
-        },
-        {
-          "$ref": "#/$defs/freeMap"
         }
       ]
     },
@@ -359,9 +355,7 @@
       "type": "object",
       "additionalProperties": true,
       "required": [
-        "key",
-        "label",
-        "type"
+        "key"
       ],
       "properties": {
         "key": {
@@ -390,7 +384,7 @@
         },
         "hint": {
           "type": "string",
-          "maxLength": 280
+          "maxLength": 512
         },
         "default": {},
         "min": {
@@ -409,7 +403,17 @@
             "minItems": 2,
             "maxItems": 2,
             "items": {
-              "type": "string"
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
             }
           }
         },
@@ -466,7 +470,7 @@
         },
         "hint": {
           "type": "string",
-          "maxLength": 280
+          "maxLength": 512
         },
         "source": {
           "type": "string",
@@ -571,7 +575,6 @@
           "$ref": "#/$defs/layout"
         },
         "options": {
-          "$ref": "#/$defs/freeMap",
           "oneOf": [
             {
               "$ref": "#/$defs/freeMap"
@@ -582,7 +585,6 @@
           ]
         },
         "config": {
-          "$ref": "#/$defs/freeMap",
           "oneOf": [
             {
               "$ref": "#/$defs/freeMap"

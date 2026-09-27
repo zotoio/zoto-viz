@@ -484,11 +484,35 @@ def _schema() -> dict[str, Any]:
     return load_plugin_schema()
 
 
+def _schema_defs_resolved(schema: dict[str, Any]) -> dict[str, Any]:
+    """Inline external $refs under $defs (e.g. manifest workBudget SDK schema)."""
+    import json
+
+    defs = dict(schema.get("$defs") or {})
+    wb = defs.get("manifestWorkBudget")
+    if isinstance(wb, dict):
+        ref = wb.get("$ref")
+        if isinstance(ref, str) and ref.endswith("manifest-work-budget.schema.json"):
+            path = (SCHEMA_FILE.parent / ref).resolve()
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+            inlined = {k: v for k, v in loaded.items() if k not in ("$schema", "$id")}
+            if isinstance(wb.get("title"), str):
+                inlined["title"] = wb["title"]
+            if isinstance(wb.get("description"), str):
+                inlined["description"] = wb["description"]
+            defs["manifestWorkBudget"] = inlined
+    return defs
+
+
 def validator():
     global _validator
     if _validator is None:
         from jsonschema import Draft202012Validator
-        _validator = Draft202012Validator(_schema())
+
+        schema = _schema()
+        if schema.get("$defs"):
+            schema = {**schema, "$defs": _schema_defs_resolved(schema)}
+        _validator = Draft202012Validator(schema)
     return _validator
 
 
@@ -737,7 +761,8 @@ def _visualisation_validator():
         from jsonschema import Draft202012Validator
 
         schema = _schema()
-        sub = {**schema["$defs"]["visualisation"], "$defs": schema["$defs"]}
+        defs = _schema_defs_resolved(schema)
+        sub = {**defs["visualisation"], "$defs": defs}
         _viz_validator = Draft202012Validator(sub)
     return _viz_validator
 
@@ -809,7 +834,7 @@ def validate_plugin_home(home: Path) -> dict[str, Any]:
         raise ValueError(errors[0]["error"])
     if merged is None:
         raise ValueError(f"{doc.get('id', '?')}: invalid plugin")
-    if not isinstance(merged.get("visualisation"), dict):
+    if merged.get("visualisation") is None:
         _validate_merged_catalog_row(merged)
     return merged
 
@@ -851,13 +876,9 @@ def _attach_visualisation(
         return row
     if viz is None:
         return row
-    out = {**row, "visualisation": viz}
-    if isinstance(viz, dict) and "workBudget" in viz:
-        out["workBudget"] = viz["workBudget"]
-        note = viz.pop("_workBudgetLimitedNote", None)
-        if note:
-            out["workBudgetLimited"] = note
-    return out
+    wb_note = None
+    if isinstance(viz, dict):
+        wb_note = viz.pop("_workBudgetLimitedNote", None)
     try:
         _validate_visualisation_yaml(viz)
     except VisualisationManifestError as e:
@@ -878,6 +899,10 @@ def _attach_visualisation(
         errors.append({"file": rel, "error": str(e)})
         return None
     merged = {**row, "visualisation": viz}
+    if isinstance(viz, dict) and "workBudget" in viz:
+        merged["workBudget"] = viz["workBudget"]
+        if wb_note:
+            merged["workBudgetLimited"] = wb_note
     try:
         _validate_merged_catalog_row(merged)
     except ValueError as e:
