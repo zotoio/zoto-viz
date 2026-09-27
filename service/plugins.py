@@ -161,9 +161,27 @@ def _plugin_sha(path: Path, given: str | None) -> str:
         return ""
 
 
-def _cache_key(sha256: str, entry: Path) -> str:
+def _frontend_fingerprint(home: Path) -> str:
+    """Invalidate the esbuild cache when any frontend/*.ts changes, not only entry."""
+    fe = home / "frontend"
+    if not fe.is_dir():
+        return "0"
+    parts: list[str] = []
+    for p in sorted(fe.rglob("*")):
+        if not p.is_file() or p.suffix.lower() not in {".ts", ".tsx", ".js", ".mjs"}:
+            continue
+        try:
+            st = p.stat()
+        except OSError:
+            continue
+        parts.append(f"{p.relative_to(home)}:{st.st_mtime_ns}:{st.st_size}")
+    return hashlib.sha256("\n".join(parts).encode()).hexdigest() if parts else "0"
+
+
+def _cache_key(sha256: str, entry: Path, home: Path | None = None) -> str:
     mtime = entry.stat().st_mtime_ns if entry.is_file() else 0
-    return f"{sha256}:{mtime}"
+    extra = _frontend_fingerprint(home) if home else "0"
+    return f"{sha256}:{mtime}:{extra}"
 
 
 def compile_runs() -> int:
@@ -211,7 +229,7 @@ def compile_typescript(doc: dict[str, Any], path: Path, sha256: str | None = Non
         raise ValueError(f"missing entry {entry.name}")
     pid = str(doc["id"])
     digest_src = _plugin_sha(path, sha256)
-    key = _cache_key(digest_src, entry)
+    key = _cache_key(digest_src, entry, home)
     cached = _bundles.get(pid)
     if cached and cached[2] == key:
         return {"hash": cached[0], "capabilities": caps, "bytes": len(cached[1]), "cached": True}

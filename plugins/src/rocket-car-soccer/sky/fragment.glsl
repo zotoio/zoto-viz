@@ -122,7 +122,7 @@ void main() {
   float pitch = sl(0, 5.0);
   if (sl(0, 0.0) < 0.5) {
     ro = vec3(0.0, 11.0, 26.0);
-    yaw = uTime * 0.05;
+    yaw = 3.14159265;
     pitch = -0.32;
   }
   vec3 fwd = vec3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch));

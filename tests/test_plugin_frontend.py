@@ -119,6 +119,12 @@ def test_module_js_compiles_from_src_frontend_and_caches(tmp_path: Path, monkeyp
     assert third.status == 200
     assert plugins.compile_runs() == after_scan + 1
 
+    helper = src / "frontend" / "lib.ts"
+    helper.write_text("export const extra = 1;\n", encoding="utf-8")
+    fourth = plugins.api_module(_req("pulse-ui"))
+    assert fourth.status == 200
+    assert plugins.compile_runs() == after_scan + 2
+
 
 def test_module_js_compiles_from_runtime_frontend_and_caches(tmp_path: Path, monkeypatch) -> None:
     repo = tmp_path / "repo"

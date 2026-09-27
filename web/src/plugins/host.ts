@@ -95,6 +95,7 @@ export class PluginSandbox {
     this.vizContract = viz;
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");
+    // Tightens the child; parent index.html must already allow 'unsafe-inline' (srcdoc scripts).
     iframe.setAttribute("csp", "default-src 'none'; script-src 'unsafe-inline' blob:; connect-src 'none'; img-src data:; style-src 'unsafe-inline'");
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";

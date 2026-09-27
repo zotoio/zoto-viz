@@ -1,5 +1,10 @@
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
+
+const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 describe("hash consent and TypeScript allow", () => {
   afterEach(() => {
@@ -35,6 +40,15 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("writeBuffer", ["viz.write"])).toBe(true);
     expect(hostAllows("writeUniform", ["viz.write"])).toBe(true);
     expect(hostAllows("writeParticles", ["viz.write"])).toBe(true);
+  });
+});
+
+describe("page CSP", () => {
+  it("allows inline scripts so sandboxed plugin srcdoc can run", () => {
+    const html = readFileSync(path.join(webRoot, "index.html"), "utf8");
+    const csp = html.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1] ?? "";
+    expect(csp).toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(csp).toMatch(/script-src[^;]*blob:/);
   });
 });
 
