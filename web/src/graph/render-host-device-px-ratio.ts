@@ -8,6 +8,9 @@ let layoutMaxDevicePxRatio = DEFAULT_MAX_DEVICE_PX_RATIO;
 /** Set by `RenderHost` construction; shared by stage3d, feed, and host layout. */
 export function configureLayoutMaxDevicePxRatio(max: number): void {
   layoutMaxDevicePxRatio = max;
+  if (!watchPinned) {
+    cachedLayoutRatio = capRawDevicePxRatio(readWindowDevicePixelRatio());
+  }
 }
 
 let cachedLayoutRatio = capRawDevicePxRatio(1);
@@ -68,10 +71,11 @@ export function resetLayoutDevicePxRatioWatch(): void {
 
 /** Start window DPR watch: one read now, then reads only in the `matchMedia` change handler. */
 export function startLayoutDevicePxRatioWatch(): void {
-  if (watchInstalled || watchPinned) return;
-  watchInstalled = true;
+  if (watchPinned) return;
   const raw = readWindowDevicePixelRatio();
   cachedLayoutRatio = capRawDevicePxRatio(raw);
+  if (watchInstalled) return;
+  watchInstalled = true;
   rearmResolutionMediaQuery(raw);
 }
 

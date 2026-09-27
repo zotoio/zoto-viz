@@ -2,7 +2,8 @@
 /** Packet-field tunnel raymarch scaffold — maps decimated proto fields into sky uniforms. */
 
 import { packetTunnelSample } from "./tunnel";
-import type { VizDataFrame } from "../../../sdk/viz-contract";
+import type { VizDataFrame, VizZotoPluginHooks } from "../../../sdk/viz-contract";
+void (null as VizZotoPluginHooks | null);
 import { getVizZoto } from "plugins/sdk/viz-zoto";
 const host = getVizZoto();
 

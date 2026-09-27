@@ -34,8 +34,8 @@ describe("deliverPluginPresentTick", () => {
       {},
       defaultVizContract({ presentTick: true }),
     );
-    const iframe = document.querySelector("iframe")!;
-    const spy = vi.spyOn(iframe.contentWindow!, "postMessage");
+    const port = (sandbox as unknown as { hostPort: MessagePort }).hostPort;
+    const spy = vi.spyOn(port, "postMessage");
     const binding = {
       sandbox,
       contract: defaultVizContract({ presentTick: true }),

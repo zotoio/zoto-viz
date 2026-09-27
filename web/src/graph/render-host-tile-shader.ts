@@ -173,6 +173,11 @@ export class RenderHostTileShader {
   onSharedContextLost(): void {
     if (this.host.glContextLost) return;
     this.host.glContextLost = true;
+    if (this.fallbackTick !== null) {
+      clearInterval(this.fallbackTick);
+      this.fallbackTick = null;
+    }
+    this.fallbackTileIds.clear();
     this.gfxNotice.onContextLost();
   }
 
@@ -198,7 +203,12 @@ export class RenderHostTileShader {
     }
     this.stopFallbackTile(tileId, slot);
     slot.fallback?.dispose();
-    const initialText = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
+    let initialText: string;
+    try {
+      initialText = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
+    } catch {
+      initialText = genericShaderFallbackMessage(slot.packName);
+    }
     const showChip = typeof slot.shaderPack.fallbackText === "function"
       && initialText !== genericShaderFallbackMessage(slot.packName);
     slot.fallback = new TileShaderFallback(slot.mount!, {
@@ -207,13 +217,18 @@ export class RenderHostTileShader {
       initialText,
     });
     slot.mountedFallbackPackKey = slot.packKey;
-    this.startFallbackTile(tileId);
+    if (!slot.latch.dead) this.startFallbackTile(tileId);
   }
 
   private refreshShaderFallbackText(tileId: string): void {
     const slot = this.tileShaders.get(tileId);
     if (!slot?.fallback) return;
-    const line = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
+    let line: string;
+    try {
+      line = resolveShaderFallbackLine(slot.shaderPack, slot.packName);
+    } catch {
+      line = genericShaderFallbackMessage(slot.packName);
+    }
     slot.fallback.applyText(line);
   }
 

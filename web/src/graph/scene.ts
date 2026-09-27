@@ -1066,10 +1066,10 @@ export interface SceneOpts {
   satellite?: boolean;
   /** draw through a shared context (one canvas for the whole wall) instead of owning a canvas */
   host?: RenderHost;
+  /** mosaic pane id (`main` solo, or tile id) — keys tile shader fallback on the host */
+  tileId?: string;
   /** mosaic tile id (`plugin:…`) for lifecycle / leak tests */
   panelId?: string;
-  /** render-host tile slot id for shader fallback / pack chrome */
-  tileId?: string;
 }
 
 export class NetScene implements HostedView {
@@ -1235,8 +1235,8 @@ export class NetScene implements HostedView {
   private readonly dragVel = new THREE.Vector3();
   private readonly baseFov = 55;
   private readonly satellite: boolean;
-  private panelId: string | null;
   readonly tileId: string;
+  private panelId: string | null;
   private releasePanelRaf: (() => void) | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
   private compactLabels = false;
@@ -1305,8 +1305,8 @@ export class NetScene implements HostedView {
   constructor(private container: HTMLElement, opts: SceneOpts = {}) {
     this.paneFps = new PaneFps(container);
     this.satellite = !!opts.satellite;
-    this.panelId = opts.panelId ?? null;
-    this.tileId = opts.tileId ?? "main";
+    this.tileId = opts.tileId ?? opts.panelId ?? "main";
+    this.panelId = opts.panelId ?? opts.tileId ?? null;
     if (this.panelId) this.releasePanelRaf = claimPanelRaf(this.panelId);
     this.host = opts.host ?? null;
     this.clearHex = this.theme.scene.clear;
