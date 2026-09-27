@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 74ffb30a..d755d70a 100644
+index 78e96b2f..2cf4b8d3 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -239,7 +239,6 @@ function openMediaAsk(waiters: Waiter[]): void {
+@@ -337,7 +337,6 @@ function openMediaAsk(waiters: Waiter[]): void {
    const head = document.createElement("div");
    head.className = "mhead";
    const title = document.createElement("strong");

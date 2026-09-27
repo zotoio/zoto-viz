@@ -1,33 +1,16 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 78e96b2f..3f446bef 100644
+index 78e96b2f..949b4096 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -271,21 +271,12 @@ function finalizeMediaAskClose(host: MediaAskHost): void {
+@@ -228,7 +228,6 @@ function recordDismiss(host: Pick<MediaAskHost, "audio" | "video">, kind: "dismi
+     if (kind === "dismiss") dismissed.cam = true;
+     granted.cam = false;
    }
-   if (rv === "abort") return;
- 
--  const kind = rv === "stuck" ? "stuck" : rv === "blocked" ? "blocked" : "dismiss";
--  recordDismiss(host, kind);
-+  if (rv === "not-now") recordDismiss(host, "dismiss");
-+  else if (rv === "stuck") recordDismiss(host, "stuck");
-+  else if (rv === "blocked") recordDismiss(host, "blocked");
-   host.waiters.forEach((w) => w.resolve(null));
+-  if (kind === "dismiss") persistDismissed();
  }
  
--function watchDialogClosedWithoutCloseEvent(host: MediaAskHost): void {
--  host.modal.addEventListener("beforetoggle", (e: Event) => {
--    const toggle = e as ToggleEvent;
--    if (toggle.newState !== "closed" || host.settled) return;
--    queueMicrotask(() => {
--      if (host.settled || host.modal.open) return;
--      finalizeMediaAskClose(host);
--    });
--  });
--}
- 
- function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
-   const wants = [
-@@ -371,7 +362,6 @@ function openMediaAsk(waiters: Waiter[]): void {
+ async function runAllowCapture(host: MediaAskHost): Promise<void> {
+@@ -371,7 +370,6 @@ function openMediaAsk(waiters: Waiter[]): void {
    paintCopy(host);
  
    modal.addEventListener("close", () => finalizeMediaAskClose(host));

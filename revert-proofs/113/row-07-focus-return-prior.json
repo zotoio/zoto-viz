@@ -3,5 +3,5 @@
   "testFile": "web/src/ui/media-ask-focus.test.ts",
   "testName": "media ask focus dialog > returns focus to the element that had it before open when still connected",
   "description": "Revert production guard (row-07-focus-return-prior)",
-  "red": "AssertionError: expected <input type=\"checkbox\" id=\"mic\"></input> to be <button type=\"button\" \u2026(1)></button> // Object.is equality"
+  "red": "AssertionError: expected 'mic' to be 'prior' // Object.is equality"
 }

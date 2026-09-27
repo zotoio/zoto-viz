@@ -57,7 +57,7 @@ describe("media ask focus (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask]");
+    await page.waitForSelector("[data-media-ask]", { state: "attached" });
     expect(await activeSelector(page)).toBe("allow");
     await page.keyboard.press("Shift+Tab");
     expect(await activeSelector(page)).toBe("not-now");
@@ -70,7 +70,7 @@ describe("media ask focus (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask]");
+    await page.waitForSelector("[data-media-ask]", { state: "attached" });
     for (let i = 0; i < 6; i += 1) {
       await page.keyboard.press("Tab");
       expect(await activeSelector(page)).not.toBe(".wall-notice-action");
@@ -82,7 +82,7 @@ describe("media ask focus (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask]");
+    await page.waitForSelector("[data-media-ask]", { state: "attached" });
     for (let i = 0; i < 10; i += 1) {
       await page.keyboard.press("Tab");
       expect(await activeSelector(page)).not.toBe(".wall-notice-action");
@@ -103,22 +103,21 @@ describe("media ask focus (chromium)", () => {
       };
       void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
     });
-    await page.waitForSelector("[data-media-ask]");
+    await page.waitForSelector("[data-media-ask]", { state: "attached" });
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !document.querySelector("[data-media-ask]"));
-    expect(await page.locator("[data-media-ask]").count()).toBe(0);
+    await page.waitForFunction(() => document.querySelectorAll("[data-media-ask]").length === 0);
     const gumCalls = await page.evaluate(() => (window as Window & { __gumCalls?: number }).__gumCalls ?? 0);
     expect(gumCalls).toBe(0);
     await page.evaluate(() => {
       void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
     });
-    expect(await page.locator("[data-media-ask]").count()).toBe(0);
+    await expect.poll(async () => await page.locator("[data-media-ask]").count()).toBe(0);
     await page.reload();
     await page.waitForFunction(() => (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness);
     await page.evaluate(() => {
       void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
     });
-    expect(await page.locator("[data-media-ask]").count()).toBe(0);
+    await expect.poll(async () => await page.locator("[data-media-ask]").count()).toBe(0);
     await page.close();
   });
 
@@ -126,7 +125,7 @@ describe("media ask focus (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await openMicAsk(page);
-    await page.waitForSelector("[data-media-ask]");
+    await page.waitForSelector("[data-media-ask]", { state: "attached" });
     await page.keyboard.press("Escape");
     await page.waitForSelector("[data-media-ask]", { state: "detached" });
     expect(await activeSelector(page)).toBe("#mic");

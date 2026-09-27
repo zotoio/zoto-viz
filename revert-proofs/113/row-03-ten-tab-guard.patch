@@ -1,8 +1,8 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 74ffb30a..5228d7b3 100644
+index 78e96b2f..c61946c1 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -230,10 +230,11 @@ function mergeOpen(waiters: Waiter[]): void {
+@@ -328,7 +328,7 @@ function mergeOpen(waiters: Waiter[]): void {
  
  function openMediaAsk(waiters: Waiter[]): void {
    const previousFocus = capturePreviousFocus();
@@ -10,29 +10,4 @@ index 74ffb30a..5228d7b3 100644
 +  const modal = document.createElement("div");
    modal.className = "modal ask";
    modal.setAttribute("data-media-ask", "1");
--  modal.setAttribute("aria-labelledby", MEDIA_ASK_TITLE_ID);
-+  modal.setAttribute("role", "dialog");
-+  modal.setAttribute("aria-modal", "true");
-   const sheet = document.createElement("div");
-   sheet.className = "sheet";
-   const head = document.createElement("div");
-@@ -255,7 +256,9 @@ function openMediaAsk(waiters: Waiter[]): void {
-   allow.textContent = "Allow";
-   row.append(cancel, allow);
-   sheet.append(head, body, row);
--  modal.append(sheet);
-+  const back = document.createElement("div");
-+  back.className = "backdrop";
-+  modal.append(back, sheet);
- 
-   const host = {
-     waiters,
-@@ -345,7 +348,7 @@ function openMediaAsk(waiters: Waiter[]): void {
- 
-   document.body.classList.add("modal-open");
-   document.body.appendChild(modal);
--  modal.showModal();
-+
-   allow.focus();
- }
- 
+   modal.setAttribute("aria-labelledby", MEDIA_ASK_TITLE_ID);

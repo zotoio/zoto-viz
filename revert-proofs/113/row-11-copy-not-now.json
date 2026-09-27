@@ -3,5 +3,5 @@
   "testFile": "web/src/ui/media-ask-focus.test.ts",
   "testName": "media ask focus dialog > pins the Not now button label",
   "description": "Revert production guard (row-11-copy-not-now)",
-  "red": "AssertionError: expected 'Later' to be 'Not now' // Object.is equality"
+  "red": "AssertionError: expected '' to be 'Not now' // Object.is equality"
 }

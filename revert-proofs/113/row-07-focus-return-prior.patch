@@ -1,13 +1,19 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 74ffb30a..7e660f0b 100644
+index 78e96b2f..b371f08c 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -229,7 +229,7 @@ function mergeOpen(waiters: Waiter[]): void {
+@@ -90,14 +90,6 @@ function capturePreviousFocus(): HTMLElement | null {
  }
  
- function openMediaAsk(waiters: Waiter[]): void {
--  const previousFocus = capturePreviousFocus();
-+  const previousFocus = null;
-   const modal = document.createElement("dialog");
-   modal.className = "modal ask";
-   modal.setAttribute("data-media-ask", "1");
+ function focusReturnTarget(previous: HTMLElement | null): HTMLElement | null {
+-  if (
+-    previous instanceof HTMLElement
+-    && previous.isConnected
+-    && !previous.closest("#wall")
+-    && !previous.classList.contains("wall-notice-action")
+-  ) {
+-    return previous;
+-  }
+   const mic = document.getElementById("mic");
+   return mic instanceof HTMLElement ? mic : null;
+ }

@@ -1,13 +1,12 @@
 diff --git a/web/src/ui/media-ask.ts b/web/src/ui/media-ask.ts
-index 74ffb30a..ea3304b4 100644
+index 78e96b2f..21e9a346 100644
 --- a/web/src/ui/media-ask.ts
 +++ b/web/src/ui/media-ask.ts
-@@ -199,7 +199,7 @@ function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
-     : host.video ? "Allow the camera" : "Allow the microphone";
+@@ -298,7 +298,6 @@ function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
    host.body.replaceChildren();
    const p1 = document.createElement("p");
--  p1.textContent = `This window needs ${wants.join(" and ")}. The OS microphone light stays off until you accept.`;
-+  p1.textContent = `Broken ${wants.join(" and ")}. The OS microphone light stays off until you accept.`;
-   const p2 = document.createElement("p");
+   p1.textContent = `This window needs ${wants.join(" and ")}. The OS microphone light stays off until you accept.`;
+-  const p2 = document.createElement("p");
    p2.className = "muted";
    p2.textContent = embeddedShell()
+     ? "This embedded browser cannot show the usual listening / camera prompt. Allow here is the accept. If nothing happens, open the monitor in Chromium on localhost."

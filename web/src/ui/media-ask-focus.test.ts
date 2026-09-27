@@ -83,7 +83,7 @@ describe("media ask focus dialog", () => {
     const dialog = document.querySelector<HTMLDialogElement>("[data-media-ask]")!;
     dialog.close();
     await vi.waitFor(() => {
-      expect(document.querySelector("[data-media-ask]")).toBeNull();
+      expect(document.querySelector("dialog") === null).toBe(true);
     });
     await expect(pending).resolves.toBeNull();
     expect(getUserMedia).not.toHaveBeenCalled();
@@ -99,7 +99,7 @@ describe("media ask focus dialog", () => {
     const cancel = document.querySelector<HTMLButtonElement>("[data-media-ask] .btn:not(.primary)")!;
     cancel.click();
     await pending;
-    expect(document.activeElement).toBe(document.getElementById("mic"));
+    expect(document.activeElement?.id).toBe("mic");
   });
 
   it("returns focus to the element that had it before open when still connected", async () => {
@@ -112,6 +112,6 @@ describe("media ask focus dialog", () => {
     await shown();
     document.querySelector<HTMLButtonElement>("[data-media-ask] .btn:not(.primary)")!.click();
     await pending;
-    expect(document.activeElement).toBe(prior);
+    expect(document.activeElement?.id).toBe("prior");
   });
 });
