@@ -1223,6 +1223,31 @@ export function assertVitestNodeAssertFailClosed(slug, target) {
 
 const GIT_APPLY_OFFSET_FUZZ_RE = /\b(?:offset|fuzz)\b/i;
 
+/** Prefer stable `error: patch failed:` lines across git versions (2.55+ logs "Checking patch …"). */
+function summarizeGitApplyCheckFailure(verbose) {
+  const text = verbose.trim();
+  if (!text) {
+    return text;
+  }
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const patchFailed = lines.find((line) => /^error: patch failed:/i.test(line));
+  if (patchFailed) {
+    return patchFailed;
+  }
+  const errLine = lines.find((line) => /^error:/i.test(line));
+  if (errLine) {
+    return errLine;
+  }
+  const checking = lines.find((line) => /^Checking patch /i.test(line));
+  if (checking) {
+    const m = checking.match(/^Checking patch (.+?)\.\.\.$/);
+    if (m) {
+      return `error: patch failed: ${m[1]}:1`;
+    }
+  }
+  return lines[0];
+}
+
 /**
  * Run `git apply --check -v` and reject any line mentioning offset or fuzz.
  * @param {string} wtRoot
@@ -1238,7 +1263,7 @@ function assertGitApplyCheckStrict(wtRoot, patchText) {
     });
     const verbose = `${check.stdout ?? ""}${check.stderr ?? ""}`;
     if (check.status !== 0) {
-      throw new Error(`git apply --check failed: ${verbose.trim()}`);
+      throw new Error(`git apply --check failed: ${summarizeGitApplyCheckFailure(verbose)}`);
     }
     for (const line of verbose.split("\n")) {
       if (GIT_APPLY_OFFSET_FUZZ_RE.test(line)) {

@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   assertRedLine,
   assertVitestNodeAssertFailClosed,
@@ -23,6 +23,11 @@ beforeEach(() => {
 
 const scriptsDir = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(scriptsDir, "..");
+const strictGitApplySamplePatch = path.join(
+  scriptsDir,
+  "fixtures",
+  "strict-git-apply-sample.patch",
+);
 
 const vitestSelection = (
   tests: { fullName: string; status: string; revertProofAssertion?: boolean }[],
@@ -539,25 +544,41 @@ function thrownMessage(fn: () => unknown): string | undefined {
 }
 
 describe("strict git apply", () => {
-  it("(strict) accepts a patch with exact context", () => {
-    const patch = fs.readFileSync(
-      path.join(repoRoot, "revert-proofs/48/classify-rejects-plain-meta.patch"),
-      "utf8",
+  const strictApplyTemps: string[] = [];
+
+  afterEach(() => {
+    for (const root of strictApplyTemps.splice(0)) {
+      fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  function strictApplyRoot() {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), "rp-strict-apply-"));
+    strictApplyTemps.push(root);
+    const fixtureDir = path.join(root, "scripts", "fixtures");
+    fs.mkdirSync(fixtureDir, { recursive: true });
+    fs.copyFileSync(
+      path.join(scriptsDir, "fixtures", "strict-git-apply-sample.txt"),
+      path.join(fixtureDir, "strict-git-apply-sample.txt"),
     );
-    expect(() => gitApplyPatchStrict(repoRoot, patch)).not.toThrow();
+    return root;
+  }
+
+  it("(strict) accepts a patch with exact context", () => {
+    const root = strictApplyRoot();
+    const patch = fs.readFileSync(strictGitApplySamplePatch, "utf8");
+    expect(() => gitApplyPatchStrict(root, patch)).not.toThrow();
   });
 
   it("(strict) rejects patches that only apply at an offset", () => {
-    const good = fs.readFileSync(
-      path.join(repoRoot, "revert-proofs/48/classify-rejects-plain-meta.patch"),
-      "utf8",
-    );
+    const root = strictApplyRoot();
+    const good = fs.readFileSync(strictGitApplySamplePatch, "utf8");
     const stalePatch = good.replace(
       /@@ -(\d+),(\d+) \+(\d+),\2 @@/,
       (_, start, count, plusStart) =>
         `@@ -${Number(start) + 10},${count} +${Number(plusStart) + 10},${count} @@`,
     );
-    expect(() => gitApplyPatchStrict(repoRoot, stalePatch)).toThrow(/offset or fuzz/i);
+    expect(() => gitApplyPatchStrict(root, stalePatch)).toThrow(/offset or fuzz/i);
   });
 });
 

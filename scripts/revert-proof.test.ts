@@ -1263,7 +1263,7 @@ def test_service_live_value():
       testName: "test_service_live_value",
       pythonModule: "service",
       description: "Revert service/live via monitor relative import",
-      red: { assert: "assert live.SERVICE_LIVE == 1" },
+      red: "assert live.SERVICE_LIVE == 1",
     });
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "service-live"]);
@@ -1276,14 +1276,14 @@ def test_service_live_value():
     const root = mkFixture();
     const exemptPatch = `--- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -1,6 +1,6 @@
- /** Shared helpers and guards for revert-proof (imported by the runner script and tests). */
- import { spawnSync } from "node:child_process";
- import fs from "node:fs";
- import path from "node:path";
--
+@@ -167,6 +167,7 @@
+   fs.writeFileSync(abs, \`\${JSON.stringify(body, null, 2)}\\n\`, "utf8");
+ }
+ 
 +// reach-exempt dogfood touch
  export const MAX_TIMER_MS = 2_147_483_647;
+ 
+ export const TEST_PATH_RE =
 `;
     writeRow(root, "99", "reach-exempt-touch", exemptPatch, {
       runner: "vitest",

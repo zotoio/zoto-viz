@@ -1,5 +1,6 @@
 /** Shared helpers for headless sandbox smoke tests (per-pack HMAC tokens). */
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 
 export function packAssetUrl(base, token, packId, ...parts) {
   const root = base.replace(/\/?$/, "/");
@@ -13,20 +14,33 @@ export async function fetchPackAssetToken(base, packId = "_sandbox") {
   assert.equal(sess.status, 200, `session ${sess.status}`);
   const { csrf } = await sess.json();
   assert.ok(csrf, "csrf missing from /api/session");
-  const headers = { Host: "127.0.0.1:7020", "X-Zoto-Viz-Csrf": csrf };
+  const headers = {
+    Host: "127.0.0.1:7020",
+    "X-Zoto-Viz-Csrf": csrf,
+    "Content-Type": "application/json",
+  };
+  const frameId = randomUUID();
+  const reg = await fetch(`${root}api/pack-assets/frames`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ frameId }),
+  });
+  assert.equal(reg.status, 200, `pack frame register ${reg.status}`);
   let r = await fetch(`${root}api/pack-assets/token/${encodeURIComponent(packId)}`, {
     method: "POST",
     headers,
+    body: JSON.stringify({ frameId }),
   });
   if (r.status === 403 && packId !== "_sandbox") {
     await fetch(`${root}api/plugins/${encodeURIComponent(packId)}/consent`, {
       method: "PUT",
-      headers: { ...headers, "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify({ consent: "reviewed" }),
     });
     r = await fetch(`${root}api/pack-assets/token/${encodeURIComponent(packId)}`, {
       method: "POST",
       headers,
+      body: JSON.stringify({ frameId }),
     });
   }
   assert.equal(r.status, 200, `pack token ${packId} ${r.status}`);
