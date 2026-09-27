@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_safe_zip_install.py",
   "testName": "test_pa_manifest_read_cap_65536_exact",
   "description": "plugin.yml manifest read capped at 65536 bytes.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:278: AssertionError"
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:278: AssertionError: manifest read cap"
 }

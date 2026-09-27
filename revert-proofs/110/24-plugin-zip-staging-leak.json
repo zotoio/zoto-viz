@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_safe_zip_install.py",
   "testName": "test_plugin_zip_unpack_does_not_leak_staging",
   "description": "plugin_zip unpack must clean validator staging dirs.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:837: AssertionError"
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:837: AssertionError: plugin zip unpack no staging leak"
 }

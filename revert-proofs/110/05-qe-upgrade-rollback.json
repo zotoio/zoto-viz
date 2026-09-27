@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_safe_zip_install.py",
   "testName": "test_qe_upgrade_rollback_restores_v1_and_cleans_bak",
   "description": "Upgrade rename failure must surface UX rollback copy and pack-info block.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:666: AssertionError"
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:666: AssertionError: upgrade rollback must not raise OSError"
 }
