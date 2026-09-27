@@ -5,7 +5,6 @@ import { mountWallNoticeRegion } from "./wall-notice-region";
 
 describe("UX copy literals", () => {
   const orig = globalThis.fetch;
-  let onRestart: ((e: Event) => void) | undefined;
 
   beforeEach(() => {
     expect.hasAssertions();
@@ -14,14 +13,13 @@ describe("UX copy literals", () => {
 
   afterEach(() => {
     globalThis.fetch = orig;
-    if (onRestart) {
-      window.removeEventListener("zoto-viz-server-restart", onRestart);
-      onRestart = undefined;
-    }
     document.body.innerHTML = "";
   });
 
   it("pins restart notice as exact literal", async () => {
+    document.body.innerHTML = "<div id=\"wall\"></div>";
+    mountWallNoticeRegion(document.getElementById("wall")!);
+    const off = bindServerRestartWallNotice();
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
       const path = String(url);
       const h = new Headers(init?.headers);
@@ -45,14 +43,12 @@ describe("UX copy literals", () => {
       }
       return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
     }) as typeof fetch;
-    const notices: string[] = [];
-    onRestart = (e) => { notices.push((e as CustomEvent<string>).detail); };
-    window.addEventListener("zoto-viz-server-restart", onRestart);
     await apiFetch("/api/profiles/user", { method: "PUT" });
-    const expected = "The server restarted, so packs were reloaded.";
-    expect(notices.length).toBe(1);
-    expect((notices[0] ?? "").length).toBe(expected.length);
-    expect(notices[0]).toBe(expected);
+    const text = document.querySelector(
+      '[data-notice-key="server-restarted"] .wall-notice-text',
+    )?.textContent ?? "";
+    expect(text).toBe("The server restarted, so packs were reloaded.");
+    off();
   });
 
   it("pins retry-failed notice as exact literal", async () => {
@@ -78,11 +74,10 @@ describe("UX copy literals", () => {
       } as Response;
     }) as typeof fetch;
     await apiFetch("/api/profiles/user", { method: "PUT" });
-    const expected = "That request still failed after the server restarted.";
-    const span = document.querySelector('[data-notice-key="retry-failed"] .wall-notice-text');
-    const text = span?.textContent ?? "";
-    expect(text.length).toBe(expected.length);
-    expect(text).toBe(expected);
+    const text = document.querySelector(
+      '[data-notice-key="retry-failed"] .wall-notice-text',
+    )?.textContent ?? "";
+    expect(text).toBe("That request still failed after the server restarted.");
     off();
   });
 
