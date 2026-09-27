@@ -168,7 +168,7 @@ def test_bad_v2_upgrade_preserves_v1_tree_and_blocked_message(
     assert pz.plugin_sha256(paths.plugin_local_dir() / f"{pid}.zip") == zip_v1_sha
     assert pid in {p["id"] for p in plugins.scan()["plugins"]}
     assert plugins.bundle_for(pid) is not None
-    assert_runtime_parent_clean(_runtime_parent())
+    _assert_runtime_parent_clean(_runtime_parent())
 
 
 def test_bad_zip_app_install_leaves_no_staging_or_bak(
@@ -183,7 +183,7 @@ def test_bad_zip_app_install_leaves_no_staging_or_bak(
         {"zip_b64": base64.b64encode(b"not-a-zip").decode(), "activate": False},
     )
     assert info.get("ok") is False
-    assert_runtime_parent_clean(parent)
+    _assert_runtime_parent_clean(parent)
 
 
 def test_bad_zip_drop_scan_leaves_no_staging_or_bak(
@@ -205,7 +205,7 @@ def test_bad_zip_drop_scan_leaves_no_staging_or_bak(
         p["id"] for p in plugins.scan()["plugins"]
     }
     assert not (_runtime_parent() / pack_id).exists()
-    assert_runtime_parent_clean(parent)
+    _assert_runtime_parent_clean(parent)
 
 
 def test_invalid_zip_leaves_no_staging_or_runtime(
@@ -218,7 +218,7 @@ def test_invalid_zip_leaves_no_staging_or_runtime(
     runtime_parent = _runtime_parent()
     with pytest.raises(ValueError):
         plugin_local.install_local_zip(b"not-a-zip", overwrite=True)
-    assert_runtime_parent_clean(runtime_parent)
+    _assert_runtime_parent_clean(runtime_parent)
 
 
 def test_interrupted_swap_uses_after_first_rename_hook(
@@ -310,7 +310,7 @@ def test_v2_start_failure_restores_v1_and_zip(
     digest_after, _ = plugins.bundle_for(pid)
     assert digest_after == digest_v1
     assert pz.plugin_sha256(paths.plugin_local_dir() / f"{pid}.zip") == zip_v1_sha
-    assert_runtime_parent_clean(_runtime_parent())
+    _assert_runtime_parent_clean(_runtime_parent())
 
 
 def test_start_failed_zip_hash_blocks_rescan_notice_once(
@@ -633,7 +633,7 @@ def test_concurrent_install_same_pack_serializes_with_barriers(
     assert order.index("hook") < order.index("done-first")
     assert order.index("done-first") < order.index("done-second")
     assert (_runtime_parent() / pid / "plugin.yml").read_text(encoding="utf-8").find("version: 3") >= 0
-    assert_runtime_parent_clean(_runtime_parent())
+    _assert_runtime_parent_clean(_runtime_parent())
 
 
 def test_concurrent_install_passes_20_of_20(
@@ -715,7 +715,7 @@ def test_install_lock_serializes_swap_hooks(
     release.set()
     t1.join(timeout=10)
     t2.join(timeout=10)
-    assert_runtime_parent_clean(_runtime_parent())
+    _assert_runtime_parent_clean(_runtime_parent())
 
 
 def test_zip_slip_rejected_on_unpack(tmp_path: Path) -> None:
