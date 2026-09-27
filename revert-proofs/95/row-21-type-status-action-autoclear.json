@@ -3,5 +3,5 @@
   "runner": "command",
   "command": "pnpm typecheck",
   "cwd": "web",
-  "red": "typecheck/wall-notice-region.typecheck.ts(6,3): error TS2578: Unused '@ts-expect-error' directive."
+  "red": "typecheck/wall-notice-region.typecheck.ts(8,3): error TS2578: Unused '@ts-expect-error' directive."
 }

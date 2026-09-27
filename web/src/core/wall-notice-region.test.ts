@@ -66,6 +66,7 @@ describe("wall notice region", () => {
     expect(cs.marginBottom).toBe("10px");
   });
 
+  // Stylesheet text is checked here; UX Pro verified real click hit-testing in Chrome.
   it("notice row rule in style.css declares pointer-events auto", () => {
     const css = fs.readFileSync(path.join(webRoot, "src/style.css"), "utf8");
     const block = css.match(/\.wall-notice-row\s*\{([^}]*)\}/)?.[1] ?? "";
