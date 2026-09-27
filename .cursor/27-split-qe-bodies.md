@@ -270,3 +270,33 @@ Must be the **AssertionError line only** — never `Test Files`, `Duration`, or 
 
 Section **(b2)** in `python3 scripts/tse_gate_bc.py`: duplicate +/- bodies (headers stripped) with the same test + assertion ⇒ one row blocker. Whole-file `sha256sum` alone is not enough.
 
+---
+
+## TSE #73 follow-up — resolved spec `name` (heads-up, no work in #94/#92/#93)
+
+TSE **#73** removes `name` from the host resolved spec type in favor of `readonly packName`, optional `readonly instanceLabel`, and `tileDisplayName(spec)`. **Do not add new `spec.name` reads or implement `packName` in these splits.** Audited three-dot diffs: **no new `spec.name` / resolved-spec `.name` lines in any split diff.**
+
+Pre-existing reads in **files each PR touches** (mechanical swap after #73 lands — use `tileDisplayName(spec)` / `packName`, not implemented here):
+
+### #94 (`6520b01…27a`)
+
+| Location | Notes |
+|----------|--------|
+| `web/src/app/main.ts:625` | `spec.name` → `vizHud.setActive` |
+| `web/src/app/main.ts:1034` | `active?.name` → `vizHud.tick` `packName` |
+| `web/src/plugins/plugin.ts:180` | `PluginView.name` field (type, not a runtime read) |
+| `web/src/plugins/plugin.ts:383`, `:486`, `:528` | `label: spec.name` |
+
+### #92 (adds to #94 list)
+
+| Location | Notes |
+|----------|--------|
+| `web/src/ui/settings.ts:446` | `spec.name` (look pin copy) |
+| `web/src/ui/settings.ts:455` | `spec.name` in template string |
+
+### #93
+
+No additional resolved-spec `.name` reads beyond #94/#92 in files introduced only on #93; **#93 diff does not add or edit any `spec.name` line.**
+
+Other repo reads (`web/src/plugins/instances.ts:78`, `web/src/plugins/plugin-ui.ts:144`) are **unchanged by this stack** — handle on main with #73, not called out per split.
+
