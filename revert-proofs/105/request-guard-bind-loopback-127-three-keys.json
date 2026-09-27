@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testId": "tests/test_request_guard_bind_matrix.py::test_build_allowed_hosts_bind_127_0_0_1_is_exactly_three_loopback_keys",
-  "red": "AssertionError: assert ['127.0.0.1:7...calhost:7020'] == ['127.0.0.1:7...calhost:7020']",
+  "red": "AssertionError: 127.0.0.1 bind must not allow LAN key 192.168.1.5:7020",
   "description": "Loopback bind 127.0.0.1 must not merge OS interface addresses.",
   "timeoutSec": 120
 }

@@ -36,7 +36,7 @@ def main() -> None:
     for name in rows:
         reset()
         patch = ROOT / f"revert-proofs/{pr}/{name}.patch"
-        run(["git", "apply", "-R", str(patch)], check=False)
+        run(["git", "apply", str(patch)], check=False)
         p = run(["pytest", "-o", "addopts=", "-q", "--tb=no"], check=False)
         ok = p.returncode == 0
         mark = "green" if ok else "RED"

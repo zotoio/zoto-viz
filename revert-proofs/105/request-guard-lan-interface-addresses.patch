@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index e158a70..8738a2f 100644
+index 14224de3..9fb39752 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -178,7 +178,6 @@
+@@ -187,7 +187,6 @@ def local_interface_hosts(port: int) -> set[str]:
                  continue
          except ValueError:
              continue

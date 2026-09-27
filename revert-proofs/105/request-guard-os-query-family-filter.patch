@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index e158a70..1a5d458 100644
+index 14224de3..2657c7cd 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -150,8 +150,6 @@
+@@ -161,8 +161,6 @@ def query_os_interface_addresses() -> list[str]:
          addrs: list[str] = []
          for iface in data:
              for info in iface.get("addr_info") or []:
