@@ -11,6 +11,7 @@ const setPixelRatio = vi.fn();
 
 vi.mock("./webgl", () => ({
   probeWebGL: vi.fn(() => true),
+  disposeOwnedWebGLRenderer: vi.fn(),
 }));
 
 vi.mock("three", async (importOriginal) => {

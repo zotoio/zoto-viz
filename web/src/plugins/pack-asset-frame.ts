@@ -182,8 +182,9 @@ export function tileRebuildFailedNotice(packName: string): string {
   return packSandboxStartFailed(packName);
 }
 
-export function tileRebuildAttemptCount(tileId: string, packName: string): number {
-  return tileRebuildAttempts.get(rebuildAttemptKey(tileId, packName)) ?? 0;
+export function tileRebuildAttemptCount(tileId: string, packName?: string): number {
+  const pack = packName ?? activePackForTile(tileId) ?? "";
+  return tileRebuildAttempts.get(rebuildAttemptKey(tileId, pack)) ?? 0;
 }
 
 export function resetTileRebuildAttempts(tileId: string, packName: string): void {

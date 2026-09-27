@@ -3,11 +3,21 @@ import type { SurfaceLetterboxFill } from "./letterbox-fill";
 import { letterboxFillHex, letterboxInnerRectInto, paintLetterboxBars } from "./letterbox-fill";
 import type { WebGLRenderer } from "three";
 import {
+  type CanvasDeviceHeight,
   type CssRect,
   type CssRectLoose,
+  type DeviceRectMut,
+  type GlRectMut,
   asCssRect,
-  deviceSizeFromCssBox,
+  deviceSizeFromCssBoxInto,
 } from "./pack-mirror-rect";
+import { applyHostViewBoxToGlRenderer } from "./render-host-gl-adapter";
+
+export type PackMirrorHostGl = {
+  layoutPixelRatio: number;
+  canvasCssHeight: number;
+  canvasDeviceHeight: CanvasDeviceHeight;
+};
 
 /** @deprecated Use `CssRect` from `./pack-mirror-rect`. */
 export type MirrorRect = CssRect;
@@ -51,13 +61,17 @@ export const packMirrorResourceStats = {
   },
 };
 
-/** Letterbox bars via scissored clears (CSS-pixel coords; renderer applies DPR). */
+const letterboxBarDeviceScratch: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
+const letterboxBarGlScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
+
+/** Letterbox bars via scissored clears (device rects when `hostGl` is set; else CSS coords). */
 export function paintLetterboxBarsThree(
   renderer: MirrorRenderer,
   fill: SurfaceLetterboxFill,
   box: CssRect,
   inner: CssRect,
   bars: LetterboxBarScratch,
+  hostGl?: PackMirrorHostGl,
 ): void {
   const hex = letterboxFillHex(fill);
   renderer.setScissorTest(true);
@@ -80,8 +94,20 @@ export function paintLetterboxBarsThree(
   bars[3].h = inner.h;
   for (const b of bars) {
     if (b.w < 1 || b.h < 1) continue;
-    renderer.setViewport(b.x, b.y, b.w, b.h);
-    renderer.setScissor(b.x, b.y, b.w, b.h);
+    if (hostGl) {
+      applyHostViewBoxToGlRenderer(
+        renderer,
+        b,
+        hostGl.canvasCssHeight,
+        hostGl.layoutPixelRatio,
+        hostGl.canvasDeviceHeight,
+        letterboxBarDeviceScratch,
+        letterboxBarGlScratch,
+      );
+    } else {
+      renderer.setViewport(b.x, b.y, b.w, b.h);
+      renderer.setScissor(b.x, b.y, b.w, b.h);
+    }
     renderer.clear(true, false, false);
   }
 }
@@ -94,6 +120,8 @@ export class PackTexturePresenter {
   readonly material = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
   readonly mesh: THREE.Mesh;
   readonly scratch = {
+    deviceVp: { x: 0, y: 0, w: 0, h: 0 },
+    glVp: { x: 0, y: 0, w: 0, h: 0 },
     innerTd: { x: 0, y: 0, w: 0, h: 0 },
     innerAbs: { x: 0, y: 0, w: 0, h: 0 },
     out: { x: 0, y: 0, w: 0, h: 0 },
@@ -125,6 +153,7 @@ export class PackTexturePresenter {
     fill: SurfaceLetterboxFill | null,
     contentAspect: number,
     opts: { letterbox: boolean },
+    hostGl?: PackMirrorHostGl,
   ): CssRect {
     const innerTd = this.scratch.innerTd;
     if (opts.letterbox) {
@@ -145,15 +174,27 @@ export class PackTexturePresenter {
     innerAbs.w = iw;
     innerAbs.h = ih;
     if (fill && opts.letterbox) {
-      paintLetterboxBarsThree(renderer, fill, dst, asCssRect(innerAbs), this.scratch.bars);
+      paintLetterboxBarsThree(renderer, fill, dst, asCssRect(innerAbs), this.scratch.bars, hostGl);
     }
     if (this.material.map !== texture) {
       this.material.map = texture;
       this.material.needsUpdate = true;
     }
-    renderer.setScissorTest(true);
-    renderer.setViewport(ix, iy, iw, ih);
-    renderer.setScissor(ix, iy, iw, ih);
+    if (hostGl) {
+      applyHostViewBoxToGlRenderer(
+        renderer,
+        { x: ix, y: iy, w: iw, h: ih },
+        hostGl.canvasCssHeight,
+        hostGl.layoutPixelRatio,
+        hostGl.canvasDeviceHeight,
+        this.scratch.deviceVp,
+        this.scratch.glVp,
+      );
+    } else {
+      renderer.setScissorTest(true);
+      renderer.setViewport(ix, iy, iw, ih);
+      renderer.setScissor(ix, iy, iw, ih);
+    }
     renderer.setRenderTarget(null);
     renderer.render(this.scene, this.camera);
     const out = this.scratch.out;
@@ -247,8 +288,8 @@ export class PackMirrorSession {
     const rd = renderer as THREE.WebGLRenderer;
     const prev = rd.getRenderTarget?.() ?? null;
     renderer.setRenderTarget(rt);
-    renderer.setViewport(0, 0, cssSize.w, cssSize.h);
-    renderer.setScissor(0, 0, cssSize.w, cssSize.h);
+    renderer.setViewport(0, 0, pw, ph);
+    renderer.setScissor(0, 0, pw, ph);
     renderer.setScissorTest(true);
     renderer.setClearColor(clearHex, 1);
     renderer.clear(true, true, false);
@@ -262,6 +303,7 @@ export class PackMirrorSession {
 export class PackMirrorRegistry {
   private readonly sessions = new Map<string, PackMirrorSession>();
   allocationCount = 0;
+  readonly devicePackSizeScratch = { pw: 0, ph: 0 };
 
   beginFrame(): void {
     for (const s of this.sessions.values()) s.rendered = false;
@@ -296,11 +338,13 @@ export class PackMirrorRegistry {
     box: CssRectLoose,
     clearHex: number,
     antialias: boolean,
+    hostGl?: PackMirrorHostGl,
   ): THREE.Texture | null {
     const session = this.sessions.get(key);
     if (!session) return null;
-    const pr = renderer.getPixelRatio();
-    const { pw, ph } = deviceSizeFromCssBox(box, pr);
+    const pr = hostGl?.layoutPixelRatio ?? renderer.getPixelRatio();
+    deviceSizeFromCssBoxInto(box, pr, this.devicePackSizeScratch);
+    const { pw, ph } = this.devicePackSizeScratch;
     return session.renderPack(renderer, scene, camera, box, pw, ph, clearHex, antialias);
   }
 
@@ -309,13 +353,14 @@ export class PackMirrorRegistry {
     renderer: MirrorRenderer,
     dst: CssRect,
     opts: { letterbox: boolean; fill: SurfaceLetterboxFill | null; aspect: number },
+    hostGl?: PackMirrorHostGl,
   ): CssRect | null {
     const session = this.sessions.get(key);
     const rt = session?.target;
     if (!rt || !session?.rendered) return null;
     return session.presenter.draw(renderer, rt.texture, dst, opts.fill, opts.aspect, {
       letterbox: opts.letterbox,
-    });
+    }, hostGl);
   }
 
   dispose(): void {
