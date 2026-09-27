@@ -2,7 +2,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CanvasChangeProbe } from "./pane-change";
 import { getSurfaceLetterboxFill, letterboxFillStats, paintLetterboxBarsInto } from "./letterbox-fill";
-import { zotoSurfacePanelClearHex } from "../core/themes";
+import { DEFAULT_THEME } from "../core/themes";
+import { clearSurfaceLetterboxFillCache } from "../../test-support/letterbox-fill-cache";
 
 function stub2dContext(): CanvasRenderingContext2D {
   const state = { fillStyle: "" };
@@ -21,6 +22,7 @@ describe("letterbox software grain stability", () => {
 
   beforeEach(() => {
     expect.hasAssertions();
+    clearSurfaceLetterboxFillCache();
     letterboxFillStats.reset();
     canvas = document.createElement("canvas");
     canvas.width = 200;
@@ -31,12 +33,13 @@ describe("letterbox software grain stability", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    clearSurfaceLetterboxFillCache();
     letterboxFillStats.reset();
   });
 
   it("300 frames: 0 Math.random and 0 new strings from letterbox module hot path", () => {
     const randomSpy = vi.spyOn(Math, "random");
-    const fill = getSurfaceLetterboxFill(zotoSurfacePanelClearHex(), 0.25);
+    const fill = getSurfaceLetterboxFill(DEFAULT_THEME.scene.clear, 0.25);
     const strBefore = letterboxFillStats.stringAllocations;
     const bars = [
       { x: 0, y: 0, w: 0, h: 0 },
@@ -61,7 +64,7 @@ describe("letterbox software grain stability", () => {
     realCtx.getImageData = vi.fn(() => ({ data: image, width: 16, height: 16 } as ImageData));
     vi.spyOn(canvas, "getContext").mockReturnValue(realCtx);
 
-    const fill = getSurfaceLetterboxFill(zotoSurfacePanelClearHex(), 0.25);
+    const fill = getSurfaceLetterboxFill(DEFAULT_THEME.scene.clear, 0.25);
     const bars = [
       { x: 0, y: 0, w: 0, h: 0 },
       { x: 0, y: 0, w: 0, h: 0 },
