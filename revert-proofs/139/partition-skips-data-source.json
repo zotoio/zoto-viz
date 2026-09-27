@@ -1,5 +1,6 @@
 {
   "runner": "vitest",
+  "project": "web",
   "testFile": "src/remix/remix-partition.test.ts",
   "testName": "remix partition catalog > applyPluginCatalog does not add data-source plugins to the view menu",
   "description": "Revert skipping data-source plugins in partitionCatalog",
