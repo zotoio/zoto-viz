@@ -2049,18 +2049,49 @@ export class Settings {
     this.persistDice();
   }
 
-  /** Show or hide the right-hand activity list. Syncs the cog toggle and persists. */
-  setFeedOn(on: boolean): void {
+  /** Session-only cypher-cic panel collapse (never persist collapsed visibility). */
+  setCypherCicPanelCollapsed(collapsed: boolean): void {
+    this.cypherCicPanelCollapsed = collapsed;
+  }
+
+  readPersistedFeedOn(): boolean {
+    return localStorage.getItem(`${this.cfg.storePrefix}.feed.on`) !== "0";
+  }
+
+  readPersistedChatOn(): boolean {
+    return localStorage.getItem(`${this.cfg.storePrefix}.chat.on`) !== "0";
+  }
+
+  private cypherCicPanelCollapsed = false;
+
+  private feedOnForPersistence(): boolean {
+    return this.feed.on;
+  }
+
+  private chatOnForPersistence(): boolean {
+    return this.chat.on;
+  }
+
+  /** Show or hide the right-hand activity list. Syncs the cog toggle and persists unless `persist` is false. */
+  setFeedOn(on: boolean, opts?: { persist?: boolean }): void {
     this.feed.on = on;
     if (this.feedUi) this.feedUi.on.checked = on;
-    this.persistFeed();
+    if (opts?.persist === false) {
+      this.onFeedChange(this.feed);
+      return;
+    }
+    this.persistFeed({ onFromMemory: true });
   }
 
   /** Show or hide the agent chat panel. */
-  setChatOn(on: boolean): void {
+  setChatOn(on: boolean, opts?: { persist?: boolean }): void {
     this.chat.on = on;
     if (this.chatUi) this.chatUi.on.checked = on;
-    this.persistChat();
+    if (opts?.persist === false) {
+      this.onChatChange(this.chat);
+      return;
+    }
+    this.persistChat({ onFromMemory: true });
   }
 
   /** Watchword: open the chat panel (pins to the latest line). */
@@ -2326,10 +2357,11 @@ export class Settings {
     this.cfg.onPersist?.();
   }
 
-  private persistFeed(): void {
+  private persistFeed(opts?: { onFromMemory?: boolean }): void {
     const p = this.cfg.storePrefix;
     const c = this.feed;
-    localStorage.setItem(`${p}.feed.on`, c.on ? "1" : "0");
+    const on = opts?.onFromMemory ? c.on : this.feedOnForPersistence();
+    localStorage.setItem(`${p}.feed.on`, on ? "1" : "0");
     localStorage.setItem(`${p}.feed.layout`, c.layout);
     localStorage.setItem(`${p}.feed.scope`, c.scope);
     localStorage.setItem(`${p}.feed.source`, c.source);
@@ -2341,10 +2373,15 @@ export class Settings {
     this.cfg.onPersist?.();
   }
 
-  private persistChat(): void {
+  private persistChat(opts?: { onFromMemory?: boolean }): void {
     const p = this.cfg.storePrefix;
     const c = this.chat;
-    localStorage.setItem(`${p}.chat.on`, c.on ? "1" : "0");
+    const on = opts?.onFromMemory
+      ? this.cypherCicPanelCollapsed
+        ? this.readPersistedChatOn()
+        : c.on
+      : this.chatOnForPersistence();
+    localStorage.setItem(`${p}.chat.on`, on ? "1" : "0");
     localStorage.setItem(`${p}.chat.textSize`, String(c.textSize));
     this.onChatChange(c);
     this.cfg.onPersist?.();

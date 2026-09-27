@@ -141,6 +141,11 @@ import {
   allowOnPluginChangeConfigPush,
   allowOnPluginFieldsConfigPush,
 } from "../plugins/plugin-config-sync";
+  applyCypherCicPanelSession as syncCypherCicPanelSession,
+  applyProductionChatHeaderToggle,
+  applyProductionFeedHeaderToggle,
+  type CypherCicPanelSessionHolder,
+} from "./cypher-cic-panels";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
@@ -1115,6 +1120,11 @@ async function loadMosaicViews(tiles: string[]): Promise<void> {
   if (gen !== mosaicViewsLoad || !mosaic.on) return;
   await syncPluginSky(paneSpec);
   nestCams.setActive(tiles.some((id) => modeById(id).pluginId === "nest-cams"));
+/** Cypher CIC mosaic is unreadable with fixed feed/chat overlays — collapse both for this session only (#49). */
+const cypherCicPanelHolder: CypherCicPanelSessionHolder = { session: null };
+
+function applyCypherCicPanelSession(m: ViewMode): void {
+  syncCypherCicPanelSession(cypherCicPanelHolder, settings, m);
 }
 
 function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
@@ -1198,6 +1208,7 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
   }
   cancelScheduledSandboxConfig();
   const m = modeById(id);
+  applyCypherCicPanelSession(m);
   const opts = optsFor(m);
   const prevMode = liveMode;
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
@@ -2801,8 +2812,8 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "Escape") scene.select(null);
   if (e.key === "r" || e.key === "R") setRedaction(!redaction.enabled);
   if (e.key === "d" || e.key === "D") setDream(!dreamToggle.checked);
-  if (e.key === "f" || e.key === "F") settings.setFeedOn(!settings.feedSettings.on);
-  if (e.key === "c" || e.key === "C") settings.setChatOn(!settings.chatSettings.on);
+  if (e.key === "f" || e.key === "F") applyProductionFeedHeaderToggle(settings);
+  if (e.key === "c" || e.key === "C") applyProductionChatHeaderToggle(settings);
   if (e.key === "b" || e.key === "B") setDebug(!debugToggle.checked);
   if (e.key === "l" || e.key === "L") setLabels(!sysLabels.checked);
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);

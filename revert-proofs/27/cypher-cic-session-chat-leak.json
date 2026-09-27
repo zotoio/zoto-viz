@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/cypher-cic-session.test.ts",
+  "testName": "^cypher\\-cic applyCypherCicPanelSession \\(R10/R11\\) > chat leak: chat toggled during session persists saved chat value on leave$",
+  "description": "Revert persistChat to write in-memory chat.on during cypher-cic (clobbers saved chat.on).",
+  "patchedAssertion": "AssertionError: expected '1' to be '0' // Object.is equality"
+}
