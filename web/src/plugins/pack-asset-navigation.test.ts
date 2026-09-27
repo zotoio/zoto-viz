@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { packNavigationStopped } from "./plugin-copy";
 import {
   applyPackNavigationStoppedNotice,
@@ -11,6 +11,8 @@ import * as packAssetFrame from "./pack-asset-frame";
 import { beginActivePackLoad, resetPackAssetFrameState } from "./pack-asset-frame";
 import * as rebuild from "./pack-asset-rebuild";
 import { packFeedPaneNotice, resetPluginPackFeedState } from "./plugin-pack-feed";
+import * as pluginModule from "./plugin";
+import type { PluginView } from "./plugin";
 
 describe("pack navigation stopped UX", () => {
   afterEach(() => {
@@ -18,6 +20,54 @@ describe("pack navigation stopped UX", () => {
     resetPluginPackFeedState();
     resetPackAssetFrameState();
     vi.restoreAllMocks();
+    vi.useRealTimers();
+  });
+
+  describe("navigation guard counts", () => {
+    const tileA = "plugin:wifi";
+    const tileB = "plugin:heat";
+    const wifiSpec: PluginView = { id: "wifi", name: "Wi-Fi", version: 1 };
+    const heatSpec: PluginView = { id: "heat", name: "Heat map", version: 1 };
+
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    it("coalesces blocked navigation pane notice work per tile", () => {
+      const paneA = document.createElement("div");
+      const paneB = document.createElement("div");
+      document.body.append(paneA, paneB);
+      const textWrite = vi.fn();
+      const tileDisplayNameSpy = vi.spyOn(pluginModule, "tileDisplayName");
+      const setTimeoutSpy = vi.spyOn(globalThis, "setTimeout");
+      let noticeCount = 0;
+      const mosaic = {
+        setPaneNotice: (id: string, text: string | null | undefined) => {
+          if (text) {
+            noticeCount += 1;
+            textWrite(text);
+          }
+          const pane = id === tileA ? paneA : paneB;
+          if (text) pane.textContent = text;
+        },
+      };
+      const specForTile = (tileId: string) => (tileId === tileA ? wifiSpec : heatSpec);
+
+      markPackNavigationStopped(tileA);
+      for (let i = 0; i < 600; i++) {
+        applyPackNavigationStoppedNotice(mosaic, tileA, specForTile(tileA).name ?? "Pack");
+      }
+      vi.runAllTimers();
+      expect(noticeCount).toBe(1);
+      expect(textWrite).toHaveBeenCalledTimes(1);
+      expect(setTimeoutSpy).toHaveBeenCalledTimes(1);
+      expect(tileDisplayNameSpy).toHaveBeenCalledTimes(1);
+
+      markPackNavigationStopped(tileB);
+      applyPackNavigationStoppedNotice(mosaic, tileB, specForTile(tileB).name ?? "Pack");
+      vi.runAllTimers();
+      expect(tileDisplayNameSpy).toHaveBeenCalledTimes(2);
+    });
   });
 
   it("shows fail copy with only Remove from wall (no Retry)", () => {
