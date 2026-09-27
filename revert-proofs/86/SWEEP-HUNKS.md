@@ -1,4 +1,4 @@
-<!-- sweep: 134 hunks vs f6c508e -->
+<!-- sweep: 134 hunks vs 80be948 -->
 | `web/src/app/main.ts:82` | accepted: pack-mirror mosaic wiring (coalesce + lifecycle tests) |
 | `web/src/app/main.ts:102` | accepted: pack-mirror mosaic wiring (coalesce + lifecycle tests) |
 | `web/src/app/main.ts:106` | accepted: pack-mirror mosaic wiring (coalesce + lifecycle tests) |

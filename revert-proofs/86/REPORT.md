@@ -1,9 +1,9 @@
 # PR #86 — revert proof report
 
-- **Base:** `cursor/wall-duplicate-pack-tiles-d355` @ `f6c508e`
+- **Base:** `cursor/wall-duplicate-pack-tiles-d355` @ `80be948`
 - **Branch:** `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4`
 
-## Per-hunk sweep vs `f6c508e`
+## Per-hunk sweep vs `80be948`
 
 See `SWEEP-HUNKS.md` (134 hunks, one line per hunk).
 
