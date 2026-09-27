@@ -34,7 +34,11 @@ from . import plugin_zip as pz
 from . import plugin_manifest_block as pmb
 from .plugin_schema import PLUGIN_SCHEMA_PATH, deref_schema, load_plugin_schema
 from .pack_boundary import PackBundleBoundaryError, boundary_from_compile
-from .pack_sdk_contract import assert_pack_sdk_compatible, write_pack_sdk_manifest_cache
+from .pack_sdk_contract import (
+    assert_pack_sdk_compatible,
+    runtime_parent_for_sdk_cache,
+    write_pack_sdk_manifest_cache,
+)
 from .pack_runtime import (
     cached_zip_block,
     catalog_boundary_error,
@@ -335,7 +339,7 @@ def compile_typescript(
     digest = hashlib.sha256(js).hexdigest()
     _compile_runs += 1
     try:
-        write_pack_sdk_manifest_cache(home.parent, pid)
+        write_pack_sdk_manifest_cache(runtime_parent_for_sdk_cache(home), pid)
     except OSError:
         pass
     if update_cache:
@@ -357,6 +361,8 @@ _ARTEFACT_FIELD = {
     "shader": "shader_sha256",
 }
 _CONSENT_HASH_KEYS = ("backend_sha256", "collector_sha256", "shader_sha256")
+# Matches ``pack_safe_zip._TREE_HASH_VERSION`` (0x01) stored on each consent row.
+PACK_TREE_HASH_VERSION = 0x01
 
 
 def needs_review(doc: dict[str, Any]) -> bool:
@@ -464,16 +470,7 @@ def consented_for(doc: dict[str, Any], hashes: dict[str, str] | None = None) -> 
     return consented(merged)
 
 
-def grant_consent(doc: dict[str, Any], kind: str) -> str:
-    if kind not in {"reviewed", "authored"}:
-        raise ValueError("kind must be reviewed or authored")
-    data = _consent_doc()
-    rec: dict[str, Any] = {"kind": kind, "stamp": consent_stamp(doc), "version": doc.get("version")}
-    for key in _CONSENT_HASH_KEYS:
-        digest = doc.get(key)
-        if digest:
-            rec[key] = digest
-    data[str(doc["id"])] = rec
+def _persist_consent_doc(data: dict[str, Any]) -> None:
     CONSENT_FILE.parent.mkdir(parents=True, exist_ok=True)
     text = yaml.safe_dump(data, sort_keys=True, allow_unicode=True)
     fd, tmp = tempfile.mkstemp(prefix="plugin-consent.", suffix=".yml", dir=CONSENT_FILE.parent)
@@ -488,7 +485,51 @@ def grant_consent(doc: dict[str, Any], kind: str) -> str:
         except OSError:
             pass
         raise
+
+
+def grant_consent(doc: dict[str, Any], kind: str) -> str:
+    if kind not in {"reviewed", "authored"}:
+        raise ValueError("kind must be reviewed or authored")
+    data = _consent_doc()
+    rec: dict[str, Any] = {"kind": kind, "stamp": consent_stamp(doc), "version": doc.get("version")}
+    for key in _CONSENT_HASH_KEYS:
+        digest = doc.get(key)
+        if digest:
+            rec[key] = digest
+    tree = doc.get("pack_tree_sha256")
+    if tree:
+        rec["pack_tree_sha256"] = str(tree)
+        rec["tree_hash_version"] = PACK_TREE_HASH_VERSION
+    data[str(doc["id"])] = rec
+    _persist_consent_doc(data)
     return kind
+
+
+def migrate_consent_pack_tree_hashes(runtime_parent: Path) -> list[str]:
+    """One-time upgrade of consent ``pack_tree_sha256`` to format version ``PACK_TREE_HASH_VERSION``."""
+    from . import pack_safe_zip as psz
+
+    data = _consent_doc()
+    if not data:
+        return []
+    runtime_parent = Path(runtime_parent)
+    changed = False
+    msgs: list[str] = []
+    for pid, rec in data.items():
+        if not isinstance(rec, dict):
+            continue
+        if rec.get("tree_hash_version") == PACK_TREE_HASH_VERSION:
+            continue
+        home = runtime_parent / str(pid)
+        if not home.is_dir():
+            continue
+        rec["pack_tree_sha256"] = psz.runtime_tree_hash(home)
+        rec["tree_hash_version"] = PACK_TREE_HASH_VERSION
+        changed = True
+        msgs.append(f"pack tree hash migrated for {pid}")
+    if changed:
+        _persist_consent_doc(data)
+    return msgs
 
 
 def service_meta(doc: dict[str, Any], path: Path) -> dict[str, Any]:
@@ -1614,9 +1655,13 @@ def cli_validate(raw_paths: list[str]) -> int:
         path = Path(raw).expanduser().resolve()
         try:
             if path.is_file() and path.suffix.lower() == ".zip":
-                manifest = pz.inspect_zip(path)
-                doc = validate_doc(manifest.plugin)
-                plugins.append({**doc, "file": str(path), "parts": list(manifest.parts)})
+                from . import pack_safe_zip as psz
+
+                hit = psz.validate_pack_zip_path(path, str(path), paths.plugin_runtime_dir())
+                if isinstance(hit, psz.Blocked):
+                    raise ValueError(hit.message)
+                doc = validate_doc(hit.manifest)
+                plugins.append({**doc, "file": str(path), "parts": list(hit.parts)})
             elif path.is_dir() and ((path / "plugin.yml").is_file() or (path / "plugin.yaml").is_file()):
                 manifest = pz.inspect_src(path)
                 doc = validate_doc(manifest.plugin)

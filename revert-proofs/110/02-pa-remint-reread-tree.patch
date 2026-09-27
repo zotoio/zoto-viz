@@ -1,0 +1,19 @@
+diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
+index c4fde32..d0d3cb7 100644
+--- a/service/pack_safe_zip.py
++++ b/service/pack_safe_zip.py
+@@ -303,8 +303,12 @@ def remint(staged: StagedPack, new_id: str) -> StagedPack:
+     doc["id"] = str(new_id)
+     yml_bytes = yaml.safe_dump(doc, sort_keys=False, allow_unicode=True).encode("utf-8")
+     yml_path.write_bytes(yml_bytes)
+-    member_sha = dict(staged.member_sha256)
+-    member_sha[_REQUIRED] = hashlib.sha256(yml_bytes).hexdigest()
++    member_sha: dict[str, str] = {}
++    for path in root.rglob("*"):
++        if not path.is_file():
++            continue
++        rel = path.relative_to(root).as_posix()
++        member_sha[rel] = hashlib.sha256(path.read_bytes()).hexdigest()
+     tree_digests = dict(member_sha)
+     tree_digests[pz.SHA256_NAME] = hashlib.sha256((staged.zip_sha256 + "\n").encode()).hexdigest()
+     doc = _parse_plugin_yml(yml_bytes)

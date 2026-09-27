@@ -1,0 +1,22 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+index e3cde6c..ea89529 100644
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -458,13 +458,10 @@ def install_zip_to_runtime(
+     pack_read: psz.StagedPack | PackZipReadView | None = None,
+ ) -> pz.UnpackResult:
+     parent = runtime.parent
+-    if isinstance(pack_read, psz.StagedPack):
+-        staged = pack_read
+-    else:
+-        hit = psz.validate_pack_zip_path(zip_path, rel, parent)
+-        if isinstance(hit, psz.Blocked):
+-            raise ValueError(hit.message)
+-        staged = hit
++    hit = psz.validate_pack_zip_path(zip_path, rel, parent)
++    if isinstance(hit, psz.Blocked):
++        raise ValueError(hit.message)
++    staged = hit
+     return install_staged_to_runtime(
+         staged,
+         zip_path,

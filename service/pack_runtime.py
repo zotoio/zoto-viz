@@ -102,8 +102,12 @@ def materialize_zip_runtime(
     del compile_bundle, verify_bundle, load_doc
     from . import plugins
 
-    manifest = pz.inspect_zip(zip_path)
-    doc = plugins.validate_doc(manifest.plugin)
+    from . import pack_safe_zip as psz
+
+    hit = psz.validate_pack_zip_path(zip_path, str(zip_path), runtime.parent)
+    if isinstance(hit, psz.Blocked):
+        raise ValueError(hit.message)
+    doc = plugins.validate_doc(hit.manifest)
     upgrade = runtime.is_dir()
     rel = str(zip_path)
     try:
@@ -114,6 +118,7 @@ def materialize_zip_runtime(
             doc,
             rel=rel,
             upgrade=upgrade,
+            pack_read=hit,
         )
     except InstallV2BlockedError:
         raise

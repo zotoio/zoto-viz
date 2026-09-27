@@ -481,3 +481,61 @@ def test_mcp_publish_local_plugin(
     assert payload["id"] == "quiet-glance"
     assert payload["activated"] is True
     assert (paths.plugin_local_dir() / "quiet-glance.zip").is_file()
+
+
+def test_sync_local_drop_schema_invalid_uses_literal_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    drop = paths.plugin_local_dir(create=True)
+    bad = _zip(
+        {
+            "plugin.yml": "id: BadUpper\nname: Bad\nversion: 1\n",
+            "visualisation.yml": "engine: graph\nbase: topology\n",
+        },
+    )
+    zpath = drop / "my-pack.zip"
+    zpath.write_bytes(bad)
+    plugin_local._primed = True
+    plugin_local._seen[str(zpath.resolve())] = "stale-digest"
+    zpath.write_bytes(bad + b"\n")
+    results = plugin_local.sync_local_drop()
+    assert len(results) == 1
+    assert results[0]["ok"] is False
+    assert results[0]["error"] == "pack_schema_invalid"
+    schema_msg_ok = (
+        results[0].get("message") == "Couldn't install my-pack.zip. The plugin id in this pack isn't valid."
+    )
+    assert schema_msg_ok is True, "drop schema literal message"
+
+
+def test_sync_local_drop_already_exists_uses_literal_message(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    _repo(tmp_path, monkeypatch)
+    drop = paths.plugin_local_dir(create=True)
+    good = _zip(
+        {
+            "plugin.yml": "id: sample\nname: Sample\nversion: 1\n",
+            "visualisation.yml": "engine: graph\nbase: topology\n",
+        },
+    )
+    plugin_local.install_local_zip(good, overwrite=True)
+    dest = drop / "sample.zip"
+    alt = drop / "alt-name.zip"
+    alt.write_bytes(good + b" ")
+    plugin_local._primed = True
+    plugin_local._seen[str(dest.resolve())] = pz.plugin_sha256(dest)
+    plugin_local._seen[str(alt.resolve())] = "stale-digest"
+    results = plugin_local.sync_local_drop()
+    blocked = [r for r in results if r.get("error") == "pack_already_exists"]
+    assert len(blocked) == 1
+    assert blocked[0]["ok"] is False
+    exists_msg_ok = (
+        blocked[0].get("message") == "Couldn't install alt-name.zip. This pack is already in the drop zone."
+    )
+    assert exists_msg_ok is True, "drop already exists literal message"

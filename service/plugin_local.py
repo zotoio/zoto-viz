@@ -22,6 +22,19 @@ from . import plugin_migration as pmg
 from . import plugin_zip as pz
 from . import plugins
 from .pack_boundary import PackBundleBoundaryError
+from .pack_id import refuse_case_insensitive_id_collision
+from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
+from . import pack_safe_zip as psz
+from .pack_install_copy import (
+    REASON_ALREADY_EXISTS,
+    REASON_PACK_INSTALL_BLOCKED,
+    REASON_PACK_INSTALL_FAULT,
+    REASON_SCHEMA_INVALID,
+    blocked_message,
+    drop_zone_already_exists_install_message,
+    drop_zone_schema_install_message,
+    fault_message,
+)
 from .pack_install_retry import (
     RETRY_RESULT_IN_PROGRESS,
     RETRY_RESULT_NOT_BLOCKED,
@@ -31,20 +44,23 @@ from .pack_install_retry import (
     format_retry_start_failed_message,
     format_retry_zip_changed_message,
 )
-from .pack_id import PACK_ID_RE, refuse_case_insensitive_id_collision
 from .pack_zip_blocks import record_zip_block, row_for_start_failure
+from .pack_zip_install_ux import zip_unsafe_blocked_payload
+from .pack_install_wall_notices import wall_notice_for_install_result
 from .plugin_install import (
     InstallStartFailedError,
+    InstallUpgradeRollbackError,
     InstallV2BlockedError,
-    drain_install_notices,
+    _install_staged_to_runtime_locked,
     install_zip_to_runtime,
+    pack_install_lock,
 )
 
 ENGINES = frozenset({
     "graph", "netpong", "invaders", "command", "frogger", "cpupong", "doom",
     "waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel",
 })
-ID_RE = PACK_ID_RE
+ID_RE = re.compile(r"^[a-z][a-z0-9_-]{0,31}$")
 _seen: dict[str, str] = {}
 _primed = False
 
@@ -90,34 +106,66 @@ def _id_claimed(pid: str) -> bool:
     return pid in pmg.catalog_ids()
 
 
-def remint_zip(raw: bytes, dest: Path, *, overwrite: bool = False) -> tuple[bytes, dict[str, Any], Path, str | None]:
-    """Keep ``id`` only when dest is free, same-sha, or an explicit overwrite.
+def zip_bytes_from_staged(staged: psz.StagedPack) -> bytes:
+    fd, tmp_name = tempfile.mkstemp(prefix="zoto-staged.", suffix=".zip")
+    os.close(fd)
+    tmp = Path(tmp_name)
+    try:
+        pz.pack_files(_members_from_staged(staged), tmp)
+        return tmp.read_bytes()
+    finally:
+        tmp.unlink(missing_ok=True)
 
-    Otherwise rewrite ``plugin.yml`` to the next free id so a new plugin never
-    collides with src / contrib / local.
-    """
+
+def _members_from_staged(staged: psz.StagedPack) -> dict[str, bytes]:
+    root = staged.staging_dir
+    out: dict[str, bytes] = {}
+    for path in root.rglob("*"):
+        if not path.is_file() or path.name == pz.SHA256_NAME:
+            continue
+        out[path.relative_to(root).as_posix()] = path.read_bytes()
+    return out
+
+
+def remint_pack_read(
+    staged: psz.StagedPack,
+    dest: Path,
+    *,
+    overwrite: bool = False,
+    incoming_sha: str | None = None,
+) -> tuple[psz.StagedPack, dict[str, Any], Path, str | None]:
+    """Adjust id/remint in staging (no extra zip CD parse)."""
+    doc = plugins.validate_doc(staged.manifest)
+    pid = str(doc["id"])
+    dest = Path(dest)
+    incoming = incoming_sha or staged.zip_sha256
+    if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+        return staged, doc, dest, None
+    if dest.is_file() and overwrite:
+        return staged, doc, dest, None
+    if not _id_claimed(pid):
+        return staged, doc, dest, None
+    nxt = unique_id(pid)
+    if nxt == pid:
+        return staged, doc, dest, None
+    new_staged = psz.remint(staged, nxt)
+    doc = plugins.validate_doc(new_staged.manifest)
+    return new_staged, doc, dest.with_name(f"{nxt}.zip"), pid
+
+
+def remint_zip(raw: bytes, dest: Path, *, overwrite: bool = False) -> tuple[bytes, dict[str, Any], Path, str | None]:
+    """Legacy byte-oriented remint (parses the zip once). Prefer ``remint_pack_read``."""
     fd, tmp_name = tempfile.mkstemp(prefix="zoto-remint.", suffix=".zip")
     os.close(fd)
     tmp = Path(tmp_name)
     try:
         tmp.write_bytes(raw)
-        doc = plugins.validate_doc(pz.inspect_zip(tmp).plugin)
-        pid = str(doc["id"])
-        incoming = pz.plugin_sha256(tmp)
-        dest = Path(dest)
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
-            return raw, doc, dest, None
-        if dest.is_file() and overwrite:
-            return raw, doc, dest, None
-        if not _id_claimed(pid):
-            return raw, doc, dest, None
-        nxt = unique_id(pid)
-        if nxt == pid:
-            return raw, doc, dest, None
-        rewritten = pz.rewrite_plugin_id(raw, nxt)
-        doc = dict(doc)
-        doc["id"] = nxt
-        return rewritten, doc, dest.with_name(f"{nxt}.zip"), pid
+        read = psz.read_pack_zip(tmp)
+        pack_read, doc, out_dest, reminted = remint_pack_read(
+            read, dest, overwrite=overwrite, incoming_sha=pz.plugin_sha256(tmp),
+        )
+        raw_out = zip_bytes_from_staged(pack_read)
+        return raw_out, doc, out_dest, reminted
     finally:
         tmp.unlink(missing_ok=True)
 
@@ -227,10 +275,6 @@ def _payload_bytes(args: dict[str, Any]) -> bytes:
     raise ValueError("zip_b64, files, or description required")
 
 
-def _verify_pack_bundle(home: Path, doc: dict[str, Any], sha256: str | None = None) -> None:
-    plugins.verify_pack_bundle_home(home, doc, sha256=sha256)
-
-
 def _install_result(
     doc: dict[str, Any],
     dest: Path,
@@ -273,14 +317,54 @@ def _refresh_python(info: dict[str, Any]) -> None:
         info["pythonReloadError"] = str(e)
 
 
+def _upgrade_rollback_result(err: InstallUpgradeRollbackError) -> dict[str, Any]:
+    return {
+        "ok": False,
+        "error": REASON_PACK_INSTALL_BLOCKED,
+        "message": str(err),
+        "id": err.pack_id,
+        "sha256": err.sha256,
+        "zip": err.zip_path,
+    }
+
+
+def _zip_blocked_result(
+    exc: ValueError,
+    *,
+    zip_display_name: str | None = None,
+    zip_path: str | Path | None = None,
+    pack_id: str = "",
+    sha256: str = "",
+    runtime: Path | None = None,
+) -> dict[str, Any]:
+    return zip_unsafe_blocked_payload(
+        str(exc),
+        zip_display_name=zip_display_name,
+        zip_path=zip_path,
+        pack_id=pack_id,
+        sha256=sha256,
+        runtime=runtime,
+    )
+
+
 def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
-    notices = drain_install_notices()
-    if notices:
-        info["installNotices"] = notices
-        info.setdefault("message", notices[0].get("message"))
+    if info.get("ok") and info.get("id"):
+        clear_blocked_pack(str(info["id"]))
+    notice = wall_notice_for_install_result(info)
+    if notice:
+        info.setdefault("installNotices", [])
+        if isinstance(info["installNotices"], list):
+            info["installNotices"].append(notice)
+    blocked = pack_info_blocked_line(str(info.get("id") or ""))
+    if blocked:
+        info["packInstallBlocked"] = blocked
     _refresh_python(info)
     safe = not info.get("consentRequired")
-    mode = f"plugin:{info['id']}" if activate and safe and info.get("id") else None
+    mode = (
+        f"plugin:{info['id']}"
+        if activate and safe and info.get("ok") and info.get("id")
+        else None
+    )
     notify_catalog(mode=mode)
     info["activated"] = bool(mode)
     if mode:
@@ -299,58 +383,120 @@ def install_local_zip(
     *,
     overwrite: bool = False,
     activate: bool = True,
+    zip_display_name: str | None = None,
 ) -> dict[str, Any]:
     """Validate, write ``~/.zoto-viz/plugins/local/<id>.zip``, unpack, maybe activate."""
     fd, tmp_name = tempfile.mkstemp(prefix="zoto-local.", suffix=".zip")
     os.close(fd)
     tmp_path = Path(tmp_name)
-    runtime: Path | None = None
-    dest: Path | None = None
+    runtime_parent = paths.plugin_local_runtime_dir(create=True)
+    pack_pid = ""
+    staging_to_clean: Path | None = None
     try:
         tmp_path.write_bytes(raw)
-        manifest = pz.inspect_zip(tmp_path)
-        doc = plugins.validate_doc(manifest.plugin)
+        try:
+            pack_read = psz.read_pack_zip(tmp_path)
+            staging_to_clean = pack_read.staging_dir
+            pack_pid = str(pack_read.manifest.get("id") or "")
+        except ValueError as e:
+            return _finish(
+                _zip_blocked_result(
+                    e,
+                    zip_display_name=zip_display_name or "pack",
+                    zip_path=None,
+                ),
+                activate=False,
+            )
+        try:
+            doc = plugins.validate_doc(pack_read.manifest)
+        except ValueError:
+            return _finish(
+                {
+                    "ok": False,
+                    "error": REASON_SCHEMA_INVALID,
+                    "message": drop_zone_schema_install_message(zip_display_name or "pack"),
+                },
+                activate=False,
+            )
         pid = str(doc["id"])
-        refuse_case_insensitive_id_collision(pid)
+        pack_pid = pid
+        try:
+            refuse_case_insensitive_id_collision(pid)
+        except ValueError as e:
+            return _finish(
+                {
+                    "ok": False,
+                    "error": REASON_SCHEMA_INVALID,
+                    "message": str(e),
+                },
+                activate=False,
+            )
         dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
-        raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=overwrite)
+        pack_read, doc, dest, reminted_from = remint_pack_read(
+            pack_read,
+            dest,
+            overwrite=overwrite,
+            incoming_sha=pz.plugin_sha256(tmp_path),
+        )
+        staging_to_clean = pack_read.staging_dir
         pid = str(doc["id"])
-        tmp_path.write_bytes(raw)
-        runtime = paths.plugin_local_runtime_dir(create=True) / pid
+        if reminted_from:
+            tmp_path.write_bytes(zip_bytes_from_staged(pack_read))
+        runtime = runtime_parent / pid
         incoming = pz.plugin_sha256(tmp_path)
+        if dest.is_file() and pz.plugin_sha256(dest) == incoming and not overwrite:
+            unpacked = pz.unpack_zip(dest, runtime)
+            info = _install_result(doc, dest, unpacked, wrote=False)
+            if reminted_from:
+                info["remintedFrom"] = reminted_from
+            return _finish(info, activate=activate)
+        if dest.is_file() and not overwrite:
+            return _finish(
+                {
+                    "ok": False,
+                    "error": REASON_ALREADY_EXISTS,
+                    "message": drop_zone_already_exists_install_message(
+                        zip_display_name or "pack",
+                    ),
+                },
+                activate=False,
+            )
         upgrade = dest.is_file() and runtime.is_dir()
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+        try:
             unpacked = install_zip_to_runtime(
-                dest,
+                tmp_path,
                 dest,
                 runtime,
                 doc,
                 rel=str(dest),
                 sha256=incoming,
                 upgrade=upgrade,
+                pack_read=pack_read,
             )
-            info = _install_result(doc, dest, unpacked, wrote=False)
-            if reminted_from:
-                info["remintedFrom"] = reminted_from
-            return _finish(info, activate=activate)
-        if dest.is_file() and not overwrite:
-            raise ValueError(
-                f"plugin {pid!r} already exists in the local drop zone (pass overwrite: true)"
+            staging_to_clean = None
+        except PackBundleBoundaryError as e:
+            return _finish({"ok": False, **e.block.to_dict()}, activate=False)
+        except InstallV2BlockedError as e:
+            return _finish(
+                {"ok": False, "error": "pack_install_blocked", "message": str(e), **e.payload},
+                activate=False,
             )
-        unpacked = install_zip_to_runtime(
-            tmp_path,
-            dest,
-            runtime,
-            doc,
-            rel=str(dest),
-            sha256=incoming,
-            upgrade=upgrade,
-        )
+        except ValueError as e:
+            text = str(e)
+            if "was blocked" in text:
+                return _finish({"ok": False, "error": "pack_boundary", "message": text}, activate=False)
+            return _finish({"ok": False, "error": text, "message": text}, activate=False)
+        except InstallUpgradeRollbackError as e:
+            return _finish(_upgrade_rollback_result(e), activate=activate)
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
         return _finish(info, activate=activate)
     finally:
+        if staging_to_clean is not None:
+            psz.cleanup_staging_dir(staging_to_clean)
+            if pack_pid:
+                psz.cleanup_staging_for_pack(runtime_parent, pack_pid)
         tmp_path.unlink(missing_ok=True)
 
 
@@ -358,45 +504,74 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     """Validate a zip already in the local drop zone and unpack it."""
     path = Path(path)
     raw = path.read_bytes()
-    manifest = pz.inspect_zip(path)
-    doc = plugins.validate_doc(manifest.plugin)
+    try:
+        pack_read = psz.read_pack_zip(path)
+    except ValueError as e:
+        return _finish(
+            _zip_blocked_result(e, zip_display_name=path.stem, zip_path=path),
+            activate=False,
+        )
+    try:
+        doc = plugins.validate_doc(pack_read.manifest)
+    except ValueError:
+        psz.cleanup_staging_dir(pack_read.staging_dir)
+        return _finish(
+            {
+                "ok": False,
+                "error": REASON_SCHEMA_INVALID,
+                "message": drop_zone_schema_install_message(path.stem),
+            },
+            activate=False,
+        )
     pid = str(doc["id"])
-    refuse_case_insensitive_id_collision(pid)
     dest = paths.plugin_local_dir(create=True) / f"{pid}.zip"
-    raw, doc, dest, reminted_from = remint_zip(raw, dest, overwrite=False)
+    pack_read, doc, dest, reminted_from = remint_pack_read(
+        pack_read,
+        dest,
+        overwrite=dest.is_file(),
+        incoming_sha=pz.plugin_sha256(path),
+    )
     pid = str(doc["id"])
     if reminted_from:
+        raw = zip_bytes_from_staged(pack_read)
         dest.write_bytes(raw)
         if path.resolve() != dest.resolve() and path.resolve().parent == dest.resolve().parent:
             path.unlink(missing_ok=True)
     elif path.resolve() != dest.resolve():
         if dest.is_file() and pz.plugin_sha256(dest) != pz.plugin_sha256(path):
-            raise ValueError(
-                f"local zip {path.name} id is {pid!r} but {dest.name} already exists"
+            psz.cleanup_staging_dir(pack_read.staging_dir)
+            return _finish(
+                {
+                    "ok": False,
+                    "error": REASON_ALREADY_EXISTS,
+                    "message": drop_zone_already_exists_install_message(path.stem),
+                },
+                activate=False,
             )
+        if path.resolve().parent == dest.resolve().parent:
+            os.replace(path, dest)
+        else:
+            shutil.copy2(path, dest)
     runtime = paths.plugin_local_runtime_dir(create=True) / pid
-    zip_source = path if path.is_file() else dest
-    incoming = pz.plugin_sha256(zip_source)
+    incoming = pz.plugin_sha256(dest)
     upgrade = runtime.is_dir()
     try:
         unpacked = install_zip_to_runtime(
-            zip_source,
+            dest,
             dest,
             runtime,
             doc,
             rel=str(dest),
             sha256=incoming,
             upgrade=upgrade,
+            pack_read=pack_read,
         )
-    except InstallV2BlockedError as e:
-        raise ValueError(str(e)) from e
-    except InstallStartFailedError as e:
-        raise ValueError(str(e)) from e
+    except InstallUpgradeRollbackError as e:
+        psz.cleanup_staging_dir(pack_read.staging_dir)
+        return _finish(_upgrade_rollback_result(e), activate=activate)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from
-    if path.resolve() != dest.resolve() and path.resolve().parent == dest.resolve().parent:
-        path.unlink(missing_ok=True)
     return _finish(info, activate=activate)
 
 
@@ -405,7 +580,14 @@ def publish_local(body: dict[str, Any] | None) -> dict[str, Any]:
     activate = True if args.get("activate") is None else bool(args.get("activate"))
     try:
         raw = _payload_bytes(args)
-        return install_local_zip(raw, overwrite=bool(args.get("overwrite")), activate=activate)
+        zip_name = args.get("zip_name") or args.get("filename")
+        display = str(zip_name).strip() if isinstance(zip_name, str) and zip_name.strip() else None
+        return install_local_zip(
+            raw,
+            overwrite=bool(args.get("overwrite")),
+            activate=activate,
+            zip_display_name=display,
+        )
     except pmg.SrcOwnedError as e:
         return {
             "ok": False,
@@ -420,6 +602,8 @@ def publish_local(body: dict[str, Any] | None) -> dict[str, Any]:
         return {"ok": False, "error": "pack_install_start_failed", "message": str(e), "reason": e.reason}
     except PackBundleBoundaryError as e:
         return {"ok": False, **e.block.to_dict()}
+    except PackInstallStoreFault as e:
+        return {"ok": False, "error": REASON_PACK_INSTALL_FAULT, "message": fault_message(str(e))}
     except ValueError as e:
         text = str(e)
         if "was blocked" in text:
@@ -448,11 +632,33 @@ def sync_local_drop() -> list[dict[str, Any]]:
             results.append(adopt_local_zip_file(z, activate=True))
         except pmg.SrcOwnedError as e:
             results.append({"ok": False, "error": "src_owns_id", "id": e.plugin_id, "path": str(z)})
-        except InstallV2BlockedError as e:
-            results.append({"ok": False, "error": "pack_install_blocked", "message": str(e), "path": str(z)})
-        except InstallStartFailedError as e:
-            results.append({"ok": False, "error": "pack_install_start_failed", "message": str(e), "path": str(z)})
-        except (ValueError, OSError) as e:
+        except PackInstallStoreFault as e:
+            results.append({"ok": False, "error": REASON_PACK_INSTALL_FAULT, "message": fault_message(str(e)), "path": str(z)})
+        except ValueError as e:
+            text = str(e)
+            if "is not a zip" in text.lower() or "zip entry" in text or "symlink" in text:
+                blocked = _zip_blocked_result(e, zip_display_name=z.stem, zip_path=z)
+                blocked["path"] = str(z)
+                results.append(blocked)
+            elif "already exists" in text.lower():
+                results.append(
+                    {
+                        "ok": False,
+                        "error": REASON_ALREADY_EXISTS,
+                        "message": drop_zone_already_exists_install_message(z.stem),
+                        "path": str(z),
+                    },
+                )
+            else:
+                results.append(
+                    {
+                        "ok": False,
+                        "error": REASON_SCHEMA_INVALID,
+                        "message": drop_zone_schema_install_message(z.stem),
+                        "path": str(z),
+                    },
+                )
+        except OSError as e:
             results.append({"ok": False, "error": str(e), "path": str(z)})
     gone = [key for key in _seen if key not in current]
     if gone:
@@ -462,6 +668,7 @@ def sync_local_drop() -> list[dict[str, Any]]:
             notify_catalog()
     _primed = True
     return results
+
 
 
 def _find_local_zip_for_digest(digest: str, pid: str, row: dict[str, str]) -> Path | None:
@@ -528,10 +735,6 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
     """Re-run the blocked zip through the full install pipeline (sync, pack lock held)."""
     from .pack_runtime import forget_zip_block_cache_for_path
     from .pack_zip_blocks import clear_zip_block, zip_block_for_sha
-    from .plugin_install import (
-        _install_zip_to_runtime_locked,
-        pack_install_lock,
-    )
 
     digest = sha256.strip().lower()
     row = zip_block_for_sha(digest)
@@ -568,8 +771,8 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
         forget_zip_block_cache_for_path(zip_path)
         plugins.reset_scan_memo()
 
-        manifest = pz.inspect_zip(zip_path)
-        doc = plugins.validate_doc(manifest.plugin)
+        pack_read = psz.read_pack_zip(zip_path)
+        doc = plugins.validate_doc(pack_read.manifest)
         pid = str(doc["id"])
         dest = folder / f"{pid}.zip"
         if zip_path.resolve() != dest.resolve():
@@ -582,53 +785,57 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
         upgrade = runtime.is_dir()
         name = str(doc.get("name") or pid)
         version = doc.get("version")
+        staging = pack_read.staging_dir
         try:
-            unpacked = _install_zip_to_runtime_locked(
-                dest,
-                dest,
-                runtime,
-                doc,
-                rel=str(dest),
-                sha256=incoming,
-                upgrade=upgrade,
-                pid=pid,
-                name=name,
-                version=version,
-            )
-        except InstallV2BlockedError as e:
-            return {"ok": False, "error": "pack_install_blocked", "retryResult": "blocked", "message": str(e), **e.payload}
-        except InstallStartFailedError:
-            msg = format_retry_start_failed_message(name, version)
-            record_zip_block(
-                digest,
-                row_for_start_failure(
-                    sha256=digest,
-                    message=msg,
-                    pack_id=pid,
+            try:
+                unpacked = _install_staged_to_runtime_locked(
+                    pack_read,
+                    dest,
+                    dest,
+                    runtime,
+                    rel=str(dest),
+                    sha256=incoming,
+                    upgrade=upgrade,
+                    pid=pid,
                     name=name,
-                    zip_path=str(dest),
                     version=version,
-                ),
-            )
-            return {
-                "ok": False,
-                "error": "pack_install_start_failed",
-                "retryResult": RETRY_RESULT_START_FAILED,
-                "message": msg,
-                "id": pid,
-                "name": name,
-                "version": version,
-                "zipSha256": digest,
-                "blockReason": "couldnt_start",
-                "retryable": "true",
-            }
-        except PackBundleBoundaryError as e:
-            return {"ok": False, **e.block.to_dict()}
-        except ValueError as e:
-            text = str(e)
-            if "was blocked" in text:
-                return {"ok": False, "error": "pack_boundary", "message": text}
-            return {"ok": False, "error": text, "id": pid}
+                )
+            except InstallV2BlockedError as e:
+                return {"ok": False, "error": "pack_install_blocked", "retryResult": "blocked", "message": str(e), **e.payload}
+            except (InstallStartFailedError, RuntimeError):
+                msg = format_retry_start_failed_message(name, version)
+                record_zip_block(
+                    digest,
+                    row_for_start_failure(
+                        sha256=digest,
+                        message=msg,
+                        pack_id=pid,
+                        name=name,
+                        zip_path=str(dest),
+                        version=version,
+                    ),
+                )
+                return {
+                    "ok": False,
+                    "error": "pack_install_start_failed",
+                    "retryResult": RETRY_RESULT_START_FAILED,
+                    "message": msg,
+                    "id": pid,
+                    "name": name,
+                    "version": version,
+                    "zipSha256": digest,
+                    "blockReason": "couldnt_start",
+                    "retryable": "true",
+                }
+            except PackBundleBoundaryError as e:
+                return {"ok": False, **e.block.to_dict()}
+            except ValueError as e:
+                text = str(e)
+                if "was blocked" in text:
+                    return {"ok": False, "error": "pack_boundary", "message": text}
+                return {"ok": False, "error": text, "id": pid}
+        finally:
+            psz.cleanup_staging_dir(staging)
 
         clear_zip_block(digest)
         forget_zip_block_cache_for_path(dest)
@@ -677,7 +884,6 @@ async def api_retry_blocked_zip(req: web.Request) -> web.Response:
     info = await asyncio.to_thread(retry_blocked_zip_install, sha)
     status = retry_blocked_zip_http_status(info)
     return web.json_response(info, status=status)
-
 
 async def api_publish_local(req: web.Request) -> web.Response:
     try:

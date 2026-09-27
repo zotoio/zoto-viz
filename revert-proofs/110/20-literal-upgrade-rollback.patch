@@ -1,0 +1,16 @@
+diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
+index 171944c..239b75f 100644
+--- a/service/pack_install_copy.py
++++ b/service/pack_install_copy.py
+@@ -28,10 +28,7 @@ FAULT_MESSAGE = (
+ )
+ 
+ # UX Pro — upgrade swap rollback (literal pin; revert row blanks this template).
+-UPGRADE_ROLLBACK_UX_MESSAGE = (
+-    "Couldn't update {name} to version {new_version}, so version {old_version} is still installed. "
+-    "Try again, and if it keeps failing, check the server log."
+-)
++UPGRADE_ROLLBACK_UX_MESSAGE = ""
+ 
+ _DEFAULT_ZIP_STEM = "pack"
+ _DISPLAY_STEM_MAX = 80

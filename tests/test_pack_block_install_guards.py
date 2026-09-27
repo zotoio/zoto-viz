@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 
 from service import paths
+from service import pack_safe_zip as psz
 from service import plugin_local
 from service import plugins
 from service.pack_id import (
@@ -46,6 +47,8 @@ def _json_outside_blocks(local: Path) -> list[Path]:
         return stray
     for path in local.rglob("*.json"):
         resolved = path.resolve()
+        if ".staging" in resolved.parts:
+            continue
         if blocks not in resolved.parents and resolved.parent != blocks:
             stray.append(path)
     return stray
@@ -80,8 +83,9 @@ def test_malicious_plugin_ids_refuse_install_without_touching_block_store(
         keep_path, keep_body = _seed_keep_pack_block()
         local = paths.plugin_local_dir(create=True)
 
-        with pytest.raises(ValueError, match="id"):
-            plugin_local.install_local_zip(_minimal_zip(malicious_id), overwrite=True)
+        out = plugin_local.install_local_zip(_minimal_zip(malicious_id), overwrite=True)
+        assert out.get("ok") is False
+        assert out.get("error") == "pack_schema_invalid"
 
         with pytest.raises(ValueError):
             pack_block_path(malicious_id)
@@ -90,6 +94,7 @@ def test_malicious_plugin_ids_refuse_install_without_touching_block_store(
         assert _json_outside_blocks(local) == []
         assert not (local / f"{malicious_id}.zip").exists()
         assert list((local / "blocks").glob("*.json")) == [keep_path]
+        assert psz.list_staging_dirs(paths.plugin_local_runtime_dir()) == []
 
 
 def test_install_koi_refused_while_koi_block_record_stays(
@@ -123,8 +128,9 @@ def test_install_koi_refused_while_koi_block_record_stays(
         return dict(doc)
 
     monkeypatch.setattr(plugins, "validate_doc", fake_validate)
-    with pytest.raises(ValueError, match="conflicts"):
-        plugin_local.install_local_zip(_minimal_zip("Koi"), overwrite=True)
+    out = plugin_local.install_local_zip(_minimal_zip("Koi"), overwrite=True)
+    assert out.get("ok") is False
+    assert "conflicts" in str(out.get("message") or "")
 
     assert koi_path.read_text(encoding="utf-8") == before
     row = zip_block_for_pack("koi")
