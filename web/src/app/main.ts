@@ -196,7 +196,7 @@ import {
   clearVizDrive,
   noteHostDirect,
 } from "../plugins/viz-drive";
-import { revertModeSelection } from "./apply-mode-mosaic";
+import { mosaicFocusSlot, revertModeSelection } from "./apply-mode-mosaic";
 import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
@@ -852,11 +852,14 @@ async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promi
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
+    console.warn("zoto-viz plugin frontend: needs review before module load", spec.id);
+    markPluginNeedsReview(spec);
     sandbox.unload();
     clearVizDrive(vizTileId);
     bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
+    paintPluginNeedsReviewNotice(modeSel.value);
     return;
   }
   const tileId = "main";
@@ -989,11 +992,25 @@ function skySpecForMode(modeId: string, fallback: PluginView | null): PluginView
   return selected;
 }
 
+const PLUGIN_NEEDS_REVIEW_MSG = "needs review";
+
+function markPluginNeedsReview(spec: PluginView): void {
+  spec.sky_error = PLUGIN_NEEDS_REVIEW_MSG;
+  spec.sky_available = false;
+}
+
+function paintPluginNeedsReviewNotice(paneId?: string): void {
+  if (!mosaic?.on) return;
+  const pane = paneId && mosaic.tileIds.includes(paneId) ? paneId : mosaicFocusSlot(mosaic);
+  if (pane) mosaic.setPaneNotice(pane, PLUGIN_NEEDS_REVIEW_MSG);
+}
+
 async function loadPluginSkyOnto(
   target: NetScene,
   spec: PluginView | null,
   pinPlugin: boolean,
   signal: AbortSignal,
+  paneId?: string,
 ): Promise<void> {
   const look = spec ? (lookForMode(pluginViewId(spec.id, spec.instanceId)) ?? spec.look) : undefined;
   const want = pinPlugin && !!spec && look?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
@@ -1009,8 +1026,11 @@ async function loadPluginSkyOnto(
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
+    console.warn("zoto-viz plugin sky: needs review before shader load", spec.id);
+    markPluginNeedsReview(spec);
     target.setPluginShader(null);
     if (target === scene) skyLoaded = "";
+    paintPluginNeedsReviewNotice(paneId);
     return;
   }
   const disposeSky = () => {
@@ -1051,7 +1071,7 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
         const tileSky = mosaic.paneSky(id);
         const pane = pluginSpecForMode(id);
         const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
-        await loadPluginSkyOnto(target, pane, wantPlugin, signal);
+        await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
       }
     } finally {
       mosaic.settlePanes();
