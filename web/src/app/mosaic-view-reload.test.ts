@@ -73,6 +73,7 @@ function makeLiveMosaic(tiles: string[], focus: string): Mosaic {
 
 describe("mosaic view reload regressions (B/C/D/E)", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     setPluginModes(MODES);
     localStorage.clear();
   });

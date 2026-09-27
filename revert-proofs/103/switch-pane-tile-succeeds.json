@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/switch-pane-view.test.ts",
+  "testName": "switchPaneView > entry tile > succeeds through teardown, swap, and mount",
+  "description": "Revert switchPaneView mount after tile pick",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

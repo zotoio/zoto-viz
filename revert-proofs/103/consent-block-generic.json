@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/apply-mode-mosaic.test.ts",
+  "testName": "consentBlockMessage > uses generic copy when the plugin name is unknown",
+  "description": "Revert generic Settings \u2192 Plugins consent copy",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

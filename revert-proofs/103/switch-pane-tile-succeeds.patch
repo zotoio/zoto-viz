@@ -1,0 +1,13 @@
+diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
+index 7f6a1135..32be6abe 100644
+--- a/web/src/app/switch-pane-view.ts
++++ b/web/src/app/switch-pane-view.ts
+@@ -137,7 +137,7 @@ export async function switchPaneView(
+   mosaic.setPaneNotice(slot.toViewId, null);
+   clearConsentPendingForPane(slot.paneId);
+   mosaic.focus(slot.toViewId);
+-  await opts.mountView(slot.toViewId);
++  // skip mount
+   opts.persistLayout();
+ 
+   return { ok: true, paneId: slot.paneId, viewId: slot.toViewId };

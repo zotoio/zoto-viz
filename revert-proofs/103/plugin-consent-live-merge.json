@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/plugin-consent-live.test.ts",
+  "testName": "mergePluginConsentLivePatch > merges WebSocket pluginConsent onto catalog rows",
+  "description": "Revert mergePluginConsentLivePatch updating catalog consent",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

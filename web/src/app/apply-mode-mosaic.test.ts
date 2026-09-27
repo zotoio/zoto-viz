@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   consentBlockMessage,
   mosaicFocusSlot,
@@ -7,6 +7,10 @@ import {
 } from "./apply-mode-mosaic";
 
 describe("mosaicFocusSlot", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("falls back when focus is stale after a tile close", () => {
     const mosaic = {
       tileIds: ["plugin:talkers", "plugin:wifi"],
@@ -26,6 +30,11 @@ describe("mosaicFocusSlot", () => {
 });
 
 describe("revertModeSelection", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+    localStorage.clear();
+  });
+
   it("restores header mode and liveMode", () => {
     const modeSel = { value: "plugin:heat" };
     const live = { mode: "plugin:heat" };
@@ -37,8 +46,17 @@ describe("revertModeSelection", () => {
 });
 
 describe("consentBlockMessage", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("names the plugin when available", () => {
-    expect(consentBlockMessage({ name: "Heat map" })).toMatch(/Heat map.*Settings → Plugins/);
-    expect(consentBlockMessage(null)).toMatch(/Not approved yet.*Settings → Plugins/);
+    expect(consentBlockMessage({ name: "Heat map" })).toBe(
+      "Not approved yet. Heat map: Approve it in Settings → Plugins.",
+    );
+  });
+
+  it("uses generic copy when the plugin name is unknown", () => {
+    expect(consentBlockMessage(null)).toBe("Not approved yet. Approve it in Settings → Plugins.");
   });
 });

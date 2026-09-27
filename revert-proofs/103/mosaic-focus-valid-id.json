@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/apply-mode-mosaic.test.ts",
+  "testName": "mosaicFocusSlot > keeps a valid focus id on the wall",
+  "description": "Revert mosaicFocusSlot keeping focused tile on the wall",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

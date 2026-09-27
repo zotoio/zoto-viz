@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import type { PluginView } from "../plugins/plugin";
 
@@ -13,6 +13,10 @@ const reviewed: PluginView = {
 };
 
 describe("shouldPromptPluginReview", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("never prompts before catalog consent is loaded", () => {
     expect(shouldPromptPluginReview({ ...reviewed, consent: null }, false)).toBe(false);
   });

@@ -1,0 +1,13 @@
+diff --git a/web/src/app/plugin-consent-sync.ts b/web/src/app/plugin-consent-sync.ts
+index a8b9c90b..5cd62550 100644
+--- a/web/src/app/plugin-consent-sync.ts
++++ b/web/src/app/plugin-consent-sync.ts
+@@ -47,7 +47,7 @@ export function disarmPluginConsentFallbackPoll(): void {
+ /** Call when pending pane set changes (register / clear). */
+ export function syncPluginConsentPendingState(): void {
+   if (hasConsentPending()) armPluginConsentFallbackPoll();
+-  else disarmPluginConsentFallbackPoll();
++  else {}
+ }
+ 
+ export function resetPluginConsentSyncForTests(): void {

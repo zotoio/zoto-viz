@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/apply-mode-mosaic.test.ts",
+  "testName": "consentBlockMessage > names the plugin when available",
+  "description": "Revert consentBlockMessage naming the plugin pack",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/apply-mode-mosaic.test.ts",
+  "testName": "mosaicFocusSlot > falls back when focus is stale after a tile close",
+  "description": "Revert mosaicFocusSlot ignoring stale focusedId off the wall",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

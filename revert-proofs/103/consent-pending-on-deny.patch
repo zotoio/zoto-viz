@@ -1,0 +1,21 @@
+diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
+index 7f6a1135..480b0a15 100644
+--- a/web/src/app/switch-pane-view.ts
++++ b/web/src/app/switch-pane-view.ts
+@@ -101,15 +101,7 @@ export async function switchPaneView(
+     }
+     const msg = consentBlockMessage(opts.spec);
+     mosaic.setPaneNotice(slot.paneId, msg);
+-    const pid = opts.pluginId?.trim();
+-    if (pid && slot.swap) {
+-      registerConsentPending({
+-        paneId: slot.paneId,
+-        toViewId: slot.toViewId,
+-        fromViewId: opts.fromViewId,
+-        pluginId: pid,
+-      });
+-    }
++    // no pending
+     return { ok: false, reason: msg };
+   }
+ 

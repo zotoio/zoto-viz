@@ -109,11 +109,8 @@ import { deliverMosaicDemoPacks, dropMosaicTileWriter } from "../graph/mosaic-vi
 import { bindVizDriveElement, noteHostDirect } from "../plugins/viz-drive";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { revertModeSelection } from "./apply-mode-mosaic";
-import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
-import { shouldPromptPluginReview } from "./plugin-consent-mount";
-import { hasConsentPending } from "./consent-pending-panes";
-import { mergePluginConsentLivePatch } from "./plugin-consent-live";
 import { initPluginConsentSync } from "./plugin-consent-sync";
+import { modeForDigitKey } from "./header-digit-mode";
 import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
 
@@ -2088,8 +2085,7 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "b" || e.key === "B") setDebug(!debugToggle.checked);
   if (e.key === "l" || e.key === "L") setLabels(!sysLabels.checked);
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);
-  const idx = e.key === "0" ? 9 : Number(e.key) - 1;
-  const modes = viewSelectOptions();
-  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.value);
+  const modeId = modeForDigitKey(e.key);
+  if (modeId && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modeId);
 });
 window.addEventListener("pagehide", () => persistLive(true));

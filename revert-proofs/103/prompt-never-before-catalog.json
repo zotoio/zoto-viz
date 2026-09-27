@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/plugin-consent-mount.test.ts",
+  "testName": "shouldPromptPluginReview > never prompts before catalog consent is loaded",
+  "description": "Revert shouldPromptPluginReview waiting for catalogReady",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

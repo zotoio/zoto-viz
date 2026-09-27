@@ -1,0 +1,12 @@
+diff --git a/web/src/app/apply-mode-mosaic.ts b/web/src/app/apply-mode-mosaic.ts
+index ca0ed888..3a87ff60 100644
+--- a/web/src/app/apply-mode-mosaic.ts
++++ b/web/src/app/apply-mode-mosaic.ts
+@@ -30,6 +30,6 @@ export function revertModeSelection(
+ 
+ export function consentBlockMessage(spec: { name?: string } | null | undefined): string {
+   const where = "Approve it in Settings → Plugins.";
+-  if (spec?.name) return `Not approved yet. ${spec.name}: ${where}`;
++  if (spec?.name) return `Not approved yet. ${where}`;
+   return `Not approved yet. ${where}`;
+ }

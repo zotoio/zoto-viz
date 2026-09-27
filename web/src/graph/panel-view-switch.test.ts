@@ -55,7 +55,7 @@ describe("mosaic panel view switch teardown", () => {
     }
     document.removeEventListener("securitypolicyviolation", onViolation);
     expect(violations).toHaveLength(0);
-    expect(host.viewCount).toBeLessThanOrEqual(2);
+    expect(host.viewCount).toBe(2);
     host.dispose();
     main.dispose();
   });

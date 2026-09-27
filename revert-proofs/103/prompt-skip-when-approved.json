@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/plugin-consent-mount.test.ts",
+  "testName": "shouldPromptPluginReview > does not prompt when every pack is already approved",
+  "description": "Revert shouldPromptPluginReview skipping reviewed packs",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

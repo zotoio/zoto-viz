@@ -9,6 +9,7 @@ import {
 
 describe("plugin consent sync (one page subscription)", () => {
   beforeEach(() => {
+    expect.hasAssertions();
     vi.useFakeTimers();
     resetPluginConsentSyncForTests();
     clearAllConsentPending();

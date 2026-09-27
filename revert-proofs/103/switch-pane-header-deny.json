@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/switch-pane-view.test.ts",
+  "testName": "switchPaneView > entry header > denies consent without swapping or mounting",
+  "description": "Revert consent deny blocking header swap",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

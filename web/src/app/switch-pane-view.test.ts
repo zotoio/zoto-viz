@@ -69,18 +69,23 @@ describe("switchPaneView", () => {
       expect(result.ok).toBe(false);
       expect(m.setPaneView).not.toHaveBeenCalled();
       expect(mountView).not.toHaveBeenCalled();
-      expect(m.setPaneNotice).toHaveBeenCalledWith(expect.any(String), expect.stringMatching(/Not approved yet.*Settings → Plugins/));
+      expect(m.setPaneNotice).toHaveBeenCalledWith(
+        "plugin:topology",
+        "Not approved yet. Talkers: Approve it in Settings → Plugins.",
+      );
     });
 
-    it("uses focus fallback when the requested tile id is stale", async () => {
-      if (entry === "header") {
-        expect(entry).toBe("header");
-        return;
-      }
+    it("uses focus fallback when the requested tile id is stale", () => {
       const m = host({
         tileIds: ["plugin:topology", "plugin:wifi"],
         focusedId: "plugin:wifi",
       });
+      if (entry === "header") {
+        const resolved = resolvePaneSwitchSlot(m, "plugin:talkers", undefined);
+        expect(resolved.ok).toBe(true);
+        if (resolved.ok) expect(resolved.paneId).toBe("plugin:wifi");
+        return;
+      }
       const resolved = resolvePaneSwitchSlot(m, "plugin:talkers", "plugin:gone");
       expect(resolved.ok).toBe(true);
       if (resolved.ok) expect(resolved.paneId).toBe("plugin:wifi");

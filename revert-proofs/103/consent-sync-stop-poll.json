@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/plugin-consent-sync.test.ts",
+  "testName": "plugin consent sync (one page subscription) > stops the shared poll when no tiles are waiting",
+  "description": "Revert disarming consent poll when pending clears",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

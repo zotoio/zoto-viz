@@ -1,0 +1,13 @@
+diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
+index 7f6a1135..dd22ed30 100644
+--- a/web/src/app/switch-pane-view.ts
++++ b/web/src/app/switch-pane-view.ts
+@@ -100,7 +100,7 @@ export async function switchPaneView(
+       return { ok: false, reason: "A newer view switch is already in progress." };
+     }
+     const msg = consentBlockMessage(opts.spec);
+-    mosaic.setPaneNotice(slot.paneId, msg);
++    // no pane notice
+     const pid = opts.pluginId?.trim();
+     if (pid && slot.swap) {
+       registerConsentPending({

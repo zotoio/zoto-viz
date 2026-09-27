@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/mosaic-consent-resume.test.ts",
+  "testName": "mosaic consent resume > retries through switchPaneView when consent appears (external approve)",
+  "description": "Revert resumePendingConsentPaneSwitches retry loop",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/mosaic-view-reload.test.ts",
+  "testName": "mosaic view reload regressions (B/C/D/E) > pane picker delegates through the live hook and persists layout",
+  "description": "Revert settings mosaic slot delegating to onMosaicPanePick",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/plugin-consent-mount.test.ts",
+  "testName": "shouldPromptPluginReview > prompts only after catalog is ready and consent is missing",
+  "description": "Revert shouldPromptPluginReview when consent missing",
+  "red": {
+    "actual": "__FILL__",
+    "expected": "__FILL__"
+  },
+  "project": "web"
+}

@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { mergePluginConsentLivePatch } from "./plugin-consent-live";
 import type { PluginView } from "../plugins/plugin";
 
 describe("mergePluginConsentLivePatch", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("merges WebSocket pluginConsent onto catalog rows", () => {
     const specs: PluginView[] = [{
       id: "heat",

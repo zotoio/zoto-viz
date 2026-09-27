@@ -1,0 +1,35 @@
+diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
+index 7f6a1135..5cfda34a 100644
+--- a/web/src/app/switch-pane-view.ts
++++ b/web/src/app/switch-pane-view.ts
+@@ -93,10 +93,10 @@ export async function switchPaneView(
+     return { ok: false, reason: slot.reason };
+   }
+ 
+-  const token = beginPaneSwitch(slot.paneId);
++  // no token
+ 
+   if (!(await opts.ensureReviewed())) {
+-    if (paneSwitchStale(slot.paneId, token)) {
++    if (false) {
+       return { ok: false, reason: "A newer view switch is already in progress." };
+     }
+     const msg = consentBlockMessage(opts.spec);
+@@ -113,7 +113,7 @@ export async function switchPaneView(
+     return { ok: false, reason: msg };
+   }
+ 
+-  if (paneSwitchStale(slot.paneId, token)) {
++  if (false) {
+     return { ok: false, reason: "A newer view switch is already in progress." };
+   }
+ 
+@@ -130,7 +130,7 @@ export async function switchPaneView(
+     }
+   }
+ 
+-  if (paneSwitchStale(slot.paneId, token)) {
++  if (false) {
+     return { ok: false, reason: "A newer view switch is already in progress." };
+   }
+ 

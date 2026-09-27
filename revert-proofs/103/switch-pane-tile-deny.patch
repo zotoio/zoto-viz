@@ -1,0 +1,13 @@
+diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
+index 7f6a1135..dd6e0138 100644
+--- a/web/src/app/switch-pane-view.ts
++++ b/web/src/app/switch-pane-view.ts
+@@ -117,7 +117,7 @@ export async function switchPaneView(
+     return { ok: false, reason: "A newer view switch is already in progress." };
+   }
+ 
+-  if (slot.swap) {
++  if (false && slot.swap) {
+     const tilesBeforeSwap = mosaic.tileIds;
+     if (!mosaic.setPaneView(slot.fromViewId, slot.toViewId)) {
+       const msg = "Could not swap that view on the wall.";
