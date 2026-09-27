@@ -27,9 +27,16 @@ def check_data_source_semantics(doc: dict[str, Any]) -> None:
     """Schema follow-up for ``kind: data-source`` (no tree I/O)."""
     if plugin_kind(doc) != "data-source":
         return
-    for key in ("frontend", "backend", "entry", "service", "runtime", "capabilities", "viz"):
-        if doc.get(key):
-            raise ValueError(f"data-source plugins must not declare {key!r}")
+    if doc.get("has_frontend") or doc.get("frontend"):
+        raise ValueError("data-source plugins must not declare 'frontend'")
+    if doc.get("has_backend") or doc.get("backend") or doc.get("service"):
+        raise ValueError("data-source plugins must not declare 'backend'")
+    if doc.get("entry") or doc.get("runtime") == "typescript":
+        raise ValueError("data-source plugins must not declare executable entry/runtime")
+    if doc.get("capabilities"):
+        raise ValueError("data-source plugins must not declare 'capabilities'")
+    if doc.get("viz"):
+        raise ValueError("data-source plugins must not declare 'viz'")
     if doc.get("datasource") or doc.get("consumes") or doc.get("produces"):
         raise ValueError("data-source plugins use dataSource.sources, not datasource consumes/produces")
     block = doc.get("dataSource")

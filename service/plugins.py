@@ -162,9 +162,18 @@ def optional_part_flags(
     has_frontend = has_frontend_part(doc, home, tuple(partset), nested=nested)
     entry = resolve_frontend_entry(doc, home) if nested or has_frontend else DEFAULT_FRONTEND_ENTRY
     caps = [c for c in (doc.get("capabilities") or []) if c in ALLOWED_CAPS]
+    inspect = nested and home.is_dir()
+    if dsp.plugin_kind(doc) == "data-source":
+        return {
+            "has_frontend": False,
+            "capabilities": caps,
+            "has_sky": "sky" in partset or (inspect and (home / "sky").is_dir()),
+            "has_sky_shader": inspect and (home / "sky" / "fragment.glsl").is_file(),
+            "has_backend": False,
+            "has_datasource": False,
+        }
     fe = dict(doc["frontend"]) if isinstance(doc.get("frontend"), dict) else {}
     fe["entry"] = entry
-    inspect = nested and home.is_dir()
     return {
         "has_frontend": has_frontend,
         "frontend": fe,
