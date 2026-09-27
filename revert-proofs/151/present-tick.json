@@ -2,6 +2,7 @@
   "runner": "vitest",
   "testFile": "src/app/__tests__/render-scale-governor-production.test.ts",
   "testName": "render-scale governor production wiring > flag on with over-budget GPU samples: commits lower scale per step-down rule",
-  "description": "Revert per-frame runRenderScaleGovernorPresentTick in main present listener",
-  "project": "web"
+  "description": "Revert per-frame runRenderScaleGovernorPresentTick body in present listener wiring",
+  "project": "web",
+  "red": "AssertionError: expected +0 to be 600 // Object.is equality"
 }
