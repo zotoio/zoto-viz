@@ -9,6 +9,7 @@ import {
 } from "./physics";
 import { LayoutClient } from "./layout";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
+import { claimPanelRaf, releasePanelView } from "./panel-view-lifecycle";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
 import { probeWebGL } from "./webgl";
@@ -1197,6 +1198,7 @@ export class NetScene implements HostedView {
   private readonly satellite: boolean;
   /** mosaic tile id when this scene is the main graph on a pane (`main` or `plugin:…`). */
   private mosaicPanelId: string | null = null;
+  private releasePanelRaf: (() => void) | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
   private compactLabels = false;
   private raf = 0;
@@ -3997,13 +3999,20 @@ export class NetScene implements HostedView {
     return base / Math.sqrt(Math.max(1, this.spreadX));
   }
 
-  /** Mosaic tile id moved onto the main scene element — used for per-tile viz delivery. */
+  /** Mosaic tile id moved onto the main scene element — retarget rAF lease. */
   retargetPanel(panelId: string | null): void {
+    this.releasePanelRaf?.();
+    this.releasePanelRaf = null;
+    if (this.mosaicPanelId) releasePanelView(this.mosaicPanelId);
     this.mosaicPanelId = panelId;
+    if (panelId) this.releasePanelRaf = claimPanelRaf(panelId);
   }
 
   dispose(): void {
     this.active = false;
+    this.releasePanelRaf?.();
+    this.releasePanelRaf = null;
+    if (this.mosaicPanelId) releasePanelView(this.mosaicPanelId);
     cancelAnimationFrame(this.raf);
     this.ro.disconnect();
     window.removeEventListener("resize", this.onWinResize);

@@ -12,6 +12,7 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
+import { releasePanelView } from "./panel-view-lifecycle";
 import { bindVizDriveElement, clearVizDrive } from "../plugins/viz-drive";
 import { dropMosaicTileWriter } from "./mosaic-viz-feed";
 
@@ -468,6 +469,7 @@ export class Mosaic {
     if (!this.tree || !toId || fromId === toId) return false;
     const next = nextPaneTiles(this.tileIds, fromId, toId);
     if (next.join("\0") === this.tileIds.join("\0")) return false;
+    if (!next.includes(fromId)) releasePanelView(fromId);
     this.assignViews(next);
     return true;
   }
@@ -739,6 +741,7 @@ export class Mosaic {
   }
 
   private dropPane(id: string): void {
+    releasePanelView(id);
     dropMosaicTileWriter(id);
     if (id === this.mainId) {
       const next = this.extras.find((e) => isGraph(e.id));
