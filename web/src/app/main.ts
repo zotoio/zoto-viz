@@ -80,6 +80,7 @@ import {
   pluginHasTypeSafe,
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
+import { runPackFrameHandler } from "../plugins/viz-pack-host";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -1152,9 +1153,7 @@ mosaic = new Mosaic({
     if (theme) applyTheme(theme.id);
     applyViewLook();
   },
-  onLayout: (patch) => {
-    settings.applyMosaicLayout(patch);
-  },
+  onLayout: (patch) => settings.applyMosaicLayout(patch),
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
