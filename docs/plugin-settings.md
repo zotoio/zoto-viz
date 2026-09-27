@@ -1,0 +1,40 @@
+# Plugin settings (host drawer)
+
+## Where settings live
+
+- **`settings`** (presets, `presetField`, HUD `labelFields`, collapsible sections) may live in `plugin.yml` and/or `visualisation.yml`.
+- **`config`** field declarations usually live in `visualisation.yml`; legacy packs may use top-level `plugin.yml` `config` / `options`.
+
+## Merge precedence (catalog → web)
+
+When both files declare settings:
+
+1. Start from `visualisation.yml` `settings`.
+2. Overlay top-level `plugin.yml` `settings` (top-level wins on conflicts).
+
+The same rule is used in Python (`service/plugins.py` `_settings_from_doc`) and TypeScript (`toPluginView` in `plugin-visualisation.ts`).
+
+Legacy top-level **`presets` / `presetField` / `hud` / `sections`** on `plugin.yml` are still read when not present under `settings` (Python `_settings_from_doc`, TS `toPluginView` preset/hud/sections fallbacks).
+
+## Validation
+
+- `plugin.yml` is validated with the root plugin schema; **settings semantics** (preset keys, HUD fields, `randomRange`, etc.) run on the **merged** row after `visualisation.yml` is attached.
+- `visualisation.yml` is validated against the `visualisation` subschema; list-shaped legacy `options` are checked in Python semantics. Config list rows may omit `type` (defaults to text in TS; semantics treat select when `values` are present).
+
+## Reset behaviour
+
+**Reset to defaults** restores non-text config fields to the pack default preset:
+
+1. If the tile/catalog row has an instance **default** for `presetField` that matches a declared preset, that preset is used.
+2. Otherwise **`settings.presets[0]`** (the first declared preset) is used.
+3. Fields not in the preset fall back to instance defaults, then field defaults.
+
+**Text and textarea fields** (gateway, pond labels, watch SSIDs, view prompt, etc.) are never changed by Reset, even when a preset maps those keys.
+
+Without declared presets, Reset restores non-text fields to instance/field defaults only.
+
+## Mosaic HUD
+
+Each mosaic **tile** paints its own settings caption inside that tile’s frame (`.mosaic-pane-settings-caption`), keyed by the tile’s view mode id (`plugin:<id>` or `plugin:<id>:<instance>`). The global `VizHud` overlay is for demoscene packs only when the wall is on; plugin `hud.labelFields` captions are never shared across tiles.
+
+Single-view (non-mosaic) mode still uses the header hint and, when applicable, the settings `VizHud` line.
