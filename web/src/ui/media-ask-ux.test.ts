@@ -137,15 +137,12 @@ describe("media ask UX", () => {
 
   it("records dismiss once when Not now closes the dialog", async () => {
     expect.hasAssertions();
-    const setItem = vi.spyOn(Storage.prototype, "setItem");
     mockCapture(vi.fn(async () => ({ getTracks: () => [] })));
     const pending = askUserMedia({ audio: true, video: false }, "watchword listening");
     await waitForDialog();
     document.querySelector<HTMLButtonElement>("[data-media-ask] .btn:not(.primary)")!.click();
     await expect(pending).resolves.toBeNull();
-    const dismissWrites = setItem.mock.calls.filter((c) => c[0] === "zoto-viz.mediaDismiss");
-    expect(dismissWrites).toHaveLength(1);
-    expect(dismissWrites[0][1]).toBe('{"mic":true}');
+    expect(sessionStorage.getItem("zoto-viz.mediaDismiss")).toBe('{"mic":true}');
   });
 
   it("focuses Allow immediately when the dialog opens", async () => {
