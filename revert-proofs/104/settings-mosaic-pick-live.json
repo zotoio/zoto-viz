@@ -1,0 +1,16 @@
+{
+  "runner": "vitest",
+  "testFile": "src/ui/settings-mosaic-pick.test.ts",
+  "testName": "settings mosaic pane pickers > delegates slot changes to the live wall hook and reverts on failure",
+  "description": "Revert settings mosaic slot delegating to onMosaicPanePick live hook",
+  "red": {
+    "actual": [],
+    "expected": [
+      [
+        "plugin:topology",
+        "plugin:talkers"
+      ]
+    ]
+  },
+  "project": "web"
+}

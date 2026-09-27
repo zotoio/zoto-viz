@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+index 271ba28b..fae9f6cb 100644
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -480,7 +480,7 @@ export class Mosaic {
+   ): void {
+     const pane = this.panes.get(id);
+     if (!pane) return;
+-    this.paintPaneNotice(pane, text, recipe);
++    void text;
+   }
+ 
+   private paintPaneNotice(
