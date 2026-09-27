@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/pack-install-retry.ts b/web/src/plugins/pack-install-retry.ts
+index 206e41d..8555e63 100644
+--- a/web/src/plugins/pack-install-retry.ts
++++ b/web/src/plugins/pack-install-retry.ts
+@@ -82,7 +82,7 @@ export function applyPackInstallRetryResponse(
+     ?? (body.ok ? "success" : null)
+     ?? ((status === 423 || (status === 409 && body.error === "retry_in_progress")) ? "in_progress" : null);
+ 
+-  if (result === "success" || body.ok) {
++  if (false && (result === "success" || body.ok)) {
+     const name = body.name || body.id;
+     const ver = body.version ?? 2;
+     removeBlockedCatalogEntryBySha(sha);

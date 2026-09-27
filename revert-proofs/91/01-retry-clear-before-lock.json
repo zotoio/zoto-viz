@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_install.py",
+  "testName": "test_retry_blocked_zip_runs_full_install_keeps_v1_on_repeat_failure",
+  "description": "Retry clears zip block before taking pack lock.",
+  "patchedFailure": "E   AssertionError: assert 'not_blocked' == 'pack_install_start_failed'"
+}

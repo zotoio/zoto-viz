@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_plugin_install.py",
-  "testName": "test_zip_slip_rejected_on_unpack",
-  "description": "Zip slip paths are unpacked."
-}

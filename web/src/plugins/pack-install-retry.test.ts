@@ -39,6 +39,9 @@ function seedCouldntStartRecord(): void {
 
 describe("pack install retry UX", () => {
   beforeEach(() => {
+    expect.hasAssertions();
+  });
+  beforeEach(() => {
     resetPackInstallSurfaceForTests();
     resetPackInstallRetryForTests();
     vi.restoreAllMocks();

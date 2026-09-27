@@ -1,0 +1,12 @@
+diff --git a/service/plugin_install.py b/service/plugin_install.py
+index f8c85eb..7ce5644 100644
+--- a/service/plugin_install.py
++++ b/service/plugin_install.py
+@@ -482,6 +482,7 @@ def _install_zip_to_runtime_locked(
+ 
+ 
+ def recover_interrupted_swaps(runtime_parent: Path) -> list[str]:
++    return []
+     if not runtime_parent.is_dir():
+         return []
+     messages: list[str] = []

@@ -1,6 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/plugins/pack-install-retry.test.ts",
-  "testName": "pack install retry UX > zip_changed: keeps blocked row with zip-changed copy",
-  "description": "zip_changed: keeps blocked row with zip-changed copy"
-}

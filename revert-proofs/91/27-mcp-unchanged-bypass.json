@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_mcp.py",
+  "testName": "test_mcp_same_sha_install_uses_pipeline_not_verify_only",
+  "description": "MCP install_catalog_zip verify-only fast path skips install_zip_to_runtime on unchanged zip.",
+  "patchedFailure": "tests/test_mcp.py:103: AssertionError: assert 1 == 2"
+}

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   blockedViewSelectRow,
   consumePackInstallNotices,
@@ -11,6 +11,10 @@ import {
 import { installPlugins, viewSelectOptions } from "./plugin";
 
 describe("pack install blocked surface", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("toast once per unchanged zip; Blocked row on every catalog sync", async () => {
     resetPackInstallSurfaceForTests();
     const orig = globalThis.fetch;
