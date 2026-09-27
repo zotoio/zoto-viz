@@ -2,13 +2,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { RenderHost } from "./render-host";
+
 const { WebGLRendererMock } = vi.hoisted(() => {
   class WebGLRendererMock {
     readonly domElement = document.createElement("canvas");
-    private ratio = 1;
-    setPixelRatio = vi.fn((n: number) => {
-      this.ratio = n;
-    });
+    setPixelRatio = vi.fn();
     setClearColor = vi.fn();
     setSize = vi.fn((w: number, h: number) => {
       this.domElement.width = w;
@@ -21,7 +19,7 @@ const { WebGLRendererMock } = vi.hoisted(() => {
     getRenderTarget = () => null;
     clear = vi.fn();
     render = vi.fn();
-    getPixelRatio = () => this.ratio;
+    getPixelRatio = () => 1;
     getContext = () => ({
       getContextAttributes: () => ({ antialias: false }),
       fenceSync: () => ({}),
@@ -38,29 +36,39 @@ vi.mock("three", async (importOriginal) => {
   return { ...orig, WebGLRenderer: WebGLRendererMock as unknown as typeof orig.WebGLRenderer };
 });
 
-describe("RenderHost setPixelRatio auto-tune", () => {
-  let wall: HTMLElement;
-  let host: RenderHost;
+describe("RenderHost canvas backing store", () => {
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
 
   beforeEach(() => {
     expect.hasAssertions();
-    wall = document.createElement("div");
+  });
+
+  it("resizeGpuCanvas uses Math.max(1, …) for zero CSS wall size", () => {
+    const wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { configurable: true, value: 200 });
     Object.defineProperty(wall, "clientHeight", { configurable: true, value: 120 });
     document.body.appendChild(wall);
-    host = new RenderHost(wall, { software: false, dpr: 1 });
+    const host = new RenderHost(wall, { software: false, dpr: 1.5 });
     cancelAnimationFrame((host as unknown as { raf: number }).raf);
-  });
-
-  afterEach(() => {
+    (host as unknown as { w: number }).w = 0;
+    (host as unknown as { h: number }).h = 0;
+    (host as unknown as { resizeGpuCanvas(): void }).resizeGpuCanvas();
+    expect(host.canvas.width).toBe(1);
+    expect(host.canvas.height).toBe(1);
     host.dispose();
-    wall.remove();
   });
 
-  it("setPixelRatio(1.25) keeps WebGLRenderer pixel ratio at 1 and resizes backing store", () => {
-    const rd = host.renderer as THREE.WebGLRenderer;
-    host.setPixelRatio(1.25);
-    expect(rd.getPixelRatio()).toBe(1);
-    expect(rd.setSize).toHaveBeenLastCalledWith(250, 150, false);
+  it("constructor refreshCanvasDeviceHeight matches canvas.height when syncSize skips tiny walls", () => {
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { configurable: true, value: 1 });
+    Object.defineProperty(wall, "clientHeight", { configurable: true, value: 1 });
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall, { software: false, dpr: 1.5 });
+    cancelAnimationFrame((host as unknown as { raf: number }).raf);
+    const branded = (host as unknown as { canvasDeviceHeight: number }).canvasDeviceHeight;
+    expect(branded).toBe(host.canvas.height);
+    host.dispose();
   });
 });

@@ -3,12 +3,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { RenderHost, type HostedView } from "./render-host";
 import { isDeviceRect } from "./pack-mirror-rect";
-import {
-  DEFAULT_MAX_DEVICE_PX_RATIO,
-  configureLayoutMaxDevicePxRatio,
-  resetLayoutDevicePxRatioWatch,
-} from "../../test-support/layout-device-px-ratio";
-
 describe("RenderHost software present", () => {
   let wall: HTMLElement;
   let host: RenderHost;
@@ -16,8 +10,6 @@ describe("RenderHost software present", () => {
 
   beforeEach(() => {
     expect.hasAssertions();
-    resetLayoutDevicePxRatioWatch();
-    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
     wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { configurable: true, value: 200 });
     Object.defineProperty(wall, "clientHeight", { configurable: true, value: 120 });
@@ -45,8 +37,6 @@ describe("RenderHost software present", () => {
   afterEach(() => {
     host.dispose();
     wall.remove();
-    resetLayoutDevicePxRatioWatch();
-    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 
   it("present returns a branded DeviceRect on the software path", () => {

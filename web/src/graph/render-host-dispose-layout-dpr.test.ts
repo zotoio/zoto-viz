@@ -1,12 +1,6 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
-import {
-  DEFAULT_MAX_DEVICE_PX_RATIO,
-  configureLayoutMaxDevicePxRatio,
-  resetLayoutDevicePxRatioWatch,
-} from "../../test-support/layout-device-px-ratio";
-
 const dprMedia = vi.hoisted(() => {
   let dpr = 1;
   let onChange: (() => void) | null = null;
@@ -77,8 +71,6 @@ describe("RenderHost dispose layout DPR listener", () => {
     expect.hasAssertions();
     hostSetSizeLog.calls = 0;
     dprMedia.dpr = 1;
-    resetLayoutDevicePxRatioWatch();
-    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
     vi.stubGlobal("matchMedia", dprMedia.matchMedia);
     Object.defineProperty(window, "devicePixelRatio", {
       configurable: true,
@@ -93,8 +85,6 @@ describe("RenderHost dispose layout DPR listener", () => {
   afterEach(() => {
     wall.remove();
     vi.unstubAllGlobals();
-    resetLayoutDevicePxRatioWatch();
-    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 
   it("after dispose, window DPR change does not resize the host canvas", () => {

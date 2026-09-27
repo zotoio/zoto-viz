@@ -18,15 +18,14 @@ let onDpiChange: (() => void) | null = null;
 const layoutChangeListeners = new Set<(ratio: DevicePxRatio) => void>();
 
 function capRawDevicePxRatio(raw: number): DevicePxRatio {
-  const n = typeof raw === "number" && Number.isFinite(raw) ? raw : 1;
+  const n = typeof raw === "number" ? raw : 1;
   return Math.min(n, layoutMaxDevicePxRatio) as DevicePxRatio;
 }
 
 function readWindowDevicePixelRatio(): number {
   if (typeof window === "undefined") return 1;
   const raw = window.devicePixelRatio;
-  if (typeof raw !== "number" || !Number.isFinite(raw)) return 1;
-  return raw;
+  return typeof raw === "number" && Number.isFinite(raw) ? raw : 1;
 }
 
 function notifyLayoutListeners(ratio: DevicePxRatio): void {
@@ -46,12 +45,6 @@ function rearmResolutionMediaQuery(rawDppx: number): void {
     if (next !== prev) notifyLayoutListeners(next);
   };
   currentMq.addEventListener("change", onDpiChange);
-}
-
-function syncLayoutRatioFromWindow(): DevicePxRatio {
-  const raw = readWindowDevicePixelRatio();
-  cachedLayoutRatio = capRawDevicePxRatio(raw);
-  return cachedLayoutRatio;
 }
 
 /** Pin cached layout DPR (fixed `RenderHost` `dpr` option); disables window watch reads. */
@@ -94,11 +87,6 @@ export function onLayoutDevicePxRatioChange(fn: (ratio: DevicePxRatio) => void):
 export function layoutDevicePxRatio(): DevicePxRatio {
   if (!watchInstalled && !watchPinned) startLayoutDevicePxRatioWatch();
   return cachedLayoutRatio;
-}
-
-/** Explicit window read + cap (construction / listener only in production). */
-export function devicePxRatioFromWindow(): DevicePxRatio {
-  return syncLayoutRatioFromWindow();
 }
 
 export function devicePxRatioFromNumber(n: number): DevicePxRatio {

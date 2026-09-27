@@ -5,7 +5,6 @@ export {
   configureLayoutMaxDevicePxRatio,
   DEFAULT_MAX_DEVICE_PX_RATIO,
   devicePxRatioFromNumber,
-  devicePxRatioFromWindow,
   devicePxRatioNumber,
   layoutBackingDevicePx,
   layoutDevicePxRatio,

@@ -5,12 +5,9 @@ import { Stage3D } from "../arcade/stage3d";
 import type { NetScene } from "./scene";
 import { RenderHost } from "./render-host";
 import {
-  DEFAULT_MAX_DEVICE_PX_RATIO,
-  configureLayoutMaxDevicePxRatio,
   layoutBackingDevicePx,
   layoutDevicePxRatio,
   devicePxRatioNumber,
-  resetLayoutDevicePxRatioWatch,
 } from "../../test-support/layout-device-px-ratio";
 import { LiveFeed } from "../ui/feed";
 import { probeWebGL } from "./webgl";
@@ -86,8 +83,6 @@ describe("layout DPR surfaces (RenderHost cap, stage3d + feed)", () => {
 
   beforeEach(() => {
     expect.hasAssertions();
-    resetLayoutDevicePxRatioWatch();
-    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
     wall = document.createElement("div");
     Object.defineProperty(wall, "clientWidth", { configurable: true, value: 200 });
     Object.defineProperty(wall, "clientHeight", { configurable: true, value: 120 });
@@ -99,13 +94,12 @@ describe("layout DPR surfaces (RenderHost cap, stage3d + feed)", () => {
     wall.remove();
     document.body.innerHTML = "";
     vi.unstubAllGlobals();
-    resetLayoutDevicePxRatioWatch();
-    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 
   it("window DPR 2: stage3d and feed backing store is CSS size × 1.5 after RenderHost configures cap", () => {
     vi.stubGlobal("devicePixelRatio", 2);
-    new RenderHost(wall, { software: true });
+    const capHost = new RenderHost(wall, { software: true });
+    cancelAnimationFrame((capHost as unknown as { raf: number }).raf);
     expect(devicePxRatioNumber(layoutDevicePxRatio())).toBe(1.5);
     expect(layoutBackingDevicePx(100)).toBe(150);
     const stageCanvas = mountStage3d(100, 80);
@@ -114,16 +108,19 @@ describe("layout DPR surfaces (RenderHost cap, stage3d + feed)", () => {
     const feedCanvas = mountFeedBars(100, 80);
     expect(feedCanvas.width).toBe(150);
     expect(feedCanvas.height).toBe(layoutBackingDevicePx(80));
+    capHost.dispose();
   });
 
   it("window DPR 1.75: stage3d and feed backing store is CSS size × 1.5 (not legacy 1.75)", () => {
     vi.stubGlobal("devicePixelRatio", 1.75);
-    new RenderHost(wall, { software: true });
+    const capHost = new RenderHost(wall, { software: true });
+    cancelAnimationFrame((capHost as unknown as { raf: number }).raf);
     expect(layoutBackingDevicePx(100)).toBe(150);
     const stageCanvas = mountStage3d(100, 64);
     expect(stageCanvas.width).toBe(150);
     const feedCanvas = mountFeedBars(100, 64);
     expect(feedCanvas.width).toBe(150);
+    capHost.dispose();
   });
 
 });

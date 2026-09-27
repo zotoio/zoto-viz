@@ -37,11 +37,13 @@ import {
 import { applyDeviceRectToGlRenderer } from "./render-host-gl-adapter";
 import {
   type DevicePxRatio,
+  configureLayoutMaxDevicePxRatio,
   devicePxRatioFromNumber,
   devicePxRatioNumber,
   layoutDevicePxRatio,
   onLayoutDevicePxRatioChange,
   pinLayoutDevicePxRatio,
+  resetLayoutDevicePxRatioWatch,
   startLayoutDevicePxRatioWatch,
 } from "./render-host-device-px-ratio";
 
@@ -109,8 +111,11 @@ export class RenderHost {
 
   constructor(
     readonly wall: HTMLElement,
-    opts: { dpr?: number; software?: boolean } = {},
+    opts: { dpr?: number; software?: boolean; maxLayoutDevicePxRatio?: number } = {},
   ) {
+    if (opts.maxLayoutDevicePxRatio !== undefined) {
+      configureLayoutMaxDevicePxRatio(opts.maxLayoutDevicePxRatio);
+    }
     if (opts.dpr !== undefined) {
       this.layoutDevicePxRatio = devicePxRatioFromNumber(opts.dpr);
       pinLayoutDevicePxRatio(this.layoutDevicePxRatio);
@@ -188,7 +193,7 @@ export class RenderHost {
     this.raf = requestAnimationFrame(this.frame);
   }
 
-  /** Layout DPR (capped); WebGLRenderer `getPixelRatio()` stays 1. */
+  /** Layout DPR (capped by `maxLayoutDevicePxRatio`, default 1.5); renderer `getPixelRatio()` stays 1. */
   get pixelRatio(): number { return this.pr; }
 
   get viewCount(): number { return this.views.length; }
@@ -315,7 +320,10 @@ export class RenderHost {
 
   dispose(): void {
     this.disposed = true;
-    this.unsubLayoutDpi?.();
+    if (this.unsubLayoutDpi) {
+      this.unsubLayoutDpi();
+      resetLayoutDevicePxRatioWatch();
+    }
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.views = [];
