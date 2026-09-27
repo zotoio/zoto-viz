@@ -22,12 +22,15 @@ export function validatePythonModule(name) {
   }
 }
 
-export function validateTestFileRel(testFile, wtRoot) {
+export function validateTestFileRel(testFile, wtRoot, meta) {
   const rel = testFile.replace(/\\/g, "/");
   if (rel.startsWith("-") || path.isAbsolute(rel) || rel.includes("..")) {
     throw new Error(`invalid testFile path: ${testFile}`);
   }
-  const abs = path.resolve(wtRoot, rel);
+  let abs = path.resolve(wtRoot, rel);
+  if (meta?.project === "web" && !rel.startsWith("web/")) {
+    abs = path.resolve(wtRoot, "web", rel);
+  }
   const root = path.resolve(wtRoot);
   if (!abs.startsWith(`${root}${path.sep}`) && abs !== root) {
     throw new Error(`testFile escapes repo: ${testFile}`);
@@ -243,7 +246,7 @@ export function resolveVitestProject(wtRoot, meta) {
     if (!fs.existsSync(bin)) {
       throw new Error(`vitest not found for web project under ${wtRoot}`);
     }
-    return { cwd, config, bin };
+    return { cwd, config, bin, project };
   }
   if (project === "scripts") {
     const config = path.join(wtRoot, "scripts", "vitest.config.mjs");

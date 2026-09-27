@@ -429,10 +429,14 @@ function summarizePytestCounts(parsed, nodeId) {
 }
 
 async function runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
-  const { bin, cwd, config } = resolveVitestProject(wtRoot, meta);
+  const { bin, cwd, config, project } = resolveVitestProject(wtRoot, meta);
   const jsonOut = path.join(artifactsDir, `${slug}-${phase}-vitest.json`);
   const testPattern = vitestTestNamePattern(meta.testName);
-  const testFileAbs = path.join(wtRoot, meta.testFile);
+  const relTest = meta.testFile.replace(/\\/g, "/");
+  const testFileAbs =
+    project === "web" && !relTest.startsWith("web/")
+      ? path.join(wtRoot, "web", relTest)
+      : path.join(wtRoot, relTest);
   const testFileArg = path.relative(cwd, testFileAbs).replace(/\\/g, "/");
   const baseConfigAbs =
     config && path.isAbsolute(config)
@@ -704,7 +708,7 @@ function metaRunnerCount(run) {
 async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   const { slug, patchPath, patchText, meta } = row;
   validateRowMeta(meta, slug);
-  validateTestFileRel(meta.testFile, wtRoot);
+  validateTestFileRel(meta.testFile, wtRoot, meta);
   validatePatchStructure(patchText, slug);
   validatePatchTouchesOnlyProduction(patchText, slug);
   validatePatchProductionReachable(patchText, slug, wtRoot);

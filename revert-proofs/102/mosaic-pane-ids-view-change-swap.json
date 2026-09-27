@@ -1,7 +1,14 @@
 {
   "runner": "vitest",
-  "testFile": "web/src/graph/mosaic-layout.test.ts",
+  "testFile": "src/graph/mosaic-layout.test.ts",
   "testName": "close / swap / assign > mosaicPaneIdsWithViewChange lists replaced and swapped panes only",
   "description": "Revert swap detection in mosaicPaneIdsWithViewChange index loop",
-  "red": { "actual": [], "expected": ["a", "b"] }
+  "red": {
+    "actual": [],
+    "expected": [
+      "a",
+      "b"
+    ]
+  },
+  "project": "web"
 }

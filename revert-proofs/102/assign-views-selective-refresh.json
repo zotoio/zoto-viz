@@ -1,0 +1,11 @@
+{
+  "runner": "vitest",
+  "testFile": "src/graph/mosaic-assign-view-sky.test.ts",
+  "testName": "assignViews selective sky hold > setPaneView on one tile refreshes only touched pane modes",
+  "description": "Revert selective refreshPaneModes touch set in assignViews",
+  "red": {
+    "actual": 5,
+    "expected": 2
+  },
+  "project": "web"
+}

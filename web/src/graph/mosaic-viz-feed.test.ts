@@ -75,7 +75,11 @@ describe("mosaic onPanePick wiring", () => {
     const host = new RenderHost(wall, { software: true });
     const main = new NetScene(sceneEl, { host });
     main.retargetPanel("plugin:topology");
-    const pick = vi.fn(async () => true);
+    const pickCalls: [string, string][] = [];
+    const pick = vi.fn(async (from: string, to: string) => {
+      pickCalls.push([from, to]);
+      return true;
+    });
     const mosaic = new Mosaic({
       wall,
       sceneEl,
@@ -104,7 +108,7 @@ describe("mosaic onPanePick wiring", () => {
     pane!.value = "plugin:wifi";
     pane!.dispatchEvent(new Event("change", { bubbles: true }));
     await Promise.resolve();
-    expect(pick).toHaveBeenCalledWith("plugin:topology", "plugin:wifi");
+    expect(pickCalls).toEqual([["plugin:topology", "plugin:wifi"]]);
     host.dispose();
     main.dispose();
   });
