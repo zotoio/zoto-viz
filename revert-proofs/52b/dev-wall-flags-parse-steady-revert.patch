@@ -1,24 +1,33 @@
 diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
-index 513ae44..f150667 100644
+index ed1e351..d2761ee 100644
 --- a/web/src/core/viz-dev-wall-flags.ts
 +++ b/web/src/core/viz-dev-wall-flags.ts
-@@ -60,7 +60,10 @@ function parseTileCostFlag(raw: string | null, scopedTileIds: readonly string[])
-     tileHudIndexById.set(scopedTileIds[i]!, i + 1);
+@@ -4,6 +4,7 @@ import { clearDevWallFlagClock, devWallFlagClockActive, setDevWallFlagClock } fr
+ import { devVizWallFlagBadInputMessage } from "../ui/viz-copy";
+ 
+ let lastParsedWallClockRaw: string | null = null;
++let devWallBuildSearch = "";
+ let lastVizTileCostBadInput: string | null = null;
+ 
+ function clearWallCostInjector(): void {
+@@ -42,7 +43,11 @@ function parseWallCostTicksFlag(raw: string | null): void {
+     return;
    }
-   showPerTileHudIndex = true;
--  setVizBuildCostTicksForTileInjector((tileId) => tileCostTicks.get(tileId));
-+  setVizBuildCostTicksForTileInjector((tileId) => {
-+    parseTileCostFlag(new URLSearchParams(location.search).get("vizTileCostTicks"), scopedTileIds);
-+    return tileCostTicks.get(tileId);
+ 
+-  setVizBuildCostTicksInjector(() => ticks);
++  const wallTicks = ticks;
++  setVizBuildCostTicksInjector(() => {
++    parseWallCostTicksFlag(new URLSearchParams(devWallBuildSearch).get("vizTileCostTicks"));
++    return wallTicks;
 +  });
  }
  
  function parseWallClockFlag(raw: string | null): void {
-@@ -77,6 +80,7 @@ function parseWallClockFlag(raw: string | null): void {
-   wallAnchorRealMs = Date.now();
-   wallDevActive = true;
-   setVizWallClockInjector(() => {
-+    parseWallClockFlag(new URLSearchParams(location.search).get("vizWallClock"));
-     if (!wallDevActive) return Date.now();
-     return wallAnchorDevMs + (Date.now() - wallAnchorRealMs);
-   });
+@@ -70,6 +75,7 @@ function parseWallClockFlag(raw: string | null): void {
+  * Steady frames read only numeric injectors — no URL parsing on the hot path.
+  */
+ export function applyDevVizWallFlagsOnBuild(search: string, _scopedTileIds: readonly string[]): void {
++  devWallBuildSearch = search;
+   clearWallCostInjector();
+   lastVizTileCostBadInput = null;
+   if (!import.meta.env.DEV) return;

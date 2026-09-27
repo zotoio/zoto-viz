@@ -1,12 +1,13 @@
 diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
-index 513ae44..36c0ef9 100644
+index ed1e351..71d9217 100644
 --- a/web/src/core/viz-dev-wall-flags.ts
 +++ b/web/src/core/viz-dev-wall-flags.ts
-@@ -88,7 +88,6 @@ function parseWallClockFlag(raw: string | null): void {
-  */
- export function applyDevVizWallFlagsOnBuild(search: string, scopedTileIds: readonly string[]): void {
-   clearInjectors();
+@@ -72,8 +72,6 @@ function parseWallClockFlag(raw: string | null): void {
+ export function applyDevVizWallFlagsOnBuild(search: string, _scopedTileIds: readonly string[]): void {
+   clearWallCostInjector();
+   lastVizTileCostBadInput = null;
 -  if (!import.meta.env.DEV) return;
- 
+-
    try {
      const params = new URLSearchParams(search);
+     parseWallCostTicksFlag(params.get("vizTileCostTicks"));

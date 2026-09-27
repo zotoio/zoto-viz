@@ -1,13 +1,13 @@
 diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
-index 513ae44..26ad168 100644
+index ed1e351..fe75385 100644
 --- a/web/src/core/viz-dev-wall-flags.ts
 +++ b/web/src/core/viz-dev-wall-flags.ts
-@@ -71,7 +71,7 @@ function parseWallClockFlag(raw: string | null): void {
+@@ -57,7 +57,7 @@ function parseWallClockFlag(raw: string | null): void {
    if (!m) return;
    const h = Number(m[1]);
    const min = Number(m[2]);
 -  if (!Number.isInteger(h) || !Number.isInteger(min) || h < 0 || h > 23 || min < 0 || min > 59) return;
-+  if (!Number.isInteger(h) || !Number.isInteger(min) ) return;
++  if (!Number.isInteger(h) || !Number.isInteger(min) || min < 0 || min > 59) return;
  
-   wallAnchorDevMs = Date.UTC(2024, 5, 15, h, min, 0, 0);
-   wallAnchorRealMs = Date.now();
+   if (trimmed === lastParsedWallClockRaw && devWallFlagClockActive()) return;
+ 
