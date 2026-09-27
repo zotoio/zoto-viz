@@ -7,5 +7,6 @@
     "actual": null,
     "expected": null
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected \"vi.fn()\" to be called with arguments: [ 'plugin:topology', \u2026(1) ]"
 }

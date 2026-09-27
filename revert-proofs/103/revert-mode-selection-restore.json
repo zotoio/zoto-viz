@@ -7,5 +7,6 @@
     "actual": "broken",
     "expected": "plugin:topology"
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected 'broken' to be 'plugin:topology' // Object.is equality"
 }

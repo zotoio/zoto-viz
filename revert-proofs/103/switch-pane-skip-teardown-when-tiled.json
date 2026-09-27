@@ -7,5 +7,6 @@
     "actual": 1,
     "expected": 0
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected [ [ 'plugin:topology' ] ] to have a length of +0 but got 1"
 }

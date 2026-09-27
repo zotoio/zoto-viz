@@ -7,5 +7,6 @@
     "actual": null,
     "expected": "reviewed"
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected null to be 'reviewed' // Object.is equality"
 }

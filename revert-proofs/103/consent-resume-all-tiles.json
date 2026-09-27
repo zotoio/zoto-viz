@@ -7,5 +7,6 @@
     "actual": 0,
     "expected": 3
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected \"vi.fn()\" to be called 3 times, but got 0 times"
 }

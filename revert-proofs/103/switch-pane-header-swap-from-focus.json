@@ -7,5 +7,6 @@
     "actual": "plugin:topology",
     "expected": "plugin:wifi"
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected 'plugin:topology' to be 'plugin:wifi' // Object.is equality"
 }

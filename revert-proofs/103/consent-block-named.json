@@ -7,5 +7,6 @@
     "actual": "Not approved yet. Approve it in Settings \u2192 Plugins.",
     "expected": "Not approved yet. Heat map: Approve it in Settings \u2192 Plugins."
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected 'Not approved yet. Approve it in Setti\u2026' to be 'Not approved yet. Heat map: Approve i\u2026' // Object.is equality"
 }

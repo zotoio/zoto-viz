@@ -7,5 +7,6 @@
     "actual": true,
     "expected": false
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected true to be false // Object.is equality"
 }

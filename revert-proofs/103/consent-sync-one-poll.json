@@ -7,5 +7,6 @@
     "actual": 0,
     "expected": 1
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected \"setInterval\" to be called 1 times, but got 0 times"
 }

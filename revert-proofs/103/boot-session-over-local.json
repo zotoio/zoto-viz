@@ -7,5 +7,6 @@
     "actual": "plugin:talkers",
     "expected": "plugin:backrooms"
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected 'plugin:talkers' to be 'plugin:backrooms' // Object.is equality"
 }

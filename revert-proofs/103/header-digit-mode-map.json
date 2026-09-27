@@ -7,5 +7,6 @@
     "actual": "plugin:topology",
     "expected": "plugin:talkers"
   },
-  "project": "web"
+  "project": "web",
+  "redLine": "AssertionError: expected 'plugin:topology' to be 'plugin:talkers' // Object.is equality"
 }
