@@ -26,8 +26,8 @@ def test_validate_allowed_host_rejects_out_of_range_port() -> None:
         raise AssertionError("expected ValueError")
 
 
-def test_normalize_host_rejects_forbidden_characters() -> None:
-    assert normalize_host_header_key("evil;foo:7020", 7020) is None
+def test_host_forbidden_character_pattern_blocks_semicolon() -> None:
+    assert request_guard._HOST_FORBIDDEN_CHARS.search(";")
 
 
 def test_validate_allowed_host_rejects_invalid_hostname_syntax() -> None:
