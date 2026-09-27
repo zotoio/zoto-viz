@@ -1,5 +1,5 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index b913228..0000000 100644
+index f4a9d83..0000000 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
 @@ -336,9 +336,7 @@ export function parseVitestJsonReport(report) {
