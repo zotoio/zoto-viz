@@ -2,12 +2,14 @@
   "scanRoots": ["web/src", "plugins", "service", "packages"],
   "entryPoints": [
     "web/index.html",
+    "web/plugin-sandbox.html",
     "web/src/app/main.ts",
     "web/src/camera/cam.worker.ts",
     "service/monitor.py"
   ],
   "packEntryGlob": "plugins/src/*/frontend/index.ts",
   "reachExempt": [
+    "web/src/plugins/sandbox-frame.ts",
     "scripts/revert-proof.mjs",
     "scripts/revert-proof-lib.mjs",
     "scripts/revert-proof-vitest-runner.mjs",
