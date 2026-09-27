@@ -2,7 +2,7 @@
   "row": "F5 prod bundle skipIf must be curried",
   "runner": "vitest",
   "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
-  "testName": "^F5 \\(meta\\) prod bundle case uses skipIf curried form$",
+  "testName": "^dev viz wall flags > F5 \\(meta\\) prod bundle case uses skipIf curried form$",
   "patchedAssertion": "AssertionError: expected true to be false // Object.is equality",
   "excerpt": "AssertionError: expected true to be false // Object.is equality"
 }
