@@ -112,6 +112,22 @@ def test_host_origin_csrf_helpers() -> None:
     assert access.parse_pack_assets_path("/pack-assets/tok/pid/module.js")
     assert access.origin_ok(FakeReq(host="lan.box:7020", origin="http://lan.box:7020", lan=True))
     assert not access.origin_ok(FakeReq(host="lan.box:7020", origin="http://other.box", lan=True))
+    # Vite changeOrigin: browser Origin is localhost:5173, proxy Host is 127.0.0.1:7020
+    assert access.origin_ok(FakeReq(
+        host="127.0.0.1:7020",
+        origin="http://localhost:5173",
+        lan=True,
+    ))
+    assert access.origin_ok(FakeReq(
+        host="127.0.0.1:7020",
+        origin="http://127.0.0.1:5173",
+        lan=True,
+    ))
+    assert not access.origin_ok(FakeReq(
+        host="127.0.0.1:7020",
+        origin="http://192.168.1.5:7020",
+        lan=True,
+    ))
     assert access.csrf_ok(FakeReq(cookie="tok", header="tok"))
     assert access.csrf_ok(FakeReq(cookie="", header="tok"))
     assert access.csrf_ok(FakeReq(cookie="stale", header="tok"))

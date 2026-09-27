@@ -229,8 +229,13 @@ def origin_ok(request: web.Request) -> bool:
             return request.method in {"GET", "HEAD"}
         return sandbox_null_origin_allowed(request)
     name = origin_hostname(raw)
+    host = header_hostname(request.headers.get("Host", ""))
+    # Vite proxies localhost:5173 → 127.0.0.1:7020 with changeOrigin, so Origin
+    # and Host loopback names can differ. LAN still requires an exact match.
+    if is_loopback_name(name) and is_loopback_name(host):
+        return True
     if request.app.get("insecure_lan"):
-        return name == header_hostname(request.headers.get("Host", ""))
+        return name == host
     return is_loopback_name(name)
 
 
