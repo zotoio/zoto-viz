@@ -1,7 +1,0 @@
-{
-  "description": "Revert tsconfig.test.json comma fix (tsconfig-test-json-valid)",
-  "runner": "command",
-  "command": "pnpm exec tsc -p tsconfig.test.json --noEmit",
-  "cwd": "web",
-  "red": "tsconfig.test.json(13,5): error TS1005: ',' expected."
-}

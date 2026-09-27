@@ -473,12 +473,13 @@ export class VizHud {
       const wallTiles = (tileBudgetLines ?? [])
         .map((l) => l.tile)
         .filter((t): t is VizTileBudgetStats => t !== null);
+      const mateTileCount = wallTiles.length > 0 ? wallTiles.length : activeTiles;
       const chrome = wallTiles.length
-        ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
+        ? wallHudChrome(tileBudget, wallTiles, nowTick, mateTileCount)
         : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
       const limited =
         chrome.state === "limited" && chrome.limitedLabel
-          ? this.skipLabelLine.limitedLabel(activeTiles, chrome.cadenceK)
+          ? this.skipLabelLine.limitedLabel(mateTileCount, chrome.cadenceK)
           : null;
       const skipText = limited ?? formatSkipRate(rate);
       this.skipLabelLine.writeText(this.skipEl, skipText);
