@@ -7,7 +7,7 @@ index 481df945..5eedfeb3 100644
      if (skin) {
        for (const s of skin) {
 -        stopSkinnedMixer(s);
-+        
++        void s;
          s.root.removeFromParent();
        }
        this.skinnedLive.delete(assetId);
