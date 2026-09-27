@@ -71,4 +71,17 @@ describe("RenderHost canvas backing store", () => {
     expect(branded).toBe(host.canvas.height);
     host.dispose();
   });
+
+  it("refreshCanvasDeviceHeight uses Math.max(1, canvas.height)", () => {
+    const wall = document.createElement("div");
+    Object.defineProperty(wall, "clientWidth", { configurable: true, value: 200 });
+    Object.defineProperty(wall, "clientHeight", { configurable: true, value: 120 });
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall, { software: false, dpr: 1.5 });
+    cancelAnimationFrame((host as unknown as { raf: number }).raf);
+    host.canvas.height = 0;
+    (host as unknown as { refreshCanvasDeviceHeight(): void }).refreshCanvasDeviceHeight();
+    expect((host as unknown as { canvasDeviceHeight: number }).canvasDeviceHeight).toBe(1);
+    host.dispose();
+  });
 });
