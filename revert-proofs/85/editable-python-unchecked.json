@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "isolation guards > rejects editable python resolving outside the worktree",
   "description": "Drop the editable-install realpath check",
-  "red": "AssertionError: expected [Function] to throw an error"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

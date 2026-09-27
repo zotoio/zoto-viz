@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (test-touch) patch touching test files is rejected",
   "description": "Disable production-only patch validation",
-  "red": "AssertionError: expected 'row touch-test: git apply --check fai…' to contain 'row touch-test: patch touches test fi…'"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

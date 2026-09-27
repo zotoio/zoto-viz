@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof-lib guards > (pythonModule) rejects injection in pythonModule",
   "description": "Drop pythonModule validation",
-  "red": "AssertionError: expected [Function] to throw an error"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

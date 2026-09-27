@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (k) pytest node id with bracket parametrize id selects one test",
   "description": "Strip the parametrize id from pytest node ids",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

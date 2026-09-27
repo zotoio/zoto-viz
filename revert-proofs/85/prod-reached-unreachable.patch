@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..4f7e653 100644
+index a3ae968..ec3a1e6 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -748,7 +748,7 @@ export function validatePatchProductionReachable(patchText, slug, wtRoot) {
+@@ -805,7 +805,7 @@ export function validatePatchProductionReachable(patchText, slug, wtRoot) {
      if (reachExempt.has(file)) {
        continue;
      }

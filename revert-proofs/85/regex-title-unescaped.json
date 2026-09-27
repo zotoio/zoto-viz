@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (j) testName with regex metacharacters selects exactly one test",
   "description": "Pass the sidecar name to -t without escaping",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

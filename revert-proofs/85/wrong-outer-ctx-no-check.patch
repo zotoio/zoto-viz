@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index 069edc9..06cee6b 100755
+index d58a94f..d3a136e 100755
 --- a/scripts/revert-proof.mjs
 +++ b/scripts/revert-proof.mjs
-@@ -622,12 +622,6 @@ function applyPatch(wtRoot, patchPath, patchText) {
+@@ -625,12 +625,6 @@ function applyPatch(wtRoot, patchPath, patchText) {
    const tmpPatch = path.join(wtRoot, ".revert-proof-apply.patch");
    fs.writeFileSync(tmpPatch, applyInput, "utf8");
    const check = gitAt(wtRoot, ["apply", "--check", ...GIT_APPLY_OPTS, tmpPatch]);

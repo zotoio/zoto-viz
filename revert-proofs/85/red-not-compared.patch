@@ -1,12 +1,13 @@
-diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index 069edc9..139269e 100755
---- a/scripts/revert-proof.mjs
-+++ b/scripts/revert-proof.mjs
-@@ -831,7 +831,6 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
-       );
-     }
-   }
--  assertRedValue(slug, meta.red, patched.counts.selection.target.failureMessage);
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index a3ae968..d85ca3c 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -92,7 +92,7 @@ export function redValuesEqual(expected, actual) {
  
-   const failureText = vitestFailureSnippet(patched.reportPath, patched.output);
- 
+ /** Compare structured red from the first branded assertion (vitest) or assert line (pytest). */
+ export function assertRedValue(slug, expected, actual) {
+-  if (!redValuesEqual(expected, actual)) {
++  if (!redValuesEqual(expected?.expected, actual?.expected)) {
+     throw new Error(
+       `row ${slug}: red value mismatch (expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual ?? null)})`,
+     );

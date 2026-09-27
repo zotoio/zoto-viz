@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof-lib guards > (allowTypeError-strict) string false does not enable allowTypeError",
   "description": "Treat any truthy allowTypeError as enabled",
-  "red": "AssertionError: expected true to be false // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

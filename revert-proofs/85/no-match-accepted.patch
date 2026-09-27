@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..4a89e97 100644
+index a3ae968..db1baa1 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -297,7 +297,7 @@ export function assessVitestSelection(tests, testName) {
+@@ -334,7 +334,7 @@ export function assessVitestSelection(tests, testName) {
      (t) => !VITEST_SKIP_STATUSES.has(t.status),
    );
    if (matches.length === 0) {

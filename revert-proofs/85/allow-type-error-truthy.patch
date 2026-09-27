@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..517cf3b 100644
+index a3ae968..773c024 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -75,7 +75,7 @@ export function assertRedValue(slug, expected, actual) {
+@@ -104,7 +104,7 @@ export function firstLine(text) {
  }
  
  export function allowTypeErrorEnabled(meta) {

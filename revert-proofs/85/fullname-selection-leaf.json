@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "vitest testName escaping > parseVitestJsonReport rebuilds fullName for selection",
   "description": "Stop rebuilding fullName from ancestorTitles",
-  "red": "AssertionError: expected 'returns one' to be 'widget & alpha > returns one' // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

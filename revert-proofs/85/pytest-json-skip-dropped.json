@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof-lib guards > (pytest-json) plugin JSON lists pass/fail/skip outcomes",
   "description": "Drop the skipped-target rejection for pytest",
-  "red": "AssertionError: expected 'other tests not skipped' to be 'target skipped' // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

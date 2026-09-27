@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof-lib guards > (pr-number) rejects path traversal PR numbers",
   "description": "Drop PR number validation",
-  "red": "AssertionError: expected [Function] to throw an error"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..af3c58f 100644
+index a3ae968..ccc69f3 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -132,7 +132,7 @@ export function validatePatchStructure(patchText, slug) {
+@@ -161,7 +161,7 @@ export function validatePatchStructure(patchText, slug) {
  }
  
  export function escapeVitestTestNamePattern(testName) {

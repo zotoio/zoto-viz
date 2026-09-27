@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (reach-exempt-first) reachExempt from config applies before first touched file",
   "description": "Ignore reachExempt from revert-proof-production.json",
-  "red": "AssertionError: expected 'row reach-exempt-touch: revert target…' to contain 'row reach-exempt-touch: test stayed G…'"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

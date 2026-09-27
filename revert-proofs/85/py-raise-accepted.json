@@ -1,0 +1,10 @@
+{
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (py-raise) hand-raised AssertionError is rejected, not counted as assert red",
+  "description": "Plugin accepts any failing statement in the test file, not only rewritten asserts",
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
+}

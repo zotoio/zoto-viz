@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "vitest testName escaping > builds pytest node ids",
   "description": "Strip the parametrize id from pytest node ids",
-  "red": "AssertionError: expected 'tests/test_selection.py::test_bracket…' to be 'tests/test_selection.py::test_bracket…' // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

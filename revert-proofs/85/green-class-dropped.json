@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (vitest-green-class) classifyPatchedVitest reports green when patched passes",
   "description": "Drop the green classification",
-  "red": "AssertionError: expected 'build break' to be 'green' // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

@@ -1,5 +1,5 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..50f7b84 100644
+index a3ae968..2350ce7 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
 @@ -38,9 +38,6 @@ export function parseTimeoutSec(raw, slug) {

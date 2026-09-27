@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..149cf2f 100644
+index a3ae968..9304b3b 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -256,7 +256,7 @@ const VITEST_SKIP_STATUSES = new Set(["skipped", "pending", "todo"]);
+@@ -285,7 +285,7 @@ const VITEST_SKIP_STATUSES = new Set(["skipped", "pending", "todo"]);
  
  export function vitestAssertionFullName(assertion) {
    if (Array.isArray(assertion.ancestorTitles) && typeof assertion.title === "string") {

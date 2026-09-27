@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (vitest-json-multi) JSON report selects one executed test among skipped siblings",
   "description": "Select by leaf title instead of full name",
-  "red": "AssertionError: expected false to be true // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

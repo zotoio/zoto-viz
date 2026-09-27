@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index 77dd88e..6c59e2b 100644
+index a3ae968..bf8192c 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -255,9 +255,6 @@ export function patchTouchesTestFiles(patchText) {
+@@ -284,9 +284,6 @@ export function patchTouchesTestFiles(patchText) {
  const VITEST_SKIP_STATUSES = new Set(["skipped", "pending", "todo"]);
  
  export function vitestAssertionFullName(assertion) {

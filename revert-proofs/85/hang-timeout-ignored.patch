@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index 069edc9..959db3a 100755
+index d58a94f..7ce1cb4 100755
 --- a/scripts/revert-proof.mjs
 +++ b/scripts/revert-proof.mjs
-@@ -671,9 +671,6 @@ function trimFailureOutput(output, maxLines = 40) {
+@@ -674,9 +674,6 @@ function trimFailureOutput(output, maxLines = 40) {
  }
  
  function assertExactlyOneTest(slug, phase, run, meta) {
@@ -12,7 +12,7 @@ index 069edc9..959db3a 100755
    const sel = run.counts.selection;
    if (!sel?.ok) {
      const reason = sel?.reason ?? "unknown";
-@@ -726,9 +723,6 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
+@@ -729,9 +726,6 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
      timeoutMs,
      artifactsDir,
    );

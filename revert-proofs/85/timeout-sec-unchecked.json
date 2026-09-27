@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof-lib guards > (timeoutSec) rejects invalid timeoutSec",
   "description": "Drop timeoutSec validation",
-  "red": "AssertionError: expected [Function] to throw an error"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

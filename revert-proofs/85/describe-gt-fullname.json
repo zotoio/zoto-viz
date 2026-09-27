@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (j2) describe title containing literal ' > ' selects exactly one test",
   "description": "Stop rebuilding fullName from ancestorTitles",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

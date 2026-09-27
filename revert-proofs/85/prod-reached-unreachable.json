@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (n) revert patch on production-reached module is accepted",
   "description": "Treat every revert target as unreachable",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

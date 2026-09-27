@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > syntax break in production module is rejected as build break",
   "description": "Drop the build-break check on the patched run",
-  "red": "AssertionError: expected 'row build-break: patched test selecti…' to contain 'row build-break: patch breaks build (…'"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

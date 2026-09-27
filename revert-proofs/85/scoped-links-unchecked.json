@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "isolation guards > rejects workspace symlinks that escape the worktree",
   "description": "Skip scoped packages in the workspace link check",
-  "red": "AssertionError: expected [Function] to throw an error"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

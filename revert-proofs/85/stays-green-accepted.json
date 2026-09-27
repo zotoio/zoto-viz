@@ -3,5 +3,8 @@
   "testFile": "scripts/revert-proof.test.ts",
   "testName": "revert-proof runner (fixture repo) > (b) noop patch stays green fails naming the row",
   "description": "Remove the stays-green guard",
-  "red": "AssertionError: expected 'row stays-green: red value mismatch (…' to contain 'row stays-green: test stayed GREEN af…'"
+  "red": {
+    "actual": "?",
+    "expected": "?"
+  }
 }

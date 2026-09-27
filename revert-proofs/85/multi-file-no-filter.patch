@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
-index 069edc9..7862386 100755
+index d58a94f..23aa73b 100755
 --- a/scripts/revert-proof.mjs
 +++ b/scripts/revert-proof.mjs
-@@ -446,8 +446,6 @@ async function runVitest(wtRoot, meta, slug, phase, timeoutMs, artifactsDir) {
+@@ -448,8 +448,6 @@ async function runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifac
      "run",
      "--config",
      overlayRel,
