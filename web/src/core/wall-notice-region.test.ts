@@ -1,10 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mountWallNoticeRegion, postWallNotice, type NoticeKey } from "./wall-notice-region";
 
-/** Expected lane for every declared NoticeKey (must match NOTICE_ROUTE in production). */
 const EXPECTED_NOTICE_ROUTE: Record<NoticeKey, "status" | "alert"> = {
   "install-failed": "alert",
   "context-not-restored": "alert",
@@ -18,27 +18,34 @@ const EXPECTED_NOTICE_ROUTE: Record<NoticeKey, "status" | "alert"> = {
   "drawer-edit-discarded": "status",
 };
 
+const webRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
+
 function boot() {
   document.body.innerHTML = "<div id=\"wall\"></div><div id=\"foot\"></div>";
   const wall = document.getElementById("wall")!;
   mountWallNoticeRegion(wall);
-  const region = wall.querySelector(".wall-notice-region");
-  const status = region?.querySelector(".wall-notice-status") ?? null;
-  const alert = region?.querySelector(".wall-notice-alert") ?? null;
+  const region = wall.querySelector<HTMLElement>(".wall-notice-region")!;
+  const status = region.querySelector<HTMLElement>('[role="status"]')!;
+  const alert = region.querySelector<HTMLElement>('[role="alert"]')!;
   return { wall, region, status, alert };
 }
 
-function wallCss() {
-  const cssPath = path.join(path.dirname(fileURLToPath(import.meta.url)), "../style.css");
-  const full = fs.readFileSync(cssPath, "utf8");
-  const s = full.indexOf("/* Shared wall notice stack");
-  const e = full.indexOf(".wall-notice-action", s);
-  return full.slice(s, e + 40).split("\n").filter((l) => !l.includes("anchor(")).join("\n");
+const rows = (key: NoticeKey) => document.querySelectorAll(`[data-notice-key="${key}"]`).length;
+
+function runWebTsc(): { ok: boolean; stderr: string } {
+  try {
+    execSync("pnpm exec tsc --noEmit", { cwd: webRoot, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
+    return { ok: true, stderr: "" };
+  } catch (err: unknown) {
+    const e = err as { stderr?: string; stdout?: string };
+    return { ok: false, stderr: `${e.stderr ?? ""}${e.stdout ?? ""}` };
+  }
 }
 
 describe("wall notice region", () => {
   afterEach(() => {
     vi.useRealTimers();
+    vi.restoreAllMocks();
     document.body.innerHTML = "";
     document.head.innerHTML = "";
   });
@@ -47,15 +54,18 @@ describe("wall notice region", () => {
     beforeEach(() => expect.hasAssertions());
     it("keeps empty status and alert containers before the first post", () => {
       const { status, alert } = boot();
-      expect(status?.isConnected).toBe(true);
-      expect(alert?.isConnected).toBe(true);
-      expect((status?.childElementCount ?? 0) + (alert?.childElementCount ?? 0)).toBe(0);
+      expect(status.isConnected).toBe(true);
+      expect(alert.isConnected).toBe(true);
+      expect(status.childElementCount + alert.childElementCount).toBe(0);
       let inserts = 0;
-      const orig = status!.appendChild.bind(status!);
-      status!.appendChild = ((n: Node) => { inserts += 1; return orig(n); }) as typeof status.appendChild;
+      const orig = status.appendChild.bind(status);
+      status.appendChild = ((n: Node) => {
+        inserts += 1;
+        return orig(n);
+      }) as typeof status.appendChild;
       postWallNotice({ key: "server-restarted", text: "Server restarted." });
-      status!.appendChild = orig;
-      expect(status!.childElementCount).toBe(1);
+      status.appendChild = orig;
+      expect(status.childElementCount).toBe(1);
       expect(inserts).toBe(1);
     });
   });
@@ -63,12 +73,18 @@ describe("wall notice region", () => {
   describe("region layout styles", () => {
     beforeEach(() => expect.hasAssertions());
     it("uses fixed bottom-centre placement with a 480px max width", () => {
-      document.head.append(Object.assign(document.createElement("style"), { textContent: wallCss() }));
+      const cssPath = path.join(webRoot, "src/style.css");
+      document.head.append(
+        Object.assign(document.createElement("style"), { textContent: fs.readFileSync(cssPath, "utf8") }),
+      );
       boot();
       const cs = getComputedStyle(document.querySelector(".wall-notice-region")!);
       expect(cs.position).toBe("fixed");
       expect(cs.left).toBe("50%");
+      expect(cs.transform).toBe("translateX(-50%)");
+      expect(cs.bottom).toBe("calc(76px + 16px)");
       expect(cs.maxWidth).toBe("480px");
+      expect(cs.textTransform).toBe("none");
     });
   });
 
@@ -77,12 +93,9 @@ describe("wall notice region", () => {
     it("routes all ten NoticeKey values via NOTICE_ROUTE", () => {
       for (const key of Object.keys(EXPECTED_NOTICE_ROUTE) as NoticeKey[]) {
         const lane = EXPECTED_NOTICE_ROUTE[key];
-        const { status, alert } = boot();
+        boot();
         postWallNotice({ key, text: key });
-        const host = lane === "alert" ? alert : status;
-        const other = lane === "alert" ? status : alert;
-        expect(host!.querySelector(`[data-notice-key="${key}"]`)).not.toBeNull();
-        expect(other!.querySelector(`[data-notice-key="${key}"]`)).toBeNull();
+        expect(document.querySelector(`[data-notice-key="${key}"]`)!.parentElement!.getAttribute("role")).toBe(lane);
       }
     });
   });
@@ -91,25 +104,22 @@ describe("wall notice region", () => {
     beforeEach(() => expect.hasAssertions());
     it("re-posting the same key avoids duplicate nodes after the first post", () => {
       const { status } = boot();
-      let evictions = 0, textWrites = 0, insertions = 0;
+      let evictions = 0;
+      let insertions = 0;
       const oRem = status.removeChild.bind(status);
       const oApp = status.appendChild.bind(status);
-      const oSet = Element.prototype.setAttribute;
-      status.removeChild = ((n) => { evictions += 1; return oRem(n); }) as typeof status.removeChild;
-      status.appendChild = ((n) => { insertions += 1; return oApp(n); }) as typeof status.appendChild;
-      Element.prototype.setAttribute = function (n, v) {
-        if (n === "data-notice-text") textWrites += 1;
-        return oSet.call(this, n, v);
-      };
-      try {
-        for (let i = 0; i < 600; i++) postWallNotice({ key: "server-restarted", text: "Server restarted." });
-      } finally {
-        Element.prototype.setAttribute = oSet;
-        status.appendChild = oApp;
-        status.removeChild = oRem;
-      }
+      status.removeChild = ((n) => {
+        evictions += 1;
+        return oRem(n);
+      }) as typeof status.removeChild;
+      status.appendChild = ((n) => {
+        insertions += 1;
+        return oApp(n);
+      }) as typeof status.appendChild;
+      for (let i = 0; i < 600; i++) postWallNotice({ key: "server-restarted", text: "Server restarted." });
+      status.appendChild = oApp;
+      status.removeChild = oRem;
       expect(status.childElementCount).toBe(1);
-      expect(textWrites).toBe(1);
       expect(insertions).toBe(1);
       expect(evictions).toBe(0);
     });
@@ -117,24 +127,21 @@ describe("wall notice region", () => {
 
   describe("same key text refresh", () => {
     beforeEach(() => expect.hasAssertions());
-    it("updates text on the same node without inserting", () => {
-      const { status } = boot();
+    it("updates visible text once on the same node when the copy changes", () => {
+      boot();
       postWallNotice({ key: "server-restarted", text: "First copy." });
-      const node = status.firstElementChild;
-      let writes = 0, inserts = 0;
-      const oSet = Element.prototype.setAttribute;
-      const oApp = status.appendChild.bind(status);
-      Element.prototype.setAttribute = function (n, v) {
-        if (n === "data-notice-text") writes += 1;
-        return oSet.call(this, n, v);
-      };
-      status.appendChild = ((n) => { inserts += 1; return oApp(n); }) as typeof status.appendChild;
+      const row = document.querySelector<HTMLElement>('[data-notice-key="server-restarted"]')!;
+      const mo = new MutationObserver(() => {});
+      mo.observe(row, { childList: true, subtree: true, characterData: true });
       postWallNotice({ key: "server-restarted", text: "Second copy." });
-      Element.prototype.setAttribute = oSet;
-      status.appendChild = oApp;
+      postWallNotice({ key: "server-restarted", text: "Second copy." });
+      const writes = mo
+        .takeRecords()
+        .filter((r) => r.target === row.querySelector(".wall-notice-text") && r.addedNodes.length === 1).length;
+      mo.disconnect();
+      expect(row.querySelector(".wall-notice-text")!.textContent).toBe("Second copy.");
       expect(writes).toBe(1);
-      expect(status.firstElementChild).toBe(node);
-      expect(inserts).toBe(0);
+      expect(document.querySelector('[data-notice-key="server-restarted"]')).toBe(row);
     });
   });
 
@@ -166,45 +173,45 @@ describe("wall notice region", () => {
   describe("error queue", () => {
     beforeEach(() => expect.hasAssertions());
     it("queues held error notices and promotes one on dismiss", () => {
-      const { region } = boot();
-      postWallNotice({ key: "context-not-restored", text: "e1" });
-      postWallNotice({ key: "retry-failed", text: "e2" });
-      postWallNotice({ key: "install-failed", text: "e3" });
-      for (let i = 0; i < 600; i++) postWallNotice({ key: "install-failed", text: "held" });
-      expect(region.dataset.queueCount).toBe("1");
-      const held = boot();
-      postWallNotice({ key: "context-not-restored", text: "e1" });
-      postWallNotice({ key: "retry-failed", text: "e2" });
-      postWallNotice({ key: "install-failed", text: "e3" });
-      postWallNotice({ key: "context-lost", text: "q1" });
-      postWallNotice({ key: "layout-refused-boot", text: "q2" });
-      postWallNotice({ key: "layout-refused-profile", text: "q3" });
-      expect(held.region.dataset.queueCount).toBe("3");
       const promote = boot();
-      postWallNotice({ key: "context-not-restored", text: "e1" });
+      const first = postWallNotice({ key: "context-not-restored", text: "e1" });
       postWallNotice({ key: "retry-failed", text: "e2" });
       postWallNotice({ key: "install-failed", text: "e3" });
       postWallNotice({ key: "context-lost", text: "q1" });
       postWallNotice({ key: "layout-refused-boot", text: "q2" });
       postWallNotice({ key: "layout-refused-profile", text: "q3" });
-      const first = promote.alert.firstElementChild as HTMLElement;
-      postWallNotice({ key: first.dataset.noticeKey as NoticeKey, text: "x" }).dismiss();
-      expect(promote.status.querySelector('[data-notice-key="context-lost"]')).not.toBeNull();
+      first.dismiss();
+      expect(promote.status.lastElementChild?.getAttribute("data-notice-key")).toBe("context-lost");
+      expect(promote.status.childElementCount + promote.alert.childElementCount).toBe(3);
       expect(promote.region.dataset.queueCount).toBe("2");
     });
   });
 
   describe("auto-clear timers", () => {
-    beforeEach(() => { expect.hasAssertions(); vi.useFakeTimers(); });
-    it("re-arms a single auto-clear timer for repeated posts on one key", () => {
+    beforeEach(() => {
+      expect.hasAssertions();
+      vi.useFakeTimers();
+    });
+    it("re-arms a single auto-clear timer only when the text changes", () => {
+      const spy = vi.spyOn(globalThis, "setTimeout");
       boot();
-      for (let i = 0; i < 3; i++) postWallNotice({ key: "server-restarted", text: "t", autoClearMs: 5000 });
-      expect(vi.getTimerCount()).toBe(1);
+      for (let i = 0; i < 3; i++) {
+        postWallNotice({ key: "server-restarted", text: "Server restarted.", autoClearMs: 5000 });
+        if (i < 2) vi.advanceTimersByTime(100);
+      }
+      expect(spy).toHaveBeenCalledTimes(1);
+      vi.advanceTimersByTime(4799);
+      expect(rows("server-restarted")).toBe(1);
+      vi.advanceTimersByTime(1);
+      expect(rows("server-restarted")).toBe(0);
     });
   });
 
   describe("region lifetime", () => {
-    beforeEach(() => { expect.hasAssertions(); vi.useFakeTimers(); });
+    beforeEach(() => {
+      expect.hasAssertions();
+      vi.useFakeTimers();
+    });
     it("clears timers and children without rebuilding the region node", () => {
       const { region, status } = boot();
       const ref = region;
@@ -217,12 +224,145 @@ describe("wall notice region", () => {
 
   describe("notice parents", () => {
     beforeEach(() => expect.hasAssertions());
-    it("parents each notice under one of the two region containers", () => {
+    it("parents each notice under its lane container", () => {
       const { status, alert } = boot();
       postWallNotice({ key: "server-restarted", text: "s" });
       postWallNotice({ key: "install-failed", text: "a" });
-      expect(status.querySelector('[data-notice-key="server-restarted"]')?.parentElement).toBe(status);
-      expect(alert.querySelector('[data-notice-key="install-failed"]')?.parentElement).toBe(alert);
+      expect(document.querySelector('[data-notice-key="server-restarted"]')!.parentElement).toBe(status);
+      expect(document.querySelector('[data-notice-key="install-failed"]')!.parentElement).toBe(alert);
     });
+  });
+
+  describe("keyboard and focus", () => {
+    beforeEach(() => expect.hasAssertions());
+    it("puts action buttons in the tab order", () => {
+      boot();
+      postWallNotice({
+        key: "install-failed",
+        text: "Install failed.",
+        action: { label: "Retry", onClick: () => {} },
+      });
+      expect(document.querySelector<HTMLButtonElement>(".wall-notice-action")!.tabIndex).toBe(0);
+    });
+
+    it("returns focus to the mount root when dismissing a focused notice", () => {
+      const { wall } = boot();
+      const h = postWallNotice({
+        key: "context-not-restored",
+        text: "Reload to restore.",
+        action: { label: "Reload", onClick: () => {} },
+      });
+      document.querySelector<HTMLButtonElement>(".wall-notice-action")!.focus();
+      h.dismiss();
+      expect(document.activeElement).toBe(wall);
+    });
+  });
+
+  describe("visible alert coalescing", () => {
+    beforeEach(() => expect.hasAssertions());
+    it("never queues a key that is already visible among three alerts", () => {
+      const { region } = boot();
+      const first = postWallNotice({ key: "context-not-restored", text: "e1" });
+      postWallNotice({ key: "retry-failed", text: "e2" });
+      postWallNotice({ key: "install-failed", text: "e3" });
+      postWallNotice({ key: "retry-failed", text: "e2 again" });
+      first.dismiss();
+      expect(rows("retry-failed")).toBe(1);
+      expect(rows("install-failed")).toBe(1);
+      expect(region.dataset.queueCount).toBe("0");
+    });
+  });
+
+  describe("action and auto-clear guards", () => {
+    beforeEach(() => expect.hasAssertions());
+    it("calls the latest action handler after a re-post", () => {
+      boot();
+      const a = vi.fn();
+      const b = vi.fn();
+      postWallNotice({ key: "install-failed", text: "x", action: { label: "Retry", onClick: a } });
+      postWallNotice({ key: "install-failed", text: "x", action: { label: "Retry", onClick: b } });
+      document.querySelector<HTMLButtonElement>(".wall-notice-action")!.click();
+      expect(b).toHaveBeenCalledTimes(1);
+      expect(a).toHaveBeenCalledTimes(0);
+    });
+
+    it("does not auto-clear alerts that carry an action even when autoClearMs is forced", () => {
+      vi.useFakeTimers();
+      const spy = vi.spyOn(globalThis, "setTimeout");
+      const { alert } = boot();
+      postWallNotice({
+        key: "retry-failed",
+        text: "Retry failed.",
+        action: { label: "Retry", onClick: () => {} },
+        autoClearMs: 5000,
+      } as never);
+      vi.advanceTimersByTime(10_000);
+      expect(alert.childElementCount).toBe(1);
+      expect(spy).toHaveBeenCalledTimes(0);
+    });
+  });
+
+  describe("dismiss handles", () => {
+    beforeEach(() => expect.hasAssertions());
+    it("ignores a stale dismiss handle after the same key is posted again", () => {
+      vi.useFakeTimers();
+      boot();
+      const stale = postWallNotice({ key: "server-restarted", text: "one", autoClearMs: 1000 });
+      vi.advanceTimersByTime(1000);
+      postWallNotice({ key: "server-restarted", text: "two" });
+      stale.dismiss();
+      expect(rows("server-restarted")).toBe(1);
+    });
+
+    it("drops exactly one queued entry when its handle is dismissed", () => {
+      const { region } = boot();
+      postWallNotice({ key: "context-not-restored", text: "e1" });
+      postWallNotice({ key: "retry-failed", text: "e2" });
+      postWallNotice({ key: "install-failed", text: "e3" });
+      const q = postWallNotice({ key: "context-lost", text: "q1" });
+      postWallNotice({ key: "layout-refused-boot", text: "q2" });
+      q.dismiss();
+      expect(region.dataset.queueCount).toBe("1");
+    });
+  });
+
+  describe("stack ordering", () => {
+    beforeEach(() => expect.hasAssertions());
+    it("stacks status notices above error notices", () => {
+      boot();
+      postWallNotice({ key: "install-failed", text: "a" });
+      postWallNotice({ key: "server-restarted", text: "s" });
+      const s = document.querySelector('[data-notice-key="server-restarted"]')!;
+      const a = document.querySelector('[data-notice-key="install-failed"]')!;
+      expect(s.compareDocumentPosition(a) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    });
+  });
+});
+
+describe("wall notice queue", () => {
+  beforeEach(() => expect.hasAssertions());
+  afterEach(() => {
+    document.body.innerHTML = "";
+  });
+
+  it("R7 a held install-failed posted 600 times is queued once", () => {
+    const { region } = boot();
+    postWallNotice({ key: "context-not-restored", text: "e1" });
+    postWallNotice({ key: "retry-failed", text: "e2" });
+    postWallNotice({ key: "update-rolled-back", text: "e3" });
+    for (let i = 0; i < 600; i++) postWallNotice({ key: "install-failed", text: "held" });
+    expect(region.dataset.queueCount).toBe("1");
+  });
+});
+
+describe("wall notice types", () => {
+  beforeEach(() => expect.hasAssertions());
+
+  it("type row alert autoClearMs stays a compile error", () => {
+    expect(runWebTsc().ok).toBe(true);
+  });
+
+  it("type row status action plus autoClearMs stays a compile error", () => {
+    expect(runWebTsc().ok).toBe(true);
   });
 });

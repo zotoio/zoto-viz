@@ -1677,11 +1677,6 @@ body.panel-wide #debuglog {
   box-shadow: 0 8px 24px var(--shadow);
   font-size: 12.5px;
   line-height: 1.4;
-  animation: wall-notice-in 0.28s ease;
 }
 .wall-notice-alert .wall-notice-row { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
-@keyframes wall-notice-in {
-  from { opacity: 0; transform: translateY(6px); }
-  to { opacity: 1; transform: translateY(0); }
-}
 .wall-notice-action { margin-left: 8px; }
