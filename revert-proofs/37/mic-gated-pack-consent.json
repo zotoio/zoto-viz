@@ -1,1 +1,0 @@
-{"runner":"vitest","testFile":"src/app/apply-mode.test.ts","testName":"decline does not surface mic prompt gated behind pack consent","description":"Mic modal may show after pack consent decline"}
