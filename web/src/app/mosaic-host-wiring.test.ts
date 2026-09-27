@@ -26,7 +26,7 @@ describe("mosaic host wiring", () => {
   });
 
   it("mosaicFocusSlotForMode picks the duplicate slot carrying the mode id", () => {
-    const tiles = ["plugin:x!1", "plugin:y"];
+    const tiles = ["plugin:y", "plugin:x!1"];
     expect(mosaicFocusSlotForMode(tiles, "plugin:x", "plugin:y")).toBe("plugin:x!1");
   });
 
