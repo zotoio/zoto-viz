@@ -123,8 +123,8 @@ export function resetHnTermPack(): void {
   termScript = "";
 }
 
-function termNow(_frame: VizDataFrame): number {
-  return vizClockMs() / 1000;
+function termNow(frame: VizDataFrame): number {
+  return typeof performance !== "undefined" ? performance.now() / 1000 : frame.t;
 }
 
 function hnTermFrameBuffer(frame: VizDataFrame): number[] {
