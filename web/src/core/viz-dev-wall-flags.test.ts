@@ -187,7 +187,8 @@ describe("dev viz wall flags", () => {
     expect(vizWallMs()).toBe(real);
   });
 
-  it.skipIf(!existsSync(distAssetsDir) && !process.env.CI)(
+  it.skipIf(
+    !existsSync(distAssetsDir) && process.env.VIZ_REQUIRE_DIST !== "1",
     "F5 (vi) prod bundle: dist has no vizWallClock string",
     () => {
       expect(existsSync(distAssetsDir)).toBe(true);

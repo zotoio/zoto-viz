@@ -71,6 +71,11 @@ jobs:
       - name: Typecheck and production build
         working-directory: web
         run: pnpm build
+      - name: Prod bundle guard (vizWallClock stripped)
+        working-directory: web
+        env:
+          VIZ_REQUIRE_DIST: "1"
+        run: pnpm exec vitest run src/core/viz-dev-wall-flags.test.ts -t "prod bundle"
 
   dogfood:
     runs-on: ubuntu-latest
