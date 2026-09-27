@@ -106,6 +106,8 @@ import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsen
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
+import { deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
+import { bindVizDriveElement, noteHostDirect } from "../plugins/viz-drive";
 
 ignoreResizeLoopError();
 
@@ -143,6 +145,8 @@ const renderHost = new RenderHost($("wall"));
 mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
+scene.retargetPanel("main");
+bindVizDriveElement("main", $("scene"));
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
 scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
@@ -377,7 +381,6 @@ let stereoBinsAt = 0;
 scene.afterLook = () => {
   const mode = modeById(modeSel.value);
   if (mode.pluginId === "backrooms" && vizWriter) {
-    // The director owns camera, creature and maze on the sky clock; the sound bed reads the same track.
     backroomsViewOptions();
     scene.setHeard(false);
     const drive = backroomsSlots(scene.skyTime(), new Date(), innerWidth / Math.max(1, innerHeight));
@@ -658,18 +661,29 @@ let wallOwner: string | null = null;
 let wallRestore: WallSnap | null = null;
 /** Last mode applyMode committed — Select updates its value before onChange. */
 let liveMode = "";
+/** Sky + frontend for the view opened while the boot spinner is up. */
+let bootViewLoad: Promise<void> = Promise.resolve();
+
+function bootProgress(pct: number, label: string): void {
+  const bar = document.getElementById("bootBar");
+  const lab = document.getElementById("bootLabel");
+  if (bar) bar.style.width = `${Math.max(0, Math.min(100, Math.round(pct)))}%`;
+  if (lab) lab.textContent = label;
+}
 
 function applyPluginWall(modeId: string, flags: { keepLayout?: boolean; prevMode?: string }): void {
   if (!settings) return;
+  const look = lookForMode(modeId);
   const resolved = resolvePluginWall({
     modeId,
     prevModeId: flags.prevMode ?? liveMode,
     keepLayout: !!flags.keepLayout,
     anim: settings.animSettings,
-    wall: pluginWall(lookForMode(modeId)),
+    wall: pluginWall(look),
     walls: catalogPluginWalls(),
     owner: wallOwner,
     restore: wallRestore,
+    solo: look?.mosaic === "off" || look?.stageOnly === true,
   });
   wallOwner = resolved.state.owner;
   wallRestore = resolved.state.restore;
@@ -780,7 +794,7 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
   nestCams.setLook(opts);
   bindThisView(m.id);
   $("modeOpts").replaceChildren();
-  void (async () => {
+  const viewLoad = (async () => {
     if (!(await ensureReviewed(spec))) {
       preserveVizUbo = false;
       modeSel.value = prevMode || modeSel.value;
@@ -789,10 +803,11 @@ function applyMode(id: string, flags: { keepLayout?: boolean } = {}): void {
       return;
     }
     if (m.standalone || arcadeSlotFor(m) !== "carousel") {
-      void loadTsPlugin(paneSpec);
-      void syncPluginSky(paneSpec);
+      await Promise.all([loadTsPlugin(paneSpec), syncPluginSky(paneSpec)]);
     }
   })();
+  if (document.body.classList.contains("view-booting")) bootViewLoad = viewLoad;
+  void viewLoad;
   feedCtl.feed?.setGraphBase(m.graphBase);
   if (m.graphBase === "wifi") void syncWifiWatch();
 
@@ -877,7 +892,8 @@ function renderLegend(m: ViewMode, opts: Record<string, string>): void {
   }
 }
 
-applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "topology");
+document.body.classList.add("view-booting");
+bootProgress(8, "starting");
 
 // ---------------------------------------------------------------- visibility filters
 
@@ -1005,7 +1021,10 @@ function feed(m: StateMsg): void {
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       sandbox.frame(f);
-      if (packId) {
+      if (mosaic?.on) {
+        deliverMosaicDemoPacks(mosaic, f, modeById, pluginSpecForMode, optsFor);
+      } else if (packId) {
+        noteHostDirect("main");
         runPackFrameHandler(packId, f, {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
@@ -1522,41 +1541,49 @@ settings.prependSection(
 uiReady = true;
 applyViewLook();
 void (async () => {
-  const session = await bootSession();
-  typeSafeKeyOn = session.typesafeConfigured;
-  setTypeSafeProxyConfigured(() => typeSafeKeyOn);
-  agent.setControlFromServer(session.aiControl);
-  pluginSpecs = await installPlugins();
-  modeSel.setOptions(viewSelectOptions());
-  settings.refreshMosaicSlots();
-  if (settings.animSettings.mosaic !== "off") {
-    mosaic.setSize(settings.animSettings.mosaic, modeSel.value, settings.animSettings.hero, {
-      tree: settings.animSettings.mosaicTree,
-      maximized: settings.animSettings.mosaicMaxId || null,
-      tiles: settings.animSettings.mosaicTiles,
+  try {
+    const session = await bootSession();
+    bootProgress(24, "session");
+    typeSafeKeyOn = session.typesafeConfigured;
+    setTypeSafeProxyConfigured(() => typeSafeKeyOn);
+    agent.setControlFromServer(session.aiControl);
+    pluginSpecs = await installPlugins();
+    bootProgress(48, "catalog");
+    modeSel.setOptions(viewSelectOptions());
+    settings.refreshMosaicSlots();
+    const live = readSessionLive();
+    bootProgress(66, "restoring view");
+    const restored = await profiles.boot(live);
+    if (!liveMode) {
+      applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
+    }
+    await agent.syncStatus();
+    if (!agent.savedBackend() && agent.cursorReady()) {
+      agent.useBackend("cursor");
+      touch();
+    }
+    quiet(() => {
+      applyMode(modeSel.value);
+      applyViewLook();
+      if (restored && live) applyTheme(live.settings.theme, false, false);
     });
-    mosaic.hydrate();
+    if (restored && live?.selected) scene.selectIp(live.selected);
+    if (restored) agent.setCycleChecked(!!live?.aiCycle);
+    else if (agent.cycleOn) await setAiCycle(true);
+    const viewName = modeSel.el.querySelector(".txt")?.textContent?.trim() || "view";
+    bootProgress(86, `loading ${viewName}`);
+    await Promise.race([
+      bootViewLoad,
+      new Promise<void>((resolve) => window.setTimeout(resolve, 12000)),
+    ]);
+    bootProgress(100, viewName);
+    liveReady = true;
+    persistLive(true);
+    void syncWifiWatch();
+    agent.armWake();
+  } finally {
+    document.body.classList.remove("view-booting");
   }
-  const live = readSessionLive();
-  applyMode(localStorage.getItem("zoto-viz.mode") ?? defaultCatalogMode()?.id ?? "");
-  const restored = await profiles.boot(live);
-  await agent.syncStatus();
-  if (!agent.savedBackend() && agent.cursorReady()) {
-    agent.useBackend("cursor");
-    touch();
-  }
-  quiet(() => {
-    applyMode(modeSel.value);
-    applyViewLook();
-    if (restored && live) applyTheme(live.settings.theme, false, false);
-  });
-  if (restored && live?.selected) scene.selectIp(live.selected);
-  if (restored) agent.setCycleChecked(!!live?.aiCycle);
-  else if (agent.cycleOn) await setAiCycle(true);
-  liveReady = true;
-  persistLive(true);
-  void syncWifiWatch();
-  agent.armWake();
 })();
 
 let liveAgentLook: AgentLook = { decos: [] };
@@ -1759,6 +1786,9 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   autoconsentToggle.checked = s.autoconsent;
   settings.setFilterText(s.filters);
   paintAgentLook(s.agent ?? { decos: [] });
+  // Pin the menu to the restored view before anim runs. Otherwise a mosaic
+  // rebuild fills panes from the catalog head, then this function switches.
+  if (s.mode) modeSel.value = modeById(s.mode).id;
   settings.applyAnim(s.anim);
   settings.applyFeed(s.feed);
   settings.applyChat(s.chat ?? settings.chatSettings);

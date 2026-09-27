@@ -165,4 +165,39 @@ describe("resolvePluginWall", () => {
     });
     expect(out.anim).toEqual(soloWallSnap(true));
   });
+
+  it("drops a live mosaic for a stage-only view, including on boot re-apply", () => {
+    const live = {
+      mosaic: "6" as const,
+      hero: "right" as const,
+      mosaicTiles: ["plugin:backrooms", "plugin:air-ssid", "plugin:ant-colony"],
+      mosaicTree: null,
+      mosaicMaxId: "",
+      mosaicSharedTheme: true,
+    };
+    const first = resolvePluginWall({
+      modeId: "plugin:backrooms",
+      prevModeId: "",
+      keepLayout: false,
+      anim: live,
+      wall: null,
+      walls,
+      owner: null,
+      restore: null,
+      solo: true,
+    });
+    expect(first.anim).toEqual(soloWallSnap(true));
+    const again = resolvePluginWall({
+      modeId: "plugin:backrooms",
+      prevModeId: "plugin:backrooms",
+      keepLayout: false,
+      anim: live,
+      wall: null,
+      walls,
+      owner: null,
+      restore: null,
+      solo: true,
+    });
+    expect(again.anim).toEqual(soloWallSnap(true));
+  });
 });

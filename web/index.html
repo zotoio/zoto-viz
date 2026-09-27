@@ -7,7 +7,7 @@
     <title>zoto-viz · live</title>
     <link rel="stylesheet" href="/src/style.css" />
   </head>
-  <body>
+  <body class="view-booting">
     <div id="wall">
       <div id="scene"></div>
       <div id="pong" class="arcade" hidden></div>
@@ -24,6 +24,15 @@
       <div id="tetris" class="arcade" hidden></div>
       <div id="portal" class="arcade" hidden></div>
       <div id="carousel" class="arcade" hidden></div>
+    </div>
+    <div id="boot" role="status" aria-live="polite">
+      <div class="boot-stage" aria-hidden="true">
+        <div class="boot-cube">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="boot-track"><i id="bootBar"></i></div>
+      <div id="bootLabel">starting</div>
     </div>
     <header id="bar">
       <div class="row top">

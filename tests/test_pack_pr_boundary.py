@@ -8,6 +8,7 @@ from scripts.check_pack_pr_boundary import (
     ALLOWED_SCHEMA_PATH,
     ALLOWED_TSCONFIG_PATH,
     HOST_REVIEW_FAIL_MESSAGE,
+    MISSING_PR_NUMBER_MESSAGE,
     evaluate_pack_pr,
     pack_py_test_path,
     paths_from_name_status,
@@ -59,7 +60,7 @@ def test_clean_pack_pr_passes() -> None:
             ALLOWED_TSCONFIG_PATH: (TSCONFIG_BASE, tsconfig_head),
         }
     )
-    code, lines = run_check(files + [ALLOWED_TSCONFIG_PATH], contents)
+    code, lines = run_check(files + [ALLOWED_TSCONFIG_PATH], contents, pr_number=99)
     assert code == 0
     assert any("passed" in line for line in lines)
 
@@ -71,7 +72,7 @@ def test_pack_pr_viz_host_edit_fails() -> None:
         f"web/src/plugins/{pack}.test.ts",
         "web/src/plugins/viz-host.ts",
     ]
-    code, lines = run_check(files, {})
+    code, lines = run_check(files, {}, pr_number=99)
     assert code == 1
     assert any("viz-host.ts" in line for line in lines)
 
@@ -89,9 +90,9 @@ def test_two_pack_folders_not_a_pack_pr() -> None:
         "plugins/src/ant-colony/plugin.yml",
         "plugins/src/metro-lines/plugin.yml",
     ]
-    code, lines = run_check(files, {})
-    assert code == 0
-    assert any("multiple pack folders" in line for line in lines)
+    code, lines = run_check(files, {}, pr_number=99)
+    assert code == 1
+    assert any("metro-lines" in line or "ant-colony" in line for line in lines)
 
 
 def test_multi_pack_with_host_web_src_fails() -> None:
@@ -100,7 +101,7 @@ def test_multi_pack_with_host_web_src_fails() -> None:
         "plugins/src/metro-lines/plugin.yml",
         "web/src/plugins/viz-host.ts",
     ]
-    code, lines = run_check(files, {})
+    code, lines = run_check(files, {}, pr_number=99)
     assert code == 1
     assert any("multi-pack PR" in line for line in lines)
     assert any("viz-host.ts" in line for line in lines)
@@ -113,14 +114,14 @@ def test_multi_pack_with_each_pack_test_still_passes() -> None:
         "web/src/plugins/ant-colony.test.ts",
         "web/src/plugins/metro-lines.test.ts",
     ]
-    code, lines = run_check(files, {})
-    assert code == 0
-    assert any("multiple pack folders" in line for line in lines)
+    code, lines = run_check(files, {}, pr_number=99)
+    assert code == 1
+    assert any("FAILED" in line for line in lines)
 
 
 def test_host_only_pr_passes() -> None:
     files = ["web/src/plugins/viz-host.ts", "service/foo.py"]
-    code, lines = run_check(files, {})
+    code, lines = run_check(files, {}, pr_number=99)
     assert code == 0
     assert any("not a pack PR" in line for line in lines)
 
@@ -134,7 +135,7 @@ def test_schema_only_adds_matching_pack_id() -> None:
 def test_evaluate_rejects_foreign_web_src() -> None:
     pack = "marble-run"
     paths = [f"plugins/src/{pack}/x.ts", "web/src/plugins/viz-host.ts"]
-    violations = evaluate_pack_pr(paths, pack, {})
+    violations = evaluate_pack_pr(paths, pack, {}, pr_number=99)
     assert len(violations) == 1
     assert violations[0].path == "web/src/plugins/viz-host.ts"
 
@@ -236,7 +237,7 @@ def test_voxel_world_style_pack_pr_passes() -> None:
         '    "backrooms",\n    "voxel-world",\n)',
     )
     contents = _contents({ALLOWED_CATALOG_PATH: (base, head)})
-    code, lines = run_check(files, contents)
+    code, lines = run_check(files, contents, pr_number=99)
     assert code == 0
     assert any("passed" in line for line in lines)
 
@@ -255,6 +256,87 @@ def test_name_status_includes_rename_source_and_dest() -> None:
         "plugins/src/foo/frontend/host.ts",
         "web/src/plugins/viz-host.ts",
     ]
+
+
+def test_pack_pr_rejects_foreign_revert_proofs_folder_112() -> None:
+    pack = "nixie-clock"
+    files = [
+        f"plugins/src/{pack}/frontend/index.ts",
+        "revert-proofs/112/x.patch",
+    ]
+    code, lines = run_check(files, {}, pr_number=111)
+    assert code == 1
+    assert any("112" in line for line in lines)
+
+
+def test_pack_pr_accepts_own_revert_proofs_folder_111() -> None:
+    pack = "nixie-clock"
+    files = [
+        f"plugins/src/{pack}/frontend/index.ts",
+        "revert-proofs/111/nixie-fc-glsl-revert.patch",
+        "revert-proofs/111/nixie-fc-glsl-revert.json",
+    ]
+    code, lines = run_check(files, {}, pr_number=111)
+    assert code == 0
+    assert any("passed" in line for line in lines)
+
+
+def test_pack_pr_rejects_second_pack_folder() -> None:
+    files = [
+        "plugins/src/nixie-clock/frontend/index.ts",
+        "plugins/src/metro-lines/plugin.yml",
+    ]
+    code, lines = run_check(files, {}, pr_number=111)
+    assert code == 1
+    assert any("metro-lines" in line for line in lines)
+
+
+def test_cli_missing_pr_number_exits_nonzero() -> None:
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    repo = Path(__file__).resolve().parents[1]
+    env = os.environ.copy()
+    env.pop("GITHUB_EVENT_PATH", None)
+    proc = subprocess.run(
+        [
+            sys.executable,
+            str(repo / "scripts" / "check_pack_pr_boundary.py"),
+            "HEAD",
+            "HEAD",
+        ],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode != 0
+    assert "missing pull request number" in proc.stderr
+    assert MISSING_PR_NUMBER_MESSAGE in proc.stderr
+
+
+def test_pack_pr_rejects_revert_proofs_1111_prefix_trap() -> None:
+    pack = "nixie-clock"
+    files = [
+        f"plugins/src/{pack}/frontend/index.ts",
+        "revert-proofs/1111/x.patch",
+    ]
+    code, lines = run_check(files, {}, pr_number=111)
+    assert code == 1
+    assert any("1111" in line for line in lines)
+
+
+def test_pack_pr_rejects_revert_proofs_104_on_pr_111() -> None:
+    pack = "nixie-clock"
+    files = [
+        f"plugins/src/{pack}/frontend/index.ts",
+        "revert-proofs/104/legacy.patch",
+    ]
+    code, lines = run_check(files, {}, pr_number=111)
+    assert code == 1
+    assert any("104" in line for line in lines)
 
 
 def test_committed_event_timestamp_uses_committer_date() -> None:
