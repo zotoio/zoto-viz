@@ -457,7 +457,6 @@ async function runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifac
     testPattern,
     "--reporter=json",
     `--outputFile.json=${jsonOut}`,
-    "--",
     testFileArg,
   ];
   const result = await runProcess(bin, args, {
