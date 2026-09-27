@@ -89,7 +89,7 @@ export type Viewport = DeviceRect;
 
 /**
  * Canvas backing-store pixels (`canvas.width` / `canvas.height`), not CSS layout.
- * Sized from the wall viewport × devicePixelRatio, capped at 1.5× for stability.
+ * Sized from the wall viewport × DPR, capped at 1.5× for stability.
  */
 export interface DevicePixelSize {
   w: number;

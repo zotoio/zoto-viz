@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  countEligibleSourceHeadlines,
   FEED_HEADLINE_LIMIT,
   illustratedSourceBind,
   oneLineTitle,
@@ -112,8 +113,9 @@ describe("sourceHeadlines", () => {
         text: Array.from({ length: 72 }, (_, i) => `Item ${i}`).join("\n"),
       },
     };
-    const uncapped = sourceHeadlines(sources, Number.MAX_SAFE_INTEGER).length;
-    expect(countEligibleSourceHeadlines(sources)).toBe(uncapped);
+    const bind = { source: "feed" };
+    const uncapped = sourceHeadlines(sources, Number.MAX_SAFE_INTEGER, bind).length;
+    expect(countEligibleSourceHeadlines(sources, bind)).toBe(uncapped);
   });
 
   it("strips HTML from article blurbs", () => {

@@ -663,12 +663,17 @@ export function buildVizFrameForPlugin(
 /** Tracks viz frame-path timing against {@link VIZ_FRAME_BUDGET_MS}. */
 export class VizFrameBudget {
   private _lastMs = 0;
+  private _p95Ms = 0;
   private _overBudget = 0;
   private _skipped = 0;
   private _total = 0;
   private _lastBuilt: VizDataFrame | null = null;
   private _lastPresent = -1;
   private _lastTileSkipped = 0;
+  private _gpuAvailable = false;
+  private readonly _gpuSamples = new Float32Array(32);
+  private _gpuSampleLen = 0;
+  private _gpuSampleStart = 0;
   private readonly now: () => number;
   private tileId: string;
 
@@ -688,8 +693,8 @@ export class VizFrameBudget {
       overBudget: this._overBudget,
       skipped: this._skipped,
       total: this._total,
-      timingSource: "cpu",
-      hasSamples: this._total > 0,
+      timingSource: this._gpuAvailable && this._gpuSampleLen > 0 ? "gpu" : "cpu",
+      hasSamples: this._total > 0 || this._gpuSampleLen > 0,
       p95Ms: this.p95ForGovernor(),
     };
   }
@@ -783,13 +788,38 @@ export class VizFrameBudget {
     tile.lastBuildCostTicks = null;
     tile.hudRingCount = 0;
     tile.hudRingNext = 0;
+    this._gpuSampleLen = 0;
+    this._gpuSampleStart = 0;
+    this._p95Ms = 0;
+    this._gpuAvailable = false;
   }
 
-  setGpuTimerAvailable(_ok: boolean): void {}
+  setGpuTimerAvailable(ok: boolean): void {
+    this._gpuAvailable = ok;
+    if (!ok) {
+      this._gpuSampleLen = 0;
+      this._gpuSampleStart = 0;
+    }
+  }
 
-  noteGpuMs(_ms: number): void {}
+  noteGpuMs(ms: number): void {
+    if (!this._gpuAvailable || !Number.isFinite(ms) || ms <= 0) return;
+    this._lastMs = ms;
+    const cap = this._gpuSamples.length;
+    if (this._gpuSampleLen < cap) {
+      this._gpuSamples[(this._gpuSampleStart + this._gpuSampleLen) % cap] = ms;
+      this._gpuSampleLen++;
+    } else {
+      this._gpuSamples[this._gpuSampleStart] = ms;
+      this._gpuSampleStart = (this._gpuSampleStart + 1) % cap;
+    }
+    const sorted = Array.from(this._gpuSamples.subarray(0, this._gpuSampleLen)).sort((a, b) => a - b);
+    const idx = Math.min(sorted.length - 1, Math.max(0, Math.ceil(sorted.length * 0.95) - 1));
+    this._p95Ms = sorted[idx] ?? ms;
+  }
 
   p95ForGovernor(): number {
+    if (this._gpuAvailable && this._gpuSampleLen > 0) return this._p95Ms;
     return this._lastMs;
   }
 }

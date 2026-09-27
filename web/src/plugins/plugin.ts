@@ -549,7 +549,7 @@ function compileGraph(spec: PluginView): ViewMode {
   const mode: ViewMode = {
     ...base,
     id: pluginViewId(spec.id, spec.instanceId),
-    label: spec.name,
+    label: tileDisplayName(spec),
     hint: spec.hint || base.hint,
     pluginId: spec.id,
     kind: catalogKindOf(spec),
