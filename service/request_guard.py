@@ -192,6 +192,13 @@ def _loopback_allowlist_keys(port: int) -> set[str]:
     }
 
 
+def _bind_is_unspecified(bind: str) -> bool:
+    try:
+        return ipaddress.ip_address((bind or "").strip()).is_unspecified
+    except ValueError:
+        return False
+
+
 def build_allowed_hosts(
     bind: str,
     port: int,
@@ -200,7 +207,7 @@ def build_allowed_hosts(
     bind = (bind or "127.0.0.1").strip()
     if bind_is_loopback(bind):
         allowed = set(_loopback_allowlist_keys(port))
-    elif bind in {"0.0.0.0", "::"}:
+    elif _bind_is_unspecified(bind):
         allowed = set(local_interface_hosts(port, include_os=True))
     else:
         allowed = set(_loopback_allowlist_keys(port))
