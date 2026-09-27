@@ -1,8 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/app/apply-mode-mosaic.test.ts",
-  "testName": "mosaicFocusSlot > prefers the main tile over the first slot when focus is stale",
-  "description": "Revert mosaicFocusSlot main-tile fallback",
-  "project": "web",
-  "red": "AssertionError: expected 'plugin:talkers' to be 'plugin:wifi' // Object.is equality"
-}
