@@ -82,6 +82,27 @@ describe("mosaic unique skies", () => {
     expect(mosaicAnimForTile({ ...wall, backdrop: "plugin" as const }, "plugin:talkers", "fire").backdrop).toBe("fire");
   });
 
+  it("drops undefined mosaic sky entries and still pins plugin looks", () => {
+    applyPluginCatalog([{
+      id: "backrooms",
+      name: "Backrooms",
+      version: 1,
+      engine: "graph",
+      look: { backdrop: "plugin", mosaic: "off", stageOnly: true },
+    }]);
+    expect(pinPluginTileSkies(
+      {
+        "plugin:backrooms": undefined,
+        "plugin:air-ssid": "space",
+        "plugin:memory": undefined,
+      },
+      ["plugin:backrooms", "plugin:air-ssid", "plugin:memory"],
+    )).toStrictEqual({
+      "plugin:backrooms": "plugin",
+      "plugin:air-ssid": "space",
+    });
+  });
+
   it("keeps a plugin-sky look even when a unique-sky plan named a host sky", () => {
     applyPluginCatalog([{
       id: "backrooms",
