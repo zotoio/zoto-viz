@@ -1882,6 +1882,18 @@ def _static_route_exempt(canon: str) -> bool:
     return False
 
 
+@web.middleware
+async def static_path_guard(request: web.Request, handler):  # noqa: ANN001
+    if request.method in {"GET", "HEAD"}:
+        raw_path = (request.path or "").split("?", 1)[0]
+        canon = static_paths.canonical_static_path(raw_path)
+        if canon is None:
+            return web.Response(status=404, text="not found")
+        if not _static_route_exempt(canon) and not static_paths.static_path_allowed(raw_path):
+            return web.Response(status=404, text="not found")
+    return await handler(request)
+
+
 def make_app(
     state: State,
     bpf: str,
@@ -1892,8 +1904,10 @@ def make_app(
     allowed_hosts: list[str] | None = None,
     insecure_lan: bool = False,
 ) -> web.Application:
+    from . import pack_asset_frames
+
     app = web.Application(
-        middlewares=[request_guard.middleware, access.middleware],
+        middlewares=[request_guard.middleware, static_path_guard, access.middleware],
         client_max_size=agent.MAX_BODY,
     )
     request_guard.register_response_prepare_hook(app)
@@ -1902,6 +1916,7 @@ def make_app(
     )
     app["state"], app["bpf"], app["clients"], app["wifi_keys"] = state, bpf, set(), wifi_keys
     app["csrf"] = access.new_token()
+    app["pack_asset_secret"] = access.new_pack_asset_secret()
     app["insecure_lan"] = insecure_lan
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
@@ -1973,6 +1988,10 @@ def make_app(
     app.router.add_post("/api/plugin-instances", plugin_instances.api_instances)
     app.router.add_put("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
     app.router.add_delete("/api/plugin-instances/{plugin}/{id}", plugin_instances.api_instance)
+    app.router.add_get(r"/pack-assets/{token}/{pack_id}/{tail:.+}", pack_assets.api_pack_assets)
+    app.router.add_post("/api/pack-assets/frames", pack_assets.api_pack_asset_register_frame)
+    app.router.add_delete("/api/pack-assets/frames/{frame_id}", pack_assets.api_pack_asset_unregister_frame)
+    app.router.add_post("/api/pack-assets/token/{pack_id}", pack_assets.api_pack_asset_token)
     if WEB_DIST.exists():
         app.router.add_static("/", WEB_DIST, show_index=False)
     app.on_startup.append(on_startup)

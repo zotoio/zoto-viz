@@ -9,7 +9,7 @@ from unittest.mock import MagicMock
 from aiohttp import web
 from yarl import URL
 
-from service import monitor, request_guard
+from service import monitor, pack_assets, request_guard
 
 
 @asynccontextmanager
@@ -23,8 +23,10 @@ async def make_app_server(
 ) -> AsyncIterator[tuple[str, int, web.AppRunner]]:
     state = MagicMock()
     orig_dist = monitor.WEB_DIST
+    orig_pack_dist = pack_assets.WEB_DIST
     if web_dist is not None:
         monitor.WEB_DIST = web_dist
+        pack_assets.WEB_DIST = web_dist
     app = monitor.make_app(
         state,
         "",
@@ -55,6 +57,7 @@ async def make_app_server(
         yield "127.0.0.1", port, runner
     finally:
         monitor.WEB_DIST = orig_dist
+        pack_assets.WEB_DIST = orig_pack_dist
         await runner.cleanup()
 
 
