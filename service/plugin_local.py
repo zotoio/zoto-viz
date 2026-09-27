@@ -378,6 +378,15 @@ def _finish(info: dict[str, Any], *, activate: bool) -> dict[str, Any]:
     return info
 
 
+def _install_settings_check_staging(staging_dir: Path) -> None:
+    """Preset/settings semantics on staged plugin.yml + visualisation.yml (no extra zip parse)."""
+    yml = staging_dir / "plugin.yml"
+    doc = plugins.load_file(yml)
+    viz = plugins._visualisation_doc(staging_dir)
+    merged: dict[str, Any] = {**doc, **({"visualisation": viz} if viz is not None else {})}
+    plugins._check_plugin_settings(merged)
+
+
 def install_local_zip(
     raw: bytes,
     *,
@@ -442,6 +451,7 @@ def install_local_zip(
         pid = str(doc["id"])
         if reminted_from:
             tmp_path.write_bytes(zip_bytes_from_staged(pack_read))
+        _install_settings_check_staging(pack_read.staging_dir)
         runtime = runtime_parent / pid
         incoming = pz.plugin_sha256(tmp_path)
         if dest.is_file() and pz.plugin_sha256(dest) == incoming and not overwrite:
@@ -544,6 +554,14 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
         incoming_sha=pz.plugin_sha256(path),
     )
     pid = str(doc["id"])
+    try:
+        _install_settings_check_staging(pack_read.staging_dir)
+    except ValueError:
+        psz.cleanup_staging_dir(pack_read.staging_dir)
+        drop = paths.plugin_local_dir(create=True)
+        if path.resolve().parent == drop.resolve() and path.resolve() != dest.resolve():
+            path.unlink(missing_ok=True)
+        raise
     if reminted_from:
         raw = zip_bytes_from_staged(pack_read)
         dest.write_bytes(raw)
@@ -640,6 +658,10 @@ def sync_local_drop() -> list[dict[str, Any]]:
         prev = _seen.get(key)
         _seen[key] = digest
         if not _primed or prev == digest:
+            continue
+        from .pack_zip_blocks import zip_block_for_sha
+
+        if zip_block_for_sha(digest):
             continue
         try:
             results.append(adopt_local_zip_file(z, activate=True))
@@ -857,7 +879,6 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
         finally:
             psz.cleanup_staging_dir(staging)
 
-        clear_zip_block(digest)
         forget_zip_block_cache_for_path(dest)
         info = _install_result(doc, dest, unpacked, wrote=True)
         finished = _finish(info, activate=activate)
