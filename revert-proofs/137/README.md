@@ -2,8 +2,8 @@
 
 | Field | Value |
 |-------|-------|
-| `proven_at` | _(set at PR head after `node scripts/revert-proof.mjs 137`)_ |
-| `tree` | _(set at PR head after `node scripts/revert-proof.mjs 137`)_ |
+| `proven_at` | `e0b06e393da677ca1c411a10a000402d8b79d123` |
+| `tree` | `e0b06e393da677ca1c411a10a000402d8b79d123` |
 
 Three pytest revert rows (`origin-userinfo`, `origin-path-suffix`, `origin-null-no-token`).
 
