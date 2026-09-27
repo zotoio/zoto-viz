@@ -6,7 +6,7 @@ import { mountWallNoticeRegion, postWallNotice, type NoticeKey } from "./wall-no
 
 const webRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const LANES: Record<NoticeKey, "status" | "alert"> = {
-  "install-failed": "alert", "context-not-restored": "alert", "retry-failed": "status", "update-rolled-back": "alert",
+  "install-failed": "alert", "context-not-restored": "alert", "retry-failed": "alert", "update-rolled-back": "alert",
   "server-restarted": "status", "context-lost": "status", "layout-refused-boot": "status",
   "layout-refused-profile": "status", "pack-navigation-stopped": "status", "drawer-edit-discarded": "status",
 };
@@ -118,20 +118,21 @@ describe("wall notice region", () => {
   });
 
   it("evicts the oldest non-error when a fourth notice arrives", () => {
-    const { status } = boot();
+    const { status, alert } = boot();
     postWallNotice({ key: "server-restarted", text: "a" });
     postWallNotice({ key: "context-lost", text: "b" });
-    postWallNotice({ key: "layout-refused-boot", text: "c" });
-    postWallNotice({ key: "layout-refused-profile", text: "d" });
-    expect(status.childElementCount).toBe(3);
+    postWallNotice({ key: "retry-failed", text: "c" });
+    postWallNotice({ key: "layout-refused-boot", text: "d" });
+    expect(status.childElementCount).toBe(2);
+    expect(alert.childElementCount).toBe(1);
     expect(status.querySelector('[data-notice-key="server-restarted"]')).toBeNull();
   });
 
   it("queues held error notices and promotes one on dismiss", () => {
     const { status, alert, region } = boot();
     const first = postWallNotice({ key: "context-not-restored", text: "e1" });
-    postWallNotice({ key: "install-failed", text: "e2" });
-    postWallNotice({ key: "update-rolled-back", text: "e3" });
+    postWallNotice({ key: "retry-failed", text: "e2" });
+    postWallNotice({ key: "install-failed", text: "e3" });
     postWallNotice({ key: "context-lost", text: "q1" });
     postWallNotice({ key: "layout-refused-boot", text: "q2" });
     postWallNotice({ key: "layout-refused-profile", text: "q3" });
@@ -194,12 +195,12 @@ describe("wall notice region", () => {
   it("never queues a key that is already visible among three alerts", () => {
     const { region } = boot();
     const first = postWallNotice({ key: "context-not-restored", text: "e1" });
-    postWallNotice({ key: "install-failed", text: "e2" });
-    postWallNotice({ key: "update-rolled-back", text: "e3" });
-    postWallNotice({ key: "install-failed", text: "e2 again" });
+    postWallNotice({ key: "retry-failed", text: "e2" });
+    postWallNotice({ key: "install-failed", text: "e3" });
+    postWallNotice({ key: "retry-failed", text: "e2 again" });
     first.dismiss();
+    expect(rows("retry-failed")).toBe(1);
     expect(rows("install-failed")).toBe(1);
-    expect(rows("update-rolled-back")).toBe(1);
     expect(region.dataset.queueCount).toBe("0");
   });
 
@@ -245,8 +246,8 @@ describe("wall notice region", () => {
   it("drops exactly one queued entry when its handle is dismissed", () => {
     const { region } = boot();
     postWallNotice({ key: "context-not-restored", text: "e1" });
-    postWallNotice({ key: "install-failed", text: "e2" });
-    postWallNotice({ key: "update-rolled-back", text: "e3" });
+    postWallNotice({ key: "retry-failed", text: "e2" });
+    postWallNotice({ key: "install-failed", text: "e3" });
     const q = postWallNotice({ key: "context-lost", text: "q1" });
     postWallNotice({ key: "layout-refused-boot", text: "q2" });
     q.dismiss();
@@ -405,8 +406,8 @@ describe("wall notice region", () => {
   it("a re-post to a queued key updates the queued copy", () => {
     boot();
     const first = postWallNotice({ key: "context-not-restored", text: "e1" });
-    postWallNotice({ key: "install-failed", text: "e2" });
-    postWallNotice({ key: "update-rolled-back", text: "e3" });
+    postWallNotice({ key: "retry-failed", text: "e2" });
+    postWallNotice({ key: "install-failed", text: "e3" });
     const q1 = postWallNotice({ key: "context-lost", text: "q1" });
     expect(postWallNotice({ key: "context-lost", text: "q2" })).toBe(q1);
     first.dismiss();
@@ -417,12 +418,12 @@ describe("wall notice region", () => {
 describe("wall notice queue", () => {
   beforeEach(() => expect.hasAssertions());
   afterEach(() => { document.body.innerHTML = ""; });
-  it("R7 a held status notice posted 600 times is queued once", () => {
+  it("R7 a held install-failed posted 600 times is queued once", () => {
     const { region } = boot();
     postWallNotice({ key: "context-not-restored", text: "e1" });
-    postWallNotice({ key: "update-rolled-back", text: "e2" });
-    postWallNotice({ key: "install-failed", text: "e3" });
-    for (let i = 0; i < 600; i++) postWallNotice({ key: "context-lost", text: "held" });
+    postWallNotice({ key: "retry-failed", text: "e2" });
+    postWallNotice({ key: "update-rolled-back", text: "e3" });
+    for (let i = 0; i < 600; i++) postWallNotice({ key: "install-failed", text: "held" });
     expect(region.dataset.queueCount).toBe("1");
   });
 });

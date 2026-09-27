@@ -1,13 +1,13 @@
 diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
-index 109ffb5..d5bd5e2 100644
+index 3fccbf1..1111111 100644
 --- a/web/src/core/wall-notice-region.ts
 +++ b/web/src/core/wall-notice-region.ts
 @@ -12,7 +12,7 @@ export type NoticeKey =
  const NOTICE_ROUTE = {
    "install-failed": "alert",
    "context-not-restored": "alert",
--  "retry-failed": "status",
-+  "retry-failed": "alert",
+-  "retry-failed": "alert",
++  "retry-failed": "status",
    "update-rolled-back": "alert",
    "server-restarted": "status",
    "context-lost": "status",

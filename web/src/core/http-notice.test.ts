@@ -310,7 +310,7 @@ describe("server restart wall notice", () => {
       expect(retryRows()).toHaveLength(1);
       const row = retryRows()[0]!;
       expect(row.querySelector(".wall-notice-text")!.textContent).toBe(SESSION_RETRY_FAILED_NOTICE);
-      expect(laneRole(row)).toBe("status");
+      expect(laneRole(row)).toBe("alert");
     });
 
     it("keeps the retry failure strip after the restart auto-clear timer fires", async () => {
