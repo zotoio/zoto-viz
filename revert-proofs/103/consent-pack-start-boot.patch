@@ -1,11 +1,12 @@
-diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
---- a/web/src/app/switch-pane-view.ts
-+++ b/web/src/app/switch-pane-view.ts
-@@ -102,7 +102,6 @@ export async function switchPaneView(
-     }
-     const msg = consentBlockMessage(opts.spec);
-     opts.onConsentDenied?.();
--    mosaic.setPaneNotice(slot.paneId, msg);
-     const pid = opts.pluginId?.trim();
-     if (pid && slot.swap) {
-       registerConsentPending({
+diff --git a/web/src/app/mosaic-boot-pack-start.ts b/web/src/app/mosaic-boot-pack-start.ts
+index 7b54bc7..36179c5 100644
+--- a/web/src/app/mosaic-boot-pack-start.ts
++++ b/web/src/app/mosaic-boot-pack-start.ts
+@@ -10,6 +10,6 @@ export function bootMosaicPackStartLayout(
+   const mode = resolveRestoredViewMode({ localMode, fallback });
+   return {
+     mode,
+-    tiles: reconcileMosaicTilesWithMode(tiles, mode, focusHint),
++    tiles,
+   };
+ }

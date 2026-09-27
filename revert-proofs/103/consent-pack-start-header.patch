@@ -1,11 +1,12 @@
-diff --git a/web/src/app/switch-pane-view.ts b/web/src/app/switch-pane-view.ts
---- a/web/src/app/switch-pane-view.ts
-+++ b/web/src/app/switch-pane-view.ts
-@@ -102,7 +102,6 @@ export async function switchPaneView(
-     }
-     const msg = consentBlockMessage(opts.spec);
-     opts.onConsentDenied?.();
--    mosaic.setPaneNotice(slot.paneId, msg);
-     const pid = opts.pluginId?.trim();
-     if (pid && slot.swap) {
-       registerConsentPending({
+diff --git a/web/src/app/mosaic-header-mode-pick.ts b/web/src/app/mosaic-header-mode-pick.ts
+index 6993135..de50b88 100644
+--- a/web/src/app/mosaic-header-mode-pick.ts
++++ b/web/src/app/mosaic-header-mode-pick.ts
+@@ -8,6 +8,5 @@ export async function mosaicHeaderModePick(
+     runMosaicPaneSwitch: (toViewId: string) => Promise<SwitchPaneViewResult>;
+   },
+ ): Promise<SwitchPaneViewResult | null> {
+-  if (!deps.mosaicOn) return null;
+-  return deps.runMosaicPaneSwitch(modeId);
++  return null;
+ }

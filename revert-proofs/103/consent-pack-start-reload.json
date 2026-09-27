@@ -2,11 +2,11 @@
   "runner": "vitest",
   "testFile": "src/app/consent-pack-start.test.ts",
   "testName": "consent blocks pack start paths > reload header pick shows consent notice and does not mount",
-  "description": "Revert inline consent notice on reload header pack start",
+  "description": "Revert reload mosaic tile reconcile before header pack start",
   "red": {
-    "actual": 0,
-    "expected": 1
+    "actual": false,
+    "expected": true
   },
   "project": "web",
-  "redLine": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
+  "redLine": "AssertionError: expected false to be true // Object.is equality"
 }

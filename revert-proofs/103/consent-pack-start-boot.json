@@ -2,11 +2,11 @@
   "runner": "vitest",
   "testFile": "src/app/consent-pack-start.test.ts",
   "testName": "consent blocks pack start paths > boot reconcile then switch shows consent notice and does not mount",
-  "description": "Revert inline consent notice after boot reconcile pack start",
+  "description": "Revert boot mosaic tile reconcile before pack start",
   "red": {
-    "actual": 0,
-    "expected": 1
+    "actual": "plugin:topology",
+    "expected": "plugin:heat"
   },
   "project": "web",
-  "redLine": "AssertionError: expected \"vi.fn()\" to be called 1 times, but got 0 times"
+  "redLine": "AssertionError: expected 'plugin:topology' to be 'plugin:heat' // Object.is equality"
 }

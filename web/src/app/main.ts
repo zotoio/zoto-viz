@@ -109,13 +109,17 @@ import { deliverMosaicDemoPacks, dropMosaicTileWriter } from "../graph/mosaic-vi
 import { bindVizDriveElement, clearVizDrive, noteHostDirect } from "../plugins/viz-drive";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { revertModeSelection } from "./apply-mode-mosaic";
-import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
+import { resolveRestoredViewMode } from "./boot-view-restore";
 import { initPluginConsentSync } from "./plugin-consent-sync";
 import { modeForDigitKey } from "./header-digit-mode";
 import { mergePluginConsentLivePatch } from "./plugin-consent-live";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
+import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
+import { bootMosaicPackStartLayout } from "./mosaic-boot-pack-start";
 import { pickMosaicPaneWith } from "./mosaic-pane-pick";
+import { wireMosaicTilePanePick } from "./mosaic-tile-pane-pick-wire";
+import { reloadMosaicTilesForMode } from "./mosaic-reload-pack-start";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
 import { onMosaicSwitchConsentDenied } from "./mosaic-switch-consent";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
@@ -860,9 +864,12 @@ async function applyModeAsync(
   const mosaicGraph = mosaic?.on && !(m.pluginId && m.standalone);
 
   if (mosaicGraph && mosaic) {
-    const sw = await runMosaicPaneSwitch(m.id);
+    const sw = await mosaicHeaderModePick(m.id, {
+      mosaicOn: true,
+      runMosaicPaneSwitch,
+    });
     if (generation !== applyModeGeneration) return;
-    if (!sw.ok) {
+    if (!sw || !sw.ok) {
       revertModeSelection(prevMode, modeSel, liveModeBinding);
       return;
     }
@@ -1230,7 +1237,7 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
-  onPanePick: (from, to) => pickMosaicPane(from, to),
+  onPanePick: wireMosaicTilePanePick((from, to) => pickMosaicPane(from, to)),
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
@@ -1282,7 +1289,7 @@ settings.addAnimation((a) => {
     mosaic!.setSize(a.mosaic, modeSel.value, a.hero, {
       tree: a.mosaicTree,
       maximized: a.mosaicMaxId || null,
-      tiles: reconcileMosaicTilesWithMode(
+      tiles: reloadMosaicTilesForMode(
         a.mosaicTiles ?? [],
         modeSel.value,
         mosaic!.focusedId,
@@ -1635,10 +1642,16 @@ void (async () => {
   modeSel.setOptions(viewSelectOptions());
   settings.refreshMosaicSlots();
   if (settings.animSettings.mosaic !== "off") {
-    mosaic.setSize(settings.animSettings.mosaic, modeSel.value, settings.animSettings.hero, {
+    const bootLayout = bootMosaicPackStartLayout(
+      settings.animSettings.mosaicTiles ?? [],
+      localStorage.getItem("zoto-viz.mode"),
+      modeSel.value,
+      modeSel.value,
+    );
+    mosaic.setSize(settings.animSettings.mosaic, bootLayout.mode, settings.animSettings.hero, {
       tree: settings.animSettings.mosaicTree,
       maximized: settings.animSettings.mosaicMaxId || null,
-      tiles: settings.animSettings.mosaicTiles,
+      tiles: bootLayout.tiles,
     });
     mosaic.hydrate();
   }
