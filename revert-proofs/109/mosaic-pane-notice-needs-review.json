@@ -8,5 +8,5 @@
     "expected": "needs review"
   },
   "project": "web",
-  "redLine": "AssertionError: expected undefined to be 'needs review' // Object.is equality"
+  "redLine": "TypeError: .toMatch() expects to receive a string, but got undefined"
 }
