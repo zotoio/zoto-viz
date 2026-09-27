@@ -9,7 +9,7 @@ describe("main viz UBO broadcast wiring", () => {
     const hits = src.match(/broadcastPluginUbo\(scene, vizWriter\.ubo/g) ?? [];
     expect(hits.length).toBeGreaterThanOrEqual(3);
     expect(src).toMatch(
-      /if \(vizWriter\?\.writeBuffer\(slot, data\)\.ok\) broadcastPluginUbo\(scene, vizWriter\.ubo/,
+      /if \(vizWriter\?\.writeBuffer\(slot, data\)\.ok\) \{\s*broadcastPluginUbo\(scene, vizWriter\.ubo/s,
     );
   });
 });

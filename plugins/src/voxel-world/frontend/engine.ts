@@ -95,8 +95,7 @@ export interface VoxTickOut {
 }
 
 export function tickVoxelWorld(frame: VoxLiveFrame, aspect = 1.6, dt: number = FIXED_DT): VoxTickOut {
-  if (lastT >= 0 && frame.t <= lastT) skips++;
-  const step = Math.min(0.1, Math.max(0, dt));
+  const step = Math.min(0.05, Math.max(0, dt));
   if (lastT < 0) simT = 0;
   else simT += step;
   lastT = frame.t;

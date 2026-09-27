@@ -29,9 +29,9 @@ export default defineConfig({
     port: 5173,
     fs: { allow: [repoRoot] },
     proxy: {
-      "/ws": { target: `ws://127.0.0.1:${monitorPort}`, ws: true },
-      "/api": { target: `http://127.0.0.1:${monitorPort}` },
-      "/pack-assets": { target: `http://127.0.0.1:${monitorPort}` },
+      "/ws": { target: `ws://127.0.0.1:${monitorPort}`, ws: true, changeOrigin: true },
+      "/api": { target: `http://127.0.0.1:${monitorPort}`, changeOrigin: true },
+      "/pack-assets": { target: `http://127.0.0.1:${monitorPort}`, changeOrigin: true },
     },
   },
   // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same

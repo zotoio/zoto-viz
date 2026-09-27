@@ -25,6 +25,7 @@ import {
 import { STEREO_BINS } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { normalizeVizDemoPackId, type VizHud } from "../ui/viz-hud";
 import type { ViewMode } from "../core/modes";
+import { notePackSandboxFrame, packPerfEnabled } from "../core/pack-host-perf";
 
 export interface VizPresentDeliverHost {
   modeById: (viewId: string) => ViewMode;
@@ -106,6 +107,7 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
         optsFor: host.optsFor,
         budgetStats: host.vizBudget.stats,
       });
+      if (packPerfEnabled() && active?.id) notePackSandboxFrame(active.id);
     },
   });
   host.setVizFrameClockMs(delivered.nextClockMs);

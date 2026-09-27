@@ -1,5 +1,6 @@
 import type { PluginSandbox } from "./host";
 import type { VizPluginContract } from "./viz-host";
+import { notePackPresentDelivery } from "../core/pack-host-perf";
 
 /**
  * Cached when the active view mode changes — no per-frame `pluginSpecs.find`.
@@ -58,4 +59,5 @@ export function deliverPluginPresentTick(binding: PresentDriveBinding | null, fr
     binding.pluginClock(),
     binding.stageAspect(),
   );
+  notePackPresentDelivery(binding.tileId);
 }

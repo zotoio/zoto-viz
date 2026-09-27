@@ -21,6 +21,8 @@ import {
 } from "./pack-asset-navigation";
 import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
 import { syncVizTileScope } from "./viz-tile-budget";
+import { validateVizWriteBatch, vizWriteBatchByteSize, type VizWriteBatchPayload } from "./viz-write-batch";
+import { notePackWriteBatch } from "../core/pack-host-perf";
 
 /** Test hook: shorten sandbox handshake waits. */
 let sandboxMsgTimeoutMs = 15_000;
@@ -138,6 +140,15 @@ export type HostMsg =
   | { source: "zoto-viz-plugin"; type: "writeBuffer"; payload: { slot: number; data: number[] } }
   | { source: "zoto-viz-plugin"; type: "writeUniform"; payload: { name: string; value: VizUniformValue } }
   | { source: "zoto-viz-plugin"; type: "writeParticles"; payload: { data: number[]; stride?: number } }
+  | {
+    source: "zoto-viz-plugin";
+    type: "writeBatch";
+    payload: {
+      buffers: { slot: number; data: number[] }[];
+      uniforms: { name: string; value: VizUniformValue }[];
+      particles?: { data: number[]; stride?: number };
+    };
+  }
   | { source: "zoto-viz-plugin"; type: "publishBitmap"; payload: { bitmap: ImageBitmap } }
   | { source: "zoto-viz-plugin"; type: "publishBitmapFailed"; payload: Record<string, never> }
   | { source: "zoto-viz-plugin"; type: "log"; payload: string }
@@ -165,6 +176,7 @@ export interface PluginHostHandlers {
   writeBuffer?: (slot: number, data: number[]) => void;
   writeUniform?: (name: string, value: VizUniformValue) => void;
   writeParticles?: (data: number[], stride?: number) => void;
+  writeBatch?: (batch: VizWriteBatchPayload) => void;
   publishBitmap?: (packId: string, bitmap: ImageBitmap) => void;
   publishBitmapFailed?: (packId: string) => void;
 }
@@ -338,7 +350,15 @@ export class PluginSandbox {
     hash?: string,
     viz?: VizPluginContract,
   ): Promise<void> {
-    await this.loadModuleUrl(await pluginModuleSandboxUrl(id, hash), caps, config, viz);
+    this.unload();
+    this.activePackId = "";
+    this.caps = caps.filter((c) => ALLOWED.has(c));
+    this.vizContract = viz;
+    // Production has no test fallback frame: module.js mint needs a live frame id.
+    this.frameId = await openPackAssetFrame(this.activeTileId);
+    activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+    const moduleSrc = await pluginModuleSandboxUrl(id, hash);
+    await this.bootFrame(moduleSrc, config, viz);
   }
 
   async loadModuleUrl(
@@ -359,8 +379,10 @@ export class PluginSandbox {
     config: Record<string, string>,
     viz?: VizPluginContract,
   ): Promise<void> {
-    this.frameId = await openPackAssetFrame(this.activeTileId);
-    activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+    if (!this.frameId) {
+      this.frameId = await openPackAssetFrame(this.activeTileId);
+      activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+    }
     const bootOut = { nonce: "" };
     const iframe = document.createElement("iframe");
     iframe.setAttribute("sandbox", "allow-scripts");
@@ -518,6 +540,19 @@ export class PluginSandbox {
     if (d.type === "writeParticles") {
       noteSandboxWrite(this.activeTileId);
       this.handlers.writeParticles?.(d.payload.data, d.payload.stride);
+    }
+    if (d.type === "writeBatch") {
+      noteSandboxWrite(this.activeTileId);
+      const err = validateVizWriteBatch(d.payload as VizWriteBatchPayload);
+      if (err) {
+        console.warn("zoto-viz viz.write batch:", err);
+        return;
+      }
+      notePackWriteBatch(
+        d.payload.buffers.length + d.payload.uniforms.length + (d.payload.particles ? 1 : 0),
+        vizWriteBatchByteSize(d.payload as VizWriteBatchPayload),
+      );
+      this.handlers.writeBatch?.(d.payload as VizWriteBatchPayload);
     }
     if (d.type === "publishBitmap") {
       const bmp = d.payload.bitmap;

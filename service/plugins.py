@@ -208,6 +208,38 @@ def _catalog_pack_sha256(home: Path, yml: Path) -> str:
     return h.hexdigest()
 
 
+def _assets_manifest_sha256(home: Path, doc: dict[str, Any]) -> str:
+    """Digest of declared mesh/audio assets (sorted by id) for consent."""
+    raw = doc.get("assets")
+    if not isinstance(raw, list) or not raw:
+        return ""
+    lines: list[str] = []
+    for entry in sorted(raw, key=lambda e: str((e or {}).get("id") or "")):
+        if not isinstance(entry, dict):
+            continue
+        aid = str(entry.get("id") or "").strip()
+        path = str(entry.get("path") or "").strip()
+        digest = str(entry.get("sha256") or "").strip().lower()
+        if not aid or not path:
+            continue
+        fp = (home / path).resolve()
+        try:
+            if not fp.is_file() or not str(fp).startswith(str(home.resolve())):
+                continue
+        except OSError:
+            continue
+        if not digest:
+            try:
+                digest = hashlib.sha256(fp.read_bytes()).hexdigest()
+            except OSError:
+                continue
+        lines.append(f"{aid}:{path}:{digest}")
+    if not lines:
+        return ""
+    h = hashlib.sha256("\n".join(lines).encode())
+    return h.hexdigest()
+
+
 def _frontend_fingerprint(home: Path) -> str:
     """Invalidate the esbuild cache when any frontend/*.ts changes, not only entry."""
     fe = home / "frontend"
@@ -389,15 +421,16 @@ def python_enabled() -> bool:
     return os.environ.get("ZOTO_VIZ_PLUGIN_SERVICE", "").strip().lower() in {"1", "true", "yes", "on"}
 
 
-CONSENT_ARTEFACTS = ("frontend", "backend", "collector", "shader")
+CONSENT_ARTEFACTS = ("frontend", "backend", "collector", "shader", "assets")
 AUTOCONSENT_ORIGINS = frozenset({"src", "local"})
 _ARTEFACT_FIELD = {
     "frontend": "hash",
     "backend": "backend_sha256",
     "collector": "collector_sha256",
     "shader": "shader_sha256",
+    "assets": "assets_sha256",
 }
-_CONSENT_HASH_KEYS = ("backend_sha256", "collector_sha256", "shader_sha256")
+_CONSENT_HASH_KEYS = ("backend_sha256", "collector_sha256", "shader_sha256", "assets_sha256")
 # Matches ``pack_safe_zip._TREE_HASH_VERSION`` (0x01) stored on each consent row.
 PACK_TREE_HASH_VERSION = 0x01
 
@@ -671,6 +704,7 @@ def api_sky(req: web.Request) -> web.StreamResponse:
 
 _ASSET_SUFFIX = frozenset({
     ".mp3", ".wav", ".ogg", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".md", ".txt",
+    ".glb", ".gltf", ".bin", ".ktx2",
 })
 _ASSET_DIR = "assets"
 _MAX_ASSET_BYTES = 16 * 1024 * 1024
@@ -791,10 +825,17 @@ def api_asset(req: web.Request) -> web.StreamResponse:
     pack_digest = str(row.get("sha256") or row.get("shader_sha256") or "")
     query = getattr(getattr(req, "rel_url", None), "query", None) or {}
     want = query.get("h") or query.get("hash") or query.get("v") if hasattr(query, "get") else None
+    file_digest = ""
+    try:
+        file_digest = hashlib.sha256(target.read_bytes()).hexdigest()
+    except OSError:
+        file_digest = ""
     ctype = _asset_content_type(target.suffix)
     resp = web.FileResponse(path=target, headers={"Content-Type": ctype})
     resp.headers["X-Content-Type-Options"] = "nosniff"
-    if want and pack_digest and want == pack_digest:
+    if want and file_digest and want == file_digest:
+        resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    elif want and pack_digest and want == pack_digest:
         resp.headers["Cache-Control"] = "private, max-age=31536000, immutable"
     else:
         resp.headers["Cache-Control"] = "private, no-cache"
@@ -1632,6 +1673,11 @@ def _catalog_row(
     )
     if row is None:
         return None
+    if isinstance(doc.get("assets"), list) and doc["assets"]:
+        row["assets"] = doc["assets"]
+        assets_digest = _assets_manifest_sha256(home, doc)
+        if assets_digest:
+            row["assets_sha256"] = assets_digest
     if not isinstance(row.get("visualisation"), dict):
         try:
             _validate_merged_catalog_row(row)

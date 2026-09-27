@@ -177,15 +177,26 @@ void main() {
   vec2 mandelC = vec2(fz0(38.0), fz0(39.0));
   float mandelS = fz0(40.0);
 
-  vec3 rd = normalize(vDir);
+  vec3 rdView = normalize(vDir);
   float rollA = mark > 0.5 ? fz0(6.0) : 0.0;
   float cr = cos(rollA);
   float sr = sin(rollA);
-  rd = normalize(vec3(rd.x * cr + rd.y * sr, rd.y * cr - rd.x * sr, rd.z));
-  vec3 ro = mark > 0.5
+  rdView = normalize(vec3(rdView.x * cr + rdView.y * sr, rdView.y * cr - rdView.x * sr, rdView.z));
+  vec2 uv = rdView.xy / max(-rdView.z, 0.18);
+  float zlog = mark > 0.5 ? fz0(7.0) : abs(fract(uTime * 0.028) * 2.0 - 1.0) * 8.6;
+  float dive = max(0.0, zlog + 0.35);
+  float zsc = exp(min(dive, 12.5) * 0.78);
+  vec3 focus = vec3(0.42, 0.58, 0.18);
+  vec3 cam = mark > 0.5
     ? vec3(fz0(0.0), fz0(1.0), fz0(2.0))
-    : vec3(0.12 * sin(uTime * 0.11), 0.1 * cos(uTime * 0.09), -1.1 - fract(uTime * 0.05) * 0.35);
-  ro += rd * fz0(7.0) * 0.15;
+    : vec3(0.15 * sin(uTime * 0.06), 0.22, 2.4);
+  vec3 fwd = normalize(focus - cam);
+  vec3 upW = abs(fwd.y) > 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
+  vec3 rt = normalize(cross(fwd, upW));
+  upW = normalize(cross(rt, fwd));
+  float stand = mix(max(length(focus - cam), 0.35), 0.045, clamp(1.0 - 1.0 / zsc, 0.0, 1.0));
+  vec3 ro = focus - fwd * stand;
+  vec3 rd = normalize(fwd + (rt * uv.x + upW * uv.y) * (0.95 / zsc));
   powr = mark > 0.5 ? powr : 8.0;
   maxIterN = mark > 0.5 ? maxIterN : 0.45;
   maxStepsN = mark > 0.5 ? maxStepsN : 0.5;
@@ -196,10 +207,25 @@ void main() {
   sat = mark > 0.5 ? sat : 1.1;
   bg = mark > 0.5 ? bg : vec3(0.03, 0.05, 0.12);
 
-  if (typ >= 6.0) {
-    vec2 uv = rd.xy / max(0.35, 1.15 - abs(rd.z));
-    vec3 col = color2d(uv, typ, mandelC, mandelS, maxIterN, tpal, pcyc, hue, sat, jc);
-    col = mix(bg, col, 0.92) + glow * 0.25;
+  if (mark < 0.5 || typ >= 6.0) {
+    float win;
+    vec2 center;
+    float iterN;
+    float useTyp;
+    if (mark < 0.5) {
+      float zWave = abs(fract(uTime * 0.04) * 2.0 - 1.0);
+      win = 2.15 * exp(-zWave * 10.0);
+      center = vec2(-0.743643887, 0.131825904);
+      iterN = 0.85;
+      useTyp = 6.0;
+    } else {
+      win = max(1e-8, mandelS);
+      center = mandelC;
+      iterN = max(0.35, maxIterN);
+      useTyp = typ;
+    }
+    vec3 col = color2d(uv, useTyp, center, win, iterN, tpal, max(pcyc, 0.25), hue, max(sat, 0.85), jc);
+    col = mix(bg, col, 0.94) + glow * 0.2;
     fragColor = vec4(col * uBright, uOpacity);
     return;
   }
@@ -208,16 +234,19 @@ void main() {
   float t = 0.0;
   vec3 col = bg;
   float hit = 0.0;
+  float closest = 1e9;
+  float eHit = max(1e-5, eps / zsc);
   for (int i = 0; i < 48; i++) {
     if (i >= steps) break;
     vec3 p = ro + rd * t;
     float d = mapDE(p, typ, powr, sc, fold, jc, sym);
-    if (d < eps) {
+    closest = min(closest, d);
+    if (d < eHit) {
       hit = 1.0;
       vec3 n = normalize(vec3(
-        mapDE(p + vec3(eps, 0.0, 0.0), typ, powr, sc, fold, jc, sym) - d,
-        mapDE(p + vec3(0.0, eps, 0.0), typ, powr, sc, fold, jc, sym) - d,
-        mapDE(p + vec3(0.0, 0.0, eps), typ, powr, sc, fold, jc, sym) - d
+        mapDE(p + vec3(eHit, 0.0, 0.0), typ, powr, sc, fold, jc, sym) - mapDE(p, typ, powr, sc, fold, jc, sym),
+        mapDE(p + vec3(0.0, eHit, 0.0), typ, powr, sc, fold, jc, sym) - mapDE(p, typ, powr, sc, fold, jc, sym),
+        mapDE(p + vec3(0.0, 0.0, eHit), typ, powr, sc, fold, jc, sym) - mapDE(p, typ, powr, sc, fold, jc, sym)
       ));
       vec3 lp = ro + vec3(2.0, 3.0, -2.0);
       vec3 l = normalize(lp - p);
@@ -233,28 +262,24 @@ void main() {
         }
         sh = mix(1.0, clamp(sh, 0.0, 1.0), shAmt);
       }
-      col = mapCol(p, typ, trapOn, tpal, pcyc, hue, sat) * (0.25 + diff * sh * ao);
+      col = mapCol(p, typ, trapOn, tpal, pcyc, hue, sat) * (0.38 + diff * sh * ao);
       col += glow * pow(max(dot(reflect(-l, n), -rd), 0.0), 6.0) * vec3(0.6, 0.75, 1.0);
       break;
     }
     t += d;
     if (t > 18.0) break;
   }
-  float mist = exp(-t * 0.22) * (0.35 + glow * 0.5);
+  float mist = exp(-t * 0.22) * (0.45 + glow * 0.55);
+  float aura = exp(-clamp(closest, 0.0, 4.0) * 5.5) * (0.55 + glow);
   col = mix(bg, col, hit);
-  col += mapCol(ro + rd * min(t, 6.0), typ, trapOn, tpal, pcyc, hue, sat) * mist * (1.0 - hit);
+  col += mapCol(ro + rd * min(t, 6.0), typ, trapOn, tpal, pcyc, hue, sat) * (mist * (1.0 - hit) + aura);
   col = mix(col, bg, fogAmt * clamp(t / 14.0, 0.0, 1.0));
   if (dof > 0.5) col = mix(col, bg, 0.08);
   col += uAudio * fz0(35.0) * 0.12;
-  float lum = dot(col, vec3(0.299, 0.587, 0.114));
-  if (lum < 0.14) {
-    vec2 uv = vDir.xy / max(0.32, 1.1 - abs(vDir.z));
-    col += color2d(uv, 6.0, vec2(-0.743643887, 0.131825904), 1.6, 0.55, 0.0, 0.4, hue, sat, jc) * 1.15;
-  }
   float pClamp = mark > 0.5 ? fz0(43.0) : 0.0;
   if (pClamp > 0.5) {
-    vec2 uv = gl_FragCoord.xy / vec2(1280.0, 800.0);
-    float band = smoothstep(0.02, 0.0, abs(uv.y - 0.08));
+    vec2 hud = gl_FragCoord.xy / vec2(1280.0, 800.0);
+    float band = smoothstep(0.02, 0.0, abs(hud.y - 0.08));
     col = mix(col, vec3(1.0, 0.85, 0.35), band * 0.85);
     col += vec3(0.15, 0.12, 0.05) * band;
   }

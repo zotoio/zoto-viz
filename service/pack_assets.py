@@ -22,7 +22,10 @@ def _web_dist() -> Path:
     from . import monitor
 
     return monitor.WEB_DIST
-_FRONTEND_ONLY = frozenset({".js", ".mjs", ".json", ".css", ".wasm", ".map", ".txt", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2"})
+_FRONTEND_ONLY = frozenset({
+    ".js", ".mjs", ".json", ".css", ".wasm", ".map", ".txt", ".svg", ".png", ".jpg", ".jpeg", ".gif", ".webp", ".ico", ".woff", ".woff2",
+    ".glb", ".gltf", ".bin", ".ktx2",
+})
 _BLOCKED_BASENAMES = frozenset({"plugin.yml", "plugin.yaml", "service.py"})
 _BACKEND_MARKERS = frozenset({"backend", "service", "collector", "datasource"})
 

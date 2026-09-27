@@ -26,6 +26,7 @@ PINNED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = (
     "helix",
     "hn-rain",
     "hn-term",
+    "host-mesh-demo",
     "invaders",
     "kefrens-bars",
     "koi-pond",

@@ -42,6 +42,8 @@ import type { MonoMs } from "../core/viz-time";
 import { vizClockMs } from "../core/viz-clock";
 import { vizClockStepSec } from "./scene-standalone";
 import { timeGpu } from "../core/gpu-time";
+import { notePackHostGpuMs, packPerfEnabled } from "../core/pack-host-perf";
+import { HostMeshLane } from "./host-mesh-lane";
 import { CanvasChangeProbe, PaneChangeProbe } from "./pane-change";
 import {
   asCanvasDeviceHeight,
@@ -1085,6 +1087,7 @@ export class NetScene implements HostedView {
   private clearHex: number;
   readonly labelLayer: LabelLayer;
   readonly scene = new THREE.Scene();
+  readonly hostMeshLane = new HostMeshLane();
   readonly camera: THREE.PerspectiveCamera;
   readonly controls: OrbitControls;
   private nodes = new Map<string, GNode>();
@@ -1423,6 +1426,7 @@ export class NetScene implements HostedView {
     this.grid.setColors(this.theme.scene.gridMajor, this.theme.scene.gridMinor);
     this.scene.add(this.grid.mesh);
     this.scene.add(this.backdrop.mesh);
+    this.scene.add(this.hostMeshLane.group);
     this.scene.add(this.backdrop.fadeMesh);
     this.scene.add(this.backdrop.liveMesh);
     this.scene.add(this.backdrop.photoMesh);
@@ -1578,7 +1582,10 @@ export class NetScene implements HostedView {
 
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: FrameTs): void { this.animate(ts); }
-  noteFrameCost(ms: number): void { this.paneFps.noteGpu(ms); }
+  noteFrameCost(ms: number): void {
+    this.paneFps.noteGpu(ms);
+    if (packPerfEnabled()) notePackHostGpuMs(ms);
+  }
   hostContextLost(): void {
     this.lumaProbe.reset();
     this.changeProbe.reset();

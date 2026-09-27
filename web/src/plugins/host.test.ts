@@ -76,6 +76,14 @@ describe("page CSP", () => {
   });
 });
 
+describe("vite monitor proxy", () => {
+  it("rewrites Host so /api is not rejected as localhost:5173", () => {
+    const src = readFileSync(path.join(webRoot, "vite.config.ts"), "utf8");
+    expect(src).toMatch(/"\/api"[\s\S]*changeOrigin:\s*true/);
+    expect(src).toMatch(/"\/ws"[\s\S]*changeOrigin:\s*true/);
+  });
+});
+
 describe("PluginSandbox", () => {
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((f) => f.remove());
@@ -155,6 +163,25 @@ describe("PluginSandbox module load", () => {
     await box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
     const iframe = document.querySelector("iframe");
     expect(iframe?.src).toContain("/pack-assets/sess-tok-abc/_sandbox/plugin-sandbox.html");
+    box.unload();
+  });
+
+  it("opens the pack-asset frame before resolving module.js", async () => {
+    const order: string[] = [];
+    vi.mocked(packAssetFrame.openPackAssetFrame).mockImplementation(async () => {
+      order.push("open");
+      return "11111111-1111-4111-8111-111111111111";
+    });
+    vi.spyOn(packAssetFrame, "packAssetFrameForTile").mockImplementation(() => {
+      order.push("resolve");
+      return undefined;
+    });
+    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
+    setPackAssetTokenForTests("pulse", "sess-tok-abc");
+    const box = new PluginSandbox();
+    await box.loadModule("pulse", ["graph.read"], { a: "1" }, "deadbeef");
+    expect(order[0]).toBe("open");
+    expect(packAssetFrame.openPackAssetFrame).toHaveBeenCalledTimes(1);
     box.unload();
   });
 
