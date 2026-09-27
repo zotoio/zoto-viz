@@ -4,8 +4,8 @@
   "testName": "switchPaneView > does not teardown the from-view when it remains tiled after a swap",
   "description": "Revert skip teardown when swapped-from id stays on wall",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": 1,
+    "expected": 0
   },
   "project": "web"
 }

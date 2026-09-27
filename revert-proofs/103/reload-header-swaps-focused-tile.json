@@ -4,8 +4,8 @@
   "testName": "mosaic view reload regressions (B/C/D/E) > C: header pick swaps the focused tile (not header-only)",
   "description": "Revert switchPaneView swapping focused mosaic tile on header pick",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": false,
+    "expected": true
   },
   "project": "web"
 }

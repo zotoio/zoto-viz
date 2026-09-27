@@ -4,8 +4,8 @@
   "testName": "mosaic panel view switch teardown > emits no securitypolicyviolation during 20 back-and-forth pane view swaps",
   "description": "Revert releasePanelView on mosaic setPaneView swap",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": false,
+    "expected": true
   },
   "project": "web"
 }

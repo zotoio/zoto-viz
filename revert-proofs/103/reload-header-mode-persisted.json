@@ -4,8 +4,8 @@
   "testName": "mosaic view reload regressions (B/C/D/E) > B: 1\u00d7 reload keeps header and main mode aligned via persisted zoto-viz.mode",
   "description": "Revert resolveRestoredViewMode preferring persisted mode on reload",
   "red": {
-    "actual": "__FILL__",
-    "expected": "__FILL__"
+    "actual": "plugin:topology",
+    "expected": "plugin:backrooms"
   },
   "project": "web"
 }
