@@ -1,12 +1,19 @@
-diff --git a/web/src/app/mosaic-tile-pane-pick.ts b/web/src/app/mosaic-tile-pane-pick.ts
-index ea28810..bfcff18 100644
---- a/web/src/app/mosaic-tile-pane-pick.ts
-+++ b/web/src/app/mosaic-tile-pane-pick.ts
-@@ -2,5 +2,6 @@
- export function mosaicTilePanePickHandler(
-   pick: (from: string, to: string) => boolean | Promise<boolean>,
- ): (from: string, to: string) => boolean | Promise<boolean> {
--  return (from, to) => pick(from, to);
-+  void pick;
-+  return async () => true;
+diff --git a/web/src/app/mosaic-pane-pick.ts b/web/src/app/mosaic-pane-pick.ts
+index 929c7b3..f7d2e27 100644
+--- a/web/src/app/mosaic-pane-pick.ts
++++ b/web/src/app/mosaic-pane-pick.ts
+@@ -23,9 +23,10 @@ export type MosaicOnPanePick = (
+   toId: string,
+ ) => boolean | Promise<boolean>;
+ 
+-/** Mosaic chrome pick → `switchPaneView` (consent). Used by `main.ts` and pack-start tests. */
+-export function mosaicOnPanePickHandler(
++/** Wire mosaic wall chrome picks through `pickMosaicPaneWith` (PR #103 `onPanePick` hunk). */
++export function applyMosaicWallPanePick<T extends { onPanePick?: MosaicOnPanePick }>(
++  cfg: T,
+   deps: MosaicPanePickDeps,
+-): MosaicOnPanePick {
+-  return (fromId, toId) => pickMosaicPaneWith(deps, fromId, toId);
++): T {
++  return cfg;
  }

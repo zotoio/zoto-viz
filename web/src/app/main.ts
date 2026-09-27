@@ -118,7 +118,7 @@ import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
 import { mosaicReloadLayoutTiles } from "./mosaic-reload-layout";
 import { bootMosaicPackStartLayout } from "./mosaic-boot-pack-start";
-import { mosaicOnPanePickHandler } from "./mosaic-pane-pick";
+import { applyMosaicWallPanePick, pickMosaicPaneWith } from "./mosaic-pane-pick";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
 import { onMosaicSwitchConsentDenied } from "./mosaic-switch-consent";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
@@ -1218,11 +1218,16 @@ settings.addSection(
   [sysCpuIdle, sysLabels],
   "CPU graphs: idle processes fade, or hide at once. Labels apply to every graph.",
 );
-const pickMosaicPane = mosaicOnPanePickHandler({
+const mosaicPanePickDeps = {
   runSwitch: runMosaicPaneSwitch,
   refreshMosaicSlots: () => settings.refreshMosaicSlots(),
-});
-mosaic = new Mosaic({
+};
+function pickMosaicPane(from: string, to: string): Promise<boolean> {
+  return pickMosaicPaneWith(mosaicPanePickDeps, from, to);
+}
+mosaic = new Mosaic(
+  applyMosaicWallPanePick(
+    {
   wall: $("wall"),
   sceneEl: $("scene"),
   main: scene,
@@ -1240,7 +1245,6 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
-  onPanePick: pickMosaicPane,
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
@@ -1261,7 +1265,10 @@ mosaic = new Mosaic({
     lastMsg: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).msg : lastRaw,
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
-});
+    },
+    mosaicPanePickDeps,
+  ),
+);
 wireSettingsMosaicPanePick(settings, pickMosaicPane);
 
 settings.addAnimation((a) => {

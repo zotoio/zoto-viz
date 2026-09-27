@@ -11,7 +11,7 @@ import { mosaicHeaderModePick } from "./mosaic-header-mode-pick";
 import { pickMosaicPaneWith } from "./mosaic-pane-pick";
 import { wireSettingsMosaicPanePick } from "./mosaic-pane-pick-wire";
 import { mosaicReloadLayoutTiles } from "./mosaic-reload-layout";
-import { mosaicOnPanePickHandler } from "./mosaic-pane-pick";
+import { applyMosaicWallPanePick } from "./mosaic-pane-pick";
 import {
   resetPaneSwitchTokens,
   switchPaneView,
@@ -47,7 +47,12 @@ function runSwitch(
     });
 }
 
-function makeMosaic(onPanePick: (from: string, to: string) => boolean | Promise<boolean>): {
+function makeMosaic(
+  panePickDeps: {
+    runSwitch: (toViewId: string, fromViewId?: string) => Promise<SwitchPaneViewResult>;
+    refreshMosaicSlots: () => void;
+  },
+): {
   mosaic: Mosaic;
   wall: HTMLElement;
 } {
@@ -60,19 +65,20 @@ function makeMosaic(onPanePick: (from: string, to: string) => boolean | Promise<
   const renderHost = new RenderHost(wall, { software: true });
   const main = new NetScene(sceneEl, { host: renderHost });
   main.retargetPanel("plugin:topology");
-  const mosaic = new Mosaic({
-    wall,
-    sceneEl,
-    main,
-    host: renderHost,
-    arcade: {},
-    optsFor: () => ({}),
-    onFocus: () => {},
-    onPromote: () => {},
-    onLayout: () => {},
-    onCloseLast: () => {},
-    onPanePick,
-    sync: () => ({
+  const mosaic = new Mosaic(
+    applyMosaicWallPanePick(
+      {
+        wall,
+        sceneEl,
+        main,
+        host: renderHost,
+        arcade: {},
+        optsFor: () => ({}),
+        onFocus: () => {},
+        onPromote: () => {},
+        onLayout: () => {},
+        onCloseLast: () => {},
+        sync: () => ({
       theme: themeById("midnight"),
       filters: {},
       anim: DEFAULT_DREAM,
@@ -81,7 +87,10 @@ function makeMosaic(onPanePick: (from: string, to: string) => boolean | Promise<
       lastMsg: null,
       aliasMap: new Map(),
     }),
-  });
+      },
+      panePickDeps,
+    ),
+  );
   mosaic.setSize("2", "plugin:topology", "off", {
     tiles: ["plugin:topology", "plugin:wifi"],
   });
@@ -136,7 +145,7 @@ describe("consent blocks pack start paths", () => {
       },
       refreshMosaicSlots: () => {},
     };
-    const built = makeMosaic(mosaicOnPanePickHandler(panePickDeps));
+    const built = makeMosaic(panePickDeps);
     mosaic = built.mosaic;
     const wall = built.wall;
     const origNotice = mosaic.setPaneNotice.bind(mosaic);

@@ -1,13 +1,16 @@
-diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
-index 4dd5430..b4b3b7d 100644
---- a/web/src/ui/settings.ts
-+++ b/web/src/ui/settings.ts
-@@ -1771,7 +1771,7 @@ export class Settings {
-         const from = ids[i] ?? "";
-         const to = sel.value;
-         if (!from || from === to) return;
--        if (this.onMosaicPanePick) {
-+        if (false && this.onMosaicPanePick) {
-           const ret = this.onMosaicPanePick(from, to);
-           const fail = () => fillViewSelect(sel, from);
-           if (ret instanceof Promise) void ret.then((ok) => { if (ok === false) fail(); });
+diff --git a/web/src/app/mosaic-pane-pick.ts b/web/src/app/mosaic-pane-pick.ts
+index 929c7b3..7d4ed0e 100644
+--- a/web/src/app/mosaic-pane-pick.ts
++++ b/web/src/app/mosaic-pane-pick.ts
+@@ -10,11 +10,6 @@ export async function pickMosaicPaneWith(
+   fromId: string,
+   toId: string,
+ ): Promise<boolean> {
+-  const sw = await deps.runSwitch(toId, fromId);
+-  if (!sw.ok) {
+-    deps.refreshMosaicSlots();
+-    return false;
+-  }
+   return true;
+ }
+ 
