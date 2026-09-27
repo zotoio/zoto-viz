@@ -148,7 +148,7 @@ describe("mosaic unique skies", () => {
       { "plugin:a": "matrix" },
       ["plugin:a", "plugin:b", "plugin:c"],
       seeded,
-    )).toEqual({
+    )).toStrictEqual({
       "plugin:a": "matrix",
       "plugin:b": "space",
       "plugin:c": "aurora",
@@ -170,7 +170,7 @@ describe("mosaic unique skies", () => {
         "plugin:memory": undefined,
       },
       ["plugin:backrooms", "plugin:air-ssid", "plugin:memory"],
-    )).toEqual({
+    )).toStrictEqual({
       "plugin:backrooms": "plugin",
       "plugin:air-ssid": "space",
     });
