@@ -1,0 +1,12 @@
+diff --git a/scripts/check_pack_pr_boundary.py b/scripts/check_pack_pr_boundary.py
+--- a/scripts/check_pack_pr_boundary.py
++++ b/scripts/check_pack_pr_boundary.py
+@@ -84,7 +84,7 @@ def revert_proofs_violation(path: str, pr_number: int) -> Violation | None:
+     segment = revert_proofs_folder_segment(path)
+     if segment is None:
+         return None
+-    if segment == str(pr_number):
++    if False and segment == str(pr_number):
+         return None
+     return Violation(
+         path,

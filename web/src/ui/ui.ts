@@ -143,7 +143,7 @@ export class Select {
   setOptions(options: SelectOption[]): void {
     this.options = options;
     this.renderMenu();
-    if (this.current) this.value = this.current;
+    if (this.current && options.some((o) => o.value === this.current)) this.value = this.current;
   }
 
   private visibleOptions(): SelectOption[] {

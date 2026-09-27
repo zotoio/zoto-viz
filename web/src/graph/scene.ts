@@ -1198,6 +1198,8 @@ export class NetScene implements HostedView {
   private readonly dragVel = new THREE.Vector3();
   private readonly baseFov = 55;
   private readonly satellite: boolean;
+  /** mosaic tile id when this scene is the main graph on a pane (`main` or `plugin:…`). */
+  private mosaicPanelId: string | null = null;
   /** mosaic equal-tile (or non-hero) graph using the main scene — same half-label budget as extras */
   private compactLabels = false;
   private raf = 0;
@@ -4028,6 +4030,11 @@ export class NetScene implements HostedView {
   private fogDensity(): number {
     const base = this.anim.backdrop === "none" ? 0.00075 : 0.00022;
     return base / Math.sqrt(Math.max(1, this.spreadX));
+  }
+
+  /** Mosaic tile id moved onto the main scene element — used for per-tile viz delivery. */
+  retargetPanel(panelId: string | null): void {
+    this.mosaicPanelId = panelId;
   }
 
   dispose(): void {

@@ -71,13 +71,27 @@ export function assignMosaicSkies(
   return out;
 }
 
+/** A plugin-sky look stays `plugin` even if a saved unique-sky plan named a host sky. */
+export function pinPluginTileSkies(
+  skies: Record<string, BackdropKind>,
+  ids: string[],
+): Record<string, BackdropKind> {
+  const out = { ...skies };
+  for (const id of ids) {
+    if (lookForMode(id)?.backdrop === "plugin") out[id] = "plugin";
+  }
+  return out;
+}
+
 export function mosaicAnimForTile(
   wall: DreamAnim,
   id: string,
   tileSky?: BackdropKind,
 ): DreamAnim {
   const merged = mergeLook(wall, lookForMode(id));
-  if (tileSky === "plugin") return { ...merged, backdrop: "plugin" };
+  if (lookForMode(id)?.backdrop === "plugin" || tileSky === "plugin") {
+    return { ...merged, backdrop: "plugin" };
+  }
   if (tileSky) return { ...merged, backdrop: tileSky };
   return merged;
 }
@@ -976,7 +990,10 @@ export class Mosaic {
     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
     if (a.mosaicUniqueSkies === true || planned) {
       const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
-      const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      const next = pinPluginTileSkies(
+        planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
+        ids,
+      );
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;
@@ -987,13 +1004,19 @@ export class Mosaic {
     }
     const stale = this.tileSkies.size > 0 && this.tileIds.some((id) => !this.tileSkies.has(id));
     if (this.tileSkies.size && stale) {
-      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      const next = pinPluginTileSkies(
+        assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
+        this.tileIds,
+      );
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
       this.applyRecoveredSkies();
       return;
     }
     if (!this.tileSkies.size && shouldUniqueMosaicSkies()) {
-      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      const next = pinPluginTileSkies(
+        assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
+        this.tileIds,
+      );
       this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
     }
     this.applyRecoveredSkies();
@@ -1002,7 +1025,9 @@ export class Mosaic {
   /** Host-sky fallbacks survive a later unique-sky / plugin pin so the tile does not go black again. */
   private applyRecoveredSkies(): void {
     for (const [id, sky] of this.recoveredSkies) {
-      if (this.tileIds.includes(id)) this.tileSkies.set(id, sky);
+      if (!this.tileIds.includes(id)) continue;
+      if (lookForMode(id)?.backdrop === "plugin") continue;
+      this.tileSkies.set(id, sky);
     }
   }
 
