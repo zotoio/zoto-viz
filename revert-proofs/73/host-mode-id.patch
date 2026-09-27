@@ -1,0 +1,20 @@
+diff --git a/web/src/app/host-mode.ts b/web/src/app/host-mode.ts
+index 8aca787..2e202ec 100644
+--- a/web/src/app/host-mode.ts
++++ b/web/src/app/host-mode.ts
+@@ -8,14 +8,5 @@ function withSlotId(modeId: string, mode: ViewMode): ViewMode {
+ }
+ 
+ export function hostModeById(modeId: string): ViewMode {
+-  const { viewId, slot } = parseMosaicSlotId(modeId);
+-  if (slot != null && modeId.startsWith("plugin:")) {
+-    return withSlotId(modeId, mosaicPaneMode(modeId));
+-  }
+-  const catalog = modeById(viewId);
+-  if (modeId.startsWith("plugin:") && catalog.id !== viewId && !catalog.pluginId) {
+-    return withSlotId(modeId, mosaicPaneMode(modeId));
+-  }
+-  const mode = catalog.id === viewId ? catalog : mosaicPaneMode(modeId);
+-  return withSlotId(modeId, mode);
++  return modeById(modeId);
+ }

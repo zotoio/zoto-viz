@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/ui/settings-mosaic-pane-sync-tiles.wiring.test.ts",
+  "testName": "^settings mosaic pane pick wiring > syncTiles after slot change > calls syncTiles once per live mosaic pane pick through onMosaicPanePick$",
+  "description": "Mosaic slot picker must call syncTiles after onMosaicPanePick.",
+  "redOutput": "AssertionError: expected 2 to be 1 // Object.is equality"
+}

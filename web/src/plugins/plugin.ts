@@ -183,7 +183,10 @@ export type PluginCapability =
 
 export interface PluginView {
   id: string;
-  name: string;
+  /** Pack display name from plugin.yml; never overwritten by instance rows. */
+  readonly packName: string;
+  /** Optional instance row label; set only in applyInstance. */
+  readonly instanceLabel?: string;
   version: number;
   hint?: string;
   /** Catalog row when this spec was expanded from plugin.yml instances. */
@@ -231,6 +234,10 @@ export interface PluginView {
   viz_block?: string;
   /** Host drawer: presets, HUD label fields, section order (from plugin.yml / visualisation.yml). */
   settings?: import("./plugin-visualisation").PluginSettingsDecl;
+}
+
+export function tileDisplayName(spec: Pick<PluginView, "packName" | "instanceLabel">): string {
+  return spec.instanceLabel ?? spec.packName;
 }
 
 const LOOK_ANIM_KEYS = [
@@ -518,7 +525,7 @@ function compileGraph(spec: PluginView): ViewMode {
   const mode: ViewMode = {
     ...base,
     id: pluginViewId(spec.id, spec.instanceId),
-    label: spec.name,
+    label: tileDisplayName(spec),
     hint: spec.hint || base.hint,
     pluginId: spec.id,
     kind: catalogKindOf(spec),
@@ -621,7 +628,7 @@ function compileArcade(spec: PluginView): ViewMode {
   return {
     ...base,
     id: pluginViewId(spec.id, spec.instanceId),
-    label: spec.name,
+    label: tileDisplayName(spec),
     hint: spec.hint || base.hint,
     pluginId: spec.id,
     kind: catalogKindOf(spec),
@@ -663,7 +670,7 @@ export function specCaption(spec: PluginView): string {
   const dispatch = engineDispatch(spec);
   return viewCaption({
     id: spec.id,
-    label: spec.name,
+    label: tileDisplayName(spec),
     graphBase: dispatch.graphBase,
     arcadeId: dispatch.arcadeId,
   });

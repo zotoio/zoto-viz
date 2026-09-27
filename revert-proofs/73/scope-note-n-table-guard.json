@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/duplicate-slot-shared-config.test.ts",
+  "testName": "^duplicate slot shared config > scope note when two tiles share one store > shared pack scope note when 1 Headlines tiles are on the wall$",
+  "description": "Hide the shared scope note when only one pack tile is on the wall.",
+  "redOutput": "AssertionError: expected 'all 1 Headlines tiles on this wall.' to be '' // Object.is equality"
+}

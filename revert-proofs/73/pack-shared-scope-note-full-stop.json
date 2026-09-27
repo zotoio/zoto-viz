@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
+  "testName": "^pack shared copy literals > shared pack scope note for two tiles ends with a full stop$",
+  "description": "Shared multi-tile scope note must end with a full stop.",
+  "redOutput": "AssertionError: expected 'Changes apply to all 2 Settings fixtu…' to be 'Changes apply to all 2 Settings fixtu…' // Object.is equality"
+}

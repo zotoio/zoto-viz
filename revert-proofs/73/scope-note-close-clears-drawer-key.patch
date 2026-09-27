@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index 455b9f1..ef5361c 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -2310,8 +2310,6 @@ export class Settings {
+ 
+   close(): void {
+     this.viewFocusId = "";
+-    this.viewDrawerKey = null;
+-    this.viewDrawerReturnFocus = null;
+     this.pop.hidden = true;
+     this.el.classList.remove("open");
+     this.btn.setAttribute("aria-expanded", "false");

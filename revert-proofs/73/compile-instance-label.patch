@@ -1,0 +1,31 @@
+diff --git a/web/src/plugins/plugin.ts b/web/src/plugins/plugin.ts
+index b4a2c0f..d4faf37 100644
+--- a/web/src/plugins/plugin.ts
++++ b/web/src/plugins/plugin.ts
+@@ -385,7 +385,7 @@ function compileGraph(spec: PluginView): ViewMode {
+   const mode: ViewMode = {
+     ...base,
+     id: pluginViewId(spec.id, spec.instanceId),
+-    label: tileDisplayName(spec),
++    label: spec.packName,
+     hint: spec.hint || base.hint,
+     pluginId: spec.id,
+     kind: catalogKindOf(spec),
+@@ -488,7 +488,7 @@ function compileArcade(spec: PluginView): ViewMode {
+   return {
+     ...base,
+     id: pluginViewId(spec.id, spec.instanceId),
+-    label: tileDisplayName(spec),
++    label: spec.packName,
+     hint: spec.hint || base.hint,
+     pluginId: spec.id,
+     kind: catalogKindOf(spec),
+@@ -530,7 +530,7 @@ export function specCaption(spec: PluginView): string {
+   const dispatch = engineDispatch(spec);
+   return viewCaption({
+     id: spec.id,
+-    label: tileDisplayName(spec),
++    label: spec.packName,
+     graphBase: dispatch.graphBase,
+     arcadeId: dispatch.arcadeId,
+   });

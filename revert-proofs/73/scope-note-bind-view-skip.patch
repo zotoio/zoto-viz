@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/settings.ts b/web/src/ui/settings.ts
+index 455b9f1..96a0e8b 100644
+--- a/web/src/ui/settings.ts
++++ b/web/src/ui/settings.ts
+@@ -492,7 +492,7 @@ export class Settings {
+       nestDevices: this.nestDevices,
+       draftValues,
+     });
+-    if (ctx.key && ctx.key === this.viewDrawerKey && host.querySelector('.plugin-layer[data-layer="view"]')) {
++    if (false && ctx.key && ctx.key === this.viewDrawerKey && host.querySelector('.plugin-layer[data-layer="view"]')) {
+       return;
+     }
+     this.viewDrawerKey = ctx.key;

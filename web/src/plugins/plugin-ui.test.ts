@@ -14,11 +14,11 @@ import type { PluginView } from "./plugin";
 describe("fillPluginFields", () => {
   it("renders an empty plugin and typed fields", () => {
     const host = document.createElement("div");
-    fillPluginFields(host, { id: "empty", name: "Empty", version: 1, engine: "graph" }, [], () => {});
+    fillPluginFields(host, { id: "empty", packName: "Empty", version: 1, engine: "graph" }, [], () => {});
     expect(host.textContent).toMatch(/no extra settings/);
 
     const spec: PluginView = {
-      id: "pulse", name: "Pulse", version: 2, engine: "graph", base: "topology", hint: "demo",
+      id: "pulse", packName: "Pulse", version: 2, engine: "graph", base: "topology", hint: "demo",
       config: [
         { key: "on", label: "on", type: "boolean", default: true },
         { key: "mode", label: "mode", type: "select", values: [["a", "A"], ["b", "B"]], default: "a" },
@@ -39,7 +39,7 @@ describe("fillPluginFields", () => {
 
   it("renders a profile prompt textarea", () => {
     const host = document.createElement("div");
-    fillPluginFields(host, { id: "cores", name: "CPU cores", version: 1, engine: "graph", base: "cores" }, [
+    fillPluginFields(host, { id: "cores", packName: "CPU cores", version: 1, engine: "graph", base: "cores" }, [
       { key: "prompt", label: "prompt", type: "textarea", default: "", hint: "brief" },
     ], () => {});
     const ta = host.querySelector("textarea");
@@ -50,7 +50,7 @@ describe("fillPluginFields", () => {
 
   it("skips the empty hint when more controls follow", () => {
     const host = document.createElement("div");
-    fillPluginFields(host, { id: "pong", name: "Pong", version: 1, engine: "netpong" }, [], () => {}, { skipEmpty: true });
+    fillPluginFields(host, { id: "pong", packName: "Pong", version: 1, engine: "netpong" }, [], () => {}, { skipEmpty: true });
     expect(host.textContent).toMatch(/Pong/);
     expect(host.textContent).not.toMatch(/no extra settings/);
   });
@@ -246,7 +246,7 @@ describe("fillPluginFields", () => {
 
   it("renders nest-cams layout and camera chips instead of a pane slider", () => {
     const host = document.createElement("div");
-    fillPluginFields(host, { id: "nest-cams", name: "Nest cams", version: 1, engine: "graph" }, [
+    fillPluginFields(host, { id: "nest-cams", packName: "Nest cams", version: 1, engine: "graph" }, [
       { key: "live", label: "live stream", type: "boolean", default: true },
       { key: "stills", label: "motion stills", type: "boolean", default: false },
       { key: "grid", label: "layout", type: "select", values: [["auto", "all"], ["4", "2×2"]], default: "auto" },
@@ -267,7 +267,7 @@ describe("fillPluginFields", () => {
 
   it("asks the operator to examine plugin source", async () => {
     const pending = askPluginReview({
-      id: "pulse", name: "Pulse", version: 1, engine: "graph", runtime: "typescript",
+      id: "pulse", packName: "Pulse", version: 1, engine: "graph", runtime: "typescript",
       service: "service/__init__.py", file: "/tmp/pulse-ts/plugin.yml",
     });
     expect(document.body.classList.contains("modal-open")).toBe(true);
@@ -282,15 +282,15 @@ describe("fillPluginFields", () => {
   });
 
   it("can cancel or claim authorship", async () => {
-    const first = askPluginReview({ id: "x", name: "X", version: 1, engine: "graph", runtime: "typescript" });
+    const first = askPluginReview({ id: "x", packName: "X", version: 1, engine: "graph", runtime: "typescript" });
     [...document.querySelectorAll("button")].find((b) => b.textContent === "Not now")!.click();
     await expect(first).resolves.toBeNull();
 
-    const second = askPluginReview({ id: "y", name: "Y", version: 1, engine: "graph", service: "service.py" });
+    const second = askPluginReview({ id: "y", packName: "Y", version: 1, engine: "graph", service: "service.py" });
     [...document.querySelectorAll("button")].find((b) => b.textContent === "I wrote this")!.click();
     await expect(second).resolves.toBe("authored");
 
-    const third = askPluginReview({ id: "z", name: "Z", version: 1, engine: "graph", runtime: "typescript" });
+    const third = askPluginReview({ id: "z", packName: "Z", version: 1, engine: "graph", runtime: "typescript" });
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
     await expect(third).resolves.toBeNull();
   });

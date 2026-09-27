@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+index 71f9f9e..6bb95b4 100644
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -93,7 +93,7 @@ export function fillPluginFields(
+             opts?.onFieldInput?.(f.key, String(v));
+           },
+         });
+-        sl.el.querySelector("input")?.addEventListener("change", () => persist());
++        sl.el.querySelector("input")?.addEventListener("input", () => persist());
+         row.append(sl.el);
+       } else {
+         const tf = new TextField({

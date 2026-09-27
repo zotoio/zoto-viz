@@ -1,4 +1,5 @@
 import type { HeroPos, MosaicSize } from "./scene";
+import { allocateMosaicTileSlot, mosaicTileViewId } from "./mosaic-tile-id";
 
 /** Horizontal = left/right. Vertical = top/bottom. */
 export type MosaicDir = "h" | "v";
@@ -189,18 +190,12 @@ export function mapLeaves(n: MosaicNode, ids: string[]): MosaicNode {
   return walk(cloneNode(n));
 }
 
-/** Replace one pane's view. Picking a view already on the wall swaps those two panes. */
-export function nextPaneTiles(ids: string[], fromId: string, toId: string): string[] {
-  const i = ids.indexOf(fromId);
-  if (i < 0 || !toId || fromId === toId) return ids;
+/** Set one pane to a view id, allocating a new tile slot when needed. */
+export function placePaneTileView(ids: string[], fromSlot: string, viewId: string): string[] {
+  const i = ids.indexOf(fromSlot);
+  if (i < 0 || !viewId) return ids;
   const next = ids.slice();
-  const j = next.indexOf(toId);
-  if (j >= 0) {
-    next[i] = toId;
-    next[j] = fromId;
-    return next;
-  }
-  next[i] = toId;
+  next[i] = allocateMosaicTileSlot(viewId, next.filter((_, j) => j !== i));
   return next;
 }
 
@@ -219,6 +214,11 @@ export function mosaicPaneIdsWithViewChange(prev: string[], next: string[]): str
     }
   }
   return [...out];
+/** Drawer / wall pane pick: allocate another tile slot for the same catalog view when needed. */
+export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
+  if (!viewId || fromSlot === viewId) return ids;
+  if (mosaicTileViewId(fromSlot) === viewId) return ids;
+  return placePaneTileView(ids, fromSlot, viewId);
 }
 
 /** Put `want` onto existing cells in order. Extra / missing ids keep the leftover leaves. */

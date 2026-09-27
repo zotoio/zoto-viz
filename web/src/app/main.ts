@@ -70,6 +70,7 @@ import {
   writePluginConfig,
   configStoreId,
   pluginSpecForStoreId,
+  tileDisplayName,
   type PluginView,
 } from "../plugins/plugin";
 import { packConfigValues } from "../plugins/plugin-settings";
@@ -145,6 +146,13 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { deliverVizPluginFrame } from "./viz-frame-tick";
 import { pluginIdleOf, withGoldenIfIdle, withGoldenSnapshot } from "../plugins/fixtures/golden-state";
+import { mosaicTileViewId, mosaicWallUsesView, parseMosaicSlotId } from "../graph/mosaic-tile-id";
+import { hostModeById } from "./host-mode";
+import { bindThisView as bindThisViewHost } from "./host-view-bind";
+import { rebindViewDrawerOnApplyMode } from "./host-apply-mode-rebind";
+import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
+import { createMosaicPanePickHandler } from "./host-mosaic-pane-pick";
+import { syncSettingsAnimToMosaic } from "./settings-mosaic-anim-sync";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
 import { bindVizDriveElement, noteHostDirect } from "../plugins/viz-drive";
@@ -685,6 +693,25 @@ function onPluginFields(): void {
       sandbox.setConfig(loadPluginConfig(spec, fields));
     }
   }
+  syncPluginFieldsFromSettingsEdit({
+    settings,
+    fallbackModeId: () => modeSel.value,
+    hostModeById,
+    optsFor,
+    mosaic,
+    scene,
+    pluginSpecForMode,
+    setCurrentOpts: (o) => { currentOpts = o; },
+    setSkyPrompt: (id, p) => setSkyPrompt(id, p),
+    setNestLook: (o) => nestCams.setLook(o),
+    isCarouselMode: (m) => m.pluginId === "carousel",
+    onCarouselBind: (o) => (arcade.carousel.view as CarouselView).setBind(o),
+    viewPromptKey: VIEW_PROMPT_KEY,
+    afterSync: (m, o) => {
+      renderLegend(m, o);
+      void syncWifiWatch();
+    },
+  });
 }
 
 /**
@@ -761,6 +788,15 @@ function bindThisView(modeId: string): void {
     arcadeControls(m),
   );
   paintViewAuth(m, spec);
+  if (!settings) return;
+  bindThisViewHost({
+    settings,
+    hostModeById,
+    pluginSpecForMode,
+    lookForMode,
+    arcadeControls,
+    paintViewAuth,
+  }, modeId);
 }
 
 /** Header VIEW is solo-only; mosaic panes each have their own picker. */
@@ -862,6 +898,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     if (m.pluginId === spec.id) {
       syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
       syncMosaicPluginHudCaptions();
+      vizHud.setActive(spec.id, tileDisplayName(spec));
     }
     if (!tsWatch) tsWatch = window.setInterval(() => void refreshTsPlugin(), 2500);
   } catch (e) {
@@ -948,11 +985,12 @@ function noteTileHealthGrace(tileId: string): void {
 }
 
 function pluginSpecForMode(modeId: string): PluginView | null {
-  const id = parsePluginId(modeId);
+  const { viewId } = parseMosaicSlotId(modeId);
+  const id = parsePluginId(viewId);
   if (!id) return null;
   const raw = pluginSpecs.find((p) => p.id === id);
   if (!raw) return null;
-  const inst = parsePluginInstance(modeId);
+  const inst = parsePluginInstance(viewId);
   if (!inst || inst === raw.id) return { ...raw, instanceId: inst || raw.id };
   const row = (raw.instances ?? []).find((i) => i.id === inst);
   return row ? applyInstance(raw, row) : { ...raw, instanceId: inst };
@@ -1175,7 +1213,7 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
   feedTitleCube.setActive(rainPics);
   nestCams.setActive(m.pluginId === "nest-cams");
   nestCams.setLook(opts);
-  bindThisView(m.id);
+  rebindViewDrawerOnApplyMode(bindThisView, { settings, modeId: m.id, flags, hostModeById });
   $("modeOpts").replaceChildren();
   const viewLoad = (async () => {
     if (!(await ensureReviewed(spec))) {
@@ -1286,6 +1324,7 @@ function morphViewChrome(m: ViewMode, opts: Record<string, string>, spec: Plugin
   } else {
     paint();
   }
+  vizHud.setActive(m.pluginId ?? spec?.id ?? null, spec ? tileDisplayName(spec) : m.label);
 }
 
 function renderLegend(m: ViewMode, opts: Record<string, string>): void {
@@ -1520,6 +1559,16 @@ function feed(m: StateMsg): void {
       renderScale,
       governorEnabled: govOn,
     });
+    if (!mosaic?.on) {
+      vizHud.tick({
+        packId,
+        packName: active?.packName ?? packId ?? "",
+        stats: vizBudget.stats,
+        frame: vizBudget.lastBuilt,
+        state: shown,
+        now: performance.now(),
+      });
+    }
   }
 
   const tsMode = modeById(modeSel.value);
@@ -1755,6 +1804,37 @@ settings.addAnimation((a) => {
     syncHeaderView();
     syncFeedShift();
   }
+settings.onMosaicPanePick = createMosaicPanePickHandler({
+  getMosaic: () => mosaic,
+  hostModeById,
+  pluginSpecForMode,
+  ensureReviewed,
+  afterPick: (slot, to, pm) => {
+    const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(to) : null);
+    if (pm.standalone || arcadeSlotFor(pm) !== "carousel") void syncPluginSky(paneSpec);
+  },
+});
+settings.addAnimation((a) => {
+  syncSettingsAnimToMosaic({
+    mosaic: mosaic!,
+    scene,
+    modeId: modeSel.value,
+    pinViewLook: pinViewLook(),
+    soloAnim: (anim) => scene.setAnim(mergeLook(anim, pinViewLook() ? lookForMode(modeSel.value) : undefined)),
+    applyMode: (id, opts) => {
+      applyMode(id, opts);
+      syncFeedShift();
+    },
+    onArcadeStop: () => {
+      if (a.mosaic !== "off" && activeArcade) {
+        arcade[activeArcade].view.stop();
+        arcade[activeArcade].el.hidden = true;
+        document.body.classList.remove("arcade");
+        scene.setStageOnly(false);
+        activeArcade = null;
+      }
+    },
+  }, a);
 }, dreamCog);
 themeFollow = (t) => settings.syncTheme(t);
 settings.syncTheme(paintedTheme(theme));
@@ -2534,7 +2614,7 @@ async function rollDice(force: { view?: boolean } = {}): Promise<void> {
       modes: modes.map((m) => ({ id: m.id, options: m.options, config: m.config })),
       plugins: allModes().filter((m) => m.pluginId).map((m) => {
         const spec = pluginSpecForMode(m.id);
-        const fields = pluginViewKnobs({ ...(spec ?? { id: m.pluginId!, name: m.label, version: 1 }), options: m.options, config: m.config }, m.config)
+        const fields = pluginViewKnobs({ ...(spec ?? { id: m.pluginId!, packName: m.label, version: 1 }), options: m.options, config: m.config }, m.config)
           .filter((f) => f.key !== "pics" || agent.cursorReady());
         return { id: spec ? `${spec.id}${spec.instanceId && spec.instanceId !== spec.id ? `:${spec.instanceId}` : ""}` : m.pluginId!, fields };
       }),

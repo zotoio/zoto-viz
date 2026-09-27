@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/app/nest-cams-empty-devices.test.ts",
+  "testName": "^nest cams drawer empty devices > hides camera chips and shows account empty copy when Device Access lists no cameras$",
+  "description": "Zero Nest devices must hide the camera chip row and show NEST_NO_CAMERAS copy.",
+  "redOutput": "AssertionError: expected [ Array(1) ] to have a length of +0 but got 1"
+}

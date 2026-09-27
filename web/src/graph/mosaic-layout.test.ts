@@ -2,6 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds, mosaicPaneIdsWithViewChange,
   nextPaneTiles, parseMosaicNode, parseMosaicTiles, setRatio, structureKey, swapLeaves,
+  assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds,
+  nextPaneTiles,
+  placePaneTileView,
+  parseMosaicNode, parseMosaicTiles, setRatio, structureKey, swapLeaves,
 } from "./mosaic-layout";
 
 describe("grid / default trees", () => {
@@ -58,9 +62,9 @@ describe("close / swap / assign", () => {
     expect(parseMosaicTiles(["a", "", "a", "b", 1])).toEqual(["a", "b"]);
   });
 
-  it("replaces one pane and swaps when the target is already on the wall", () => {
+  it("replaces one pane and allocates a duplicate slot when the target is already on the wall", () => {
     expect(nextPaneTiles(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
-    expect(nextPaneTiles(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
+    expect(nextPaneTiles(["a", "b", "c"], "a", "c")).toEqual(["c!1", "b", "c"]);
     expect(nextPaneTiles(["a", "b"], "a", "a")).toEqual(["a", "b"]);
     expect(nextPaneTiles(["a", "b"], "z", "x")).toEqual(["a", "b"]);
   });
@@ -69,6 +73,8 @@ describe("close / swap / assign", () => {
     expect(mosaicPaneIdsWithViewChange(["a", "b", "c", "d"], ["x", "b", "c", "d"]).sort()).toEqual(["a", "x"]);
     expect(mosaicPaneIdsWithViewChange(["a", "b", "c", "d"], ["b", "a", "c", "d"]).sort()).toEqual(["a", "b"]);
     expect(mosaicPaneIdsWithViewChange(["a", "b"], ["a", "b"]).sort()).toEqual([]);
+  it("nextPaneTiles allocates a new slot when picking another tile of the same pack view", () => {
+    expect(nextPaneTiles(["plugin:x", "b", "c"], "b", "plugin:x")).toEqual(["plugin:x", "plugin:x!1", "c"]);
   });
 });
 

@@ -310,7 +310,7 @@ export function toPluginView(raw: unknown): PluginView {
   const idle = parsePluginIdle(viz.idle);
   const spec: PluginView = {
     id,
-    name,
+    packName: name,
     version,
     hint: asString(viz.hint) ?? asString(row.hint),
     engine,

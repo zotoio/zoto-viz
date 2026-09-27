@@ -8,7 +8,7 @@ export function pluginPackMetaLine(spec: PluginView): string {
     return `${base}. ${spec.workBudgetLimited}`;
   }
   return base;
-}
+import { packScopeNoteText, type PackWallScope } from "./instances";
 import type { PluginField } from "../core/modes";
 import { Select, Slider, TextField, Toggle } from "../ui/ui";
 import { mountNestCamFields } from "./nest-cams-ui";
@@ -138,9 +138,15 @@ export function fillPluginFields(
   spec: PluginView,
   fields: PluginField[],
   onPersist: (id: string, values: Record<string, string>) => void,
-  opts?: { skipEmpty?: boolean; devices?: SdmDevice[] },
+  opts?: {
+    skipEmpty?: boolean;
+    devices?: SdmDevice[];
+    wallScope?: PackWallScope;
+    draftValues?: Record<string, string>;
+    onFieldInput?: (key: string, value: string) => void;
+  },
 ): void {
-  const values = loadPluginConfig(spec, fields);
+  const values = { ...loadPluginConfig(spec, fields), ...opts?.draftValues };
   const head = document.createElement("div");
   head.className = "sec";
   const title = document.createElement("div");
@@ -155,6 +161,7 @@ export function fillPluginFields(
     knobs = mountNestCamFields(host, spec, fields, values, opts?.devices ?? [], onPersist);
   } else {
     host.append(head);
+    mountPackScopeNote(host, spec, opts?.wallScope);
   }
   if (!knobs.length) {
     if (!opts?.skipEmpty && spec.id !== "nest-cams") {
@@ -215,6 +222,53 @@ export function fillPluginFields(
     const row = document.createElement("div");
     row.className = "sec-controls";
     for (const f of compact) appendFieldControl(row, f, values, persist);
+    for (const f of compact) {
+      const current = values[f.key] ?? fieldDefault(f);
+      if (f.type === "boolean") {
+        const t = new Toggle({
+          label: f.label,
+          title: f.hint,
+          checked: current === "1" || current === "true",
+          onChange: (on) => { values[f.key] = on ? "1" : "0"; persist(); },
+        });
+        row.append(t.el);
+      } else if (f.type === "select" && f.values?.length) {
+        const s = new Select({
+          caption: f.label,
+          title: f.hint,
+          options: f.values.map(([value, label]) => ({ value, label })),
+          value: current,
+          onChange: (v) => { values[f.key] = v; persist(); },
+        });
+        row.append(s.el);
+      } else if (f.type === "number") {
+        const min = f.min ?? 0;
+        const max = f.max ?? Math.max(min + 1, 100);
+        const sl = new Slider({
+          label: f.label,
+          title: f.hint,
+          min,
+          max,
+          step: f.step ?? 1,
+          value: Number(current),
+          onInput: (v) => {
+            values[f.key] = String(v);
+            opts?.onFieldInput?.(f.key, String(v));
+          },
+        });
+        sl.el.querySelector("input")?.addEventListener("change", () => persist());
+        row.append(sl.el);
+      } else {
+        const tf = new TextField({
+          caption: f.label,
+          title: f.hint,
+          placeholder: f.default !== undefined ? String(f.default) : undefined,
+          value: current,
+          onInput: (v) => { values[f.key] = v; persist(); },
+        });
+        row.append(tf.el);
+      }
+    }
     sec.append(row);
     host.append(sec);
   }
@@ -242,7 +296,41 @@ export function fillPluginFields(
   }
 }
 
+function viewLayerForScopeNote(root: HTMLElement): HTMLElement {
+  return root.querySelector<HTMLElement>('.plugin-layer[data-layer="view"]') ?? root;
+}
+
 /** Modal: the operator wrote this plugin, or they examined the source (AI IDE suggested). */
+function mountPackScopeNote(host: HTMLElement, spec: PluginView, wall?: PackWallScope): void {
+  const text = packScopeNoteText(spec, wall);
+  if (!text) return;
+  const note = document.createElement("div");
+  note.className = "sec-hint plugin-pack-scope-note";
+  note.textContent = text;
+  const layer = viewLayerForScopeNote(host);
+  const anchor = layer.querySelector(".sec-title");
+  if (anchor?.parentElement === layer && anchor.nextSibling) {
+    layer.insertBefore(note, anchor.nextSibling);
+  } else {
+    layer.append(note);
+  }
+}
+
+/** Keep pack scope copy in sync with the live mosaic tile list (drawer may stay open). */
+export function syncPackScopeNote(root: HTMLElement, spec: PluginView, wall?: PackWallScope): void {
+  const text = packScopeNoteText(spec, wall);
+  const existing = root.querySelector(".plugin-pack-scope-note");
+  if (!text) {
+    existing?.remove();
+    return;
+  }
+  if (existing instanceof HTMLElement) {
+    if (existing.textContent !== text) existing.textContent = text;
+    return;
+  }
+  mountPackScopeNote(viewLayerForScopeNote(root), spec, wall);
+}
+
 export function askPluginReview(spec: PluginView): Promise<"reviewed" | "authored" | null> {
   return new Promise((resolve) => {
     const bits: string[] = [];
@@ -262,7 +350,7 @@ export function askPluginReview(spec: PluginView): Promise<"reviewed" | "authore
     const head = document.createElement("div");
     head.className = "mhead";
     const h = document.createElement("strong");
-    h.textContent = `Review “${spec.name}” before activating`;
+    h.textContent = `Review “${spec.packName}” before activating`;
     head.appendChild(h);
     const body = document.createElement("div");
     body.className = "ask-body";
