@@ -1,11 +1,11 @@
 /**
- * Compile-time guards for the CSS/device rect boundary (included in `tsc`, not vitest).
+ * Compile-time guards for the CSS/device rect boundary (included in `tsc -p tsconfig.test.json`, not vitest).
  */
 type MirrorRenderer = {
   setViewport(x: number, y: number, w: number, h: number): void;
   setScissor(x: number, y: number, w: number, h: number): void;
 };
-import { CanvasChangeProbe } from "./pane-change";
+import { CanvasChangeProbe } from "../src/graph/pane-change";
 import {
   type CssRect,
   type DeviceRect,
@@ -18,7 +18,7 @@ import {
   deviceRect,
   toDeviceRectInto,
   toGlRectInto,
-} from "./pack-mirror-rect";
+} from "../src/graph/pack-mirror-rect";
 
 const _deviceScratch: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
 const _glScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };

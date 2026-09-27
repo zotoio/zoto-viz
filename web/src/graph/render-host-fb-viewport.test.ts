@@ -4,6 +4,11 @@ import * as THREE from "three";
 import { probeLines } from "./pane-change";
 import type { GlRect } from "./pack-mirror-rect";
 import { RenderHost, type HostedView } from "./render-host";
+import {
+  DEFAULT_MAX_DEVICE_PX_RATIO,
+  configureLayoutMaxDevicePxRatio,
+  resetLayoutDevicePxRatioWatch,
+} from "../../test-support/layout-device-px-ratio";
 
 const EXPECTED_PROBE_LINES = [
   { x: 2, y: 102, w: 151, h: 1 },
@@ -83,6 +88,8 @@ describe("RenderHost framebuffer viewport", () => {
   afterEach(() => {
     host.dispose();
     wall.remove();
+    resetLayoutDevicePxRatioWatch();
+    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 
   it("present returns per-edge device rect at pr 1.5 bottom-left css (pane-change readPixels uses the same vp)", () => {

@@ -11,7 +11,7 @@ import {
   layoutDevicePxRatio,
   devicePxRatioNumber,
   resetLayoutDevicePxRatioWatch,
-} from "./render-host-device-px-ratio";
+} from "../../test-support/layout-device-px-ratio";
 import { LiveFeed } from "../ui/feed";
 import { probeWebGL } from "./webgl";
 
@@ -126,9 +126,10 @@ describe("layout DPR surfaces (RenderHost cap, stage3d + feed)", () => {
     expect(feedCanvas.width).toBe(150);
   });
 
-  it("maxDevicePxRatio 1.25 at window DPR 2: stage3d and feed backing store is CSS × 1.25", () => {
+  it("configureLayoutMaxDevicePxRatio 1.25 at window DPR 2: stage3d and feed backing store is CSS × 1.25", () => {
     vi.stubGlobal("devicePixelRatio", 2);
-    new RenderHost(wall, { software: true, maxDevicePxRatio: 1.25 });
+    configureLayoutMaxDevicePxRatio(1.25);
+    new RenderHost(wall, { software: true });
     expect(layoutBackingDevicePx(100)).toBe(125);
     const stageCanvas = mountStage3d(100, 80);
     expect(stageCanvas.width).toBe(125);

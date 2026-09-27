@@ -3,31 +3,12 @@ export type DevicePxRatio = number & { readonly __brand: "devicePxRatio" };
 
 export const DEFAULT_MAX_DEVICE_PX_RATIO = 1.5;
 
-/** @deprecated use {@link DEFAULT_MAX_DEVICE_PX_RATIO} */
-export const MAX_DEVICE_PX_RATIO = DEFAULT_MAX_DEVICE_PX_RATIO;
-
 let layoutMaxDevicePxRatio = DEFAULT_MAX_DEVICE_PX_RATIO;
 
 /** Set by `RenderHost` construction; shared by stage3d, feed, and host layout. */
 export function configureLayoutMaxDevicePxRatio(max: number): void {
   layoutMaxDevicePxRatio = max;
 }
-
-export function layoutMaxDevicePxRatioCap(): number {
-  return layoutMaxDevicePxRatio;
-}
-
-/** Counting hooks for layout DPR getter / listener tests (no timing). */
-export const layoutDevicePxRatioStats = {
-  getterCalls: 0,
-  windowDevicePixelRatioReads: 0,
-  matchMediaRearmCount: 0,
-  reset(): void {
-    this.getterCalls = 0;
-    this.windowDevicePixelRatioReads = 0;
-    this.matchMediaRearmCount = 0;
-  },
-};
 
 let cachedLayoutRatio = capRawDevicePxRatio(1);
 let watchInstalled = false;
@@ -42,15 +23,10 @@ function capRawDevicePxRatio(raw: number): DevicePxRatio {
 }
 
 function readWindowDevicePixelRatio(): number {
-  layoutDevicePxRatioStats.windowDevicePixelRatioReads += 1;
-  if (
-    typeof window === "undefined" ||
-    typeof window.devicePixelRatio !== "number" ||
-    !Number.isFinite(window.devicePixelRatio)
-  ) {
-    return 1;
-  }
-  return window.devicePixelRatio;
+  if (typeof window === "undefined") return 1;
+  const raw = window.devicePixelRatio;
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return 1;
+  return raw;
 }
 
 function notifyLayoutListeners(ratio: DevicePxRatio): void {
@@ -59,7 +35,6 @@ function notifyLayoutListeners(ratio: DevicePxRatio): void {
 
 function rearmResolutionMediaQuery(rawDppx: number): void {
   if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
-  layoutDevicePxRatioStats.matchMediaRearmCount += 1;
   if (currentMq && onDpiChange) currentMq.removeEventListener("change", onDpiChange);
   currentMq = window.matchMedia(`(resolution: ${rawDppx}dppx)`);
   onDpiChange = () => {
@@ -114,15 +89,14 @@ export function onLayoutDevicePxRatioChange(fn: (ratio: DevicePxRatio) => void):
 
 /**
  * Cached capped layout DPR. Hot path: no `window.devicePixelRatio` read.
- * Steady-frame integration (host + stage3d + feed): **3 getter calls per frame** (one per surface).
+ * Steady-frame integration (host + stage3d + feed): **2 getter calls per frame** (stage3d + feed).
  */
 export function layoutDevicePxRatio(): DevicePxRatio {
-  layoutDevicePxRatioStats.getterCalls += 1;
   if (!watchInstalled && !watchPinned) startLayoutDevicePxRatioWatch();
   return cachedLayoutRatio;
 }
 
-/** Explicit window read + cap (construction / listener only in production; tests may call directly). */
+/** Explicit window read + cap (construction / listener only in production). */
 export function devicePxRatioFromWindow(): DevicePxRatio {
   return syncLayoutRatioFromWindow();
 }

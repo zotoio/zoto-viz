@@ -111,9 +111,9 @@ export class RenderHost {
 
   constructor(
     readonly wall: HTMLElement,
-    opts: { dpr?: number; software?: boolean; antialias?: boolean; maxDevicePxRatio?: number } = {},
+    opts: { dpr?: number; software?: boolean } = {},
   ) {
-    configureLayoutMaxDevicePxRatio(opts.maxDevicePxRatio ?? DEFAULT_MAX_DEVICE_PX_RATIO);
+    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
     if (opts.dpr !== undefined) {
       this.layoutDevicePxRatio = devicePxRatioFromNumber(opts.dpr);
       pinLayoutDevicePxRatio(this.layoutDevicePxRatio);
@@ -130,7 +130,7 @@ export class RenderHost {
     if (!forceSoft) {
       try {
         this.renderer = new THREE.WebGLRenderer({
-          antialias: opts.antialias ?? this.pr < 1.3,
+          antialias: this.pr < 1.3,
           alpha: true,
           premultipliedAlpha: true,
           preserveDrawingBuffer: true,
@@ -194,13 +194,6 @@ export class RenderHost {
   /** Layout DPR (capped); WebGLRenderer `getPixelRatio()` stays 1. */
   get pixelRatio(): number { return this.pr; }
 
-  /** Capped device pixel ratio used for canvas backing store and pixel-sized materials. */
-  get devicePxRatio(): DevicePxRatio {
-    return this.layoutDevicePxRatio;
-  }
-
-  get layoutCssWidth(): number { return this.w; }
-  get layoutCssHeight(): number { return this.h; }
   get viewCount(): number { return this.views.length; }
 
   /** WebGL2 context, or null when lost / unavailable. */

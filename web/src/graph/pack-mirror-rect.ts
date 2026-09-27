@@ -17,8 +17,6 @@ export type GlRect = CssRectLoose & { readonly __unit: "gl" };
 export type DeviceRectMut = { x: number; y: number; w: number; h: number };
 export type GlRectMut = { x: number; y: number; w: number; h: number };
 
-export type DeviceSizeMut = { pw: number; ph: number };
-
 /** Canvas backing-store height in device pixels (`canvas.height`); not CSS layout height. */
 export type CanvasDeviceHeight = number & { readonly __brand: "canvasDevicePx" };
 
@@ -49,18 +47,6 @@ export function viewMutAsGlRect(m: GlRectMut): GlRect {
 
 export function isDeviceRect(vp: { __unit?: string }): vp is DeviceRect {
   return vp.__unit === "device";
-}
-
-export function isGlRect(vp: { __unit?: string }): vp is GlRect {
-  return vp.__unit === "gl";
-}
-
-/** Host viewBox is bottom-left CSS; converters expect top-left CSS (y down). */
-export function cssRectTopFromBottomLeft(
-  box: CssRectLoose,
-  canvasCssHeight: number,
-): CssRect {
-  return cssRect(box.x, canvasCssHeight - box.y - box.h, box.w, box.h);
 }
 
 export function deviceRect(x: number, y: number, w: number, h: number): DeviceRect {
@@ -148,27 +134,5 @@ export function deviceRectTopLeftCssInto(
   out.h = y1 - y0;
   Object.defineProperty(out, "__unit", { value: "device", enumerable: true });
   return out as DeviceRect;
-}
-
-/** Device RT size from CSS tile edges (shared with adjacent tiles at non-integer DPR). */
-export function deviceSizeFromCssBoxInto(
-  box: CssRectLoose,
-  pixelRatio: number,
-  out: DeviceSizeMut,
-): DeviceSizeMut {
-  const pr = pixelRatio;
-  const bx = cssBoxDim(box.x);
-  const by = cssBoxDim(box.y);
-  const bw = cssBoxDim(box.w);
-  const bh = cssBoxDim(box.h);
-  const x0 = Math.round(bx * pr);
-  const x1 = Math.round((bx + bw) * pr);
-  const y0 = Math.round(by * pr);
-  const y1 = Math.round((by + bh) * pr);
-  const pw = x1 - x0;
-  const ph = y1 - y0;
-  out.pw = Number.isFinite(pw) ? Math.max(2, pw) : 2;
-  out.ph = Number.isFinite(ph) ? Math.max(2, ph) : 2;
-  return out;
 }
 

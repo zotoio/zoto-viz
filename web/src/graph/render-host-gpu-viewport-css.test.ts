@@ -3,6 +3,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { RenderHost, type HostedView } from "./render-host";
 import { deviceRectFromHostViewBoxInto, toGlRectInto, asCanvasDeviceHeight } from "./pack-mirror-rect";
+import {
+  DEFAULT_MAX_DEVICE_PX_RATIO,
+  configureLayoutMaxDevicePxRatio,
+  resetLayoutDevicePxRatioWatch,
+} from "../../test-support/layout-device-px-ratio";
 
 /** GL viewport/scissor for the standard tile at layout pr 1.5 (device H 180). */
 export const EXPECTED_TILE_GL_VIEWPORT = [2, 87, 151, 91] as const;
@@ -127,6 +132,8 @@ describe("RenderHost GPU viewport (device rect, renderer pr 1)", () => {
     host?.dispose();
     wall?.remove();
     vi.unstubAllGlobals();
+    resetLayoutDevicePxRatioWatch();
+    configureLayoutMaxDevicePxRatio(DEFAULT_MAX_DEVICE_PX_RATIO);
   });
 
   it("setup: WebGLRenderer getPixelRatio is always 1", () => {
