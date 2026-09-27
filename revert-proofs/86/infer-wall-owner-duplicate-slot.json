@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/plugins/plugin-wall.test.ts",
+  "testName": "^plugin wall remnants > inferWallOwner resolves sys wall for duplicate tile slots$",
+  "description": "Revert inferWallOwner to raw includes without mosaicTileViewId (#86).",
+  "expectedRed": "AssertionError: expected null to be 'plugin:syscon' // Object.is equality"
+}

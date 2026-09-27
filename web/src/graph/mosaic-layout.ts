@@ -67,7 +67,7 @@ export function parseMosaicTiles(raw: unknown): string[] {
   const seen = new Set<string>();
   for (const row of raw.slice(0, 8)) {
     if (typeof row !== "string" || !row.trim()) continue;
-    const id = row.trim().slice(0, 80);
+    const id = row.trim().slice(0, 96);
     if (seen.has(id)) continue;
     seen.add(id);
     out.push(id);
@@ -218,6 +218,31 @@ export function mosaicPaneIdsWithViewChange(prev: string[], next: string[]): str
 export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
   if (!viewId || fromSlot === viewId) return ids;
   if (mosaicTileViewId(fromSlot) === viewId) return ids;
+/** Swap two tile slots (leaf ids). */
+export function movePaneTileView(ids: string[], fromSlot: string, otherSlot: string): string[] {
+  const i = ids.indexOf(fromSlot);
+  const j = ids.indexOf(otherSlot);
+  if (i < 0 || j < 0 || i === j) return ids;
+  const next = ids.slice();
+  next[i] = otherSlot;
+  next[j] = fromSlot;
+  return next;
+}
+
+/** Set one pane to a view id, allocating a new tile slot when needed. */
+export function placePaneTileView(ids: string[], fromSlot: string, viewId: string): string[] {
+  const i = ids.indexOf(fromSlot);
+  if (i < 0 || !viewId) return ids;
+  const next = ids.slice();
+  next[i] = allocateMosaicTileSlot(viewId, next.filter((_, j) => j !== i));
+  return next;
+}
+
+/** @deprecated Use placePaneTileView / movePaneTileView via mosaic view pick helpers. */
+export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
+  if (!viewId || fromSlot === viewId) return ids;
+  const j = ids.findIndex((id, k) => k !== ids.indexOf(fromSlot) && mosaicTileViewId(id) === viewId);
+  if (j >= 0) return movePaneTileView(ids, fromSlot, ids[j]!);
   return placePaneTileView(ids, fromSlot, viewId);
 }
 
@@ -225,19 +250,7 @@ export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): 
 export function assignTiles(n: MosaicNode, want: string[]): MosaicNode {
   const cur = leafIds(n);
   const clean = parseMosaicTiles(want);
-  const used = new Set<string>();
-  const next: string[] = [];
-  for (let i = 0; i < cur.length; i++) {
-    const cand = clean[i];
-    if (cand && !used.has(cand)) {
-      next.push(cand);
-      used.add(cand);
-      continue;
-    }
-    const keep = cur.find((id) => !used.has(id) && !clean.includes(id)) ?? cur.find((id) => !used.has(id));
-    next.push(keep ?? cur[i]!);
-    used.add(next[next.length - 1]!);
-  }
+  const next = cur.map((id, i) => clean[i] ?? id);
   return mapLeaves(n, next);
 }
 

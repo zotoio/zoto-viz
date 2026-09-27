@@ -144,6 +144,15 @@ import {
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
+import {
+  agentPatchTilesWhenViewOffWall,
+  bindMosaicHostSettings,
+  mosaicFocusSlotForMode,
+  mosaicModeAlreadyOnWall,
+  mosaicPluginSkyPaneView,
+  shouldTickVizHudForFeed,
+} from "./mosaic-host-bindings";
 import { deliverVizPluginFrame } from "./viz-frame-tick";
 import { pluginIdleOf, withGoldenIfIdle, withGoldenSnapshot } from "../plugins/fixtures/golden-state";
 import { mosaicTileViewId, mosaicWallUsesView, parseMosaicSlotId } from "../graph/mosaic-tile-id";
@@ -1054,8 +1063,8 @@ async function syncPluginSky(spec: PluginView | null): Promise<void> {
         const target = mosaic.graphScene(id);
         if (!target) continue;
         const tileSky = mosaic.paneSky(id);
-        const pane = pluginSpecForMode(id);
-        const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
+        const { viewId, wantPlugin } = mosaicPluginSkyPaneView(id, tileSky, lookForMode);
+        const pane = pluginSpecForMode(viewId);
         await loadPluginSkyOnto(target, pane, wantPlugin);
       }
     } finally {
@@ -1245,15 +1254,37 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
         tiles: settings.animSettings.mosaicTiles,
       });
     }
-    if (!mosaic.tileIds.includes(m.id)) {
+    const finishMosaic = (): void => {
+      const focusId = mosaicFocusSlotForMode(mosaic!.tileIds, m.id, m.id);
+      mosaic!.focus(focusId);
+      const target = mosaic!.graphScene(focusId);
+      if (target) {
+        target.setMode(m, opts);
+        target.setStageOnly(skyStage);
+      }
+      document.body.classList.remove("arcade");
+      scene.setActive(true);
+      if (target !== scene) scene.setStageOnly(false);
+      morphViewChrome(m, opts, spec, skyStage);
+      applyViewLook();
+    };
+    if (!mosaicModeAlreadyOnWall(mosaic.tileIds, m.id)) {
       const slot = mosaic.focusedId || mosaic.tileIds[0];
-      if (!slot || !mosaic.setPaneView(slot, m.id)) {
+      if (!slot) {
         modeSel.value = prevMode || modeSel.value;
         liveMode = prevMode;
         localStorage.setItem("zoto-viz.mode", modeSel.value);
         syncHeaderView();
         return;
       }
+      if (!mosaic.setPaneView(slot, m.id)) {
+        modeSel.value = prevMode || modeSel.value;
+        liveMode = prevMode;
+        localStorage.setItem("zoto-viz.mode", modeSel.value);
+        return;
+      }
+      finishMosaic();
+      return;
     }
     const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.tileIds[0] ?? m.id;
     mosaic.focus(focusId);
@@ -1273,6 +1304,7 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
     if (m.standalone || arcadeSlotFor(m) !== "carousel") {
       void loadTsPlugin(paneSpec);
     }
+    finishMosaic();
     return;
   }
 
@@ -1477,6 +1509,8 @@ function feed(m: StateMsg): void {
     ? (mosaic.focusedId || mosaic.mainMode || mosaic.tileIds[0] || "main")
     : "main";
   syncPanelPackSub(packPanelId, !!(packId && (active?.capabilities?.includes("viz.read") || packId)));
+  const mosaicDemoPacks = mosaic?.on
+    && mosaic.tileIds.some((id) => normalizeVizDemoPackId(modeById(mosaicTileViewId(id)).pluginId));
   if (active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks) {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
@@ -1499,8 +1533,13 @@ function feed(m: StateMsg): void {
       deliverVizPluginFrame({
         frame: f,
         sandbox,
+        mosaic,
+        mosaicDemoPacks: !!mosaicDemoPacks,
         packId,
         activeMode: mode,
+        modeById,
+        mosaicTileViewId,
+        pluginSpecForMode,
         optsFor,
         budgetStats: vizBudget.stats,
       });
@@ -1563,6 +1602,10 @@ function feed(m: StateMsg): void {
       vizHud.tick({
         packId,
         packName: active?.packName ?? packId ?? "",
+    if (shouldTickVizHudForFeed(!!mosaic?.on)) {
+      vizHud.tick({
+        packId,
+        packName: active?.name ?? packId ?? "",
         stats: vizBudget.stats,
         frame: vizBudget.lastBuilt,
         state: shown,
@@ -1676,6 +1719,8 @@ mosaic = new Mosaic({
     mosaic?.focus(id);
     persistMosaicFocus(id);
   },
+  pluginSpecForMode: (modeId) => pluginSpecForMode(modeId),
+  onFocus: (id) => mosaic?.focus(id),
   onPromote: (id, theme) => {
     applyMode(id, { keepLayout: true });
     if (theme) applyTheme(theme.id);
@@ -1780,6 +1825,20 @@ async function pickMosaicPane(from: string, to: string): Promise<boolean> {
   return true;
 }
 
+bindMosaicHostSettings(
+  settings,
+  {
+    getMosaic: () => mosaic,
+    modeById,
+    optsFor,
+    pluginSpecForMode,
+    ensureReviewed,
+    skySpecForMode,
+    syncPluginSky,
+    arcadeSlotFor,
+  },
+  { beforePluginChange: onPluginFields },
+);
 settings.addAnimation((a) => {
   const pin = pinViewLook();
   if (mosaic!.on) {
@@ -2369,11 +2428,9 @@ async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
   const lockLayout = !aiMosaicLayoutOn();
   if (lockLayout && p.anim) p.anim = stripMosaicLayout(p.anim);
   const cur = collectSettings();
-  if (lockLayout && mosaic?.on && p.mode && !mosaic.tileIds.includes(p.mode)) {
-    const tiles = [...mosaic.tileIds];
-    const at = Math.max(0, tiles.indexOf(mosaic.focusedId));
-    tiles[at] = p.mode;
-    p.anim = { ...p.anim, mosaicTiles: tiles };
+  if (lockLayout && mosaic?.on && p.mode && typeof p.mode === "string") {
+    const nextTiles = agentPatchTilesWhenViewOffWall(mosaic.tileIds, mosaic.focusedId, p.mode);
+    if (nextTiles) p.anim = { ...p.anim, mosaicTiles: nextTiles };
   }
   const next = mergeAgentPatch(cur, p);
   applySettings(next, { keepLayout: lockLayout });

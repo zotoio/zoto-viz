@@ -54,6 +54,10 @@ describe("mosaic tile slot ids", () => {
     const packId = parsePluginId("plugin:air-bt")!;
     const a = configStoreId({ id: packId });
     const b = configStoreId({ id: parsePluginId("plugin:air-bt!1")! });
+  it("keeps one config store id for two tiles of the same pack", () => {
+    const packId = parsePluginId("plugin:air-bt")!;
+    const a = configStoreId({ id: packId });
+    const b = configStoreId({ id: parsePluginId(mosaicTileViewId("plugin:air-bt!1"))! });
     expect(a).toBe("air-bt");
     expect(b).toBe("air-bt");
   });

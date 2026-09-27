@@ -54,7 +54,7 @@ describe("settings mosaic pane pickers", () => {
     expect(sel!.value).toBe("plugin:topology");
   });
 
-  it("persists mosaicTiles after a slot change when no live hook is wired", () => {
+  it("persists mosaicTiles after a slot change when no live hook is wired", async () => {
     const s = new Settings({ storePrefix: "zoto-viz-mosaic-pick-persist", onChange: () => {} });
     s.addAnimation(() => {}, { el: document.createElement("div") });
     s.applyAnim({
@@ -68,6 +68,7 @@ describe("settings mosaic pane pickers", () => {
     expect(sel).toBeTruthy();
     sel!.value = "plugin:talkers";
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
+    await Promise.resolve();
     expect(s.animSettings.mosaicTiles).toEqual(["plugin:talkers", "plugin:wifi"]);
     const raw = localStorage.getItem("zoto-viz-mosaic-pick-persist.anim.mosaicTiles");
     expect(JSON.parse(raw!)).toEqual(["plugin:talkers", "plugin:wifi"]);

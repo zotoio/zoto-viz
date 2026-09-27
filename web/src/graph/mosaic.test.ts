@@ -1,6 +1,21 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { assignMosaicSkies, mosaicAnimForTile, mosaicIds, mosaicIsGraph, mosaicPaneMode, mosaicShouldLift, mosaicTileTheme, pinPluginTileSkies, shouldUniqueMosaicSkies } from "./mosaic";
 import { applyPluginCatalog } from "../plugins/plugin";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  assignMosaicSkies,
+  mosaicAnimForTile,
+  assignParsedMosaicTree,
+  mosaicIds,
+  mosaicIsGraph,
+  mosaicPaneMode,
+  mosaicShouldLift,
+  mosaicTileTheme,
+  shouldUniqueMosaicSkies,
+} from "./mosaic";
+import { defaultTree, leafIds } from "./mosaic-layout";
+import { mosaicTileViewId } from "./mosaic-tile-id";
+import * as plugin from "../plugins/plugin";
 import { memory, setPluginModes, topology } from "../core/modes";
 import { themeById } from "../core/themes";
 import { DEFAULT_DREAM } from "./scene";
@@ -27,6 +42,34 @@ describe("mosaicIds", () => {
   });
 });
 
+describe("mosaic boot primary pack tile", () => {
+  const packMode = (pluginId: string) => ({
+    ...topology,
+    id: `plugin:${pluginId}`,
+    pluginId,
+    label: pluginId,
+    family: "viz-pack" as const,
+  });
+
+  it("boot with 4 packs: primary tile shows the primary pack id exactly", () => {
+    setPluginModes([
+      packMode("pack-a"),
+      packMode("pack-b"),
+      packMode("pack-c"),
+      packMode("pack-d"),
+      packMode("pack-e"),
+    ]);
+    const primary = "plugin:pack-c";
+    const staleTree = defaultTree(
+      ["plugin:pack-a", "plugin:pack-b", "plugin:pack-d", "plugin:pack-e"],
+      "off",
+    )!;
+    expect(mosaicTileViewId(leafIds(staleTree)[0]!)).not.toBe(primary);
+    const tree = assignParsedMosaicTree(staleTree, "4", primary, "off", []);
+    expect(mosaicTileViewId(leafIds(tree)[0]!)).toBe(primary);
+  });
+});
+
 describe("mosaicPaneMode", () => {
   it("uses the host engine when the catalog is empty so SYS tiles still graph", () => {
     expect(mosaicIsGraph("plugin:memory")).toBe(true);
@@ -39,6 +82,11 @@ describe("mosaicPaneMode", () => {
     setPluginModes([{ ...memory, id: "plugin:memory", pluginId: "memory", label: "Mem wrap" }]);
     expect(mosaicPaneMode("plugin:memory").id).toBe("plugin:memory");
     expect(mosaicPaneMode("plugin:memory").label).toBe("Mem wrap");
+  });
+
+  it("resolves a duplicate tile slot to the same catalog mode", () => {
+    setPluginModes([{ ...memory, id: "plugin:memory", pluginId: "memory", label: "Mem wrap" }]);
+    expect(mosaicPaneMode("plugin:memory!2").id).toBe("plugin:memory");
   });
 });
 
@@ -73,6 +121,15 @@ describe("mosaic unique skies", () => {
     const host = ["plugin:a", "plugin:c", "plugin:d"].map((id) => skies[id]);
     expect(new Set(host).size).toBe(3);
     expect(host.includes("aurora")).toBe(false);
+  });
+
+  it("merges catalog look via pack view id when tile slot has a suffix", () => {
+    const lookSpy = vi.spyOn(plugin, "lookForMode").mockImplementation((id) =>
+      (id === "plugin:pulse" ? { backdrop: "matrix" as const } : undefined));
+    const wall = { ...DEFAULT_DREAM, backdrop: "aurora" as const };
+    expect(mosaicAnimForTile(wall, "plugin:pulse!2", undefined).backdrop).toBe("matrix");
+    expect(lookSpy).toHaveBeenCalledWith("plugin:pulse");
+    lookSpy.mockRestore();
   });
 
   it("overrides a host wall sky per tile and keeps plugin shaders", () => {
