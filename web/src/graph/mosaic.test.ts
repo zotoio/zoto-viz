@@ -1,10 +1,14 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { assignMosaicSkies, mosaicAnimForTile, mosaicIds, mosaicIsGraph, mosaicPaneMode, mosaicShouldLift, mosaicTileTheme, shouldUniqueMosaicSkies } from "./mosaic";
+import { assignMosaicSkies, mosaicAnimForTile, mosaicIds, mosaicIsGraph, mosaicPaneMode, mosaicShouldLift, mosaicTileTheme, pinPluginTileSkies, shouldUniqueMosaicSkies } from "./mosaic";
+import { applyPluginCatalog } from "../plugins/plugin";
 import { memory, setPluginModes, topology } from "../core/modes";
 import { themeById } from "../core/themes";
 import { DEFAULT_DREAM } from "./scene";
 
-afterEach(() => setPluginModes([]));
+afterEach(() => {
+  setPluginModes([]);
+  applyPluginCatalog([]);
+});
 
 describe("mosaicIds", () => {
   it("is empty when the catalog has not loaded yet", () => {
@@ -76,6 +80,24 @@ describe("mosaic unique skies", () => {
     expect(mosaicAnimForTile(wall, "plugin:talkers", "fire").backdrop).toBe("fire");
     expect(mosaicAnimForTile({ ...wall, backdrop: "plugin" as const }, "plugin:talkers", "plugin").backdrop).toBe("plugin");
     expect(mosaicAnimForTile({ ...wall, backdrop: "plugin" as const }, "plugin:talkers", "fire").backdrop).toBe("fire");
+  });
+
+  it("keeps a plugin-sky look even when a unique-sky plan named a host sky", () => {
+    applyPluginCatalog([{
+      id: "backrooms",
+      name: "Backrooms",
+      version: 1,
+      engine: "graph",
+      look: { backdrop: "plugin", mosaic: "off", stageOnly: true },
+    }]);
+    const planned = pinPluginTileSkies(
+      { "plugin:backrooms": "matrix", "plugin:air-ssid": "space" },
+      ["plugin:backrooms", "plugin:air-ssid"],
+    );
+    expect(planned["plugin:backrooms"]).toBe("plugin");
+    expect(planned["plugin:air-ssid"]).toBe("space");
+    const wall = { ...DEFAULT_DREAM, backdrop: "tornado" as const };
+    expect(mosaicAnimForTile(wall, "plugin:backrooms", "matrix").backdrop).toBe("plugin");
   });
 });
 

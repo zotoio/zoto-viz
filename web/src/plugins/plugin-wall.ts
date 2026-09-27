@@ -82,9 +82,19 @@ export function resolvePluginWall(input: {
   walls: CatalogWall[];
   owner: string | null;
   restore: WallSnap | null;
+  /** Stage-only / `look.mosaic: off` views own the frame — drop a live mosaic. */
+  solo?: boolean;
 }): { anim: WallSnap | null; state: WallState } {
-  const { modeId, prevModeId, keepLayout, anim, wall, walls, owner, restore } = input;
+  const { modeId, prevModeId, keepLayout, anim, wall, walls, owner, restore, solo } = input;
   if (keepLayout) return { anim: null, state: { owner, restore } };
+
+  if (solo && !wall) {
+    if (anim.mosaic === "off") return { anim: null, state: { owner: null, restore } };
+    return {
+      anim: soloWallSnap(anim.mosaicSharedTheme),
+      state: { owner: null, restore: restore ?? snapWall(anim) },
+    };
+  }
 
   if (wall) {
     const remnant = isWallRemnant(anim.mosaicTiles, walls);
