@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { TileHealthMonitor } from "../graph/tile-health-monitor";
+import type { TileHealthMonitor } from "../plugins/tile-health-monitor";
 import { bindTileHealthPresentTick } from "./tile-health-present";
 
 describe("tile health present tick", () => {

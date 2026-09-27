@@ -93,30 +93,21 @@ function installCanvasContextStub(): void {
     fillStyle: "",
   };
   const nativeGetContext = HTMLCanvasElement.prototype.getContext;
-  function harnessGetContext(
-    this: HTMLCanvasElement,
-    contextId: "2d",
-    options?: CanvasRenderingContext2DSettings,
-  ): CanvasRenderingContext2D | null;
-  function harnessGetContext(
-    this: HTMLCanvasElement,
-    contextId: string,
-    options?: unknown,
-  ): RenderingContext | null;
-  function harnessGetContext(
-    this: HTMLCanvasElement,
-    contextId: string,
-    ...rest: unknown[]
-  ): RenderingContext | null {
-    if (contextId === "2d") {
-      return ctx2d;
-    }
-    if (contextId === "webgl" || contextId === "webgl2") {
-      return webgl;
-    }
-    return nativeGetContext.apply(this, [contextId, ...rest] as Parameters<HTMLCanvasElement["getContext"]>);
-  }
-  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(harnessGetContext);
+  vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+    (function (
+      this: HTMLCanvasElement,
+      contextId: string,
+      ...rest: unknown[]
+    ) {
+      if (contextId === "2d") {
+        return ctx2d;
+      }
+      if (contextId === "webgl" || contextId === "webgl2") {
+        return webgl;
+      }
+      return nativeGetContext.call(this, contextId, ...(rest as []));
+    } as typeof HTMLCanvasElement.prototype.getContext),
+  );
 }
 
 const PROFILE_LIST = {

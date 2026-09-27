@@ -1,4 +1,4 @@
-import type { TileHealthMonitor } from "../graph/tile-health-monitor";
+import type { TileHealthMonitor } from "../plugins/tile-health-monitor";
 
 export type PresentListenerRegistrar = (fn: (ts: number) => void) => void;
 
