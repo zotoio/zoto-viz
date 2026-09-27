@@ -1,0 +1,8 @@
+{
+  "row": "F5 (i) revert dev flags parsed every steady frame",
+  "runner": "vitest",
+  "testFile": "web/src/core/viz-dev-wall-flags.test.ts",
+  "testName": "^dev viz wall flags > F5 \\(i\\): 600 frames \u2014 1 parse per flag; rebuild adds 1 each$",
+  "excerpt": "AssertionError: expected 1 to be undefined",
+  "patchedAssertion": "AssertionError: expected 1 to be undefined"
+}

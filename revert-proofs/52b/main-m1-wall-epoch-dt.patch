@@ -1,0 +1,13 @@
+diff --git a/web/src/app/viz-main-deliver.ts b/web/src/app/viz-main-deliver.ts
+index 8211333..66926e5 100644
+--- a/web/src/app/viz-main-deliver.ts
++++ b/web/src/app/viz-main-deliver.ts
+@@ -25,7 +25,7 @@ export interface MainVizDeliverResult {
+ export function mainVizDeliver(input: MainVizDeliverInput): MainVizDeliverResult {
+   const { budget, prevClockMs, state, audio, onFrame, buildFrame } = input;
+   const frame = budget.deliver(state, prevClockMs, audio, onFrame, buildFrame);
+-  const nextClockMs = frame ? vizClockMs() : prevClockMs;
++  const nextClockMs = frame ? monoMs(frame.t * 1000) : prevClockMs;
+   return { frame, nextClockMs };
+ }
+ 

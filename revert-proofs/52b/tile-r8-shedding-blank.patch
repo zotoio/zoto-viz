@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
+index 05fe981..459149d 100644
+--- a/web/src/ui/viz-hud.ts
++++ b/web/src/ui/viz-hud.ts
+@@ -100,7 +100,7 @@ export function tileHudDisplayFrame(
+   tile: VizTileBudgetStats,
+   built: VizDataFrame | null,
+ ): VizDataFrame | null {
+-  if (tile.shedding && tile.lastDeliveredFrame) return tile.lastDeliveredFrame;
++  if (tile.shedding) return built;
+   return built ?? tile.lastDeliveredFrame;
+ }
+ 

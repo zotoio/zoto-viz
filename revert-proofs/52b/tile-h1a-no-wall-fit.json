@@ -1,0 +1,8 @@
+{
+  "row": "H1 revert A without wall-fit over_budget",
+  "runner": "vitest",
+  "testFile": "web/src/plugins/dogfood-tile-hud.test.ts",
+  "testName": "^tile HUD rows \\(half-open window \\(now\u2212300000, now\\] in ticks\\) > H2: 50 ms at 2\u00d72 \u2014 55 skipped/s at i=119 over budget; 1\u00d71 \u2192 40 skipped/s over budget$",
+  "excerpt": "AssertionError: expected 'limited' to be 'over_budget' // Object.is equality",
+  "patchedAssertion": "AssertionError: expected 'limited' to be 'over_budget' // Object.is equality"
+}

@@ -1,0 +1,15 @@
+diff --git a/web/src/core/viz-dev-wall-flags.ts b/web/src/core/viz-dev-wall-flags.ts
+index ed1e351..a3dd40a 100644
+--- a/web/src/core/viz-dev-wall-flags.ts
++++ b/web/src/core/viz-dev-wall-flags.ts
+@@ -36,8 +36,8 @@ function parseWallCostTicksFlag(raw: string | null): void {
+     return;
+   }
+ 
+-  const ticks = parseDecimalIntToken(trimmed);
+-  if (ticks === null || ticks < 0) {
++  const ticks = Number(trimmed);
++  if (!Number.isFinite(ticks) || ticks < 0) {
+     rejectVizTileCostTicks(trimmed);
+     return;
+   }

@@ -1,0 +1,6 @@
+{
+  "runner": "vitest",
+  "testFile": "web/src/plugins/dogfood-tile-budget.test.ts",
+  "testName": "^tile frame budget rows > R2: 1x1 spike then 4 ms sheds debt 15030 to 0 in 3 skips$",
+  "description": "Removing debt cap yields 29 skips after spike"
+}
