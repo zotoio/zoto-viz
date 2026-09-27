@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_plugin_id_pattern.py",
+  "testName": "test_schema_accepts_my_pack_underscore_id",
+  "description": "Pack id my_pack must match schema/plugin.schema.json underscore pattern.",
+  "patchedFailure": "tests/test_plugin_id_pattern.py:47: AssertionError: my_pack"
+}
