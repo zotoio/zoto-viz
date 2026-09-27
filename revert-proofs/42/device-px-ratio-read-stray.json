@@ -2,7 +2,7 @@
   "kind": "lint",
   "runner": "pnpm",
   "testFile": "src/graph/lint-brand-casts.test.ts",
-  "testName": "^lint brand casts > passes on the production tree$",
-  "expectedRed": "src/core/fps.ts: raw `devicePixelRatio` read (only src/graph/render-host-device-px-ratio.ts; use layoutDevicePxRatio or devicePxRatioFromWindow)",
-  "description": "`window.devicePixelRatio` may be read only in render-host-device-px-ratio.ts across all of web/src (tests exempt)."
+  "testName": "^lint brand casts > lint gate: no stray devicePixelRatio reads in production$",
+  "expectedRed": "expected +0 to be 1 // Object.is equality",
+  "description": "Reverts the stray `devicePixelRatio` read rule in `web/scripts/lint-brand-casts-core.mjs` (added by #42)."
 }
