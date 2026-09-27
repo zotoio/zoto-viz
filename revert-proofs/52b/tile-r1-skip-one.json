@@ -2,5 +2,7 @@
   "runner": "vitest",
   "testFile": "web/src/plugins/dogfood-tile-budget.test.ts",
   "testName": "^tile frame budget rows > R1: 1x1 all 50 ms over 120 attempts$",
-  "description": "Broken clear check yields 60 delivered instead of 40"
+  "description": "Broken clear check yields 60 delivered instead of 40",
+  "excerpt": "AssertionError: expected 60 to be 40 // Object.is equality",
+  "patchedAssertion": "AssertionError: expected 60 to be 40 // Object.is equality"
 }
