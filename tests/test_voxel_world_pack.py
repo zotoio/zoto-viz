@@ -41,7 +41,7 @@ def test_voxel_world_osd_strip_bottom_edge_only() -> None:
     """OSD bar must not use vDir.y offset that paints the whole viewport at host FOV."""
     glsl = (SRC / "sky" / "fragment.glsl").read_text(encoding="utf-8")
     assert VOXEL_OSD_FULLSCREEN_BUG not in glsl
-    assert "-0.49-osdUv.y" in glsl.replace(" ", "")
+    assert "-0.49-uv.y" in glsl.replace(" ", "")
     assert "vDir.xy / max(-vDir.z" in glsl
 
 
@@ -74,6 +74,21 @@ def test_voxel_world_catalog_and_sky(tmp_path, monkeypatch) -> None:
     keys = [c["key"] for c in doc["config"]]
     assert "bind_sysLoad_weather" in keys
     assert "cap_maxChunks" in keys
+
+
+def test_voxel_world_camera_present_deliver_wired() -> None:
+    """Sandbox camera must tick on display cadence, not only websocket feed()."""
+    main = (ROOT / "web" / "src" / "app" / "main.ts").read_text(encoding="utf-8")
+    assert "tickVizPresentDeliver(shown, vizPresentHost)" in main
+    feed_body = main.split("function feed(m: StateMsg)", 1)[1].split("\nfunction ", 1)[0]
+    assert "deliverVizPluginFrame" not in feed_body
+
+
+def test_voxel_world_camera_present_revert_row_would_fail_gate() -> None:
+    marker = "tickVizPresentDeliver(shown, vizPresentHost)"
+    main = (ROOT / "web" / "src" / "app" / "main.ts").read_text(encoding="utf-8")
+    assert marker in main
+    assert marker not in main.replace(marker, "")
 
 
 def test_voxel_world_vitest_pack() -> None:

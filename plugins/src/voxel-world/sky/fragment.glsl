@@ -314,8 +314,8 @@ void main() {
   col = mix(col, uAccent * 0.15, uAudio * 0.15 * (1.0 - fail));
   col *= uBright;
   // Bottom-edge OSD strip only (screen uv); vDir.y + 0.93 was >0 on all visible pixels at ~55° FOV.
-  vec2 osdUv = vDir.xy / max(-vDir.z, 1e-4);
-  float osdY = -0.49 - osdUv.y;
+  vec2 uv = vDir.xy / max(-vDir.z, 1e-4);
+  float osdY = -0.49 - uv.y;
   if (osdY > 0.0) {
     vec3 bar = vec3(0.04, 0.07, 0.11);
     col = mix(col, bar, smoothstep(0.0, 0.04, osdY));
