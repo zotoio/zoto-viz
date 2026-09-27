@@ -1,7 +1,7 @@
 ## Remote heads
 
 - **#42:** `cursor/wall-duplicate-pack-tiles-d355` @ **`80be948`**
-- **#86:** `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4` @ **`8931aff771288367a12f747c47ec8667908d6164`**
+- **#86:** `cursor/host-pixel-lifecycle-revert-rows-d355-e7d4` @ **`9c3a6bc9`**
 
 ## Gates (`PATH=/workspace/.venv/bin:$PATH`, `web/`)
 
