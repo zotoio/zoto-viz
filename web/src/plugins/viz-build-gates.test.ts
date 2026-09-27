@@ -11,7 +11,7 @@ import {
   takeVizBuildWorkSnapshot,
 } from "./viz-build-counters";
 import { encodedVizFrameBytes, takeVizDecimationDropStats } from "./viz-decimation-stats";
-import { assertVizFrameOutputCaps } from "./viz-gate-assertions";
+import { assertVizBuildWorkGates, assertVizFrameOutputCaps } from "./viz-gate-assertions";
 import {
   FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
   VIZ_MAX_PACKET_SAMPLES,

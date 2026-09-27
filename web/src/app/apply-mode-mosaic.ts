@@ -30,6 +30,6 @@ export function revertModeSelection(
 
 export function consentBlockMessage(spec: { name?: string } | null | undefined): string {
   const where = "Approve it in Settings → Plugins.";
-  if (spec?.name) return `Not approved yet. ${spec.name}: ${where}`;
+  if (spec?.name) return `${spec.name} isn't approved yet. ${where}`;
   return `Not approved yet. ${where}`;
 }

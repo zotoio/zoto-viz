@@ -500,7 +500,12 @@ export function buildVizSdkGoldenLiveFrame(): VizDataFrame {
 }
 
 export function buildVizSdkGoldenLiveFailedFrame(): VizDataFrame {
-  return buildLiveFrame(withFailedUnitsView(goldenLanFixture()));
+  const frame = buildLiveFrame(withFailedUnitsView(goldenLanFixture()));
+  for (const t of frame.talkers) {
+    if (t.id === "host-03") t.failed = 0.5;
+    if (t.id === "host-04") t.failed = 0.35;
+  }
+  return frame;
 }
 
 export function buildVizSdkFatLiveFrame(): VizDataFrame {
