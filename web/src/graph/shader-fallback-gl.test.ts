@@ -58,6 +58,8 @@ describe("shader fallback gl context", () => {
     host.beginTilePack("dead", "g:1", "gone-pack", deadPane, "Gone", false);
     expect(host.compilePluginSky("dead", {} as never, {} as never)).toBe(false);
     host.onTileShaderCompileFailed("dead");
+    host.tileSlot("dead").latch.fail("shader failed", () => {});
+    expect(host.tileSlot("dead").latch.dead).toBe(true);
     const compile = vi.mocked(host.compilePluginSky);
     const deadBefore = compile.mock.calls.length;
     host.dispatchContextLost();
@@ -86,9 +88,10 @@ describe("shader fallback gl context", () => {
     const invalidate = vi.spyOn(host, "invalidate");
     host.dispatchContextLost();
     vi.advanceTimersByTime(10_000);
+    expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(1);
     host.dispatchContextRestored();
     expect(wall.querySelectorAll(`.${GFX_WALL_RELOAD_CLASS}`).length).toBe(0);
-    expect(invalidate).toHaveBeenCalled();
+    expect(invalidate).toHaveBeenCalledTimes(1);
     host.dispose();
     wall.remove();
   });

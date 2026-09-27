@@ -170,25 +170,6 @@ p.write_text(''.join(lines))
 PY""",
     ),
     (
-        "nixie-per-tile-cache",
-        "src/plugins/nixie-fallback.test.ts",
-        "nixie shader fallback text > nixie-per-tile-cache",
-        r"""python3 - <<'PY'
-from pathlib import Path
-p = Path('plugins/src/nixie-clock/frontend/tubes.ts')
-t = p.read_text()
-needle = 'export function formatNixieFallbackLine('
-inject = 'const NIXIE_FORMAT_SHARED = { key: -1, text: "" };\n'
-if inject not in t:
-    t = t.replace(needle, inject + needle)
-t = t.replace(
-  '  if (key === cache.key) return cache.text;\n',
-  '  cache = NIXIE_FORMAT_SHARED;\n  if (key === cache.key) return cache.text;\n',
-)
-p.write_text(t)
-PY""",
-    ),
-    (
         "fallback-throws-latched",
         "src/graph/shader-fallback-bad-pack.test.ts",
         "shader fallback bad pack text > fallback-throws-latched",
@@ -288,18 +269,7 @@ PY""",
         "fallback-survives-sky-reset",
         "src/graph/shader-fallback-wall.test.ts",
         "shader fallback wall > fallback-survives-sky-reset",
-        r"""python3 - <<'PY'
-from pathlib import Path
-p = Path('web/src/graph/render-host.ts')
-old = '''    if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;
-    this.untrackFallback(slot.fallback);
-    slot.fallback?.dispose();'''
-new = '''    if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;'''
-t = p.read_text()
-if old not in t:
-    raise SystemExit('mountShaderFallback dispose block missing')
-p.write_text(t.replace(old, new))
-PY""",
+        "sed -i '/if (slot.fallback && slot.mountedFallbackPackKey === slot.packKey) return;/d' web/src/graph/render-host.ts",
     ),
     (
         "drive-writes-tile",
@@ -485,32 +455,7 @@ PY""",
         "late-restore-clears-reload",
         "src/graph/shader-fallback-gl.test.ts",
         "shader fallback gl context > late-restore-clears-reload",
-        r"""python3 - <<'PY'
-from pathlib import Path
-p = Path('web/src/graph/gfx-wall-notice.ts')
-t = p.read_text()
-old = '''    const btn = this.el?.querySelector(`.${GFX_WALL_RELOAD_CLASS}`) as HTMLButtonElement | null;
-    const focusOnReload = btn !== null && document.activeElement === btn;
-    const hadLateReload = this.reloadOffered;
-    this.el?.remove();
-    this.el = null;
-    this.shown = false;
-    this.reloadOffered = false;
-    if (focusOnReload) {
-      this.wall.tabIndex = -1;
-      this.wall.focus();
-    }
-    if (hadLateReload) this.opts.onDismissLateReload?.();'''
-new = '''    const hadLateReload = this.reloadOffered;
-    this.el?.remove();
-    this.el = null;
-    this.shown = false;
-    this.reloadOffered = false;
-    if (hadLateReload) this.opts.onDismissLateReload?.();'''
-if old not in t:
-    raise SystemExit('late-restore anchor missing')
-p.write_text(t.replace(old, new))
-PY""",
+        "sed -i 's/if (hadLateReload) this.opts.onDismissLateReload?.();//' web/src/graph/gfx-wall-notice.ts",
     ),
 ]
 

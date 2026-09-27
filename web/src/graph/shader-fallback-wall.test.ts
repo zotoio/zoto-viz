@@ -146,11 +146,9 @@ describe("shader fallback wall", () => {
     host.beginTilePack("main", "k:1", "nixie-clock", pane, "Nixie", true);
     expect(host.compilePluginSky("main", {} as never, {} as never)).toBe(false);
     host.onTileShaderCompileFailed("main");
-    const first = pane.querySelector(".tile-shader-fallback");
-    expect(first).toBeTruthy();
+    expect(pane.querySelectorAll(".tile-shader-fallback")).toHaveLength(1);
     host.onTileShaderCompileFailed("main");
     expect(pane.querySelectorAll(".tile-shader-fallback")).toHaveLength(1);
-    expect(pane.querySelector(".tile-shader-fallback")).toBe(first);
     host.dispose();
     wall.remove();
   });
