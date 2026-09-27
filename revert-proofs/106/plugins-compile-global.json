@@ -3,5 +3,5 @@
   "testId": "tests/test_plugins_compile_runs.py::test_unbundled_frontend_increments_compile_runs",
   "description": "global _compile_runs before unbundled compile path.",
   "timeoutSec": 120,
-  "red": "SyntaxError: name '_compile_runs' is assigned to before global declaration"
+  "red": "AssertionError: assert 0 == (0 + 1)"
 }
