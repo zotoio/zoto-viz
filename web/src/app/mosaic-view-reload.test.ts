@@ -10,6 +10,7 @@ import { setPluginModes, talkers, topology } from "../core/modes";
 import {
   reconcileMosaicTilesWithMode,
   resolveRestoredViewMode,
+  viewMountState,
 } from "./boot-view-restore";
 import {
   resetPaneSwitchTokens,
@@ -73,7 +74,6 @@ function makeLiveMosaic(tiles: string[], focus: string): Mosaic {
 
 describe("mosaic view reload regressions (B/C/D/E)", () => {
   beforeEach(() => {
-    expect.hasAssertions();
     setPluginModes(MODES);
     localStorage.clear();
   });
@@ -103,7 +103,11 @@ describe("mosaic view reload regressions (B/C/D/E)", () => {
       fallback: "plugin:topology",
     });
     expect(bootMode).toBe("plugin:backrooms");
-    expect(header.value).toBe("plugin:backrooms");
+    expect(viewMountState({
+      headerModeId: header.value,
+      sceneModeId: bootMode,
+      pluginActiveId: "backrooms",
+    })).toBe(true);
   });
 
   it("C: header pick swaps the focused tile (not header-only)", async () => {
@@ -194,8 +198,6 @@ describe("mosaic view reload regressions (B/C/D/E)", () => {
     expect(sel).toBeTruthy();
     sel!.value = "plugin:backrooms";
     sel!.dispatchEvent(new Event("change", { bubbles: true }));
-    expect(pick.mock.calls.length).toBe(1);
-    expect(pick.mock.calls[0]?.[0] === "plugin:topology").toBe(true);
-    expect(pick.mock.calls[0]?.[1] === "plugin:backrooms").toBe(true);
+    expect(pick).toHaveBeenCalledWith("plugin:topology", "plugin:backrooms");
   });
 });

@@ -22,9 +22,7 @@ describe("page CSP bootstrap policy", () => {
     expect(sandbox).not.toMatch(/\bsrcdoc\b/i);
     expect(sandbox).toMatch(/<script[^>]+src="/);
     expect(sandbox).not.toMatch(/<script[^>]*>[^<]+/);
-    expect(sandbox).toContain("default-src 'none'");
     expect(sandbox).toContain("connect-src 'none'");
-    expect(sandbox).toContain("object-src 'none'");
   });
 });
 

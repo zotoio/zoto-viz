@@ -1,26 +1,13 @@
 import * as THREE from "three";
 import type { SurfaceLetterboxFill } from "./letterbox-fill";
-import { letterboxInnerRectInto } from "./letterbox-fill";
+import { letterboxFillHex, letterboxInnerRectInto, paintLetterboxBars } from "./letterbox-fill";
 import type { WebGLRenderer } from "three";
-import { packMirrorSizeStats } from "./pack-mirror-size-stats";
 import {
-  type CanvasDeviceHeight,
   type CssRect,
   type CssRectLoose,
-  type DeviceRectMut,
-  type GlRectMut,
   asCssRect,
-  deviceSizeFromCssBoxInto,
-  type DeviceSizeMut,
-  asCanvasDeviceHeight,
+  deviceSizeFromCssBox,
 } from "./pack-mirror-rect";
-import { applyHostViewBoxToGlRenderer } from "./render-host-gl-adapter";
-
-export type PackMirrorHostGl = {
-  layoutPixelRatio: number;
-  canvasCssHeight: number;
-  canvasDeviceHeight: CanvasDeviceHeight;
-};
 
 /** @deprecated Use `CssRect` from `./pack-mirror-rect`. */
 export type MirrorRect = CssRect;
@@ -61,23 +48,19 @@ export const packMirrorResourceStats = {
     this.textureDisposed = 0;
     this.geometryDisposed = 0;
     this.materialDisposed = 0;
-    packMirrorSizeStats.reset();
   },
 };
 
-const letterboxBarDeviceScratch: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
-const letterboxBarGlScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
-
-/** Letterbox bars via scissored clears (per-edge device rects; renderer pixel ratio must be 1). */
+/** Letterbox bars via scissored clears (CSS-pixel coords; renderer applies DPR). */
 export function paintLetterboxBarsThree(
   renderer: MirrorRenderer,
   fill: SurfaceLetterboxFill,
   box: CssRect,
   inner: CssRect,
   bars: LetterboxBarScratch,
-  hostGl: PackMirrorHostGl,
 ): void {
-  const hex = fill.hex;
+  const hex = letterboxFillHex(fill);
+  renderer.setScissorTest(true);
   renderer.setClearColor(hex, 1);
   bars[0].x = box.x;
   bars[0].y = inner.y + inner.h;
@@ -97,15 +80,8 @@ export function paintLetterboxBarsThree(
   bars[3].h = inner.h;
   for (const b of bars) {
     if (b.w < 1 || b.h < 1) continue;
-    applyHostViewBoxToGlRenderer(
-      renderer,
-      b,
-      hostGl.canvasCssHeight,
-      hostGl.layoutPixelRatio,
-      hostGl.canvasDeviceHeight,
-      letterboxBarDeviceScratch,
-      letterboxBarGlScratch,
-    );
+    renderer.setViewport(b.x, b.y, b.w, b.h);
+    renderer.setScissor(b.x, b.y, b.w, b.h);
     renderer.clear(true, false, false);
   }
 }
@@ -118,8 +94,6 @@ export class PackTexturePresenter {
   readonly material = new THREE.MeshBasicMaterial({ transparent: true, depthTest: false, depthWrite: false });
   readonly mesh: THREE.Mesh;
   readonly scratch = {
-    deviceVp: { x: 0, y: 0, w: 0, h: 0 },
-    glVp: { x: 0, y: 0, w: 0, h: 0 },
     innerTd: { x: 0, y: 0, w: 0, h: 0 },
     innerAbs: { x: 0, y: 0, w: 0, h: 0 },
     out: { x: 0, y: 0, w: 0, h: 0 },
@@ -151,7 +125,6 @@ export class PackTexturePresenter {
     fill: SurfaceLetterboxFill | null,
     contentAspect: number,
     opts: { letterbox: boolean },
-    hostGl: PackMirrorHostGl,
   ): CssRect {
     const innerTd = this.scratch.innerTd;
     if (opts.letterbox) {
@@ -172,21 +145,15 @@ export class PackTexturePresenter {
     innerAbs.w = iw;
     innerAbs.h = ih;
     if (fill && opts.letterbox) {
-      paintLetterboxBarsThree(renderer, fill, dst, asCssRect(innerAbs), this.scratch.bars, hostGl);
+      paintLetterboxBarsThree(renderer, fill, dst, asCssRect(innerAbs), this.scratch.bars);
     }
     if (this.material.map !== texture) {
       this.material.map = texture;
       this.material.needsUpdate = true;
     }
-    applyHostViewBoxToGlRenderer(
-      renderer,
-      { x: ix, y: iy, w: iw, h: ih },
-      hostGl.canvasCssHeight,
-      hostGl.layoutPixelRatio,
-      hostGl.canvasDeviceHeight,
-      this.scratch.deviceVp,
-      this.scratch.glVp,
-    );
+    renderer.setScissorTest(true);
+    renderer.setViewport(ix, iy, iw, ih);
+    renderer.setScissor(ix, iy, iw, ih);
     renderer.setRenderTarget(null);
     renderer.render(this.scene, this.camera);
     const out = this.scratch.out;
@@ -211,8 +178,6 @@ export class PackMirrorSession {
   private samples = -1;
   readonly presenter = new PackTexturePresenter();
   rendered = false;
-  /** Last `deviceSize` reference passed to `renderPack` (lifecycle tests). */
-  lastRenderDeviceSize: DeviceSizeMut | null = null;
 
   get target(): THREE.WebGLRenderTarget | null { return this.rt; }
 
@@ -272,24 +237,23 @@ export class PackMirrorSession {
     scene: THREE.Scene,
     camera: THREE.Camera,
     cssSize: CssRectLoose,
-    deviceSize: DeviceSizeMut,
+    pw: number,
+    ph: number,
     clearHex: number,
     antialias: boolean,
   ): THREE.Texture | null {
-    this.lastRenderDeviceSize = deviceSize;
-    const rt = this.ensure(deviceSize.pw, deviceSize.ph, antialias);
+    const rt = this.ensure(pw, ph, antialias);
     if (!rt) return null;
     const rd = renderer as THREE.WebGLRenderer;
     const prev = rd.getRenderTarget?.() ?? null;
     renderer.setRenderTarget(rt);
-    renderer.setViewport(0, 0, deviceSize.pw, deviceSize.ph);
-    renderer.setScissor(0, 0, deviceSize.pw, deviceSize.ph);
+    renderer.setViewport(0, 0, cssSize.w, cssSize.h);
+    renderer.setScissor(0, 0, cssSize.w, cssSize.h);
     renderer.setScissorTest(true);
     renderer.setClearColor(clearHex, 1);
     renderer.clear(true, true, false);
     renderer.render(scene, camera);
     renderer.setRenderTarget(prev);
-    rt.texture.flipY = true;
     this.rendered = true;
     return rt.texture;
   }
@@ -298,11 +262,6 @@ export class PackMirrorSession {
 export class PackMirrorRegistry {
   private readonly sessions = new Map<string, PackMirrorSession>();
   allocationCount = 0;
-
-  /** Reused for every `renderPrimary` (no per-frame `{pw,ph}` allocation). */
-  readonly devicePackSizeScratch: DeviceSizeMut = { pw: 0, ph: 0 };
-
-  private readonly drawLetterboxScratch = { letterbox: false };
 
   beginFrame(): void {
     for (const s of this.sessions.values()) s.rendered = false;
@@ -337,12 +296,12 @@ export class PackMirrorRegistry {
     box: CssRectLoose,
     clearHex: number,
     antialias: boolean,
-    hostGl: PackMirrorHostGl,
   ): THREE.Texture | null {
     const session = this.sessions.get(key);
     if (!session) return null;
-    deviceSizeFromCssBoxInto(box, hostGl.layoutPixelRatio, this.devicePackSizeScratch);
-    return session.renderPack(renderer, scene, camera, box, this.devicePackSizeScratch, clearHex, antialias);
+    const pr = renderer.getPixelRatio();
+    const { pw, ph } = deviceSizeFromCssBox(box, pr);
+    return session.renderPack(renderer, scene, camera, box, pw, ph, clearHex, antialias);
   }
 
   presentPack(
@@ -350,26 +309,108 @@ export class PackMirrorRegistry {
     renderer: MirrorRenderer,
     dst: CssRect,
     opts: { letterbox: boolean; fill: SurfaceLetterboxFill | null; aspect: number },
-    hostGl: PackMirrorHostGl,
   ): CssRect | null {
     const session = this.sessions.get(key);
     const rt = session?.target;
     if (!rt || !session?.rendered) return null;
-    this.drawLetterboxScratch.letterbox = opts.letterbox;
-    return session.presenter.draw(
-      renderer,
-      rt.texture,
-      dst,
-      opts.fill,
-      opts.aspect,
-      this.drawLetterboxScratch,
-      hostGl,
-    );
+    return session.presenter.draw(renderer, rt.texture, dst, opts.fill, opts.aspect, {
+      letterbox: opts.letterbox,
+    });
   }
 
   dispose(): void {
-    this.sessions.forEach((s) => s.dispose());
+    for (const s of this.sessions.values()) s.dispose();
     this.sessions.clear();
   }
 }
 
+/** Sandbox duplicate: one GPU texture + one quad presenter per plugin id. */
+export class SandboxBitmapGl {
+  private texture: THREE.Texture | null = null;
+  private tw = 0;
+  private th = 0;
+  readonly presenter = new PackTexturePresenter();
+  uploadCount = 0;
+
+  dispose(): void {
+    if (this.texture) {
+      this.texture.dispose();
+      packMirrorResourceStats.textureDisposed += 1;
+    }
+    this.texture = null;
+    this.tw = 0;
+    this.th = 0;
+    this.presenter.dispose();
+  }
+
+  ensureTexture(w: number, h: number): THREE.Texture | null {
+    if (w < 2 || h < 2) return null;
+    if (this.texture && w === this.tw && h === this.th) return this.texture;
+    if (this.texture) {
+      this.texture.dispose();
+      packMirrorResourceStats.textureDisposed += 1;
+    }
+    this.tw = w;
+    this.th = h;
+    this.texture = new THREE.Texture();
+    packMirrorResourceStats.textureCreated += 1;
+    this.texture.flipY = false;
+    this.texture.minFilter = THREE.LinearFilter;
+    this.texture.magFilter = THREE.LinearFilter;
+    return this.texture;
+  }
+
+  uploadFrame(bitmap: ImageBitmap): THREE.Texture | null {
+    const tex = this.ensureTexture(bitmap.width, bitmap.height);
+    if (!tex) return null;
+    tex.image = bitmap;
+    tex.needsUpdate = true;
+    this.uploadCount += 1;
+    return tex;
+  }
+
+  present(
+    renderer: MirrorRenderer,
+    texture: THREE.Texture,
+    fill: SurfaceLetterboxFill,
+    dst: CssRect,
+    aspect: number,
+  ): CssRect {
+    return this.presenter.draw(renderer, texture, dst, fill, aspect, { letterbox: true });
+  }
+}
+
+const sandboxGpu = new Map<string, SandboxBitmapGl>();
+
+export function sandboxBitmapGpuCount(): number {
+  return sandboxGpu.size;
+}
+
+export function sandboxBitmapGl(pluginId: string): SandboxBitmapGl {
+  let gpu = sandboxGpu.get(pluginId);
+  if (!gpu) {
+    gpu = new SandboxBitmapGl();
+    sandboxGpu.set(pluginId, gpu);
+  }
+  return gpu;
+}
+
+/** Drop sandbox GPU mirrors when a pack falls below two tiles (same rule as host pack mirrors). */
+export function syncSandboxBitmapGpuScopes(scopes: ReadonlyMap<string, number>): void {
+  for (const [pluginId] of sandboxGpu) {
+    if ((scopes.get(pluginId) ?? 0) < 2) teardownSandboxBitmapGl(pluginId);
+  }
+}
+
+export function resetSandboxBitmapGl(): void {
+  for (const gpu of sandboxGpu.values()) gpu.dispose();
+  sandboxGpu.clear();
+}
+
+export function teardownSandboxBitmapGl(pluginId: string): void {
+  const gpu = sandboxGpu.get(pluginId);
+  if (gpu) {
+    gpu.dispose();
+    sandboxGpu.delete(pluginId);
+  }
+}

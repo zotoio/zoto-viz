@@ -1,14 +1,12 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   reconcileMosaicTilesWithMode,
   resolveRestoredViewMode,
+  viewMountState,
 } from "./boot-view-restore";
+import { parsePluginId } from "../plugins/plugin";
 
 describe("resolveRestoredViewMode", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
   it("prefers session snapshot over localStorage", () => {
     expect(resolveRestoredViewMode({
       sessionMode: "plugin:backrooms",
@@ -19,10 +17,6 @@ describe("resolveRestoredViewMode", () => {
 });
 
 describe("reconcileMosaicTilesWithMode", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
   it("replaces the focused slot when mode is missing from tiles", () => {
     expect(reconcileMosaicTilesWithMode(
       ["plugin:topology", "plugin:wifi"],
@@ -32,3 +26,26 @@ describe("reconcileMosaicTilesWithMode", () => {
   });
 });
 
+describe("viewMountState", () => {
+  it("requires header, scene, and plugin id to match after reload", () => {
+    expect(viewMountState({
+      headerModeId: "plugin:backrooms",
+      sceneModeId: "plugin:backrooms",
+      pluginActiveId: "backrooms",
+    })).toBe(true);
+    expect(viewMountState({
+      headerModeId: "plugin:backrooms",
+      sceneModeId: "plugin:talkers",
+      pluginActiveId: "backrooms",
+    })).toBe(false);
+  });
+
+  it("tracks mosaic focus tile the same way", () => {
+    const focused = "plugin:wifi";
+    expect(viewMountState({
+      headerModeId: focused,
+      sceneModeId: focused,
+      pluginActiveId: parsePluginId(focused),
+    })).toBe(true);
+  });
+});

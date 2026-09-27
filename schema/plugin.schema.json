@@ -42,6 +42,11 @@
           "pattern": "^(?!.*\\.\\.)[A-Za-z0-9._/-]+\\.(ts|tsx|js|mjs)$",
           "maxLength": 120,
           "description": "TypeScript/JS module relative to the plugin root (typically frontend/index.ts)."
+        },
+        "bundle": {
+          "type": "boolean",
+          "default": true,
+          "description": "When false, the monitor serves the entry file verbatim (preserves relative imports for pack-assets)."
         }
       }
     },

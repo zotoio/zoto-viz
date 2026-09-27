@@ -1,5 +1,4 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleSandboxHostMessage, type SandboxZoto, type VizPresentTick } from "./sandbox-frame";
 import { handleSandboxHostMessage, redactSandboxAssetPath, type SandboxZoto, type VizPresentTick } from "./sandbox-frame";
 
 function stubZoto(over: Partial<SandboxZoto> = {}): SandboxZoto {

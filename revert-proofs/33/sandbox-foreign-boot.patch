@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/sandbox-frame.ts b/web/src/plugins/sandbox-frame.ts
+index 0000000..0000001 100644
+--- a/web/src/plugins/sandbox-frame.ts
++++ b/web/src/plugins/sandbox-frame.ts
+@@ -182,7 +182,6 @@ export function handleSandboxBootMessage(
+   if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") {
+     return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+   }
+-  if (ev.source !== window.parent) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+   if (!d.bootNonce || d.bootNonce !== opts.bootNonce) {
+     return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+   }

@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_pack_assets_security.py",
+  "testName": "PackAssetsSecurityTests::test_token_bound_to_session_id",
+  "description": "Pack asset token must verify the caller CSRF session id.",
+  "timeoutSec": 60
+}

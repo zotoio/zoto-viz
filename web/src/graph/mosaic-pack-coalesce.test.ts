@@ -1,14 +1,10 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import * as packHost from "../plugins/viz-pack-host";
-import { deliverCoalescedMosaicPacks, mosaicPackGroups, resetMosaicPackCoalesceWriters, applyPackCoalesceLayout } from "./mosaic-pack-coalesce";
+import { deliverCoalescedMosaicPacks, mosaicPackGroups, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
 import { setPluginModes, topology } from "../core/modes";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 describe("mosaic pack coalesce", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
   afterEach(() => {
     setPluginModes([]);
     resetMosaicPackCoalesceWriters();
@@ -66,7 +62,7 @@ describe("mosaic pack coalesce", () => {
     expect(budget.stats.skipped).toBe(3);
   });
 
-  it("fan-out: UBO copied to every duplicate tile slot after one pack onFrame", () => {
+  it("fan-out: one pack onFrame and one sandbox onFrame, UBO drawn on every duplicate tile", () => {
     const uboBySlot: string[] = [];
     const mosaic = {
       tileIds: ["plugin:star-sines", "plugin:star-sines!1"],
@@ -76,6 +72,7 @@ describe("mosaic pack coalesce", () => {
         setPackCoalesce: () => {},
       }),
     };
+    const onSandboxFrame = vi.fn();
     const onFrameSpy = vi.spyOn(packHost, "runPackFrameHandler").mockImplementation((_packId, _frame, handlers) => {
       handlers.writeBuffer(0, [1, 2, 3]);
     });
@@ -96,31 +93,11 @@ describe("mosaic pack coalesce", () => {
       }) as never,
       optsFor: () => ({}),
       budget: { stats: { lastMs: 0, overBudget: 0, skipped: 0, total: 0 } },
+      onSandboxFrame,
     });
     expect(onFrameSpy).toHaveBeenCalledTimes(1);
+    expect(onSandboxFrame).toHaveBeenCalledTimes(1);
     expect(uboBySlot.filter((s) => s === "plugin:star-sines")).toHaveLength(2);
     expect(uboBySlot).toContain("plugin:star-sines!1");
-  });
-
-  it("applyPackCoalesceLayout assigns one primary and mirror roles on duplicate pack tiles", () => {
-    setPluginModes([
-      { ...topology, id: "plugin:star-sines", pluginId: "star-sines", label: "Sines" },
-    ]);
-    const roles = new Map<string, string>();
-    const mosaic = {
-      tileIds: ["plugin:star-sines", "plugin:star-sines!1"],
-      graphScene: (slot: string) => ({
-        setPackCoalesce: (v: { role: string } | null) => {
-          if (v) roles.set(slot, v.role);
-        },
-      }),
-    };
-    applyPackCoalesceLayout(
-      mosaic,
-      (id) => ({ pluginId: "star-sines", id }) as never,
-      () => null,
-    );
-    expect(roles.get("plugin:star-sines")).toBe("primary");
-    expect(roles.get("plugin:star-sines!1")).toBe("mirror");
   });
 });

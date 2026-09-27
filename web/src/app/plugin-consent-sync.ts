@@ -50,6 +50,11 @@ export function syncPluginConsentPendingState(): void {
   else disarmPluginConsentFallbackPoll();
 }
 
+export function resetPluginConsentSyncForTests(): void {
+  disarmPluginConsentFallbackPoll();
+  host = null;
+}
+
 export function pluginConsentFallbackPollActive(): boolean {
   return fallbackPollId !== 0;
 }

@@ -2,6 +2,7 @@ import type { StateMsg } from "../../core/types";
 import type { PluginView } from "../plugin";
 import type { VizIdleConfig } from "../viz-host";
 import { goldenLanFixture } from "./golden-lan-state";
+import { smokeBackroomsHarnessArmed, smokeGoldenStateTs } from "../../core/smoke-harness";
 
 export type PluginIdleConfig = VizIdleConfig;
 
@@ -47,7 +48,7 @@ export function withGoldenIfIdle(live: StateMsg, idle?: PluginIdleConfig): State
   const golden = goldenLanFixture();
   return {
     ...golden,
-    ts: live.ts,
+    ts: smokeBackroomsHarnessArmed() ? smokeGoldenStateTs() : live.ts,
     iface: live.iface || golden.iface,
     interfaces: live.interfaces?.length ? live.interfaces : golden.interfaces,
     links: live.links ?? golden.links,

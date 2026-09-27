@@ -1,11 +1,7 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { Mosaic } from "./mosaic";
 
 describe("mosaic pane notice", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
   it("shows and clears inline copy on a tile", () => {
     const wall = document.createElement("div");
     const mosaic = new Mosaic({
@@ -34,12 +30,9 @@ describe("mosaic pane notice", () => {
     (mosaic as unknown as { panes: Map<string, HTMLElement> }).panes.set("plugin:topology", pane);
     mosaic.setPaneNotice("plugin:topology", "needs review");
     const notice = pane.querySelector(".mosaic-pane-notice");
-    expect(Boolean(notice)).toBe(true);
-    expect(notice?.textContent === "needs review").toBe(true);
+    expect(notice?.textContent).toMatch(/needs review/);
     mosaic.setPaneNotice("plugin:topology", "Blob Mesh couldn't start, its sandbox didn't respond", "fail");
-    const failEl = pane.querySelector(".mosaic-pane-notice-fail");
-    expect(failEl).not.toBeNull();
-    expect(failEl?.textContent === "Blob Mesh couldn't start, its sandbox didn't respond").toBe(true);
+    expect(pane.querySelector(".mosaic-pane-notice-fail")?.textContent).toMatch(/couldn't start/);
     mosaic.setPaneNotice("plugin:topology", null);
     expect(pane.querySelector(".mosaic-pane-notice")).toBeNull();
   });

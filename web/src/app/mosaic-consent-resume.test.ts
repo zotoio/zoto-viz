@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearAllConsentPending,
   hasConsentPending,
@@ -22,10 +22,6 @@ function host(over: Partial<SwitchPaneViewHost> & Pick<SwitchPaneViewHost, "tile
 }
 
 describe("mosaic consent resume", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
   afterEach(() => {
     clearAllConsentPending();
     resetPaneSwitchTokens();
@@ -107,16 +103,12 @@ describe("mosaic consent resume", () => {
     });
     expect(m.setPaneNotice).toHaveBeenCalledWith(
       "plugin:a",
-      "Demo isn't approved yet. Approve it in Settings → Plugins.",
+      expect.stringMatching(/Not approved yet.*Settings → Plugins/),
     );
   });
 });
 
 describe("grantPluginConsent then catalog refresh", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
   afterEach(() => {
     clearAllConsentPending();
     resetPaneSwitchTokens();

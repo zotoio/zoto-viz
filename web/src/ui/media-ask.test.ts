@@ -110,6 +110,20 @@ describe("askUserMedia", () => {
     expect(getUserMedia).toHaveBeenCalledTimes(2);
   });
 
+  it("does not auto-open the mic when mediaAccept is set but permission is still prompt", async () => {
+    localStorage.setItem("zoto-viz.mediaAccept", JSON.stringify({ mic: true, cam: false }));
+    const getUserMedia = vi.fn(async () => fakeStream());
+    mockCapture(getUserMedia);
+    const pending = askUserMedia({ audio: true, video: false }, "pulse microphone");
+    await vi.waitFor(() => {
+      expect(document.querySelector("[data-media-ask]")).toBeTruthy();
+    });
+    expect(getUserMedia).not.toHaveBeenCalled();
+    [...document.querySelectorAll("button")].find((b) => b.textContent === "Not now")!.click();
+    await expect(pending).resolves.toBeNull();
+    localStorage.removeItem("zoto-viz.mediaAccept");
+  });
+
   it("still asks in-page when the Permissions API already says granted", async () => {
     const stream = fakeStream();
     mockCapture(vi.fn(async () => stream));
@@ -122,6 +136,19 @@ describe("askUserMedia", () => {
     expect(document.body.textContent).toMatch(/Allow the microphone/);
     [...document.querySelectorAll("button")].find((b) => b.textContent === "Not now")!.click();
     await expect(pending).resolves.toBeNull();
+  });
+
+  it("opens the pulse mic without in-page ask when browser permission is already granted", async () => {
+    const stream = fakeStream();
+    const getUserMedia = vi.fn(async () => stream);
+    mockCapture(getUserMedia);
+    Object.defineProperty(navigator, "permissions", {
+      configurable: true,
+      value: { query: vi.fn(async () => ({ state: "granted" })) },
+    });
+    await expect(askUserMedia({ audio: true, video: false }, "pulse microphone")).resolves.toBe(stream);
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("[data-media-ask]")).toBeNull();
   });
 
   it("treats a hanging getUserMedia as a missing browser prompt", async () => {

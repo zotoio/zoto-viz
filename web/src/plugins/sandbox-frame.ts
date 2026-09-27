@@ -3,15 +3,6 @@
  * External module only — no inline script, so the app CSP never needs 'unsafe-inline'.
  */
 
-import {
-  HOST_SOURCE,
-  isHostBootChannel,
-  PLUGIN_SOURCE,
-  type HostBootPayload,
-  type HostPortMsg,
-  type PluginPortMsg,
-} from "./sandbox-channel";
-
 /** Matches contract v2 `VizPresentTick` (plugins/sdk/viz-contract.ts on host-change). */
 export type VizPresentTick = {
   frameMs: number;
@@ -19,29 +10,19 @@ export type VizPresentTick = {
   pluginClock?: number;
 };
 
+type HostBoot = {
+  source: "zoto-viz-host";
+  type: "boot";
+  caps: string[];
+  config: Record<string, string>;
+  viz?: unknown;
+  moduleSrc: string;
+  bootNonce: string;
+  parentOrigin: string;
+};
+
 const PACK_ASSETS = "/pack-assets/";
 const TOKEN_REDACT = "<sandbox-token>";
-
-/** Best-effort WebRTC lockdown before any pack module loads (CSP does not cover WebRTC). */
-export function freezeSandboxWebRtc(): void {
-  const names = ["RTCPeerConnection", "webkitRTCPeerConnection", "mozRTCPeerConnection"];
-  for (const name of names) {
-    try {
-      Object.defineProperty(globalThis, name, {
-        configurable: false,
-        writable: false,
-        value: undefined,
-      });
-    } catch {
-      try {
-        // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-        delete (globalThis as Record<string, unknown>)[name];
-      } catch { /* ignore */ }
-    }
-  }
-}
-
-freezeSandboxWebRtc();
 
 export function packAssetTokenFromLocation(href = location.href): string {
   try {
@@ -98,11 +79,11 @@ export function redactSandboxAssetPath(text: string, token?: string): string {
 }
 
 type HostMsg =
-  | { source: typeof HOST_SOURCE; type: "init"; caps: string[]; config: Record<string, string>; viz?: unknown }
-  | { source: typeof HOST_SOURCE; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
-  | { source: typeof HOST_SOURCE; type: "frame"; frame: unknown }
-  | { source: typeof HOST_SOURCE; type: "present"; tick: VizPresentTick }
-  | { source: typeof HOST_SOURCE; type: "config"; config: Record<string, string> };
+  | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: unknown }
+  | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
+  | { source: "zoto-viz-host"; type: "frame"; frame: unknown }
+  | { source: "zoto-viz-host"; type: "present"; tick: VizPresentTick }
+  | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
 
 export type SandboxZoto = {
   onTick: ((nodes: { id: string; rate: number; role: string }[]) => void) | null;
@@ -120,44 +101,10 @@ export type SandboxZoto = {
 let allowed = new Set<string>();
 let bootDone = false;
 let postTargetOrigin = "";
-let hostPort: MessagePort | null = null;
 
 function send(type: string, payload?: unknown): void {
-  let msg: PluginPortMsg;
-  if (type === "ready") {
-    msg = {
-      source: PLUGIN_SOURCE,
-      type: "ready",
-      bootNonce: (payload as { bootNonce?: string } | undefined)?.bootNonce,
-    };
-  } else if (type === "log") {
-    msg = { source: PLUGIN_SOURCE, type: "log", payload: String(payload ?? "") };
-  } else if (type === "setStyle") {
-    msg = { source: PLUGIN_SOURCE, type: "setStyle", payload: payload as Record<string, unknown> };
-  } else if (type === "setNodeColor") {
-    msg = { source: PLUGIN_SOURCE, type: "setNodeColor", payload: payload as { id: string; hex: number } };
-  } else if (type === "writeBuffer") {
-    msg = { source: PLUGIN_SOURCE, type: "writeBuffer", payload: payload as { slot: number; data: number[] } };
-  } else if (type === "writeUniform") {
-    msg = { source: PLUGIN_SOURCE, type: "writeUniform", payload: payload as { name: string; value: unknown } };
-  } else if (type === "writeParticles") {
-    msg = {
-      source: PLUGIN_SOURCE,
-      type: "writeParticles",
-      payload: payload as { data: number[]; stride?: number },
-    };
-  } else if (type === "frame-ready") {
-    parent.postMessage({ source: PLUGIN_SOURCE, type: "frame-ready" }, window.location.origin);
-    return;
-  } else {
-    msg = { source: PLUGIN_SOURCE, type: "log", payload: `unknown sandbox send type: ${type}` };
-  }
-  if (hostPort) {
-    hostPort.postMessage(msg);
-    return;
-  }
   const origin = postTargetOrigin || location.origin;
-  parent.postMessage(msg, origin);
+  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, origin);
 }
 
 const zoto: SandboxZoto = {
@@ -205,12 +152,12 @@ function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: 
 
 /** Host → sandbox dispatch (unit-tested; hot path passes message tick by reference). */
 export function handleSandboxHostMessage(
-  d: HostMsg | HostBootPayload | undefined,
+  d: HostMsg | HostBoot | undefined,
   caps: Set<string>,
   api: SandboxZoto,
   opts?: { source?: MessageEventSource | null; bootNonce?: string; bootDone?: boolean },
 ): void {
-  if (!d || d.source !== HOST_SOURCE) return;
+  if (!d || d.source !== "zoto-viz-host") return;
   if (d.type === "boot") return;
   if (opts?.source && opts.source !== window.parent) return;
   if (d.type === "config") {
@@ -226,83 +173,47 @@ export function handleSandboxHostMessage(
   }
 }
 
-export function handleSandboxBootChannel(
+export function handleSandboxBootMessage(
   ev: MessageEvent,
-  opts: { bootNonce: string; bootDone: boolean },
-): { bootDone: boolean; postTargetOrigin: string; port: MessagePort | null } {
-  if (opts.bootDone) {
-    return { bootDone: true, postTargetOrigin, port: hostPort };
+  opts: { bootDone: boolean; bootNonce: string },
+): { bootDone: boolean; postTargetOrigin: string } {
+  const d = ev.data as HostBoot | undefined;
+  if (opts.bootDone) return { bootDone: true, postTargetOrigin: postTargetOrigin };
+  if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") {
+    return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
   }
-  if (ev.source !== window.parent) {
-    return { bootDone: false, postTargetOrigin, port: hostPort };
+  if (ev.source !== window.parent) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+  if (!d.bootNonce || d.bootNonce !== opts.bootNonce) {
+    return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
   }
-  if (!isHostBootChannel(ev.data)) {
-    return { bootDone: false, postTargetOrigin, port: hostPort };
-  }
-  const d = ev.data;
-  if (d.bootNonce !== opts.bootNonce) {
-    return { bootDone: false, postTargetOrigin, port: hostPort };
-  }
-  if (ev.origin !== window.location.origin) {
-    return { bootDone: false, postTargetOrigin, port: hostPort };
-  }
-  const port = ev.ports?.[0] ?? null;
-  if (!port) return { bootDone: false, postTargetOrigin, port: hostPort };
-  return { bootDone: false, postTargetOrigin: d.parentOrigin, port };
-}
-
-export async function handleSandboxBootPayload(
-  d: HostBootPayload,
-  nonce: string,
-): Promise<void> {
-  if (bootDone) return;
-  if (d.bootNonce !== nonce) return;
-  if (!d.parentOrigin) return;
+  if (!d.parentOrigin) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
   applyInit(d);
-  bootDone = true;
-  postTargetOrigin = d.parentOrigin;
-  const token = packAssetTokenFromLocation();
-  try {
-    await import(/* @vite-ignore */ moduleSrcForSandbox(d.moduleSrc, token));
-    send("ready", { bootNonce: nonce });
-  } catch (e) {
-    const raw = String(e);
-    send("log", redactSandboxAssetPath(raw, token));
-  }
-}
-
-export function handleSandboxPortMessage(
-  data: HostPortMsg | undefined,
-  caps: Set<string>,
-  api: SandboxZoto,
-  nonce: string,
-): void {
-  if (!data || data.source !== HOST_SOURCE) return;
-  if (data.type === "boot") {
-    if (bootDone) return;
-    void handleSandboxBootPayload(data, nonce);
-    return;
-  }
-  handleSandboxHostMessage(data, caps, api);
-}
-
-export function attachSandboxPort(
-  port: MessagePort,
-  nonce: string,
-): void {
-  hostPort = port;
-  port.start();
-  port.onmessage = (ev) => {
-    handleSandboxPortMessage(ev.data as HostPortMsg, allowed, zoto, nonce);
-  };
+  return { bootDone: true, postTargetOrigin: d.parentOrigin };
 }
 
 window.addEventListener("message", (ev) => {
+  handleSandboxHostMessage(ev.data as HostMsg | HostBoot | undefined, allowed, zoto, {
+    source: ev.source,
+    bootDone,
+    bootNonce: bootNonceFromLocation(),
+  });
+});
+
+window.addEventListener("message", async (ev) => {
   const nonce = bootNonceFromLocation();
-  const ch = handleSandboxBootChannel(ev, { bootDone: !!hostPort, bootNonce: nonce });
-  if (ch.port) {
-    postTargetOrigin = ch.postTargetOrigin;
-    attachSandboxPort(ch.port, nonce);
+  const out = handleSandboxBootMessage(ev, { bootDone, bootNonce: nonce });
+  bootDone = out.bootDone;
+  postTargetOrigin = out.postTargetOrigin;
+  if (!bootDone) return;
+  const d = ev.data as HostBoot;
+  if (d.type !== "boot") return;
+  const token = packAssetTokenFromLocation();
+  try {
+    await import(/* @vite-ignore */ moduleSrcForSandbox(d.moduleSrc, token));
+    send("ready");
+  } catch (e) {
+    const raw = String(e);
+    send("log", redactSandboxAssetPath(raw, token));
   }
 });
 

@@ -1,5 +1,4 @@
 import type { Mosaic } from "../graph/mosaic";
-import { nextPaneTiles } from "../graph/mosaic-layout";
 import { consentBlockMessage, mosaicFocusSlot, mosaicSwapFrom } from "./apply-mode-mosaic";
 import { clearConsentPendingForPane, registerConsentPending } from "./consent-pending-panes";
 
@@ -25,8 +24,6 @@ export type SwitchPaneViewOpts = {
   persistLayout: () => void;
   /** Catalog plugin id when `toViewId` is a plugin view (for consent-resume). */
   pluginId?: string | null;
-  /** Host hook when consent review fails (e.g. clear viz UBO preserve flags). */
-  onConsentDenied?: () => void;
 };
 
 const paneSwitchGen = new Map<string, number>();
@@ -102,7 +99,6 @@ export async function switchPaneView(
       return { ok: false, reason: "A newer view switch is already in progress." };
     }
     const msg = consentBlockMessage(opts.spec);
-    opts.onConsentDenied?.();
     mosaic.setPaneNotice(slot.paneId, msg);
     const pid = opts.pluginId?.trim();
     if (pid && slot.swap) {
@@ -121,16 +117,12 @@ export async function switchPaneView(
   }
 
   if (slot.swap) {
-    const tilesBeforeSwap = mosaic.tileIds;
     if (!mosaic.setPaneView(slot.fromViewId, slot.toViewId)) {
       const msg = "Could not swap that view on the wall.";
       mosaic.setPaneNotice(slot.paneId, msg);
       return { ok: false, reason: msg };
     }
-    const tilesAfterSwap = nextPaneTiles(tilesBeforeSwap, slot.fromViewId, slot.toViewId);
-    if (!tilesAfterSwap.includes(slot.fromViewId)) {
-      opts.teardownView(slot.fromViewId);
-    }
+    opts.teardownView(slot.fromViewId);
   }
 
   if (paneSwitchStale(slot.paneId, token)) {

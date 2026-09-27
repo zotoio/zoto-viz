@@ -4,6 +4,8 @@
  * so a 2×2 mosaic still reads as ~60 fps when the main thread is keeping up.
  */
 
+import { onSmokePresentedFrame } from "./smoke-harness";
+
 const SHOW_MS = 1000;
 /** Keep a 1-minute trail so auto-tune can average a recovery window. */
 const KEEP_MS = 60_000;
@@ -66,6 +68,7 @@ export function windowFps(now: number, windowMs = SHOW_MS, since = Number.NEGATI
 export function markFrame(ts: number): void {
   if (ts === lastTs) return;
   lastTs = ts;
+  onSmokePresentedFrame();
   for (const fn of presentListeners) fn(ts);
   stamps.push(ts);
   const cutoff = ts - KEEP_MS;

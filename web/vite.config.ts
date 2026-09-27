@@ -2,18 +2,11 @@
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Connect } from "vite";
 import { defineConfig } from "vite";
 
 const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
 const webRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(webRoot, "..");
-
-/** Never enable dogfood counters in `pnpm build` (child may inherit VITEST from vitest). */
-const vizBuildCounters =
-  process.env.VITEST === "true" &&
-  process.env.npm_lifecycle_event !== "build";
-const gateBuild = process.env.ZOTO_VIZ_GATE_BUILD === "1";
 
 function gitShortRev(): string {
   try {
@@ -27,48 +20,9 @@ function gitShortRev(): string {
   }
 }
 
-/** Dev-only: opaque-origin plugin sandbox iframe (no allow-same-origin). */
-function sandboxNullOriginDevPath(pathname: string): boolean {
-  if (pathname === "/plugin-sandbox.html") return true;
-  if (pathname.startsWith("/src/plugins/sandbox-frame")) return true;
-  if (pathname === "/@vite/client") return true;
-  if (pathname.startsWith("/@id/") || pathname.startsWith("/@fs/")) return true;
-  if (pathname.startsWith("/node_modules/")) return true;
-  if (pathname.startsWith("/src/plugins/")) return true;
-  return false;
-}
-
-function sandboxNullOriginCorsPlugin() {
-  return {
-    name: "zoto-sandbox-null-origin-cors",
-    configureServer(server: { middlewares: Connect.Server }) {
-      server.middlewares.use((req, res, next) => {
-        if (req.headers.origin !== "null" || req.method !== "GET") {
-          next();
-          return;
-        }
-        const pathname = (req.url ?? "").split("?")[0] ?? "";
-        if (!sandboxNullOriginDevPath(pathname)) {
-          next();
-          return;
-        }
-        const end = res.end.bind(res);
-        res.end = ((chunk?: unknown, encoding?: unknown, cb?: unknown) => {
-          res.setHeader("Access-Control-Allow-Origin", "null");
-          res.setHeader("Vary", "Origin");
-          return end(chunk as never, encoding as never, cb as never);
-        }) as typeof res.end;
-        next();
-      });
-    },
-  };
-}
-
 export default defineConfig({
-  plugins: [sandboxNullOriginCorsPlugin()],
   define: {
     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
-    __VIZ_BUILD_COUNTERS__: JSON.stringify(vizBuildCounters),
   },
   server: {
     port: 5173,
@@ -82,7 +36,6 @@ export default defineConfig({
   // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same
   // bytes in with `?inline` (no Node fs types in the browser tsconfig)
   assetsInclude: ["**/*.wasm", "**/*.glsl"],
-  build: { outDir: "dist", emptyOutDir: true, sourcemap: false, minify: gateBuild ? false : true },
   build: { outDir: "dist", emptyOutDir: true, sourcemap: false,
     rollupOptions: {
       input: {
@@ -94,7 +47,7 @@ export default defineConfig({
   test: {
     environment: "happy-dom",
     setupFiles: ["src/test/setup.ts"],
-    include: ["src/**/*.test.ts", "../plugins/sdk/**/*.test.ts"],
+    include: ["src/**/*.test.ts"],
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary"],

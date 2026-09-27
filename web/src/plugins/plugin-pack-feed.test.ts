@@ -14,18 +14,11 @@ import {
   setTileExpectsVizFeed,
 } from "./plugin-pack-feed";
 import { setPackAssetTokenForTests } from "../core/http";
-import { beginActivePackLoad, resetPackAssetFrameState } from "./pack-asset-frame";
-import { resetPackAssetNavigationState } from "./pack-asset-navigation";
 
 describe("plugin pack feed notices", () => {
-  afterEach(() => {
-    resetPluginPackFeedState();
-    resetPackAssetFrameState();
-    resetPackAssetNavigationState();
-  });
+  afterEach(() => resetPluginPackFeedState());
 
   it("shows startup failure copy (not NO PACK FEED) after sandbox boot fails", () => {
-    beginActivePackLoad("plugin:blob-mesh", "Blob Mesh");
     markSandboxStartupFailed("plugin:blob-mesh");
     const notice = packFeedPaneNotice("plugin:blob-mesh", "Blob Mesh");
     expect(notice?.text).toBe(formatSandboxStartupFailure("Blob Mesh"));
@@ -34,7 +27,6 @@ describe("plugin pack feed notices", () => {
   });
 
   it("shows NO PACK FEED when sandbox is live, onFrame ticks, and no viz writes", () => {
-    beginActivePackLoad("plugin:talker-storm", "Talker Storm");
     setTileExpectsVizFeed("plugin:talker-storm", true);
     markSandboxStartupOk("plugin:talker-storm");
     noteSandboxFrameTick("plugin:talker-storm");
@@ -73,14 +65,12 @@ describe("plugin pack feed notices", () => {
 
   it("applyPackFeedPaneNotice uses fail styling on mosaic tiles", () => {
     const mosaic = { setPaneNotice: vi.fn() };
-    beginActivePackLoad("plugin:wifi", "Wi-Fi");
     markSandboxStartupFailed("plugin:wifi");
     applyPackFeedPaneNotice(mosaic, "plugin:wifi", "Wi-Fi");
     expect(mosaic.setPaneNotice).toHaveBeenCalledWith(
       "plugin:wifi",
       formatSandboxStartupFailure("Wi-Fi"),
       "fail",
-      expect.objectContaining({ showRetry: false }),
     );
   });
 });

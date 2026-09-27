@@ -33,3 +33,16 @@ export function reconcileMosaicTilesWithMode(
   return next;
 }
 
+/** Header selector, main graph mode, and mounted plugin id should agree. */
+export function viewMountState(args: {
+  headerModeId: string;
+  sceneModeId: string;
+  pluginActiveId: string | null;
+}): boolean {
+  if (args.headerModeId !== args.sceneModeId) return false;
+  const pluginId = args.headerModeId.startsWith("plugin:")
+    ? args.headerModeId.slice("plugin:".length)
+    : null;
+  if (pluginId && args.pluginActiveId && args.pluginActiveId !== pluginId) return false;
+  return true;
+}

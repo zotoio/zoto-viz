@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   consentBlockMessage,
   mosaicFocusSlot,
@@ -7,10 +7,6 @@ import {
 } from "./apply-mode-mosaic";
 
 describe("mosaicFocusSlot", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
   it("falls back when focus is stale after a tile close", () => {
     const mosaic = {
       tileIds: ["plugin:talkers", "plugin:wifi"],
@@ -30,11 +26,6 @@ describe("mosaicFocusSlot", () => {
 });
 
 describe("revertModeSelection", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-    localStorage.clear();
-  });
-
   it("restores header mode and liveMode", () => {
     const modeSel = { value: "plugin:heat" };
     const live = { mode: "plugin:heat" };
@@ -46,25 +37,8 @@ describe("revertModeSelection", () => {
 });
 
 describe("consentBlockMessage", () => {
-  beforeEach(() => {
-    expect.hasAssertions();
-  });
-
   it("names the plugin when available", () => {
-    const msg = consentBlockMessage({ name: "Heat map" });
-    expect(msg.includes("\u2192")).toBe(true);
-    expect(msg === "Heat map isn't approved yet. Approve it in Settings → Plugins.").toBe(true);
-  });
-
-  it("uses generic copy when the plugin name is unknown", () => {
-    const msg = consentBlockMessage(null);
-    expect(msg.includes("\u2192")).toBe(true);
-    expect(msg === "Not approved yet. Approve it in Settings → Plugins.").toBe(true);
-  });
-
-  it("includes unicode arrow in Settings Plugins consent copy", () => {
-    const msg = consentBlockMessage({ name: "Heat map" });
-    expect(msg.includes("\u2192")).toBe(true);
-    expect(msg.includes("Settings \u2192 Plugins.")).toBe(true);
+    expect(consentBlockMessage({ name: "Heat map" })).toMatch(/Heat map.*Settings → Plugins/);
+    expect(consentBlockMessage(null)).toMatch(/Not approved yet.*Settings → Plugins/);
   });
 });

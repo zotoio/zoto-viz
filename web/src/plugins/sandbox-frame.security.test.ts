@@ -1,33 +1,28 @@
 import { describe, expect, it, vi } from "vitest";
 import {
-  freezeSandboxWebRtc,
-  handleSandboxBootChannel,
+  handleSandboxBootMessage,
   redactSandboxAssetPath,
   type SandboxZoto,
 } from "./sandbox-frame";
 
 describe("sandbox-frame boot security", () => {
-  it("ignores boot-channel postMessage from a foreign frame", () => {
+  it("ignores boot postMessage from a foreign frame", () => {
     const foreign = {} as MessageEventSource;
     const ev = {
       data: {
         source: "zoto-viz-host",
-        type: "boot-channel",
+        type: "boot",
         bootNonce: "nonce-1",
         parentOrigin: "http://127.0.0.1:7020",
+        moduleSrc: "blob:http://127.0.0.1/abc",
+        caps: [],
+        config: {},
       },
       source: foreign,
-      ports: [{} as MessagePort],
-      origin: "http://127.0.0.1:7020",
     } as MessageEvent;
-    const out = handleSandboxBootChannel(ev, { bootDone: false, bootNonce: "nonce-1" });
-    expect(out.port).toBeNull();
+    const out = handleSandboxBootMessage(ev, { bootDone: false, bootNonce: "nonce-1" });
+    expect(out.bootDone).toBe(false);
     expect(out.postTargetOrigin).toBe("");
-  });
-
-  it("freezes WebRTC constructors in the bootstrap", () => {
-    freezeSandboxWebRtc();
-    expect((globalThis as { RTCPeerConnection?: unknown }).RTCPeerConnection).toBeUndefined();
   });
 
   it("does not leak pack asset token in log postMessage payloads", () => {

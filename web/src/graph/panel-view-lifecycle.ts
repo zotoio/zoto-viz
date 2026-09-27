@@ -7,6 +7,14 @@
 const rafLeases = new Map<string, symbol>();
 const packLeases = new Map<string, symbol>();
 
+export function panelRafCount(panelId: string): number {
+  return rafLeases.has(panelId) ? 1 : 0;
+}
+
+export function panelPackCount(panelId: string): number {
+  return packLeases.has(panelId) ? 1 : 0;
+}
+
 /** Claim the single rAF slot for this tile (replaces any stale claim). */
 export function claimPanelRaf(panelId: string): () => void {
   const prev = rafLeases.get(panelId);
@@ -33,6 +41,7 @@ export function claimPanelPack(panelId: string): () => void {
 export function releasePanelView(panelId: string): void {
   rafLeases.delete(panelId);
   packLeases.delete(panelId);
+  void import("../plugins/pack-asset-frame").then((m) => m.closePackAssetFrameForTile(panelId));
   if (packSubKey.startsWith(`${panelId}\0`)) {
     packSubRelease?.();
     packSubRelease = null;

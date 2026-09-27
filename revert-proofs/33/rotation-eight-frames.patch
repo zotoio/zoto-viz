@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/pack-asset-frame.ts b/web/src/plugins/pack-asset-frame.ts
+index 4020476..66f06ce 100644
+--- a/web/src/plugins/pack-asset-frame.ts
++++ b/web/src/plugins/pack-asset-frame.ts
+@@ -131,7 +131,7 @@ export function shouldCapRebuild(tileId: string): boolean {
+ }
+ 
+ export function scheduleServerRestartWallNotice(): void {
+-  wallNoticePending = true;
++  wallNoticePending = false;
+ }
+ 
+ export function consumeServerRestartWallNotice(): string | null {
