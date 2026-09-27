@@ -19,9 +19,28 @@ type Waiter = {
 };
 
 const ACCEPT_KEY = "zoto-viz.mediaAccept";
+const DISMISS_KEY = "zoto-viz.mediaDismiss";
 
 const granted: Record<MediaAskKind, boolean> = { mic: false, cam: false };
 const dismissed: Record<MediaAskKind, boolean> = { mic: false, cam: false };
+
+function loadDismissed(): void {
+  try {
+    const raw = sessionStorage.getItem(DISMISS_KEY);
+    if (!raw) return;
+    const j = JSON.parse(raw) as { mic?: boolean; cam?: boolean };
+    dismissed.mic = j.mic === true;
+    dismissed.cam = j.cam === true;
+  } catch { /* ignore */ }
+}
+
+function persistDismissed(): void {
+  try {
+    sessionStorage.setItem(DISMISS_KEY, JSON.stringify({ mic: dismissed.mic, cam: dismissed.cam }));
+  } catch { /* ignore */ }
+}
+
+loadDismissed();
 
 function readAccept(): Record<MediaAskKind, boolean> {
   try {
@@ -49,7 +68,7 @@ let queue: Waiter[] = [];
 let flushScheduled = false;
 const MEDIA_ASK_TITLE_ID = "media-ask-title";
 
-let open: {
+type MediaAskHost = {
   waiters: Waiter[];
   audio: boolean;
   video: boolean;
@@ -59,7 +78,10 @@ let open: {
   body: HTMLDivElement;
   allow: HTMLButtonElement;
   cancel: HTMLButtonElement;
-} | null = null;
+  settled: boolean;
+};
+
+let open: MediaAskHost | null = null;
 
 function capturePreviousFocus(): HTMLElement | null {
   const el = document.activeElement;
@@ -97,21 +119,28 @@ export function resetMediaAsk(): void {
   queue = [];
   flushScheduled = false;
   if (open) {
-    for (const w of open.waiters) w.resolve(null);
-    teardown(open.modal, open.previousFocus);
+    const host = open;
     open = null;
+    host.settled = true;
+    for (const w of host.waiters) w.resolve(null);
+    if (host.modal.open) host.modal.close("abort");
+    detachMediaAsk(host);
   }
   granted.mic = false;
   granted.cam = false;
   dismissed.mic = false;
   dismissed.cam = false;
-  try { localStorage.removeItem(ACCEPT_KEY); } catch { /* ignore */ }
+  try {
+    localStorage.removeItem(ACCEPT_KEY);
+    sessionStorage.removeItem(DISMISS_KEY);
+  } catch { /* ignore */ }
 }
 
 /** Settings / header toggles call this so Not now can be asked again. */
 export function clearMediaDismiss(kind?: MediaAskKind): void {
   if (!kind || kind === "mic") dismissed.mic = false;
   if (!kind || kind === "cam") dismissed.cam = false;
+  persistDismissed();
 }
 
 export function mediaAskGranted(kind: MediaAskKind): boolean {
@@ -140,7 +169,9 @@ export function dropMediaAsk(kind?: MediaAskKind): void {
   if (!keep.length) {
     const host = open;
     open = null;
-    teardown(host.modal, host.previousFocus);
+    host.settled = true;
+    if (host.modal.open) host.modal.close("abort");
+    detachMediaAsk(host);
     return;
   }
   open.waiters = keep;
@@ -182,11 +213,78 @@ function captureOne(constraints: MediaStreamConstraints): Promise<MediaStream | 
   });
 }
 
-function teardown(modal: HTMLDialogElement, previousFocus: HTMLElement | null): void {
+function detachMediaAsk(host: MediaAskHost): void {
   document.body.classList.remove("modal-open");
-  if (modal.open) modal.close();
-  modal.remove();
-  restoreFocus(previousFocus);
+  host.modal.remove();
+  restoreFocus(host.previousFocus);
+}
+
+function recordDismiss(host: Pick<MediaAskHost, "audio" | "video">, kind: "dismiss" | "blocked" | "stuck"): void {
+  if (host.audio) {
+    if (kind === "dismiss") dismissed.mic = true;
+    granted.mic = false;
+  }
+  if (host.video) {
+    if (kind === "dismiss") dismissed.cam = true;
+    granted.cam = false;
+  }
+  if (kind === "dismiss") persistDismissed();
+}
+
+async function runAllowCapture(host: MediaAskHost): Promise<void> {
+  const streams: Array<MediaStream | null> = [];
+  let stuck = false;
+  for (const w of host.waiters) {
+    const stream = await captureOne({ audio: w.audio, video: w.video });
+    if (!stream) {
+      stuck = true;
+      streams.push(null);
+      continue;
+    }
+    if (!waiterAllowed(w)) {
+      for (const t of stream.getTracks()) t.stop();
+      streams.push(null);
+      continue;
+    }
+    if (w.audio) writeAccept("mic");
+    if (w.video) writeAccept("cam");
+    streams.push(stream);
+  }
+  if (stuck && streams.every((s) => !s)) {
+    recordDismiss(host, "stuck");
+    host.waiters.forEach((w) => w.resolve(null));
+    return;
+  }
+  host.waiters.forEach((w, i) => w.resolve(streams[i] ?? null));
+}
+
+function finalizeMediaAskClose(host: MediaAskHost): void {
+  if (host.settled) return;
+  host.settled = true;
+  const rv = host.modal.returnValue;
+  detachMediaAsk(host);
+  if (open === host) open = null;
+
+  if (rv === "allow") {
+    void runAllowCapture(host);
+    return;
+  }
+  if (rv === "abort") return;
+
+  const kind = rv === "stuck" ? "stuck" : rv === "blocked" ? "blocked" : "dismiss";
+  recordDismiss(host, kind);
+  host.waiters.forEach((w) => w.resolve(null));
+}
+
+function watchDialogClosedWithoutCloseEvent(host: MediaAskHost): void {
+  host.modal.addEventListener("beforetoggle", (e: Event) => {
+    const toggle = e as ToggleEvent;
+    if (toggle.newState !== "closed" || host.settled) return;
+    queueMicrotask(() => {
+      if (host.settled || host.modal.open) return;
+      finalizeMediaAskClose(host);
+    });
+  });
 }
 
 function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
@@ -257,7 +355,7 @@ function openMediaAsk(waiters: Waiter[]): void {
   sheet.append(head, body, row);
   modal.append(sheet);
 
-  const host = {
+  const host: MediaAskHost = {
     waiters,
     audio: waiters.some((w) => w.audio),
     video: waiters.some((w) => w.video),
@@ -267,80 +365,24 @@ function openMediaAsk(waiters: Waiter[]): void {
     body,
     allow,
     cancel,
+    settled: false,
   };
   open = host;
   paintCopy(host);
 
-  const finish = (streams: Array<MediaStream | null>): void => {
-    if (open !== host) return;
-    open = null;
-    teardown(modal, host.previousFocus);
-    host.waiters.forEach((w, i) => w.resolve(streams[i] ?? null));
-  };
-
-  const deny = (kind: "dismiss" | "blocked" | "stuck"): void => {
-    if (host.audio) {
-      if (kind === "dismiss") dismissed.mic = true;
-      granted.mic = false;
-    }
-    if (host.video) {
-      if (kind === "dismiss") dismissed.cam = true;
-      granted.cam = false;
-    }
-    finish(host.waiters.map(() => null));
-  };
-
-  modal.addEventListener("cancel", (e) => {
-    e.preventDefault();
-    deny("dismiss");
-  });
+  modal.addEventListener("close", () => finalizeMediaAskClose(host));
+  watchDialogClosedWithoutCloseEvent(host);
   modal.addEventListener("click", (e) => {
-    if (e.target === modal) deny("dismiss");
+    if (e.target === modal) modal.close("not-now");
   });
-  cancel.addEventListener("click", () => deny("dismiss"));
+  cancel.addEventListener("click", () => modal.close("not-now"));
 
-  allow.addEventListener("click", async () => {
+  allow.addEventListener("click", () => {
     if (!navigator.mediaDevices?.getUserMedia) {
-      paintCopy(host, "This window has no media capture.");
-      allow.remove();
-      cancel.textContent = "OK";
-      deny("blocked");
+      modal.close("blocked");
       return;
     }
-    allow.disabled = true;
-    cancel.disabled = true;
-    paintCopy(host, "Waiting for this window to grant the device…");
-    const streams: Array<MediaStream | null> = [];
-    let stuck = false;
-    for (const w of host.waiters) {
-      const constraints: MediaStreamConstraints = {
-        audio: w.audio,
-        video: w.video,
-      };
-      const stream = await captureOne(constraints);
-      if (!stream) {
-        stuck = true;
-        streams.push(null);
-        continue;
-      }
-      if (!waiterAllowed(w)) {
-        for (const t of stream.getTracks()) t.stop();
-        streams.push(null);
-        continue;
-      }
-      if (w.audio) writeAccept("mic");
-      if (w.video) writeAccept("cam");
-      streams.push(stream);
-    }
-    if (stuck && streams.every((s) => !s)) {
-      allow.remove();
-      cancel.disabled = false;
-      cancel.textContent = "OK";
-      paintCopy(host, "The browser never presented a listening or camera prompt. The OS light can still be on if Cursor or another app already holds the microphone. Open this monitor in Chromium on localhost, then accept there.");
-      cancel.onclick = () => deny("stuck");
-      return;
-    }
-    finish(streams);
+    modal.close("allow");
   });
 
   document.body.classList.add("modal-open");

@@ -92,21 +92,32 @@ describe("media ask focus (chromium)", () => {
 
   it("closes on Escape with no microphone request", async () => {
     expect.hasAssertions();
-    const page = await harnessPage();
-    let gumCalls = 0;
+    const page = await browser.newPage();
+    await page.goto(`${baseUrl}/test-pages/media-ask-focus.html`);
+    await page.waitForFunction(() => (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness);
     await page.evaluate(() => {
+      (window as Window & { __gumCalls?: number }).__gumCalls = 0;
       navigator.mediaDevices.getUserMedia = () => {
         (window as Window & { __gumCalls?: number }).__gumCalls = ((window as Window & { __gumCalls?: number }).__gumCalls ?? 0) + 1;
         return new Promise(() => { /* hang */ });
       };
+      void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
     });
-    void page.evaluate(() => window.__mediaAskFocusHarness.openMicAsk());
     await page.waitForSelector("[data-media-ask]");
     await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.querySelector("[data-media-ask]"));
     expect(await page.locator("[data-media-ask]").count()).toBe(0);
-    gumCalls = await page.evaluate(() => (window as Window & { __gumCalls?: number }).__gumCalls ?? 0);
+    const gumCalls = await page.evaluate(() => (window as Window & { __gumCalls?: number }).__gumCalls ?? 0);
     expect(gumCalls).toBe(0);
-    await page.evaluate(() => window.__mediaAskFocusHarness.openMicAsk());
+    await page.evaluate(() => {
+      void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
+    });
+    expect(await page.locator("[data-media-ask]").count()).toBe(0);
+    await page.reload();
+    await page.waitForFunction(() => (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness);
+    await page.evaluate(() => {
+      void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
+    });
     expect(await page.locator("[data-media-ask]").count()).toBe(0);
     await page.close();
   });

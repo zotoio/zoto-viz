@@ -81,7 +81,7 @@ describe("media ask focus dialog", () => {
     const pending = askUserMedia({ audio: true, video: false }, "watchword listening");
     await shown();
     const dialog = document.querySelector<HTMLDialogElement>("[data-media-ask]")!;
-    dialog.dispatchEvent(new Event("cancel", { cancelable: true }));
+    dialog.close();
     await vi.waitFor(() => {
       expect(document.querySelector("[data-media-ask]")).toBeNull();
     });
