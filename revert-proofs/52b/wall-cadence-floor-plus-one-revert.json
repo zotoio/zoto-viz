@@ -1,7 +1,0 @@
-{
-  "row": "Amendment 5 P3 rounding revert — floor(N×cost/5010)+1 instead of ceil goes red at 2505 with 200 runs",
-  "runner": "vitest",
-  "testFile": "src/core/viz-wall-limited-harness.test.ts",
-  "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > Amendment 5 P3: 2505 → 300/300; 2506 → 200 runs at 2×2$",
-  "excerpt": "AssertionError: expected 200 to be 300 // Object.is equality"
-}

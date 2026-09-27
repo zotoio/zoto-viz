@@ -1,7 +1,0 @@
-{
-  "row": "Amendment 5 P1 carry-forward revert — debt skip path returns 350 skips at 3000 2×2",
-  "runner": "vitest",
-  "testFile": "src/core/viz-wall-limited-harness.test.ts",
-  "testName": "^Amendment 4 wall LIMITED harness \\(VizFrameBudget \\+ VizHud\\) > D positive: ceil\\(4×3000/5010\\)=3 cadence — 600 frames 2×2 → 200 runs, 400 skips, 1 wall LIMITED$",
-  "excerpt": "AssertionError: expected 350 to be 400 // Object.is equality"
-}
