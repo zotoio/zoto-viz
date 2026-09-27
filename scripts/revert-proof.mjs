@@ -224,7 +224,11 @@ function pnpmInstallOffline(cwd) {
 let worktreeJsDepsReady = false;
 
 function findPnpmInstallRoots(wtRoot, rows) {
-  if (!rows.some((r) => r.meta.runner === "vitest")) {
+  const needsVitest = rows.some((r) => r.meta.runner === "vitest");
+  const needsWebCommand = rows.some(
+    (r) => r.meta.runner === "command" && r.meta.cwd === "web",
+  );
+  if (!needsVitest && !needsWebCommand) {
     return [];
   }
   const roots = [];
@@ -256,7 +260,11 @@ function ensureJsDepsInWorktree(_mainRoot, wtRoot, rows) {
     return;
   }
   const needsVitest = rows.some((r) => r.meta.runner === "vitest");
-  const installRoots = needsVitest ? findPnpmInstallRoots(wtRoot, rows) : [];
+  const needsWebCommand = rows.some(
+    (r) => r.meta.runner === "command" && r.meta.cwd === "web",
+  );
+  const installRoots =
+    needsVitest || needsWebCommand ? findPnpmInstallRoots(wtRoot, rows) : [];
   if (installRoots.length > 0) {
     for (const dir of installRoots) {
       pnpmInstallOffline(dir);
@@ -264,6 +272,10 @@ function ensureJsDepsInWorktree(_mainRoot, wtRoot, rows) {
   } else if (needsVitest && !vitestBinsPresent(wtRoot)) {
     throw new Error(
       "vitest rows require pnpm-lock.yaml and offline install in the worktree",
+    );
+  } else if (needsWebCommand && !tscBin(wtRoot)) {
+    throw new Error(
+      "command rows with cwd web require pnpm-lock.yaml and offline install in the worktree",
     );
   }
   if (needsVitest) {
