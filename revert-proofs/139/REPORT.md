@@ -1,6 +1,6 @@
 ## Revert proof
 
-Recorded at HEAD `6fc1a91635b18317d90a31a4c5b7aeedb8008b04`.
+Recorded at HEAD `2a92aed9dd22e6bbb56900d076f59e0564d788ba`.
 
 `node scripts/revert-proof.mjs 139 --prove` at that commit: **baseline GREEN** (each targeted test passes on HEAD), **patched RED** (each `.patch` reverted, test fails as below).
 
