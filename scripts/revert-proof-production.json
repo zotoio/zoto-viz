@@ -4,7 +4,9 @@
     "web/index.html",
     "web/src/app/main.ts",
     "web/src/camera/cam.worker.ts",
-    "service/monitor.py"
+    "service/monitor.py",
+    "web/typecheck/plugin-sandbox.typecheck.ts",
+    "plugins/sdk/plugin-sandbox.ts"
   ],
   "packEntryGlob": "plugins/src/*/frontend/index.ts",
   "reachExempt": [
