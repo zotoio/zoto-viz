@@ -1,4 +1,4 @@
-"""UX copy pinned as string literals (not production constants). One pytest row each."""
+"""UX copy pinned as full string literals (exact equality, not substrings)."""
 from __future__ import annotations
 
 import asyncio
@@ -29,13 +29,13 @@ def test_ux_literal_host_reject_400_body_malformed_and_disallowed() -> None:
                 ) as malformed:
                     assert malformed.status == 400
                     assert malformed.content_type == "text/plain"
-                    assert "doesn't accept the address" in await malformed.text()
+                    assert await malformed.text() == _HOST_400_LITERAL
                 async with session.get(
                     f"http://{ip}:{port}/api/session",
                     headers={"Host": f"evil.example:{port}"},
                 ) as rejected:
                     assert rejected.status == 400
-                    assert "doesn't accept the address" in await rejected.text()
+                    assert await rejected.text() == _HOST_400_LITERAL
 
     asyncio.run(run())
 
@@ -64,7 +64,7 @@ def test_ux_literal_handler_500_body() -> None:
                     headers=host_header(port),
                 ) as resp:
                     assert resp.status == 500
-                    assert "Reload to try again" in await resp.text()
+                    assert await resp.text() == _HANDLER_500_LITERAL
         finally:
             await runner.cleanup()
 
