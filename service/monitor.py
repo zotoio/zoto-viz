@@ -1866,20 +1866,6 @@ async def on_cleanup(app: web.Application) -> None:
     log("stopped")
 
 
-def _static_route_exempt(canon: str) -> bool:
-    if canon == "/":
-        return True
-    if canon.startswith("/api/"):
-        return True
-    if canon.startswith("/pack-assets/"):
-        return True
-    if canon == "/mcp" or canon.startswith("/mcp/"):
-        return True
-    if canon == "/ws" or canon.startswith("/ws/"):
-        return True
-    return False
-
-
 def make_app(
     state: State,
     bpf: str,
