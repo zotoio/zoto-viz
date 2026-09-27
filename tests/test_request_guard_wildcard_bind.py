@@ -8,7 +8,10 @@ import pytest
 from aiohttp import ClientSession
 
 from service.request_guard import HOST_REJECT_BODY, build_allowed_hosts
+from tests.lan_guard_test_util import stub_lan_os_interfaces
 from tests.monitor_app_test_util import make_app_server
+
+pytestmark = pytest.mark.usefixtures("stub_lan_os_interfaces")
 
 
 async def _get_status(ip: str, port: int, host: str) -> tuple[int, str]:

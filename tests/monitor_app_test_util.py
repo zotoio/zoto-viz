@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from unittest.mock import MagicMock
@@ -9,7 +10,7 @@ from unittest.mock import MagicMock
 from aiohttp import web
 from yarl import URL
 
-from service import monitor, request_guard
+from service import monitor, pack_assets, request_guard
 
 
 @asynccontextmanager
@@ -20,17 +21,21 @@ async def make_app_server(
     bind: str = "127.0.0.1",
     insecure_lan: bool = False,
     listen_port: int = 0,
+    clock: Callable[[], float] | None = None,
 ) -> AsyncIterator[tuple[str, int, web.AppRunner]]:
     state = MagicMock()
     orig_dist = monitor.WEB_DIST
+    orig_pack_dist = pack_assets.WEB_DIST
     if web_dist is not None:
         monitor.WEB_DIST = web_dist
+        pack_assets.WEB_DIST = web_dist
     app = monitor.make_app(
         state,
         "",
         bind=bind,
         port=7020,
         allowed_hosts=allowed_hosts or [],
+        setup_request_guard=False,
         insecure_lan=insecure_lan,
     )
     app.on_startup.clear()
@@ -50,11 +55,13 @@ async def make_app_server(
         bind=bind,
         port=port,
         allowed_hosts=allowed_hosts or [],
+        clock=clock,
     )
     try:
         yield "127.0.0.1", port, runner
     finally:
         monitor.WEB_DIST = orig_dist
+        pack_assets.WEB_DIST = orig_pack_dist
         await runner.cleanup()
 
 
