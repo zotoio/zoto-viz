@@ -27,7 +27,7 @@ def test_validate_allowed_host_rejects_out_of_range_port() -> None:
 
 
 def test_normalize_host_rejects_forbidden_characters() -> None:
-    assert normalize_host_header_key("evil;connect-src", 7020) is None
+    assert normalize_host_header_key("evil;foo:7020", 7020) is None
 
 
 def test_validate_allowed_host_rejects_invalid_hostname_syntax() -> None:
