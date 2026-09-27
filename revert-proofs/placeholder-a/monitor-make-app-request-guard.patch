@@ -1,0 +1,14 @@
+diff --git a/service/monitor.py b/service/monitor.py
+index 2a2daca..b23a7b6 100644
+--- a/service/monitor.py
++++ b/service/monitor.py
+@@ -1911,9 +1911,6 @@ def make_app(
+         client_max_size=agent.MAX_BODY,
+     )
+     request_guard.register_response_prepare_hook(app)
+-    request_guard.configure_request_guard(
+-        app, bind=bind, port=port, allowed_hosts=allowed_hosts or [],
+-    )
+     app["state"], app["bpf"], app["clients"], app["wifi_keys"] = state, bpf, set(), wifi_keys
+     app["csrf"] = access.new_token()
+     app["pack_asset_secret"] = access.new_pack_asset_secret()

@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_sysconfig_allowed_hosts.py::test_allowed_hosts_round_trips_through_dump_and_load",
+  "red": "AssertionError: assert [] == ['viz.example.lan']",
+  "description": "sysconfig dump() must persist allowed_hosts for load() round-trip.",
+  "timeoutSec": 120
+}

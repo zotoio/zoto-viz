@@ -1,0 +1,30 @@
+diff --git a/service/request_guard.py b/service/request_guard.py
+index 1e33abf..ff6a0ba 100644
+--- a/service/request_guard.py
++++ b/service/request_guard.py
+@@ -69,15 +69,13 @@ def validate_allowed_host_entry(entry: str) -> str:
+ 
+ 
+ def _canonical_key(host: str, port: int) -> str:
+-    if host.lower() == "localhost":
+-        return f"localhost:{port}"
+     try:
+         ip = ipaddress.ip_address(host)
+         if isinstance(ip, ipaddress.IPv6Address):
+             return f"[{ip.compressed}]:{port}"
+         return f"{host}:{port}"
+     except ValueError:
+-        return f"{host.lower()}:{port}"
++        return f"{host}:{port}"
+ 
+ 
+ def normalize_host_header_key(
+@@ -120,7 +118,7 @@ def normalize_host_header_key(
+         return None
+     if not 1 <= port <= 65535:
+         return None
+-    if host.lower() == "localhost":
++    if host == "localhost":
+         return _canonical_key("localhost", port)
+     try:
+         ipaddress.ip_address(host)
