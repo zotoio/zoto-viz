@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 
-import pytest
 from aiohttp import ClientSession
 
 from service import request_guard
@@ -19,18 +18,30 @@ def test_escape_log_host_sanitizes_control_characters() -> None:
 
 
 def test_validate_allowed_host_rejects_out_of_range_port() -> None:
-    with pytest.raises(ValueError, match="invalid allowed_hosts"):
+    try:
         validate_allowed_host_entry("lan.example:99999")
+    except ValueError as exc:
+        assert "invalid allowed_hosts" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
 
 
 def test_validate_allowed_host_rejects_forbidden_characters() -> None:
-    with pytest.raises(ValueError, match="invalid allowed_hosts"):
+    try:
         validate_allowed_host_entry("bad;host")
+    except ValueError as exc:
+        assert "invalid allowed_hosts" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
 
 
 def test_validate_allowed_host_rejects_invalid_hostname_syntax() -> None:
-    with pytest.raises(ValueError, match="invalid allowed_hosts"):
+    try:
         validate_allowed_host_entry("-bad-hostname")
+    except ValueError as exc:
+        assert "invalid allowed_hosts" in str(exc)
+    else:
+        raise AssertionError("expected ValueError")
 
 
 def test_multiple_host_headers_rejected() -> None:
