@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-43-s-e-row-pointer-events)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > notice row rule in style.css declares pointer-events auto",
-  "red": "AssertionError: expected '' to be 'auto' // Object.is equality"
-}

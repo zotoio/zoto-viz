@@ -1,7 +1,0 @@
---- a/scripts/fixtures/strict-git-apply-sample.txt
-+++ b/scripts/fixtures/strict-git-apply-sample.txt
-@@ -1,3 +1,3 @@
- line one
--line two
-+line two modified
- line three

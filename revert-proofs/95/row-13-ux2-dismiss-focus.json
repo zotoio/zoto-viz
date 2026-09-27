@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > returns focus to the mount root when dismissing a focused notice",
-  "description": "Revert production guard (row-13-ux2-dismiss-focus)",
-  "red": "AssertionError: expected <body>\u2026(2)</body> to be <div id=\"wall\" tabindex=\"-1\">\u2026(1)</div> // Object.is equality"
-}

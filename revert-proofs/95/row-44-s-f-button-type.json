@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-44-s-f-button-type)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > puts action buttons in the tab order",
-  "red": "AssertionError: expected 'submit' to be 'button' // Object.is equality"
-}

@@ -57,11 +57,6 @@ jobs:
       - name: Playwright Chromium (media-ask focus, starter pack smoke)
         working-directory: web
         run: pnpm exec playwright install chromium --with-deps
-      - name: Revert-proof self-test (head runner, head tests)
-        run: bash scripts/revert-proof-ci-selftest.sh head
-      - name: Revert-proof self-test (head runner, base tests)
-        if: github.event_name == 'pull_request'
-        run: bash scripts/revert-proof-ci-selftest.sh base "${{ github.event.pull_request.base.sha }}"
       - uses: browser-actions/setup-chrome@v1
         id: chrome
         with:
@@ -145,7 +140,7 @@ jobs:
       - name: Backrooms browser smoke
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb iproute2
           bash scripts/dev.sh start backend
           cd web && pnpm exec playwright install chromium
           xvfb-run -a env ZOTO_VIZ_URL=http://127.0.0.1:7020/ pnpm test:backrooms-smoke
@@ -177,7 +172,7 @@ jobs:
       - name: Sandbox plugin draw smoke
         run: |
           sudo apt-get update
-          sudo apt-get install -y xvfb
+          sudo apt-get install -y xvfb iproute2
           bash scripts/dev.sh start backend
           cd web && pnpm exec playwright install chromium
           xvfb-run -a env ZOTO_VIZ_URL=http://127.0.0.1:7020/ pnpm test:sandbox-plugin-smoke

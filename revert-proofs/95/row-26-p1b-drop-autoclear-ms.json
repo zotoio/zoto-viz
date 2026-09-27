@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-26-p1b-drop-autoclear-ms)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > dropping autoClearMs on a same-text re-post cancels auto-clear",
-  "red": "AssertionError: expected 1 to be +0 // Object.is equality"
-}

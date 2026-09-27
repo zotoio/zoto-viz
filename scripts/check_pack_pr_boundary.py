@@ -87,28 +87,15 @@ def is_pack_py_test_file(path: str, pack: str) -> bool:
     return path == pack_py_test_path(pack)
 
 
-def revert_proofs_folder_segment(path: str) -> str | None:
-    """Second path segment under revert-proofs/, or None if not under that tree."""
-    if not path.startswith("revert-proofs/"):
-        return None
-    parts = path.split("/")
-    if len(parts) < 2 or not parts[1]:
-        return None
-    return parts[1]
-
-
 def revert_proofs_violation(path: str, pr_number: int) -> Violation | None:
-    """Reject revert-proofs/<other>/ on this PR; allow only revert-proofs/<pr_number>/."""
-    segment = revert_proofs_folder_segment(path)
-    if segment is None:
-        return None
-    if segment == str(pr_number):
-        return None
-    return Violation(
-        path,
-        f"revert-proofs/{segment}/ is not allowed for PR #{pr_number} "
-        f"(only revert-proofs/{pr_number}/)",
-    )
+    """Pack PRs must not touch revert-proofs/ (regression proof lives in the PR body)."""
+    if path.startswith("revert-proofs/"):
+        return Violation(
+            path,
+            "revert-proofs/ is not allowed on pack PRs "
+            "(describe regression proof in the PR body: test red with fix reverted, green with fix applied)",
+        )
+    return None
 
 
 def is_allowed_multipack_web_src(path: str, packs: set[str]) -> bool:
@@ -449,8 +436,6 @@ def evaluate_pack_pr(
         if path.startswith(pack_prefix):
             continue
         rev_v = revert_proofs_violation(path, pr_number)
-        if rev_v is None and revert_proofs_folder_segment(path) is not None:
-            continue
         if rev_v is not None:
             violations.append(rev_v)
             continue

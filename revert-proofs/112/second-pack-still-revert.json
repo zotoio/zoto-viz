@@ -1,8 +1,0 @@
-{
-  "row": "pack PR 111: second pack folder unchanged",
-  "runner": "pytest",
-  "testFile": "tests/test_pack_pr_boundary.py",
-  "testName": "^test_pack_pr_rejects_second_pack_folder$",
-  "patchedAssertion": "AssertionError: assert 0 == 1",
-  "excerpt": "AssertionError: assert 0 == 1"
-}

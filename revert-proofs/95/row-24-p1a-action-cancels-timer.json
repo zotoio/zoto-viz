@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-24-p1a-action-cancels-timer)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > adding an action on a same-text re-post cancels auto-clear",
-  "red": "AssertionError: expected +0 to be 1 // Object.is equality"
-}

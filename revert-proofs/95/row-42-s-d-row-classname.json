@@ -1,7 +1,0 @@
-{
-  "description": "Revert production guard (row-42-s-d-row-classname)",
-  "runner": "vitest",
-  "testFile": "src/core/wall-notice-region.test.ts",
-  "testName": "wall notice region > puts action buttons in the tab order",
-  "red": "AssertionError: expected '' to be 'wall-notice-row' // Object.is equality"
-}
