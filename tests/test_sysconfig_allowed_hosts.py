@@ -95,10 +95,12 @@ def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
     assert run_app_calls[0]["shutdown_timeout"] == 3
 
 
-def test_api_docs_describe_loopback_host_allowlist_not_lan_scan() -> None:
+def test_api_docs_describe_bind_allowlist_branches() -> None:
     text = (REPO / "docs" / "api.md").read_text(encoding="utf-8")
-    assert "loopback names and addresses for the bound port" in text
-    assert "all local interface addresses" not in text
+    assert "**Loopback bind**" in text
+    assert "**Wildcard bind**" in text
+    assert "**Specific non-loopback bind**" in text
+    assert "all local interface addresses on that port" not in text
 
 
 def test_sysconfig_header_documents_allowed_hosts_key() -> None:

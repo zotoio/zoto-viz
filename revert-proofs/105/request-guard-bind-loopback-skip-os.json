@@ -1,6 +1,0 @@
-{
-  "runner": "pytest",
-  "testId": "tests/test_request_guard_os_query.py::test_build_allowed_hosts_loopback_bind_skips_os_lan_addresses",
-  "red": "AssertionError: assert 5 == 3",
-  "timeoutSec": 120
-}

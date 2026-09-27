@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_request_guard_bind_matrix.py::test_build_allowed_hosts_bind_specific_lan_includes_only_that_address",
+  "red": "AssertionError: assert ['127.0.0.1:7...calhost:7020'] == ['127.0.0.1:7...calhost:7020']",
+  "description": "Specific LAN bind must not merge every OS interface address.",
+  "timeoutSec": 120
+}
