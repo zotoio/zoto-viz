@@ -1,7 +1,0 @@
-{
-  "description": "Revert explicit null deny on non-pack paths (opaque null allowed without token)",
-  "runner": "pytest",
-  "testFile": "tests/test_access_origin_strict.py",
-  "testName": "test_origin_null_denied_without_token_on_api_path",
-  "red": "assert not access.origin_ok(req)"
-}
