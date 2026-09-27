@@ -29,7 +29,7 @@ import time
 from collections import Counter, defaultdict, deque
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from aiohttp import WSCloseCode, web
 
@@ -79,6 +79,7 @@ FIELDS = [
     "dns.resp.name",  # pair with dns.a; qry.name on every A record is mDNS glue (Android.local on every Cast box)
     "wlan.bssid", "wlan.ssid", "wlan.fc.type_subtype", "radiotap.dbm_antsignal", "wlan_radio.channel",
     "tcp.payload", "udp.payload",  # the head of each is kept per conversation so the trace modal can decode a packet
+    "tcp.flags",
     "_ws.col.Info",  # keep last: free text that may itself contain the field separator
 ]
 BT_FIELDS = [
@@ -118,6 +119,29 @@ TLS_PORTS = {"443", "8443", "853", "993", "995", "465", "5223", "5228"}
 def log(msg: str) -> None:
     print(f"[monitor] {time.strftime('%H:%M:%S')} {msg}", file=sys.stderr, flush=True)
     logbuf.record(str(msg))
+
+
+def _tcp_reset(flags: str) -> bool:
+    s = (flags or "").strip().lower()
+    if not s:
+        return False
+    if "rst" in s:
+        return True
+    with contextlib.suppress(ValueError):
+        return bool(int(s, 0) & 0x04)
+    return False
+
+
+def _tcp_syn(flags: str) -> bool:
+    """True for a bare SYN (connection attempt), not SYN-ACK."""
+    s = (flags or "").strip()
+    if not s:
+        return False
+    with contextlib.suppress(ValueError):
+        v = int(s, 0)
+        return bool(v & 0x02) and not bool(v & 0x10)
+    low = s.lower()
+    return "syn" in low and "ack" not in low.replace("syn", "")
 
 
 def mac_from_eui64(ip: str) -> str:
@@ -358,8 +382,17 @@ def own_nodenames() -> set[str]:
 
 
 class State:
-    def __init__(self, iface: str, local_ip: str, net: str, gateway: str, only_ifaces: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        iface: str,
+        local_ip: str,
+        net: str,
+        gateway: str,
+        only_ifaces: list[str] | None = None,
+        viz_frame_opts: dict[str, Any] | None = None,
+    ) -> None:
         self.iface, self.local_ip, self.net_str, self.gateway = iface, local_ip, net, gateway
+        self.viz_frame_opts = viz_frame_opts or {"links": True, "linksMax": 64}
         self.net = ipaddress.ip_network(net)
         self.only_ifaces = only_ifaces
         self.ifaces: dict[str, list[str]] = {}
@@ -393,6 +426,10 @@ class State:
         self._flow_buckets: dict[str, dict[int, int]] = defaultdict(dict)       # flow -> sec -> bytes
         self._flow_ab: dict[str, dict[int, int]] = defaultdict(dict)            # flow -> sec -> bytes a→b
         self._flow_ba: dict[str, dict[int, int]] = defaultdict(dict)            # flow -> sec -> bytes b→a
+        self._flow_pkt_ab: dict[str, dict[int, int]] = defaultdict(dict)        # flow -> sec -> packets a→b
+        self._flow_pkt_ba: dict[str, dict[int, int]] = defaultdict(dict)        # flow -> sec -> packets b→a
+        self._fail_buckets: dict[str, dict[int, int]] = defaultdict(dict)       # host ip -> sec -> RST sent (blamed host)
+        self._conn_attempt_buckets: dict[str, dict[int, int]] = defaultdict(dict)  # host ip -> sec -> TCP SYN attempts
         # per-device captured-traffic detail for the panel: a ring of recent packets and rolling counters
         self.recent: dict[str, deque] = defaultdict(lambda: deque(maxlen=RECENT_PACKETS))
         self.recent_flow: dict[str, deque] = defaultdict(lambda: deque(maxlen=FLOW_PACKETS))  # "a|b" -> packets
@@ -602,11 +639,19 @@ class State:
                 if n not in d["hostnames"] and useful_name(n):
                     d["hostnames"].append(n)
             self.alias_to_ip[v6] = v4
+            for bucket in (self._fail_buckets, self._conn_attempt_buckets):
+                v6_b = bucket.pop(v6, None)
+                if v6_b:
+                    v4_b = bucket[v4]
+                    for sec, n in v6_b.items():
+                        v4_b[sec] = v4_b.get(sec, 0) + n
             for key in [k for k in self.flows if v6 in k.split("|")]:
                 del self.flows[key]
                 self._flow_buckets.pop(key, None)
                 self._flow_ab.pop(key, None)
                 self._flow_ba.pop(key, None)
+                self._flow_pkt_ab.pop(key, None)
+                self._flow_pkt_ba.pop(key, None)
                 self.recent_flow.pop(key, None)
 
     def scrub_device(self, d: dict) -> None:
@@ -641,6 +686,7 @@ class State:
         dns_resp = f[27] if len(f) > 27 else ""
         wlan_bssid, wlan_ssid, wlan_sub, wlan_sig, wlan_ch = (f[28:33] + [""] * 5)[:5]
         payload_hex = (f[33] or f[34]) if len(f) > 34 else ""
+        tcp_flags = f[35] if len(f) > 35 else ""
         info = "|".join(f[INFO_FIELD:]) if len(f) > INFO_FIELD else ""
         sec = int(t)
 
@@ -722,7 +768,8 @@ class State:
         fl = self.flows.get(key)
         if fl is None:
             fl = self.flows[key] = {"a": a, "b": b_, "bytes": 0, "packets": 0, "ports": [], "protos": [], "ifaces": [],
-                                    "first_seen": t, "last_seen": t, "rate": 0.0, "rate_ab": 0.0, "rate_ba": 0.0}
+                                    "first_seen": t, "last_seen": t, "rate": 0.0, "rate_ab": 0.0, "rate_ba": 0.0,
+                                    "rate_pkt_ab": 0.0, "rate_pkt_ba": 0.0}
         if iface and iface not in fl["ifaces"]:
             fl["ifaces"].append(iface)
         fl["bytes"] += size
@@ -732,6 +779,19 @@ class State:
         fb[sec] = fb.get(sec, 0) + size
         side = self._flow_ab[key] if src == a else self._flow_ba[key]
         side[sec] = side.get(sec, 0) + size
+        pkt_side = self._flow_pkt_ab[key] if src == a else self._flow_pkt_ba[key]
+        pkt_side[sec] = pkt_side.get(sec, 0) + 1
+        if tsp:
+            if _tcp_syn(tcp_flags):
+                if useful_alias(src) and not is_multicast(src):
+                    ab = self._conn_attempt_buckets[src]
+                    ab[sec] = ab.get(sec, 0) + 1
+                if useful_alias(dst) and not is_multicast(dst):
+                    ab = self._conn_attempt_buckets[dst]
+                    ab[sec] = ab.get(sec, 0) + 1
+            if _tcp_reset(tcp_flags) and useful_alias(src) and not is_multicast(src):
+                fb = self._fail_buckets[src]
+                fb[sec] = fb.get(sec, 0) + 1
         port_kind = "tcp" if tsp else ("udp" if usp else "")
         tag = ""
         if port_kind:
@@ -929,6 +989,16 @@ class State:
         cutoff = int(now) - RATE_WINDOW_S
         for s in [s for s in self._rate_buckets if s < cutoff - 1]:
             del self._rate_buckets[s]
+        for ip, fb in list(self._fail_buckets.items()):
+            for s in [s for s in fb if s < cutoff - 1]:
+                del fb[s]
+            if not fb:
+                del self._fail_buckets[ip]
+        for ip, ab in list(self._conn_attempt_buckets.items()):
+            for s in [s for s in ab if s < cutoff - 1]:
+                del ab[s]
+            if not ab:
+                del self._conn_attempt_buckets[ip]
         away = self.radio.away
         for key, fl in list(self.flows.items()):
             if away and self.air_only(fl["ifaces"]):
@@ -939,6 +1009,8 @@ class State:
                     self._flow_buckets.pop(key, None)
                     self._flow_ab.pop(key, None)
                     self._flow_ba.pop(key, None)
+                    self._flow_pkt_ab.pop(key, None)
+                    self._flow_pkt_ba.pop(key, None)
                     self.recent_flow.pop(key, None)
                 continue
             fb = self._flow_buckets[key]
@@ -951,11 +1023,19 @@ class State:
                     del bucket[s]
             fl["rate_ab"] = sum(v for s, v in ab.items() if s >= cutoff) / RATE_WINDOW_S
             fl["rate_ba"] = sum(v for s, v in ba.items() if s >= cutoff) / RATE_WINDOW_S
+            pab, pba = self._flow_pkt_ab[key], self._flow_pkt_ba[key]
+            for bucket in (pab, pba):
+                for s in [s for s in bucket if s < cutoff - 1]:
+                    del bucket[s]
+            fl["rate_pkt_ab"] = sum(v for s, v in pab.items() if s >= cutoff) / RATE_WINDOW_S
+            fl["rate_pkt_ba"] = sum(v for s, v in pba.items() if s >= cutoff) / RATE_WINDOW_S
             if now - fl["last_seen"] > FLOW_IDLE_S:
                 del self.flows[key]
                 del self._flow_buckets[key]
                 self._flow_ab.pop(key, None)
                 self._flow_ba.pop(key, None)
+                self._flow_pkt_ab.pop(key, None)
+                self._flow_pkt_ba.pop(key, None)
                 self.recent_flow.pop(key, None)
         self.radio.tick(now)
 
@@ -994,6 +1074,12 @@ class State:
                 if job.get("status") == "done":
                     job["summary"] = forensics.summarise(job.get("steps") or {}, facts)
             dd["analysis"] = job["status"] if job else None  # running | done | error; lets the panel show a badge
+            fb = self._fail_buckets.get(d["ip"], {})
+            fail_n = sum(v for s, v in fb.items() if s >= cutoff)
+            ab = self._conn_attempt_buckets.get(d["ip"], {})
+            attempt_n = sum(v for s, v in ab.items() if s >= cutoff)
+            if fail_n > 0 and attempt_n > 0:
+                dd["conn_fail"] = min(1.0, fail_n / attempt_n)
             devices.append(dd)
         return {
             "ts": now,
@@ -1010,6 +1096,7 @@ class State:
                       "flows": len(self.flows), "active_flows": sum(1 for f in self.flows.values() if f["rate"] > 0)},
             "devices": devices,
             "flows": list(self.flows.values()),
+            "host": {"vizFrame": dict(self.viz_frame_opts)},
             "views": {
                 **self.radio.views(now),
                 "cpu": self.hostsys.decorate_cpu(self.cpu.snapshot(now)),
@@ -1984,7 +2071,11 @@ def main() -> None:
         sys.exit("[monitor] refusing non-loopback --bind (pass --insecure-lan or set bind in ~/.zoto-viz/sys-config.yml)")
 
     iface, local_ip, cidr, gw = zotoviz.default_iface()
-    state = State(iface, local_ip, cidr, gw, only_ifaces=args.iface)
+    state = State(
+        iface, local_ip, cidr, gw,
+        only_ifaces=args.iface,
+        viz_frame_opts=sysconfig.viz_frame_opts(cfg),
+    )
     if not state.ifaces:
         sys.exit(f"[monitor] no capturable interfaces" + (f" among {args.iface}" if args.iface else ""))
     if not args.fresh:

@@ -1,0 +1,13 @@
+diff --git a/web/src/ui/viz-hud.ts b/web/src/ui/viz-hud.ts
+index d005e99..6f8d61f 100644
+--- a/web/src/ui/viz-hud.ts
++++ b/web/src/ui/viz-hud.ts
+@@ -284,7 +284,7 @@ export class VizHud {
+     this.activeId = next;
+     this.root.hidden = !this.activeId;
+     if (!this.activeId) {
+-      this.stageFailEl.hidden = true;
++      this.stageFailEl.hidden = false;
+       this.stageFailEl.textContent = "⚠ DEGRADED";
+       return;
+     }

@@ -665,6 +665,9 @@ def _check_semantics(doc: dict[str, Any], *, include_settings: bool = False) -> 
             pass
         elif not any(idle.get(k) for k in ("packets", "rf", "talkers", "headlines")):
             raise ValueError("viz.idle must be { fixture: host } or an inline demo seed")
+        cv = viz.get("contract")
+        if cv is not None and cv not in (1, 2):
+            raise ValueError(f"viz.contract must be 1 or 2, got {cv!r}")
     elif isinstance(viz, dict) and viz.get("graphWalk") is not False:
         raise ValueError("viz.graphWalk must be false when viz block is present")
     render = doc.get("render")

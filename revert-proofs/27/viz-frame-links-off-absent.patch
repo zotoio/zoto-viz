@@ -1,0 +1,13 @@
+diff --git a/web/src/plugins/viz-frame-collect.ts b/web/src/plugins/viz-frame-collect.ts
+index 9c63711..85a2e41 100644
+--- a/web/src/plugins/viz-frame-collect.ts
++++ b/web/src/plugins/viz-frame-collect.ts
+@@ -185,7 +185,7 @@ export function applyVizFrameContractV2(
+ ): VizDataFrame {
+   frame.contract = VIZ_CONTRACT_VERSION;
+   if (!opts.linksEnabled) {
+-    delete frame.links;
++    frame.links = EMPTY_VIZ_LINKS;
+     delete frame.linksDropped;
+     for (const t of frame.talkers) delete t.failed;
+     return frame;

@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/ui/viz-hud.test.ts",
+  "testName": "^viz\\ hud\\ helpers\\ >\\ shows\\ DEGRADED\\ stage\\ pill\\ matching\\ strip\\ badge\\ text$",
+  "description": "One-line production revert: omit stageFailEl show/update in VizHud.tick when failBadge is set.",
+  "patchedAssertion": "AssertionError: expected '\u26a0 DEGRADED' to be '\u26a0 DEGRADED 55% TCP \u00b7 2 units' // Object.is equality"
+}

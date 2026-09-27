@@ -50,12 +50,23 @@ Each frame the host sends a **decimated** `VizDataFrame` (see
 
 | Field | Source | Cap |
 | --- | --- | --- |
+| `contract` | `1` on v1 plugin frames (lifetime talker counts); `2` on host v2 frames and plugin `init` when the pack declares contract 2 | — |
 | `t`, `dt` | monitor timestamp | — |
 | `audio` | scene pulse bass 0..1 | — |
 | `packets[]` | flow proto tallies | 32 |
 | `rf[]` | Wi-Fi watch SSIDs + RSSI | 24 |
-| `talkers[]` | top devices by packet rate | 24 |
+| `talkers[]` | top devices — summed **sent packets/s** per host when flow rates exist; else lifetime packet counts (never mixed in one frame) | 24 |
+| `talkers[].failed` | per-host TCP failure ratio 0..1 when link collection is **on** and the monitor reports `conn_fail`; omitted when collection is off | optional |
+| `links[]` | directional host-pair **sent packets/s**; always present (possibly empty `[]` shared constant) when collection is on; omitted when off | 64 default |
+| `linksDropped` | pairs over the cap | optional |
 | `headlines[]` | host sources: RSS titles + `summary` blurbs, HTTP JSON strings, file lines (`kind`) | 8 |
+
+When `~/.zoto-viz/sys-config.yml` sets `viz_frame_links: false`, the host still
+stamps `contract` but omits `links[]`, `linksDropped`, and `talkers[].failed`.
+When link collection is **on** but no pairs qualify, the host sends **`links: []`**
+(empty array), not a missing key.
+Optional keys: `viz_frame_links` (default `true`), `viz_frame_links_max` (1..256,
+default `64`). Resolved into `state.host.vizFrame` on each `/api/state` snapshot.
 
 Plugins must **not** request or traverse the full device graph. Use
 `graph.read` only when you need the legacy `{id, rate, role}` tick.
@@ -172,6 +183,12 @@ Each ships `frontend/index.ts` + `sky/fragment.glsl` + `visualisation.yml`
 with `backdrop: plugin`. The host hides the LAN graph (nodes, edges, labels,
 legend) for every demo pack — `viz.read` / `viz.write`, `backdrop: plugin`,
 or a sky shader. Set `look.stageOnly: false` only when the graph should stay.
+
+## Dev fixture switch
+
+On the Vite dev server only, `?vizFixture=idle|idle-failed|golden-live|vm-live`
+feeds shared SDK fixtures to every viz pack instead of live traffic (see
+`plugins/sdk/README.md`). Production builds omit this path.
 
 ## Tests
 

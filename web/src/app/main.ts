@@ -97,6 +97,7 @@ import {
 import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, buildVizFrame,
   buildVizFrameForPlugin, defaultVizContract, type VizDataFrame,
+  buildVizFrameForPlugin, buildVizFrameForV1AdapterDelivery, defaultVizContract,
 } from "../plugins/viz-host";
 import {
   TILE_HEAL_FALLBACK_MODE,
@@ -114,6 +115,7 @@ import {
   setTypeSafeProxyConfigured,
 } from "../plugins/typesafe-host";
 import { runPackFrameHandler } from "../plugins/viz-pack-host";
+import { deliverVizFrameToPackTiles } from "../plugins/viz-frame-pack-deliver";
 import {
   easeStereoBins, STEREO_BINS, packStereoDrive, parseStereoTiming, stepStereoClock, stereoRate,
 } from "../../../plugins/src/stereo-gram/frontend/drive";
@@ -137,6 +139,10 @@ import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import { vizV1FrameAdapter } from "../plugins/viz-v1-frame-adapter";
+import { optsForMode } from "./mode-opts";
+import { VizFrameScopeCache } from "./viz-frame-scope";
+import { vizFrameHostPerFrameTick } from "./viz-frame-host-tick";
 import {
   allowOnPluginChangeConfigPush,
   allowOnPluginFieldsConfigPush,
@@ -435,6 +441,34 @@ const sandbox = new PluginSandbox();
 const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameTs = 0;
+const vizBudget = new VizFrameBudget();
+
+type VizDevFixtureModule = typeof import("../plugins/viz-dev-fixture");
+let vizDevFixtureMod: VizDevFixtureModule | null = null;
+let vizDevFixtureName: import("../plugins/viz-dev-fixture").VizDevFixtureName | null = null;
+let vizDevFixtureLoad: Promise<void> | null = null;
+
+function vizFixtureQueryRaw(): string | null {
+  if (!import.meta.env.DEV) return null;
+  const search = globalThis.location?.search ?? "";
+  const q = search.startsWith("?") ? search.slice(1) : search;
+  const raw = new URLSearchParams(q).get("vizFixture")?.trim();
+  return raw || null;
+}
+
+function ensureVizDevFixtureLoaded(): Promise<void> {
+  if (!vizFixtureQueryRaw()) return Promise.resolve();
+  if (vizDevFixtureLoad) return vizDevFixtureLoad;
+  vizDevFixtureLoad = import("../plugins/viz-dev-fixture")
+    .then((mod) => {
+      vizDevFixtureMod = mod;
+      vizDevFixtureName = mod.parseVizDevFixtureQuery(globalThis.location?.search ?? "", true);
+    })
+    .catch((err) => {
+      console.warn("[zoto-viz] viz dev fixture failed to load", err);
+    });
+  return vizDevFixtureLoad;
+}
 const typesafeHost = new TypeSafeHost();
 let preserveVizUbo = false;
 const vizHud = new VizHud($("scene"), (packId) => swapVizPack(packId));
@@ -568,7 +602,35 @@ scene.afterLook = () => {
   for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
   scene.setPluginUboBuffer(vizWriter.ubo);
 };
+let v1AdapterPackId: string | null = null;
+const vizFrameScope = new VizFrameScopeCache({
+  parseSourceBind,
+  illustratedSourceBind,
+  syncAdapterViewOpts: (opts) => vizV1FrameAdapter.syncViewOpts(opts),
+});
+const vizHostPerFrameInput = {
+  mode: modeById("topology"),
+  currentOpts: {} as Record<string, string>,
+  scope: vizFrameScope,
+};
+
+export function syncVizFrameScope(m: ViewMode, opts: Record<string, string>, effectivePluginId?: string): void {
+  vizFrameScope.sync(m, opts, effectivePluginId);
+}
+
+function syncV1PackAdapter(spec: PluginView | null): void {
+  if (v1AdapterPackId) {
+    vizV1FrameAdapter.unregister(v1AdapterPackId);
+    v1AdapterPackId = null;
+  }
+  if (spec?.viz?.contract === 1) {
+    vizV1FrameAdapter.register(spec.id);
+    v1AdapterPackId = spec.id;
+  }
+}
+
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
+  syncV1PackAdapter(spec);
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
   const { writer, resetFrameTs, resetBudget } = bindVizWriterCore(vizWriter, contract, preserveUbo);
@@ -675,6 +737,7 @@ function onPluginFields(): void {
   const m = modeById(modeSel.value);
   const opts = optsFor(m);
   currentOpts = opts;
+  syncVizFrameScope(m, opts, (m.pluginId ?? tsWatchId) || undefined);
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   if (mosaic?.on) {
     const focus = mosaic.focusedId || mosaic.mainMode;
@@ -780,6 +843,7 @@ function optsFor(m: ViewMode): Record<string, string> {
   }
   modeOptsCache.set(m.id, o);
   return o;
+  return optsForMode(m, pluginSpecForMode);
 }
 
 function arcadeControls(m: ViewMode): HTMLElement[] {
@@ -886,6 +950,13 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
     tsWatchStoreId = spec ? configStoreId(spec) : "";
+    return;
+  }
+  if (spec.viz_block) {
+    sandbox.unload();
+    bindVizWriter(null);
+    scene.clearPluginStyle();
+    tsWatchId = "";
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
@@ -1227,6 +1298,7 @@ async function applyModeAsync(id: string, flags: { keepLayout?: boolean } = {}):
 
   noteTileHealthGrace("main");
   currentOpts = opts;
+  syncVizFrameScope(m, opts, (m.pluginId ?? tsWatchId) || undefined);
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
   modeSel.value = m.id;
   localStorage.setItem("zoto-viz.mode", m.id);
@@ -1534,19 +1606,34 @@ function feed(m: StateMsg): void {
     if (!vizWriter && active) bindVizWriter(active);
     const audio = scene.pulseNow.bass;
     const idle = active?.viz?.idle;
-    const bind = packId === "hn-rain" || packId === "hn-term"
-      ? illustratedSourceBind(optsFor(mode))
-      : parseSourceBind(optsFor(mode));
-    const buildFrame = idle
-      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
-        s,
-        pt,
-        a,
-        idle,
-        active?.viz?.contract ?? 1,
-        bind,
-      )
-      : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
+    vizHostPerFrameInput.mode = mode;
+    vizHostPerFrameInput.currentOpts = currentOpts;
+    const { bind, packOpts: vizPackOpts } = vizFrameHostPerFrameTick(vizHostPerFrameInput);
+    const useV1Adapter = vizV1FrameAdapter.hasV1Packs() || active?.viz?.contract === 1;
+    const buildLiveFrame = useV1Adapter
+      ? (s: StateMsg, pt: number, a: number) => buildVizFrameForV1AdapterDelivery(s, pt, a, idle, bind)
+      : idle
+        ? (s: StateMsg, pt: number, a: number) => buildVizFrameForPlugin(
+          s,
+          pt,
+          a,
+          idle,
+          active?.viz?.contract ?? 1,
+          bind,
+        )
+        : (s: StateMsg, pt: number, a: number) => buildVizFrame(s, pt, a, bind);
+    const useDevFixture = import.meta.env.DEV && !!vizFixtureQueryRaw();
+    const buildFrame = useDevFixture
+      ? (s: StateMsg, pt: number, a: number) => {
+        if (!vizDevFixtureMod || !vizDevFixtureName) return buildLiveFrame(s, pt, a);
+        return vizDevFixtureMod.buildVizDevFixtureFrame(
+          vizDevFixtureName,
+          s.ts,
+          pt > 0 ? Math.max(0, s.ts - pt) : 0,
+          a,
+        );
+      }
+      : buildLiveFrame;
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       deliverVizPluginFrame({
@@ -1577,12 +1664,21 @@ function feed(m: StateMsg): void {
       lastVizFrame = f;
       sandbox.frame(f);
       tileHealth?.noteVizFrameDelivered();
+      if (vizV1FrameAdapter.hasV1Packs()) vizV1FrameAdapter.deliver(f);
+      const pluginFrame = active?.viz?.contract === 1 && active.id
+        ? vizV1FrameAdapter.frameFor(active.id) ?? f
+        : f;
+      if (packId === "stereo-gram") pluginFrame.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
+      sandbox.frame(pluginFrame);
       if (packId) {
-        runPackFrameHandler(packId, f, {
-          writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
-          writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
-          writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
-        }, optsFor(mode));
+        deliverVizFrameToPackTiles(pluginFrame, [{
+          tileId: packId,
+          onFrame: (pf) => runPackFrameHandler(packId, pf, {
+            writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
+            writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
+            writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
+          }, vizPackOpts),
+        }]);
       }
     }, buildFrame);
     if (frame) {
@@ -1591,7 +1687,7 @@ function feed(m: StateMsg): void {
         scene.setVizHeadlines(frame.headlines.map((h) => h.text).join(" / ") || "HN");
       }
       if (packId === "hn-rain") {
-        const pics = parseHnRainLook(optsFor(mode)).pics && !mosaic?.on;
+        const pics = parseHnRainLook(currentOpts).pics && !mosaic?.on;
         feedTitleCube.setActive(pics);
         if (pics) feedTitleCube.sync(frame.headlines.map((h) => h.text));
       }
@@ -2271,6 +2367,7 @@ settings.prependSection(
   profileHost,
 );
 uiReady = true;
+if (import.meta.env.DEV) void ensureVizDevFixtureLoaded();
 applyViewLook();
 void (async () => {
   try {
