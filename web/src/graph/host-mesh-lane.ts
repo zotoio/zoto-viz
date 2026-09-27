@@ -278,7 +278,8 @@ export class HostMeshLane {
   }
 
   private assetUrl(packId: string, path: string, sha256?: string): string {
-    const base = `/api/plugins/${encodeURIComponent(packId)}/asset/${path.split("/").map(encodeURIComponent).join("/")}`;
+    const rel = path.replace(/^\/+/, "").replace(/^assets\//i, "");
+    const base = `/api/plugins/${encodeURIComponent(packId)}/asset/${rel.split("/").map(encodeURIComponent).join("/")}`;
     return sha256 ? `${base}?h=${encodeURIComponent(sha256)}` : base;
   }
 

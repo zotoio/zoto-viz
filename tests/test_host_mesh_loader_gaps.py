@@ -9,6 +9,11 @@ LANE = ROOT / "web" / "src" / "graph" / "host-mesh-lane.ts"
 REVERT_FIRST_MESH_ONLY = "if (!mesh && (obj as THREE.Mesh).isMesh) mesh = obj as THREE.Mesh"
 
 
+def test_host_mesh_lane_strips_assets_prefix_in_api_url() -> None:
+    text = LANE.read_text(encoding="utf-8")
+    assert 'replace(/^assets\\//i, "")' in text
+
+
 def test_host_mesh_lane_has_meshopt_decoder() -> None:
     text = LANE.read_text(encoding="utf-8")
     assert "setMeshoptDecoder" in text

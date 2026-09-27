@@ -41,15 +41,18 @@ async function main() {
     boot: [],
   };
 
-  const bootstrapUrl = packAssetUrl(sat, "_sandbox", jsName);
+  const bootstrapUrl = packAssetUrl(monitor, sat, "_sandbox", jsName);
   const mod = await fetch(bootstrapUrl, {
-    headers: { Origin: "null", Host: "127.0.0.1:7020" },
+    headers: { Origin: "null", Host: "127.0.0.1:7020", Cookie: `zoto-viz-csrf=${(await (await fetch(`${monitor}api/session`, { headers: { Host: "127.0.0.1:7020" } })).json()).csrf}` },
   });
   diag.bootstrapJsStatus = mod.status;
   diag.bootstrapJsCors = mod.headers.get("access-control-allow-origin");
 
   const browser = await chromium.launch({ headless: true });
-  const page = await browser.newPage();
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  // Establish zoto-viz-csrf cookie on :7020 before opaque-origin iframe loads pack-assets.
+  await page.goto(monitor, { waitUntil: "domcontentloaded", timeout: WAIT_MS });
 
   page.on("console", (msg) => {
     const t = msg.text();
@@ -66,7 +69,7 @@ async function main() {
     });
   });
 
-  const sandboxHtml = packAssetUrl(sat, "_sandbox", "plugin-sandbox.html");
+  const sandboxHtml = packAssetUrl(monitor, sat, "_sandbox", "plugin-sandbox.html");
   await page.setContent(`<!doctype html><meta charset="utf-8"><iframe id="sb" sandbox="allow-scripts"></iframe>
 <script>
   window.__sandboxBoot = [];

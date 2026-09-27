@@ -7,8 +7,8 @@ from unittest.mock import patch
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from service import access, monitor, plugins
-from tests.pack_asset_test_util import SESSION, mint, pack_url
+from service import access, monitor, pack_asset_frames, plugins
+from tests.pack_asset_test_util import SESSION, mint, pack_url, new_frame_id
 from tests.pack_asset_test_util import make_test_app as make_pack_test_app
 
 HOST = {"Host": "127.0.0.1:7020"}
@@ -151,6 +151,31 @@ class SandboxAssetTokenOriginTests(AioHTTPTestCase):
         assert resp.status == 200
         assert resp.headers.get("Access-Control-Allow-Origin") == "null"
         assert resp.headers.get("Referrer-Policy") == "no-referrer"
+
+    async def test_null_origin_pack_assets_with_stale_csrf_cookie(self) -> None:
+        """Sandbox iframe sends the tab cookie, not the CSRF header — stale cookie must not 401."""
+        stale = "stale-tab-cookie-from-before-restart"
+        live = SESSION
+        frame = new_frame_id()
+        pack_asset_frames.registry_for_app(self.app).register(live, frame)
+        tok = mint("_sandbox", session_id=live, frame_id=frame)
+        js_name = "plugin-sandbox-deadbeef.js"
+        with tempfile.TemporaryDirectory() as tmp:
+            dist = Path(tmp)
+            assets = dist / "assets"
+            assets.mkdir()
+            (assets / js_name).write_text("// smoke", encoding="utf-8")
+            self.app["csrf"] = live
+            with patch.object(monitor, "WEB_DIST", dist):
+                resp = await self.client.get(
+                    access.pack_asset_url(tok, "_sandbox", js_name),
+                    headers={
+                        **HOST,
+                        "Origin": "null",
+                        "Cookie": f"{access.COOKIE}={stale}",
+                    },
+                )
+        assert resp.status == 200
 
     def test_mutate_log_path_redacts_pack_asset_token(self) -> None:
         tok = mint("demo-pack")
