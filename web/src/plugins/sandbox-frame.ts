@@ -405,6 +405,7 @@ async function handleBootOnPort(d: HostBootPayload, rt: SandboxFrameRuntime): Pr
 
 export function attachSandboxHostPort(port: MessagePort, rt: SandboxFrameRuntime, api: SandboxZoto = zoto): void {
   rt.pluginPort = port;
+  rt.bootDone = false;
   port.start();
   port.onmessage = (ev) => {
     const d = ev.data as HostBootPayload | HostSandboxPortMsg | undefined;
