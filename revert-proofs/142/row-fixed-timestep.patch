@@ -1,0 +1,13 @@
+diff --git a/plugins/src/marble-run/frontend/sim.ts b/plugins/src/marble-run/frontend/sim.ts
+index fe68ac6f..2207de93 100644
+--- a/plugins/src/marble-run/frontend/sim.ts
++++ b/plugins/src/marble-run/frontend/sim.ts
+@@ -168,7 +168,7 @@ export class MarbleSim {
+     this.acc += Math.min(0.1, Math.max(0, dt));
+     let steps = 0;
+     const budget = marbleWorkBudget();
+-    while (this.acc >= SIM_DT && steps < Math.min(MAX_CATCHUP_STEPS, budget.maxSimStepsPerFrame)) {
++    while (this.acc >= SIM_DT && steps < MAX_CATCHUP_STEPS + 4) {
+       this.integrate(SIM_DT);
+       this.acc -= SIM_DT;
+       steps++;

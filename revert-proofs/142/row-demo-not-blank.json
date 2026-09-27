@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testFile": "tests/test_marble_run_pack.py",
+  "testName": "^test_marble_run_row_demo_not_blank$",
+  "description": "Revert marble-run production guard (row-demo-not-blank)",
+  "red": "assert proc.returncode == 0, proc.stdout + proc.stderr"
+}

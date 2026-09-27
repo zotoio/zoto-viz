@@ -1,0 +1,13 @@
+diff --git a/plugins/src/marble-run/frontend/pack.ts b/plugins/src/marble-run/frontend/pack.ts
+index e3feca6f..231c5eb0 100644
+--- a/plugins/src/marble-run/frontend/pack.ts
++++ b/plugins/src/marble-run/frontend/pack.ts
+@@ -166,7 +166,7 @@ export function ingestFrame(frame: VizDataFrame): void {
+       if (spawnFromPacket(s, frame, pkt)) consumedPackets++;
+       else poolFull++;
+     }
+-  } else if (frame.demo && dropCooldown <= 0) {
++  } else if (false && frame.demo && dropCooldown <= 0) {
+     const phase = frame.t % 4;
+     const proto = ["tcp", "udp", "dns", "tls"][Math.floor(phase)]!;
+     const pkt: VizPacketSample = { proto, size: 128, field: 0.5 };

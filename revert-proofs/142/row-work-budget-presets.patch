@@ -1,0 +1,13 @@
+diff --git a/plugins/src/marble-run/frontend/sim.ts b/plugins/src/marble-run/frontend/sim.ts
+index fe68ac6f..a63b1ded 100644
+--- a/plugins/src/marble-run/frontend/sim.ts
++++ b/plugins/src/marble-run/frontend/sim.ts
+@@ -221,7 +221,7 @@ export class MarbleSim {
+     const pieces = trackPieceCount(this.opts.complexity, this.opts.seed);
+     this.work.instances = active;
+     this.work.drawCalls = 12 + pieces + active;
+-    this.work.triangles = 8000 + pieces * 1200 + active * 96;
++    this.work.triangles = 800000 + pieces * 1200 + active * 96;
+     this.work.gpuBytes = 512 * 1024 + active * 4096;
+   }
+ 
