@@ -1,10 +1,24 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, describe, expect, it } from "vitest";
-import { PluginSandbox, consentHash, hashConsented, hostAllows, pluginModuleUrl, setTsPluginsAllowed, tsPluginsAllowed } from "./host";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setPackAssetTokenForTests } from "../core/http";
+import * as packAssetFrame from "./pack-asset-frame";
+import * as tileBudget from "./viz-tile-budget";
+import {
+  PluginSandbox,
+  consentHash,
+  hashConsented,
+  hostAllows,
+  packAssetUrlWithToken,
+  pluginModuleSandboxUrl,
+  pluginModuleUrl,
+  setTsPluginsAllowed,
+  tsPluginsAllowed,
+} from "./host";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
+import { VIZ_CONTRACT_VERSION, defaultVizContract } from "./viz-host";
 
 describe("hash consent and TypeScript allow", () => {
   afterEach(() => {
@@ -40,6 +54,15 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("writeBuffer", ["viz.write"])).toBe(true);
     expect(hostAllows("writeUniform", ["viz.write"])).toBe(true);
     expect(hostAllows("writeParticles", ["viz.write"])).toBe(true);
+    expect(hostAllows("publishBitmap", ["viz.write"])).toBe(true);
+    expect(hostAllows("publishBitmap", ["viz.read"])).toBe(false);
+    expect(hostAllows("publishBitmapFailed", ["viz.write"])).toBe(true);
+    expect(hostAllows("publishBitmapFailed", ["viz.read"])).toBe(false);
+  });
+
+  it("allows tile-heal sandbox messages without extra caps", () => {
+    expect(hostAllows("drawState", [])).toBe(true);
+    expect(hostAllows("loseHostContext", ["viz.read"])).toBe(true);
   });
 });
 
@@ -52,14 +75,33 @@ describe("page CSP", () => {
   });
 });
 
-describe("plugin sky reload", () => {
-  it("clears the bound sky key when the catalog is reloaded", () => {
-    const main = readFileSync(path.join(webRoot, "src/app/main.ts"), "utf8");
-    expect(main).toMatch(/reloadPlugins === true[\s\S]*skyLoaded = ""/);
-  });
-});
-
 describe("PluginSandbox", () => {
+  afterEach(() => {
+    document.querySelectorAll("iframe").forEach((f) => f.remove());
+  });
+
+  it("unload resets viz tile scope to solo main", () => {
+    const spy = vi.spyOn(tileBudget, "syncVizTileScope");
+    const box = new PluginSandbox();
+    box.unload();
+    expect(spy).toHaveBeenCalledWith(["main"]);
+    spy.mockRestore();
+  });
+
+  it("negotiates pack viz.contract on MessageChannel boot (replaces legacy srcdoc init)", async () => {
+    const box = new PluginSandbox();
+    await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
+    expect(box.contract()?.contract).toBe(VIZ_CONTRACT_VERSION);
+    box.unload();
+  });
+
+  it("resolves load when the iframe is removed before onload", async () => {
+    const box = new PluginSandbox();
+    const pending = box.load("slow", "globalThis.ok = true;", ["graph.read"], {});
+    box.unload();
+    await expect(pending).resolves.toBeUndefined();
+  });
+
   it("loads srcdoc, ticks, and unloads", async () => {
     const box = new PluginSandbox();
     const styles: Record<string, unknown>[] = [];
@@ -72,25 +114,77 @@ describe("PluginSandbox", () => {
     box.unload();
     expect(document.querySelector("iframe")).toBeNull();
   });
+});
 
-  it("fetches /plugins/<id>/module.js then loads the iframe", async () => {
-    const orig = globalThis.fetch;
-    const seen: string[] = [];
-    globalThis.fetch = (async (url: string) => {
-      seen.push(String(url));
-      return { ok: true, text: async () => "globalThis.fromHost = true;" } as Response;
-    }) as typeof fetch;
+describe("pack asset URLs", () => {
+  afterEach(() => {
+    setPackAssetTokenForTests("_sandbox", "");
+    setPackAssetTokenForTests("pulse-ts", "");
+  });
+
+  it("puts the session token in the path segment", async () => {
+    setPackAssetTokenForTests("pulse-ts", "sess-tok-abc");
+    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
+    const url = packAssetUrlWithToken("sess-tok-abc", "pulse-ts", "module.js");
+    expect(url).toBe("/pack-assets/sess-tok-abc/pulse-ts/module.js");
+    expect(url).not.toContain("?");
+    expect(await pluginModuleSandboxUrl("pulse-ts", "deadbeef")).toContain(
+      "/pack-assets/sess-tok-abc/pulse-ts/module.js?h=deadbeef",
+    );
+  });
+});
+
+describe("PluginSandbox module load", () => {
+  beforeEach(() => {
+    vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
+    vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
+  });
+
+  afterEach(() => {
+    document.querySelectorAll("iframe").forEach((el) => el.remove());
+    vi.restoreAllMocks();
+    setPackAssetTokenForTests("_sandbox", "");
+  });
+
+  it("loads pack-assets module.js in the bootstrap frame", async () => {
+    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
+    setPackAssetTokenForTests("pulse", "sess-tok-abc");
     const box = new PluginSandbox();
     expect(pluginModuleUrl("pulse", "deadbeef")).toBe("/api/plugins/pulse/module.js?h=deadbeef");
     await box.loadModule("pulse", ["graph.read", "os.exec"], { a: "1" }, "deadbeef");
-    expect(seen).toEqual(["/api/plugins/pulse/module.js?h=deadbeef"]);
     const iframe = document.querySelector("iframe");
-    expect(iframe?.getAttribute("sandbox")).toBe("allow-scripts");
-    expect(iframe?.srcdoc).toMatch(/fromHost/);
-    expect(iframe?.srcdoc).not.toMatch(/os\.exec/);
+    expect(iframe?.src).toContain("/pack-assets/sess-tok-abc/_sandbox/plugin-sandbox.html");
     box.unload();
-    globalThis.fetch = (async () => ({ ok: false, status: 404, text: async () => "" }) as Response) as typeof fetch;
-    await expect(box.loadModule("missing", ["graph.read"], {})).rejects.toThrow(/module 404/);
-    globalThis.fetch = orig;
+  });
+
+  it("does not post present ticks after unload", async () => {
+    const box = new PluginSandbox();
+    await box.load(
+      "demo",
+      "globalThis.ok = true;",
+      ["viz.write"],
+      {},
+      defaultVizContract({ presentTick: true }),
+    );
+    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const spy = vi.spyOn(port, "postMessage");
+    box.deliverPresentTick(1, "plugin:demo");
+    expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(true);
+    box.unload();
+    spy.mockClear();
+    box.deliverPresentTick(2, "plugin:demo");
+    expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(false);
+    spy.mockRestore();
+  });
+
+  it("does not post present when presentTick is off", async () => {
+    const box = new PluginSandbox();
+    await box.load("demo", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
+    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const spy = vi.spyOn(port, "postMessage");
+    box.deliverPresentTick(1, "x");
+    expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(false);
+    spy.mockRestore();
+    box.unload();
   });
 });

@@ -1,10 +1,15 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import {
   assignTiles, centerSplit, closeLeaf, defaultTree, equalize, gridTree, leafIds, mosaicPaneIdsWithViewChange,
   nextPaneTiles, parseMosaicNode, parseMosaicTiles, setRatio, structureKey, swapLeaves,
+  movePaneTileView, placePaneTileView,
 } from "./mosaic-layout";
 
 describe("grid / default trees", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("builds a 2×2 then a 2×3", () => {
     const four = gridTree(["a", "b", "c", "d"], 2);
     expect(leafIds(four)).toEqual(["a", "b", "c", "d"]);
@@ -33,6 +38,10 @@ describe("grid / default trees", () => {
 });
 
 describe("close / swap / assign", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("expands the neighbour when a leaf closes", () => {
     const t = gridTree(["a", "b", "c", "d"], 2);
     const next = closeLeaf(t, "b");
@@ -52,17 +61,27 @@ describe("close / swap / assign", () => {
     expect(structureKey(swapped)).toBe(key);
   });
 
-  it("assigns tile ids in order and skips duplicates", () => {
+  it("assigns tile slot ids in order and keeps duplicate pack views", () => {
     const t = gridTree(["a", "b", "c", "d"], 2);
-    expect(leafIds(assignTiles(t, ["x", "x", "y"]))).toEqual(["x", "y", "a", "b"]);
+    expect(leafIds(assignTiles(t, ["plugin:x", "plugin:x!1", "y"]))).toEqual(["plugin:x", "plugin:x!1", "y", "d"]);
     expect(parseMosaicTiles(["a", "", "a", "b", 1])).toEqual(["a", "b"]);
+    expect(parseMosaicTiles(["plugin:a", "plugin:a!1"])).toEqual(["plugin:a", "plugin:a!1"]);
+    const long = `plugin:${"x".repeat(100)}`;
+    expect(parseMosaicTiles([long])[0]?.length).toBe(96);
   });
 
-  it("replaces one pane and swaps when the target is already on the wall", () => {
+  it("replaces one pane and swaps when the target view is already on the wall", () => {
     expect(nextPaneTiles(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
     expect(nextPaneTiles(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
     expect(nextPaneTiles(["a", "b"], "a", "a")).toEqual(["a", "b"]);
+    expect(nextPaneTiles(["a", "b"], "a", "b")).toEqual(["b", "a"]);
     expect(nextPaneTiles(["a", "b"], "z", "x")).toEqual(["a", "b"]);
+  });
+
+  it("places and moves tile slots", () => {
+    expect(placePaneTileView(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
+    expect(movePaneTileView(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
+    expect(placePaneTileView(["plugin:x", "b"], "b", "plugin:x")).toEqual(["plugin:x", "plugin:x!1"]);
   });
 
   it("mosaicPaneIdsWithViewChange lists replaced and swapped panes only", () => {
@@ -73,6 +92,10 @@ describe("close / swap / assign", () => {
 });
 
 describe("ratios / parse", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("clamps a split ratio and equalizes the tree", () => {
     const t = gridTree(["a", "b"], 2);
     const wide = setRatio(t, "", 0.95);

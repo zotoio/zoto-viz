@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it, afterEach } from "vitest";
+import { beforeEach, describe, expect, it, afterEach } from "vitest";
+import { applyInstance } from "./instances";
+import { HEADLINES_PACK } from "./test/load-settings-fixture";
 import {
   applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
   loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
@@ -10,6 +12,7 @@ import {
 import { pluginViewKnobs, toPluginView, VIEW_PROMPT_KEY } from "./plugin-visualisation";
 import { PluginSandbox } from "./host";
 import { DEFAULT_DREAM } from "../graph/scene";
+import { setPackAssetTokenForTests } from "../core/http";
 import type { GNode } from "../graph/scene";
 import type { Device } from "../core/types";
 
@@ -28,7 +31,7 @@ const node = (over: Partial<GNode> = {}, d?: Device): GNode => ({
 } as GNode);
 
 const spec = (over: Partial<PluginView> = {}): PluginView => ({
-  id: "pulse", name: "Pulse", version: 1, engine: "graph", base: "topology", ...over,
+  id: "pulse", packName: "Pulse", version: 1, engine: "graph", base: "topology", ...over,
 });
 
 afterEach(() => applyPluginCatalog([]));
@@ -39,7 +42,7 @@ describe("plugin ids and look", () => {
     expect(parsePluginId("plugin:pulse")).toBe("pulse");
     expect(parsePluginId("topology")).toBeNull();
     expect(pluginNeedsReview(spec())).toBe(false);
-    expect(pluginNeedsReview(spec({ id: "topology", name: "Topology" }))).toBe(false);
+    expect(pluginNeedsReview(spec({ id: "topology", packName: "Topology" }))).toBe(false);
     expect(pluginNeedsReview(spec({ runtime: "typescript" }))).toBe(true);
     expect(pluginNeedsReview(spec({ has_frontend: true }))).toBe(true);
     expect(pluginNeedsReview(spec({ has_backend: true }))).toBe(true);
@@ -104,6 +107,20 @@ describe("plugin config", () => {
   });
 });
 
+describe("compilePlugin > instance label on compiled modes", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
+  it("uses the instance label Alt feed for graph and arcade compiles", () => {
+    const instanced = applyInstance(HEADLINES_PACK, { id: "alt", name: "Alt feed" });
+    const graph = compilePlugin({ ...instanced, engine: "graph", base: "topology" });
+    expect(graph.label).toBe("Alt feed");
+    const arcade = compilePlugin({ ...instanced, engine: "netpong" });
+    expect(arcade.label).toBe("Alt feed");
+  });
+});
+
 describe("compilePlugin", () => {
   it("wraps a graph base and styles nodes", () => {
     const mode = compilePlugin(spec({
@@ -162,12 +179,12 @@ describe("compilePlugin", () => {
   });
 
   it("compiles arcade plugins and view options", () => {
-    const arcade = compilePlugin({ id: "pong", name: "Pong", version: 1, engine: "netpong" });
+    const arcade = compilePlugin({ id: "pong", packName: "Pong", version: 1, engine: "netpong" });
     expect(arcade.standalone).toBe(true);
     expect(arcade.arcadeId).toBe("netpong");
     expect(arcade.kind).toBe("arcade");
     const storm = compilePlugin({
-      id: "storm", name: "Storm", version: 1, engine: "graph", base: "talkers",
+      id: "storm", packName: "Storm", version: 1, engine: "graph", base: "talkers",
       capabilities: ["viz.read", "viz.write"], look: { backdrop: "plugin" },
     });
     expect(storm.kind).toBe("demo");
@@ -185,19 +202,19 @@ describe("compilePlugin", () => {
       id: "heat", name: "Heat", version: 1, engine: "graph", base: "talkers",
       look: { backdrop: "none" },
     })).stageOnly).toBe(false);
-    expect(specCaption({ id: "air", name: "Air SSIDs", version: 1, engine: "graph", base: "wifi" })).toBe("AIR SSIDs");
-    expect(specCaption({ id: "bt", name: "Air Bluetooth", version: 1, engine: "graph", base: "bluetooth" })).toBe("BT Bluetooth");
-    expect(specCaption({ id: "cores", name: "CPU cores", version: 1, engine: "graph", base: "cores" })).toBe("CPU cores");
-    expect(specCaption({ id: "source-web", name: "Source web", version: 1, engine: "graph", base: "sources" })).toBe("SRC Source web");
-    expect(specCaption({ id: "memory", name: "Memory", version: 1, engine: "graph", base: "memory" })).toBe("SYS Memory");
-    expect(specCaption({ id: "syscon", name: "Syscon", version: 1, engine: "graph", base: "bridge" })).toBe("SYS Syscon");
+    expect(specCaption({ id: "air", packName: "Air SSIDs", version: 1, engine: "graph", base: "wifi" })).toBe("AIR SSIDs");
+    expect(specCaption({ id: "bt", packName: "Air Bluetooth", version: 1, engine: "graph", base: "bluetooth" })).toBe("BT Bluetooth");
+    expect(specCaption({ id: "cores", packName: "CPU cores", version: 1, engine: "graph", base: "cores" })).toBe("CPU cores");
+    expect(specCaption({ id: "source-web", packName: "Source web", version: 1, engine: "graph", base: "sources" })).toBe("SRC Source web");
+    expect(specCaption({ id: "memory", packName: "Memory", version: 1, engine: "graph", base: "memory" })).toBe("SYS Memory");
+    expect(specCaption({ id: "syscon", packName: "Syscon", version: 1, engine: "graph", base: "bridge" })).toBe("SYS Syscon");
     expect(pluginStageOnly({
       engine: "graph", capabilities: ["viz.read", "viz.write"], look: { backdrop: "plugin", stageOnly: false },
       has_sky_shader: true,
     })).toBe(false);
-    expect(specCaption({ id: "pong", name: "Pong", version: 1, engine: "netpong" })).toBe("NET Pong");
-    expect(specCaption({ id: "doom", name: "Doom", version: 1, engine: "doom" })).toBe("CPU Doom");
-    applyPluginCatalog([spec({ id: "topology", name: "Topology" })]);
+    expect(specCaption({ id: "pong", packName: "Pong", version: 1, engine: "netpong" })).toBe("NET Pong");
+    expect(specCaption({ id: "doom", packName: "Doom", version: 1, engine: "doom" })).toBe("CPU Doom");
+    applyPluginCatalog([spec({ id: "topology", packName: "Topology" })]);
     expect(viewSelectOptions().some((o) => o.value === "plugin:topology" && o.label === "NET Topology")).toBe(true);
     applyPluginCatalog([]);
   });
@@ -233,22 +250,26 @@ describe("compilePlugin", () => {
     expect(viewSelectOptions().some((o) => o.value === "plugin:topology")).toBe(true);
     expect(viewSelectOptions().some((o) => o.value === "topology")).toBe(false);
     const origFetch = globalThis.fetch;
-    globalThis.fetch = (async (url: string) => {
-      expect(String(url)).toContain("/api/plugins/pulse/module.js");
-      return { ok: true, text: async () => "globalThis.fromModule = 1;" };
-    }) as typeof fetch;
+    setPackAssetTokenForTests("_sandbox", "test-pack-token");
+    setPackAssetTokenForTests("pulse", "test-pack-token");
     const box = new PluginSandbox();
     await attachPluginFrontend(box, pulse, { g: "1" });
     expect(document.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
+    expect(document.querySelector("iframe")?.src).toContain("/pack-assets/test-pack-token/_sandbox/plugin-sandbox.html");
     box.unload();
     await attachPluginFrontend(box, list.find((p) => p.id === "topology")!, {});
     expect(document.querySelector("iframe")).toBeNull();
-    globalThis.fetch = origFetch;
+    setPackAssetTokenForTests("_sandbox", "");
     globalThis.fetch = (async () => ({ ok: false, status: 500, json: async () => ({}) })) as never;
     await expect(fetchPlugins()).rejects.toThrow(/plugins/);
-    globalThis.fetch = (async () => { throw new Error("offline"); }) as never;
+    globalThis.fetch = (async (url: string) => {
+      if (String(url).includes("/api/pack-assets")) {
+        return { ok: true, json: async () => ({ ok: true }) } as Response;
+      }
+      throw new Error("offline");
+    }) as never;
     expect(await installPlugins()).toEqual([]);
-    globalThis.fetch = orig;
+    globalThis.fetch = origFetch;
   });
 
   it("records source-review consent", async () => {
@@ -391,11 +412,11 @@ describe("visualisation.yml", () => {
   });
 
   it("maps arcade engines including doom onto arcadeId", () => {
-    const doom = compilePlugin({ id: "doom", name: "Doom", version: 1, engine: "doom" });
+    const doom = compilePlugin({ id: "doom", packName: "Doom", version: 1, engine: "doom" });
     expect(doom.arcadeId).toBe("doom");
     expect(doom.standalone).toBe(true);
     for (const engine of ["waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel"] as const) {
-      const mode = compilePlugin({ id: engine, name: engine, version: 1, engine });
+      const mode = compilePlugin({ id: engine, packName: engine, version: 1, engine });
       expect(mode.arcadeId).toBe(engine);
       expect(mode.standalone).toBe(true);
       expect(mode.kind).toBe("arcade");
@@ -410,7 +431,7 @@ describe("visualisation.yml", () => {
     applyPluginCatalog([
       spec({ id: "pulse", look: { backdrop: "matrix" } }),
       spec({ id: "pulse", look: { backdrop: "space", theme: "ember" } }),
-      spec({ id: "heat", name: "Heat", look: { backdrop: "fire" } }),
+      spec({ id: "heat", packName: "Heat", look: { backdrop: "fire" } }),
     ]);
     expect(lookForMode("plugin:pulse")?.backdrop).toBe("space");
     expect(lookForMode("plugin:pulse")?.theme).toBe("ember");
@@ -428,10 +449,10 @@ describe("visualisation.yml", () => {
 
   it("prefers a wall row's plugin sky over a sky-less mosaic hero", () => {
     const wall = spec({
-      id: "cypher-cic", name: "Cypher CIC",
+      id: "cypher-cic", packName: "Cypher CIC",
       has_sky_shader: true, shader_sha256: "abc", look: { backdrop: "plugin" },
     });
-    const hero = spec({ id: "topology", name: "Topology", look: { backdrop: "space" } });
+    const hero = spec({ id: "topology", packName: "Topology", look: { backdrop: "space" } });
     expect(pluginHasSky(wall)).toBe(true);
     expect(pluginHasSky(hero)).toBe(false);
     expect(pickPluginSkySpec(wall, hero)?.id).toBe("cypher-cic");

@@ -1,0 +1,309 @@
+/**
+ * Empty-tile detection and automatic healing (host-only).
+ *
+ * Sampling, classification, heal ladder, and backoff are pure / testable here.
+ * DOM and NetScene wiring live in {@link TileHealthMonitor}.
+ */
+
+import type { Viewport } from "../graph/render-host";
+
+export const TILE_CHECK_MS = 2000;
+/** After load, view change, or source change — empty checks reset and do not count. */
+export const TILE_LOAD_GRACE_MS = 5000;
+export const TILE_EMPTY_STREAK = 3;
+export const TILE_HEAL_OK_STREAK = 3;
+export const TILE_PATCH = 16;
+/** Luminance max−min (0–255) below this ⇒ near-uniform. */
+export const TILE_UNIFORM_SPREAD = 6;
+/** Luminance std-dev below this ⇒ near-uniform. */
+export const TILE_UNIFORM_STDDEV = 4;
+export const TILE_HEAL_PIN_WINDOW_MS = 10 * 60 * 1000;
+export const TILE_HEAL_PIN_COUNT = 3;
+export const TILE_HEAL_BACKOFF_BASE_MS = 2000;
+export const TILE_HEAL_FALLBACK_MODE = "plugin:topology";
+
+/** 16×16 RGBA sample (WebGL PBO and 2D canvas paths both use Uint8Array). */
+export type TilePatchBytes = Uint8Array;
+
+export type HealStep =
+  | "resend-frame"
+  | "restart-pack"
+  | "recreate-context"
+  | "demo-snapshot"
+  | "fallback-pack";
+
+export const HEAL_LADDER: readonly HealStep[] = [
+  "resend-frame",
+  "restart-pack",
+  "recreate-context",
+  "demo-snapshot",
+  "fallback-pack",
+];
+
+export type EmptyReason = "uniform" | "stalled" | "context-lost" | "drawing-nothing";
+
+export interface TileHealthSignals {
+  mayBeStatic: boolean;
+  contextLost: boolean;
+  /** Monotonic serial bumped when this pane's picture changes. */
+  pictureSerial: number;
+  /** Viz / monitor frames are being delivered with live slices. */
+  dataFramesArriving: boolean;
+  /** Pack explicitly reported not drawing, or host inferred no viz writes. */
+  drawingNothing: boolean;
+}
+
+export interface TileEmptyInput {
+  patch: TilePatchBytes;
+  signals: TileHealthSignals;
+  lastCheckPictureSerial: number;
+}
+
+/** True when this 2 s check should count as EMPTY. */
+export function classifyTileEmpty(input: TileEmptyInput): EmptyReason | null {
+  if (input.signals.contextLost) return "context-lost";
+  if (patchIsNearUniform(input.patch)) return "uniform";
+  if (input.signals.drawingNothing && input.signals.dataFramesArriving) return "drawing-nothing";
+  if (!input.signals.mayBeStatic
+    && input.signals.pictureSerial === input.lastCheckPictureSerial) {
+    return "stalled";
+  }
+  return null;
+}
+
+export function patchIsNearUniform(
+  data: TilePatchBytes,
+  spreadThreshold = TILE_UNIFORM_SPREAD,
+  stdThreshold = TILE_UNIFORM_STDDEV,
+): boolean {
+  const n = (data.length / 4) | 0;
+  if (n < 4) return true;
+  let sum = 0;
+  let sumSq = 0;
+  let lo = 255;
+  let hi = 0;
+  for (let i = 0; i < data.length; i += 4) {
+    const lum = 0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!;
+    sum += lum;
+    sumSq += lum * lum;
+    if (lum < lo) lo = lum;
+    if (lum > hi) hi = lum;
+  }
+  const mean = sum / n;
+  const variance = Math.max(0, sumSq / n - mean * mean);
+  const std = Math.sqrt(variance);
+  return (hi - lo) < spreadThreshold || std < stdThreshold;
+}
+
+/** Reused 16×16 scratch (no per-check allocation). */
+export class TilePatchSampler {
+  readonly canvas: HTMLCanvasElement;
+  private ctx: CanvasRenderingContext2D | null = null;
+  private readonly buf: TilePatchBytes;
+
+  constructor(size = TILE_PATCH) {
+    this.canvas = document.createElement("canvas");
+    this.canvas.width = size;
+    this.canvas.height = size;
+    this.buf = new Uint8Array(size * size * 4);
+  }
+
+  private ensureCtx(): CanvasRenderingContext2D | null {
+    if (!this.ctx) {
+      this.ctx = this.canvas.getContext("2d", { willReadFrequently: true });
+    }
+    return this.ctx;
+  }
+
+  get scratchBuffer(): TilePatchBytes {
+    return this.buf;
+  }
+
+  sample2d(
+    source: CanvasImageSource,
+    sx: number,
+    sy: number,
+    sw: number,
+    sh: number,
+  ): TilePatchBytes {
+    const ctx = this.ensureCtx();
+    const s = this.canvas.width;
+    if (!ctx) return this.buf;
+    ctx.drawImage(source, sx, sy, sw, sh, 0, 0, s, s);
+    this.buf.set(ctx.getImageData(0, 0, s, s).data);
+    return this.buf;
+  }
+
+}
+
+export function healMessage(reason: EmptyReason, step: HealStep, emptyMs: number): string {
+  const secs = Math.round(emptyMs / 1000);
+  const verb: Record<HealStep, string> = {
+    "resend-frame": "re-sent frame",
+    "restart-pack": "restarted pack",
+    "recreate-context": "recreated graphics context",
+    "demo-snapshot": "switched to demo snapshot",
+    "fallback-pack": "switched to fallback pack",
+  };
+  const why: Record<EmptyReason, string> = {
+    uniform: "blank",
+    stalled: "stalled",
+    "context-lost": "WebGL context lost",
+    "drawing-nothing": "pack not drawing",
+  };
+  return `Tile ${why[reason]} for ${secs} s, ${verb[step]}`;
+}
+
+export interface TileHealLogEntry {
+  tileId: string;
+  packId: string;
+  step: HealStep;
+  reason: EmptyReason;
+}
+
+export interface PerTileHealthState {
+  emptyStreak: number;
+  healthyStreak: number;
+  ladderIndex: number;
+  backoffUntil: number;
+  healAttempts: number;
+  healTimes: number[];
+  pinnedFallback: boolean;
+  forceDemo: boolean;
+  lastCheckPictureSerial: number;
+  emptySince: number;
+  lastReason: EmptyReason | null;
+  lastMessage: string;
+}
+
+export function freshTileHealthState(): PerTileHealthState {
+  return {
+    emptyStreak: 0,
+    healthyStreak: 0,
+    ladderIndex: 0,
+    backoffUntil: 0,
+    healAttempts: 0,
+    healTimes: [],
+    pinnedFallback: false,
+    forceDemo: false,
+    lastCheckPictureSerial: -1,
+    emptySince: 0,
+    lastReason: null,
+    lastMessage: "",
+  };
+}
+
+/**
+ * Clear empty-detection progress and cancel a pending heal (backoff / streak).
+ * Keeps pin, ladder index, and heal history from completed heals.
+ */
+export function resetTileHealthProgress(state: PerTileHealthState): PerTileHealthState {
+  return {
+    ...state,
+    emptyStreak: 0,
+    healthyStreak: 0,
+    emptySince: 0,
+    lastReason: null,
+    backoffUntil: 0,
+    lastCheckPictureSerial: -1,
+    lastMessage: "",
+  };
+}
+
+export interface TileCheckOutcome {
+  state: PerTileHealthState;
+  empty: EmptyReason | null;
+  heal: HealStep | null;
+  log: TileHealLogEntry | null;
+}
+
+/**
+ * Apply one staggered health check. Mutates `state` and returns whether a heal
+ * step should run now.
+ */
+export function stepTileHealth(
+  state: PerTileHealthState,
+  now: number,
+  input: TileEmptyInput,
+  tileId: string,
+  packId: string,
+): TileCheckOutcome {
+  const reason = classifyTileEmpty(input);
+  const next = { ...state, healTimes: [...state.healTimes] };
+  next.lastCheckPictureSerial = input.signals.pictureSerial;
+
+  if (!reason) {
+    next.emptyStreak = 0;
+    next.emptySince = 0;
+    next.lastReason = null;
+    next.healthyStreak++;
+    if (next.healthyStreak >= TILE_HEAL_OK_STREAK) {
+      next.ladderIndex = 0;
+      next.healAttempts = 0;
+      next.backoffUntil = 0;
+      next.forceDemo = false;
+      next.healthyStreak = 0;
+    }
+    return { state: next, empty: null, heal: null, log: null };
+  }
+
+  next.healthyStreak = 0;
+  next.emptyStreak++;
+  if (next.emptyStreak === 1) next.emptySince = now;
+  next.lastReason = reason;
+
+  if (next.emptyStreak < TILE_EMPTY_STREAK) {
+    return { state: next, empty: reason, heal: null, log: null };
+  }
+
+  if (now < next.backoffUntil) {
+    return { state: next, empty: reason, heal: null, log: null };
+  }
+
+  if (next.pinnedFallback) {
+    return { state: next, empty: reason, heal: null, log: null };
+  }
+
+  const healsInWindow = healTimesInWindow(next.healTimes, now);
+  const forceFallback = healsInWindow >= TILE_HEAL_PIN_COUNT - 1;
+  const idx = Math.min(next.ladderIndex, HEAL_LADDER.length - 1);
+  const step = forceFallback ? "fallback-pack" : HEAL_LADDER[idx]!;
+  if (!forceFallback) {
+    next.ladderIndex = Math.min(next.ladderIndex + 1, HEAL_LADDER.length - 1);
+  } else {
+    next.ladderIndex = HEAL_LADDER.length - 1;
+  }
+  next.healAttempts++;
+  next.backoffUntil = now + TILE_HEAL_BACKOFF_BASE_MS * (2 ** Math.min(6, next.healAttempts - 1));
+  if (step === "demo-snapshot") next.forceDemo = true;
+  if (step === "fallback-pack") next.pinnedFallback = true;
+  next.emptyStreak = 0;
+  next.healthyStreak = 0;
+  next.lastMessage = healMessage(reason, step, now - next.emptySince);
+  const log = { tileId, packId, step, reason };
+  recordHeal(next, now);
+  return { state: next, empty: reason, heal: step, log };
+}
+
+function healTimesInWindow(healTimes: number[], now: number): number {
+  const cutoff = now - TILE_HEAL_PIN_WINDOW_MS;
+  return healTimes.filter((t) => t >= cutoff).length;
+}
+
+function recordHeal(state: PerTileHealthState, now: number): void {
+  state.healTimes.push(now);
+  const cutoff = now - TILE_HEAL_PIN_WINDOW_MS;
+  state.healTimes = state.healTimes.filter((t) => t >= cutoff);
+}
+
+/** Centre of a host viewport for readPixels (origin bottom-left). */
+export function patchOrigin(vp: Viewport, patch = TILE_PATCH): { x: number; y: number } {
+  const x = Math.max(vp.x, Math.min(vp.x + vp.w - patch, Math.floor(vp.x + (vp.w - patch) / 2)));
+  const y = Math.max(vp.y, Math.min(vp.y + vp.h - patch, Math.floor(vp.y + (vp.h - patch) / 2)));
+  return { x, y };
+}
+
+/** When true, an empty check was skipped (async read pending) — must not advance the empty streak. */
+export function isSkippedHealthSample(patch: TilePatchBytes | null | undefined): boolean {
+  return patch == null;
+}

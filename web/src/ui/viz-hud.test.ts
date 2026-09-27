@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, beforeEach } from "vitest";
 import type { StateMsg } from "../core/types";
 import { protocols } from "../core/modes";
+import { buildIdleVizFrameFailed, idleVizFrameFailedBadgeText } from "../plugins/fixtures/idle-viz-frame";
 import { hudTickFromBudget } from "../plugins/dogfood-runner";
 import { VizFrameBudget } from "../plugins/viz-host";
 import {
@@ -11,8 +12,10 @@ import {
   isVizDemoPack,
   normalizeVizDemoPackId,
   skipRatePerSec,
+  vizFrameFailureBadge,
   vizHudMetric,
 } from "./viz-hud";
+import { formatVizBudgetOverlay } from "../plugins/viz-budget-overlay";
 
 type Box = Pick<DOMRect, "top" | "bottom" | "left" | "right">;
 
@@ -42,6 +45,10 @@ export function modeledHudFootBoxes(
 const FAT_PROTOCOLS_FOOT_H = 72;
 const HUD_LINE_H = 26;
 const VIEWPORT_H = 800;
+
+beforeEach(() => {
+  expect.hasAssertions();
+});
 
 describe("viz hud helpers", () => {
   it("recognises demo pack ids", () => {
@@ -172,6 +179,34 @@ describe("viz hud helpers", () => {
     expect(legend.childElementCount).toBeGreaterThanOrEqual(10);
   });
 
+  it("shows budget overlay with CPU label and dashes when there are no samples", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setBudgetOverlayVisible(true);
+    hud.setActive("packet-tunnel", "Packet Tunnel");
+    hud.tick({
+      packId: "packet-tunnel",
+      packName: "Packet Tunnel",
+      stats: {
+        skipped: 0, overBudget: 0, lastMs: 0, p95Ms: 0, total: 0, timingSource: "cpu", hasSamples: false,
+      },
+      frame: null,
+      state: minimalState(),
+      now: 1000,
+      renderScale: 1,
+    });
+    const text = hud.root.querySelector(".viz-hud-budget")?.textContent ?? "";
+    expect(text).toBe(formatVizBudgetOverlay({
+      timingSource: "cpu",
+      lastMs: null,
+      p95Ms: null,
+      renderScale: 1,
+      governorEnabled: false,
+    }));
+    expect(text.startsWith("gov off · CPU")).toBe(true);
+    expect(text).toContain("—");
+  });
+
   it("lays out pack, metric, skip, and swap on one nowrap row", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
@@ -179,7 +214,9 @@ describe("viz hud helpers", () => {
     hud.tick({
       packId: "packet-tunnel",
       packName: "Packet Tunnel",
-      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      stats: {
+        skipped: 0, overBudget: 0, lastMs: 0, p95Ms: 0, total: 0, timingSource: "cpu", hasSamples: false,
+      },
       frame: null,
       state: minimalState(),
       now: 1000,
@@ -269,6 +306,149 @@ describe("viz hud helpers", () => {
       t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
       talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
     }, state)).toEqual({ label: "talkers", value: "1" });
+  });
+
+  it("hides HUD separator after DEGRADED badge when failure gauges are zero", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    const healthy = {
+      packId: "talker-storm" as const,
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: {
+        t: 1,
+        dt: 0,
+        audio: 0,
+        packets: [],
+        rf: [],
+        talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" as const }],
+        headlines: [],
+      },
+      state: minimalState(),
+      now: 1000,
+    };
+    hud.tick(healthy);
+    const visibleSeps = () =>
+      [...hud.root.querySelectorAll<HTMLElement>(".viz-hud-sep")].filter((el) => !el.hidden);
+    expect(visibleSeps().length).toBe(3);
+    hud.tick({
+      ...healthy,
+      frame: {
+        ...healthy.frame,
+        talkers: [{ id: "10.0.0.1", rate: 80, role: "lan", failed: 0.4 }],
+        sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.5, udev: 0 },
+      },
+    });
+    expect(visibleSeps().length).toBe(4);
+  });
+
+  it("shows DEGRADED strip badge from talker TCP failure ratio", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: {
+        t: 1,
+        dt: 0,
+        audio: 0,
+        packets: [],
+        rf: [],
+        talkers: [{ id: "10.0.0.1", rate: 80, role: "lan", failed: 0.55 }],
+        headlines: [],
+        sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.6, udev: 0 },
+      },
+      state: minimalState(),
+      now: 1000,
+    });
+    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe("⚠ DEGRADED 55% TCP · 2 units");
+  });
+
+  it("shows DEGRADED stage pill matching strip badge text", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: {
+        t: 1,
+        dt: 0,
+        audio: 0,
+        packets: [],
+        rf: [],
+        talkers: [{ id: "10.0.0.1", rate: 80, role: "lan", failed: 0.55 }],
+        headlines: [],
+        sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.6, udev: 0 },
+      },
+      state: minimalState(),
+      now: 1000,
+    });
+    expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe("⚠ DEGRADED 55% TCP · 2 units");
+  });
+
+  it("uses DEGRADED prefix on strip failure badge", () => {
+    const badge = vizFrameFailureBadge({
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
+      talkers: [{ id: "10.0.0.1", rate: 1, role: "lan", failed: 0.4 }],
+    });
+    expect(badge).toBe("⚠ DEGRADED 40% TCP");
+  });
+
+  it("keeps systemd unit count separate from TCP failure percentage", () => {
+    expect(vizFrameFailureBadge({
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
+      talkers: [{ id: "10.0.0.1", rate: 1, role: "lan", failed: 0.6 }],
+      sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.25, udev: 0 },
+    })).toBe("⚠ DEGRADED 60% TCP · 1 unit");
+  });
+
+  it("idle-failed fixture shows the same DEGRADED copy on strip and stage pill", () => {
+    const frame = buildIdleVizFrameFailed(12, 0);
+    const expected = idleVizFrameFailedBadgeText();
+    expect(vizFrameFailureBadge(frame)).toBe(expected);
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame,
+      state: minimalState(),
+      now: 1000,
+    });
+    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe(expected);
+    expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe(expected);
+  });
+
+  it("hides stage fail pill when demo pack is deactivated", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: buildIdleVizFrameFailed(0, 0),
+      state: minimalState(),
+      now: 1000,
+    });
+    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(false);
+    hud.setActive(null, "");
+    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(true);
+  });
+
+  it("hides failure badge on healthy idle frames", () => {
+    expect(vizFrameFailureBadge({
+      t: 0, dt: 0, audio: 0, packets: [], rf: [],
+      talkers: [{ id: "10.0.0.1", rate: 1, role: "lan" }],
+      headlines: [],
+    })).toBeNull();
   });
 });
 

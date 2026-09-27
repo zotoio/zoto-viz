@@ -1,13 +1,8 @@
-/** Shape of visualisation.yml → workBudget (parsed for caps). */
+import type { ManifestWorkBudget } from "../../../sdk/manifest-work-budget";
+import { CONSERVATIVE_WORK_BUDGET } from "../../../sdk/host-init-context";
 
-export type MarbleWorkBudget = {
-  maxDrawCalls: number;
-  maxTriangles: number;
-  maxInstances: number;
-  maxGpuBytes: number;
-  maxSimStepsPerFrame: number;
-  maxPacketsPerFrame: number;
-};
+/** Shape of visualisation.yml → workBudget (parsed for caps). */
+export type MarbleWorkBudget = ManifestWorkBudget;
 
 const INT = /^\s*([a-zA-Z]+):\s*(\d+)\s*$/;
 
@@ -22,7 +17,14 @@ export function parseMarbleWorkBudgetYaml(yaml: string): MarbleWorkBudget {
     const m = line.match(INT);
     if (m) out[m[1]!] = Number(m[2]);
   }
-  const req = ["maxDrawCalls", "maxTriangles", "maxInstances", "maxGpuBytes", "maxSimStepsPerFrame", "maxPacketsPerFrame"] as const;
+  const req = [
+    "maxDrawCalls",
+    "maxTriangles",
+    "maxInstances",
+    "maxGpuBytes",
+    "maxSimStepsPerFrame",
+    "maxPacketsPerFrame",
+  ] as const;
   for (const k of req) {
     if (!Number.isFinite(out[k])) throw new Error(`workBudget.${k} missing`);
   }
@@ -39,9 +41,24 @@ const SHIPPED_WORK_BUDGET_SNIPPET = `workBudget:
   maxPacketsPerFrame: 8
 `;
 
-let cached: MarbleWorkBudget | null = null;
+let hostBudget: MarbleWorkBudget | null = null;
+let conservativeUntilHostInit = false;
+
+export function applyPackWorkBudget(budget: MarbleWorkBudget): void {
+  hostBudget = budget;
+  conservativeUntilHostInit = false;
+}
+
+export function resetPackWorkBudget(): void {
+  hostBudget = null;
+  conservativeUntilHostInit = true;
+}
 
 export function marbleWorkBudget(): MarbleWorkBudget {
-  if (!cached) cached = parseMarbleWorkBudgetYaml(SHIPPED_WORK_BUDGET_SNIPPET);
-  return cached;
+  if (hostBudget) return hostBudget;
+  if (conservativeUntilHostInit) return CONSERVATIVE_WORK_BUDGET;
+  return parseMarbleWorkBudgetYaml(SHIPPED_WORK_BUDGET_SNIPPET);
 }
+
+/** @deprecated use shipped yaml defaults until host init delivers workBudget */
+export const CONSERVATIVE_MARBLE_WORK_BUDGET = parseMarbleWorkBudgetYaml(SHIPPED_WORK_BUDGET_SNIPPET);

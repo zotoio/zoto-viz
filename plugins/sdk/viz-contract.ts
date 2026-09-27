@@ -4,7 +4,36 @@
  */
 
 /** Bump when frame slice shapes or semantics change. */
-export const VIZ_CONTRACT_VERSION = 1;
+export const VIZ_CONTRACT_VERSION = 2;
+
+/**
+ * Host → sandbox tick when `viz.presentTick` is true in plugin.yml.
+ * Delivered once per sandbox per display frame (mosaic panes may share one sandbox).
+ */
+export interface VizPresentTick {
+  /** rAF / vsync timestamp in milliseconds (`performance.now()` clock). */
+  frameMs: number;
+  /**
+   * **Pack id** (`plugins/src/<id>/`), not a view-instance id or mosaic slot id.
+   * Field reserved until Andrew decides the sandbox model (one sandbox per tile vs
+   * per pack); semantics will be re-scoped together with `aspect` when that lands.
+   */
+  tileId: string;
+  /**
+   * Host sky clock in seconds (`scene.skyTime()` / shader `uTime`): monotonic (never
+   * decreases), global across views, always sent on present ticks. Per-frame `dt` is
+   * clamped to 0.25 s **before** speed scaling; the integrated rate follows the motion
+   * speed slider and scene pulse (up to **2.4×** extra at full pulse, same as the sky).
+   */
+  pluginClock?: number;
+  /**
+   * Width/height of the **stage tile** the sandbox is drawing into (`w / h`), not the
+   * hidden iframe size. In mosaic layout the host currently uses the main scene camera
+   * aspect while this field is reserved. Re-scoped with `tileId` after the sandbox model
+   * decision; do not use `innerWidth`/`innerHeight` alone in the iframe.
+   */
+  aspect?: number;
+}
 
 export interface VizPacketSample {
   /** Uppercased protocol label from the decimated capture slice (e.g. TCP, UDP). */
@@ -24,13 +53,24 @@ export interface VizRfBeacon {
   channel: number;
 }
 
+export interface VizLinkSample {
+  /** Talker id for the source host (same id space as `talkers[].id`). */
+  src: string;
+  /** Talker id for the destination host. */
+  dst: string;
+  /** Directional sent-packet rate over the frame window (sent packets/s). */
+  rate: number;
+}
+
 export interface VizTalkerSample {
   /** Stable talker id (often IP or alias). */
   id: string;
-  /** Recent packet rate used for motion scaling. */
+  /** With live flow rates: summed directional sent packets/s for the host (same units as `links[].rate`). When no host has live rates, the whole top-K uses lifetime packet counts — never both in one frame. */
   rate: number;
   /** Role bucket: gateway, internet, lan, self, etc. */
   role: string;
+  /** Per-host failed-connection ratio 0..1 (RST/refused over SYN attempts in the window). Present on v2 frames when link collection is enabled and the host reports conn_fail; omitted when link collection is off. */
+  failed?: number;
 }
 
 export interface VizHeadline {
@@ -72,8 +112,13 @@ export interface VizSysTelemetry {
   udev: number;
 }
 
+/** Optional pack hooks implemented on `window.zoto` in the plugin iframe. */
+export interface VizZotoPluginHooks {}
+
 /** Host-decimated snapshot delivered to viz.read plugins each frame. */
 export interface VizDataFrame {
+  /** Present on v2 frames from the host; v1 plugin deliveries omit this key. Matches {@link VIZ_CONTRACT_VERSION} on v2 host-built frames. */
+  contract?: number;
   /** Monotonic frame time in seconds. */
   t: number;
   /** Delta since the previous delivered frame in seconds. */
@@ -84,8 +129,12 @@ export interface VizDataFrame {
   packets: VizPacketSample[];
   /** Wi-Fi / RF beacon rows from the watch slice. */
   rf: VizRfBeacon[];
-  /** Top talkers by rate from the LAN slice. */
+  /** Top talkers by traffic. In live mode, `rate` is the sum of directional sent flow packet rates (sent packets/s) for that host; when no flow rates exist, the whole top-K uses lifetime `packets` counts instead (never mixed in one frame). */
   talkers: VizTalkerSample[];
+  /** Directional host-pair rates (v2). When the monitor enables link collection, always present (use {@link EMPTY_VIZ_LINKS} when none qualify). Omitted entirely when link collection is disabled. */
+  links?: VizLinkSample[];
+  /** Count of pair rows dropped by the top-N cap (v2). Present when {@link links} is present and pairs were dropped; omitted when zero. */
+  linksDropped?: number;
   /** Headlines from bound sources (HN, RSS, etc.). */
   headlines: VizHeadline[];
   /** True when any slice was filled from viz.idle (host fixture or inline seed). */
@@ -97,6 +146,9 @@ export interface VizDataFrame {
   /** Optional spectrum bins (low frequency first) for analyser skies. */
   spectrum?: number[];
 }
+
+/** Shared empty links slice for v2 frames when collection is on but no pairs qualify (no per-frame allocation). Always frozen in dev and production builds. */
+export const EMPTY_VIZ_LINKS: readonly VizLinkSample[] = Object.freeze([]);
 
 export const EMPTY_SYS_TELEMETRY: VizSysTelemetry = {
   cpu: 0,

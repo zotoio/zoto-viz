@@ -2,17 +2,14 @@
 
 import { EMPTY_SYS_GAUGES, packSysGauges, sysconCanvasSize } from "./telemetry";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "plugins/sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "sys">) => void) | null;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
+const host = getVizZoto();
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame) => {
   const sys = frame.sys ?? EMPTY_SYS_GAUGES;
-  zoto.writeBuffer(0, packSysGauges(sys, frame.audio, sysconCanvasSize()));
+  host.writeBuffer(0, packSysGauges(sys, frame.audio, sysconCanvasSize()));
   const heat = Math.max(sys.temp, sys.failed, sys.psi);
-  zoto.writeUniform("uAccent", [0.18 + heat * 0.55, 0.72 - heat * 0.35, 0.98 - heat * 0.25]);
-  zoto.writeUniform("uBg", [0.01, 0.03, 0.055]);
+  host.writeUniform("uAccent", [0.18 + heat * 0.55, 0.72 - heat * 0.35, 0.98 - heat * 0.25]);
+  host.writeUniform("uBg", [0.01, 0.03, 0.055]);
 };

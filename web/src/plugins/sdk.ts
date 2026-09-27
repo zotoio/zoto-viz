@@ -12,17 +12,24 @@ window.zoto = {
   onTick: null,
   onConfig: null,
   onFrame: null,
+  onPresent: null,
   setStyle(s) { if (allowed.has("graph.style")) send("setStyle", s); },
   setNodeColor(id, hex) { if (allowed.has("graph.style")) send("setNodeColor", { id, hex }); },
   writeBuffer() {},
   writeUniform() {},
   writeParticles() {},
   getConfig() { return window.__zotoConfig || {}; },
+  getWorkBudget() { return window.__zotoWorkBudget ?? null; },
 };
 window.addEventListener("message", (ev) => {
   const d = ev.data;
   if (!d || d.source !== "zoto-viz-host") return;
-  if (d.type === "init") { window.__zotoConfig = d.config || {}; window.__zotoViz = d.viz || null; }
+  if (d.type === "init") {
+    window.__zotoConfig = d.config || {};
+    window.__zotoViz = d.viz || null;
+    if (d.workBudget !== undefined) window.__zotoWorkBudget = d.workBudget;
+    if (typeof d.contractVersion === "number") window.__zotoContractVersion = d.contractVersion;
+  }
   if (d.type === "config") { window.__zotoConfig = d.config || {}; window.zoto.onConfig && window.zoto.onConfig(d.config); }
   if (d.type === "tick" && allowed.has("graph.read") && window.zoto.onTick) window.zoto.onTick(d.nodes);
 });

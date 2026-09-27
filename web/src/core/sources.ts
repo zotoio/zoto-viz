@@ -136,6 +136,51 @@ export function oneLineTitle(text: string, max = 240): string {
   return text.replace(/\s+/g, " ").trim().slice(0, max);
 }
 
+/** Count feed-eligible headlines without materializing the full list (viz decimation stats). */
+export function countEligibleSourceHeadlines(
+  sources: Record<string, SourceLive> | undefined,
+  bind?: SourceBind,
+): number {
+  if (!sources) return 0;
+  const want = (bind?.source ?? "").trim();
+  const titleKey = bind?.titleField || "title";
+  const captionKey = bind?.captionField || "summary";
+  const imageKey = bind?.imageField || "image";
+  const pictured =
+    (bind?.filter ?? "all") === "has-image" || bind?.filter === "image" || bind?.filter === "pictured";
+  let count = 0;
+  const bump = (text: string, image?: string): void => {
+    const t = text.trim();
+    if (!t) return;
+    const href = (image || "").trim();
+    if (pictured && !href.startsWith("https://")) return;
+    count += 1;
+  };
+  for (const live of Object.values(sources)) {
+    if (!live || live.feed === false || live.paused || live.ok === false) continue;
+    if (want && live.id !== want) continue;
+    const kind = (live.kind || "").toLowerCase() || undefined;
+    if (kind === "http" && live.json !== undefined && !(live.items && live.items.length)) {
+      for (const text of jsonStrings(live.json, Number.MAX_SAFE_INTEGER)) {
+        bump(text);
+      }
+      continue;
+    }
+    for (const item of live.items ?? []) {
+      const title = itemField(item, titleKey) || item.title || stripMarkup(item.summary || "");
+      const summary = itemField(item, captionKey) || item.summary;
+      const image = itemField(item, imageKey) || item.image;
+      bump(title, image);
+    }
+    if (!live.items?.length && live.text) {
+      for (const line of String(live.text).split(/\r?\n/)) {
+        bump(line, undefined);
+      }
+    }
+  }
+  return count;
+}
+
 export function sourceHeadlines(
   sources: Record<string, SourceLive> | undefined,
   limit = FEED_HEADLINE_LIMIT,

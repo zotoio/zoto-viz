@@ -14,7 +14,13 @@
     "typecheck": "tsc --noEmit",
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
-    "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs"
+    "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",
+    "lint": "node scripts/lint-brand-casts-core.mjs",
+    "lint:eslint": "node --require ./eslint-ts6-resolver.cjs ./node_modules/eslint/bin/eslint.js src",
+    "lint:verify-frame-ts": "bash scripts/verify-frame-ts-lint.sh",
+    "test:backrooms-smoke": "node scripts/backrooms-smoke.test.mjs",
+    "test:sandbox-plugin-smoke": "node scripts/sandbox-plugin-smoke.test.mjs",
+    "test:sandbox-draws-smoke": "node scripts/sandbox-draws-smoke.test.mjs"
   },
   "dependencies": {
     "d3-force-3d": "^3.0.6",
@@ -22,13 +28,22 @@
     "three": "^0.186.0"
   },
   "devDependencies": {
+    "@testing-library/user-event": "^14.6.7",
+    "@types/node": "22.18.12",
     "@types/three": "^0.185.4",
+    "@typescript-eslint/parser": "8.70.1",
     "@vitest/coverage-v8": "^5.0.0",
     "assemblyscript": "^0.28.20",
     "esbuild": "^0.28.2",
+    "eslint": "^9.39.2",
     "happy-dom": "^20.14.5",
+    "playwright": "^1.63.0",
+    "pngjs": "^7.0.0",
+    "puppeteer-core": "^25.12.0",
     "typescript": "^7.0.2",
+    "ts6": "npm:typescript@5.9.3",
     "vite": "^8.2.2",
-    "vitest": "^5.0.0"
+    "vitest": "^5.0.0",
+    "yaml": "^2.9.1"
   }
 }

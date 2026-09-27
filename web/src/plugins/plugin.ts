@@ -23,6 +23,15 @@ import {
 } from "./instances";
 import type { PluginInstance } from "./instances";
 import {
+  blockedCatalogEntries,
+  blockedViewSelectRow,
+  catalogErrorLooksBlocked,
+  consumePackInstallNotices,
+  queuePackInstallBlockedNotice,
+  syncBlockedCatalogFromErrors,
+  takePackInstallBlockedNotice,
+} from "./pack-install-surface";
+import {
   engineDispatch,
   mergeOverlayPins,
   partitionCatalog,
@@ -39,11 +48,17 @@ import type { BackdropKind } from "../graph/backdrop";
 import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
+import type { ManifestBlockedPlugin } from "./plugin-manifest-blocked";
+import {
+  manifestBlockedViewSelectRow,
+  setManifestBlockedCatalog,
+} from "./plugin-manifest-blocked";
 import { PluginSandbox, pluginModuleUrl } from "./host";
 import type { PluginIdleConfig } from "./fixtures/golden-state";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
+import { addModeSwitchAbortListener, removeModeSwitchAbortListener } from "../app/mode-switch-attempt";
 
 function dimHex(hex: number, amount: number): number {
   const r = Math.round(((hex >> 16) & 255) * amount);
@@ -182,6 +197,11 @@ export interface PluginView {
   hint?: string;
   /** Catalog row when this spec was expanded from plugin.yml instances. */
   instanceId?: string;
+  /** Short label for mosaic tiles when distinct from {@link name}. */
+  instanceLabel?: string;
+  packName?: string;
+  /** Defaults from the matched plugin.yml instance row (before pack fallback). */
+  instanceDefaults?: Record<string, string | number | boolean>;
   instances?: PluginInstance[];
   /** Absent when the zip has no visualisation.yml and plugin.yml ships no engine. */
   engine?: PluginEngine;
@@ -199,8 +219,13 @@ export interface PluginView {
   /** visualisation.yml idle golden mock — graph / arcade when capture is quiet. */
   idle?: PluginIdleConfig;
   viz?: VizPluginContract;
+  /** Host-clamped visualisation.yml workBudget (#45). */
+  workBudget?: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget;
+  /** Set when the host clamped workBudget below what the pack asked for. */
+  workBudgetLimited?: string;
   typesafe?: TypeSafeContract;
   hash?: string;
+  sha256?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;
   /** Catalog provenance: src (shipped), zip (contrib), or local (~/.zoto-viz/plugins/local). */
@@ -213,6 +238,8 @@ export interface PluginView {
   shader_sha256?: string;
   sky_available?: boolean;
   sky_error?: string;
+  /** Host drawer: presets, HUD label fields, section order (from plugin.yml / visualisation.yml). */
+  settings?: import("./plugin-visualisation").PluginSettingsDecl;
 }
 
 const LOOK_ANIM_KEYS = [
@@ -247,11 +274,20 @@ export interface PluginList {
   dir: string;
   schema: string;
   plugins: PluginView[];
-  errors: { file: string; error: string }[];
+  errors: { file: string; error: string; message?: string; id?: string; name?: string; import?: string }[];
+  blocked?: ManifestBlockedPlugin[];
+  installNotices?: { error: string; message: string }[];
   pythonService?: boolean;
 }
 
-export { configStoreId, parsePluginId, parsePluginInstance, pluginViewId } from "./instances";
+export {
+  configStoreId,
+  configStoreIdForMode,
+  parsePluginId,
+  parsePluginInstance,
+  pluginSpecForStoreId,
+  pluginViewId,
+} from "./instances";
 
 /** Executable plugins (TypeScript, Python, and/or a custom sky shader) need a source-review consent. YAML-only views skip it. */
 export function pluginNeedsReview(spec: PluginView): boolean {
@@ -264,6 +300,11 @@ export function pluginHasFrontend(spec: PluginView | null | undefined): boolean 
   return !!spec && (spec.has_frontend === true || spec.runtime === "typescript");
 }
 
+/** Tile chrome title: instance label, then pack name, then catalog name. */
+export function tileDisplayName(spec: PluginView): string {
+  return spec.instanceLabel || spec.packName || spec.name || spec.id;
+}
+
 export function pluginModulePath(id: string, hash?: string): string {
   return pluginModuleUrl(id, hash);
 }
@@ -274,10 +315,18 @@ export function pluginSkyPath(id: string, hash?: string): string {
 }
 
 /** Fetch `/api/plugins/<id>/sky/fragment.glsl` (403 without consent). */
-export async function fetchPluginSky(id: string, hash?: string): Promise<string> {
+export async function fetchPluginSky(
+  id: string,
+  hash?: string,
+  signal?: AbortSignal,
+): Promise<string> {
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   const r = await apiFetch(pluginSkyPath(id, hash), { cache: "no-store" });
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
   if (!r.ok) throw new Error(`plugin sky ${r.status}`);
-  return r.text();
+  const text = await r.text();
+  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+  return text;
 }
 
 /** Fetch `/plugins/<id>/module.js` and load it in the iframe sandbox. */
@@ -285,13 +334,27 @@ export async function attachPluginFrontend(
   sandbox: PluginSandbox,
   spec: PluginView | null,
   config: Record<string, string> = {},
+  signal?: AbortSignal,
 ): Promise<boolean> {
+  if (signal?.aborted) return false;
   if (!pluginHasFrontend(spec)) {
     sandbox.unload();
     return false;
   }
-  await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
-  return true;
+  const dispose = () => { sandbox.unload(); };
+  addModeSwitchAbortListener(signal, dispose, { once: true });
+  try {
+    await sandbox.loadModule(spec!.id, spec!.capabilities ?? [], config, spec!.hash, spec!.viz);
+    if (signal?.aborted) {
+      sandbox.unload();
+      if (signal) removeModeSwitchAbortListener(signal, dispose);
+      return false;
+    }
+    return true;
+  } catch (e) {
+    if (signal) removeModeSwitchAbortListener(signal, dispose);
+    throw e;
+  }
 }
 
 export function vizContractFor(spec: PluginView | null | undefined): VizPluginContract | undefined {
@@ -299,24 +362,110 @@ export function vizContractFor(spec: PluginView | null | undefined): VizPluginCo
 }
 
 const storeKey = (id: string, key: string) => `zoto-viz.plugin.${id}.${key}`;
+
+let pluginConfigCacheGen = 0;
+let pluginCatalogRevision = 0;
+const pluginOptsConfigCache = new Map<string, { gen: number; values: Record<string, string> }>();
+
+export function pluginConfigCacheGeneration(): number {
+  return pluginConfigCacheGen;
+}
+
+export function pluginCatalogCacheRevision(): number {
+  return pluginCatalogRevision;
+}
+
+function fieldDefaultsSignature(fields: PluginField[]): string {
+  return fields.map((f) => {
+    const d = f.default !== undefined ? String(f.default) : "";
+    return `${f.key}:${f.type}:${d}:${f.min ?? ""}:${f.max ?? ""}`;
+  }).join("\0");
+}
+
+function pluginConfigCacheKey(spec: PluginView, fields: PluginField[]): string {
+  const storeId = configStoreId(spec);
+  const fieldSig = fields.map((f) => f.key).join("\0");
+  return `${pluginCatalogRevision}\0${storeId}\0${fieldSig}\0${fieldDefaultsSignature(fields)}`;
+}
+
+export function bumpPluginCatalogRevision(): void {
+  pluginCatalogRevision += 1;
+  pluginConfigCacheGen += 1;
+  pluginOptsConfigCache.clear();
+}
+
+export function invalidatePluginConfigCache(): void {
+  pluginConfigCacheGen += 1;
+  pluginOptsConfigCache.clear();
+}
+
+/** Cached config for per-frame optsFor (invalidated on writePluginConfig). */
+export function loadPluginConfigCached(spec: PluginView, fields: PluginField[]): Record<string, string> {
+  const key = pluginConfigCacheKey(spec, fields);
+  const hit = pluginOptsConfigCache.get(key);
+  if (hit && hit.gen === pluginConfigCacheGen) return hit.values;
+  const loaded = loadPluginConfig(spec, fields);
+  pluginOptsConfigCache.set(key, { gen: pluginConfigCacheGen, values: loaded });
+  return loaded;
+}
+
+/** Persisted meta: base preset for custom configs (not exported to packs). */
+export const PRESET_BASE_META_KEY = "__presetBase";
 export type { PluginInstance } from "./instances";
 
+/** One encoding for field defaults, instance defaults, and preset values (booleans → 1/0). */
+export function encodeStoredConfigValue(
+  field: PluginField | undefined,
+  value: string | number | boolean,
+): string {
+  if (field?.type === "boolean") {
+    return value === true || value === 1 || value === "true" || value === "1" ? "1" : "0";
+  }
+  return String(value);
+}
+
 export function fieldDefault(f: PluginField): string {
-  if (f.type === "boolean") return f.default === true || f.default === "true" || f.default === "1" ? "1" : "0";
+  if (f.type === "boolean") return encodeStoredConfigValue(f, f.default ?? false);
   if (f.default !== undefined) return String(f.default);
   if (f.type === "number") return String(f.min ?? 0);
   if (f.type === "select") return f.values?.[0]?.[0] ?? "";
   return "";
 }
 
+function instanceDefaultFor(spec: PluginView, key: string): string | undefined {
+  const field = spec.config?.find((f) => f.key === key);
+  const encode = (raw: string | number | boolean) => encodeStoredConfigValue(field, raw);
+  const defs = spec.instanceDefaults;
+  if (defs && defs[key] !== undefined) return encode(defs[key]);
+  const inst = spec.instances?.find((i) => i.id === (spec.instanceId ?? spec.id));
+  const row = inst?.defaults;
+  if (!row || row[key] === undefined) return undefined;
+  return encode(row[key]);
+}
+
+/** Same baseline as loadPluginConfig (instance row before field default). */
+export function instanceDefaultValue(spec: PluginView, key: string): string | undefined {
+  return instanceDefaultFor(spec, key);
+}
+
 export function loadPluginConfig(spec: PluginView, fields = spec.config): Record<string, string> {
   const out: Record<string, string> = {};
   const storeId = configStoreId(spec);
   const viewId = pluginViewId(spec.id, spec.instanceId);
+  const metaKeys = [PRESET_BASE_META_KEY];
+  for (const mk of metaKeys) {
+    const saved = localStorage.getItem(storeKey(storeId, mk));
+    if (saved !== null) out[mk] = saved;
+  }
   for (const f of fields ?? []) {
     const saved = localStorage.getItem(storeKey(storeId, f.key));
     if (saved !== null) {
       out[f.key] = saved;
+      continue;
+    }
+    const instDef = instanceDefaultFor(spec, f.key);
+    if (instDef !== undefined) {
+      out[f.key] = instDef;
       continue;
     }
     const pack = spec.instanceId && spec.instanceId !== spec.id
@@ -332,18 +481,40 @@ export function loadPluginConfig(spec: PluginView, fields = spec.config): Record
   return out;
 }
 
+export function removePluginConfigKeys(id: string, keys: string[]): void {
+  for (const k of keys) localStorage.removeItem(storeKey(id, k));
+  invalidatePluginConfigCache();
+}
+
 export function writePluginConfig(id: string, values: Record<string, string>): void {
   for (const [k, v] of Object.entries(values)) localStorage.setItem(storeKey(id, k), v);
+  invalidatePluginConfigCache();
 }
 
 export function collectPluginConfigs(specs: PluginView[]): Record<string, Record<string, string>> {
   const rows = specs.flatMap((s) => expandPluginInstances(s));
-  return Object.fromEntries(rows.map((s) => [configStoreId(s), loadPluginConfig(s, pluginViewKnobs(s))]));
+  return Object.fromEntries(rows.map((s) => {
+    const raw = loadPluginConfig(s, pluginViewKnobs(s));
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (k === PRESET_BASE_META_KEY || k.startsWith("__")) continue;
+      out[k] = v;
+    }
+    return [configStoreId(s), out];
+  }));
 }
 
 export function applyPluginConfigs(raw: Record<string, Record<string, string>> | undefined): void {
   if (!raw) return;
-  for (const [id, values] of Object.entries(raw)) writePluginConfig(id, values);
+  for (const [id, values] of Object.entries(raw)) {
+    const cleaned: Record<string, string> = {};
+    for (const [k, v] of Object.entries(values)) {
+      if (k === PRESET_BASE_META_KEY || k.startsWith("__")) continue;
+      cleaned[k] = v;
+    }
+    writePluginConfig(id, cleaned);
+    removePluginConfigKeys(id, [PRESET_BASE_META_KEY]);
+  }
 }
 
 function mergeOptions(base: ModeOption[] | undefined, extra: ModeOption[] | undefined): ModeOption[] | undefined {
@@ -378,7 +549,7 @@ function compileGraph(spec: PluginView): ViewMode {
   const mode: ViewMode = {
     ...base,
     id: pluginViewId(spec.id, spec.instanceId),
-    label: spec.name,
+    label: tileDisplayName(spec),
     hint: spec.hint || base.hint,
     pluginId: spec.id,
     kind: catalogKindOf(spec),
@@ -523,7 +694,7 @@ export function specCaption(spec: PluginView): string {
   const dispatch = engineDispatch(spec);
   return viewCaption({
     id: spec.id,
-    label: spec.name,
+    label: tileDisplayName(spec),
     graphBase: dispatch.graphBase,
     arcadeId: dispatch.arcadeId,
   });
@@ -565,12 +736,16 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
     label: viewCaption(m),
     group: m.kind === "arcade" ? "arcade" : m.kind === "demo" ? "demo" : "graph",
   }));
+  const blockedRow = manifestBlockedViewSelectRow();
+  if (blockedRow) rows.push(blockedRow);
   rows.sort((a, b) => (CATALOG_GROUP_RANK[a.group] ?? 9) - (CATALOG_GROUP_RANK[b.group] ?? 9)
     || a.label.localeCompare(b.label));
-  return rows.map((row, i) => ({
+  const numbered = rows.map((row, i) => ({
     ...row,
     hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : row.group,
   }));
+  const blocked = blockedViewSelectRow(blockedCatalogEntries());
+  return blocked ? [...numbered, blocked] : numbered;
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
@@ -610,10 +785,38 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
   return modes;
 }
 
+export { takePackInstallBlockedNotice } from "./pack-install-surface";
+
 export async function installPlugins(): Promise<PluginView[]> {
   try {
+    bumpPluginCatalogRevision();
+    const { clearPluginSettingsUiState } = await import("./plugin-settings");
+    clearPluginSettingsUiState();
     const data = await fetchPlugins();
-    for (const e of data.errors) console.warn("zoto-viz plugin:", e.file, e.error);
+    setManifestBlockedCatalog((data.blocked ?? []) as ManifestBlockedPlugin[]);
+    consumePackInstallNotices(data.installNotices);
+    syncBlockedCatalogFromErrors(data.errors as Record<string, unknown>[]);
+    for (const e of data.errors) {
+      const err = String(e.error || "");
+      const msg = e.message ?? (catalogErrorLooksBlocked(err) ? err : "");
+      if (
+        e.error === "pack_boundary"
+        || e.error === "pack_sdk_contract"
+        || e.error === "pack_install_blocked"
+        || e.error === "pack_install_start_failed"
+        || e.error === "pack_install_interrupted"
+        || catalogErrorLooksBlocked(msg)
+        || catalogErrorLooksBlocked(err)
+      ) {
+        queuePackInstallBlockedNotice({
+          ok: false,
+          ...e,
+          error: String(e.error || "pack_boundary"),
+          message: String(msg || err || e.message || ""),
+        });
+      }
+      console.warn("zoto-viz plugin:", e.file, err || msg);
+    }
     const specs: PluginView[] = [];
     for (const raw of data.plugins) {
       try {
@@ -626,8 +829,10 @@ export async function installPlugins(): Promise<PluginView[]> {
     return specs;
   } catch (e) {
     console.warn("zoto-viz plugins:", e);
+    setManifestBlockedCatalog([]);
     looks = new Map();
     setPluginModes([]);
+    syncBlockedCatalogFromErrors([]);
     return [];
   }
 }

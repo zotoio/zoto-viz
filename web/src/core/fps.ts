@@ -1,8 +1,13 @@
+import type { FrameTs } from "./time-ms";
+import type { MonoMs } from "./viz-time";
+
 /**
  * Display framerate of the live UI. Several rAF loops (graph, mosaic tiles, arcade, feed)
  * share one vsync timestamp; marking the same timestamp twice does not count as two frames,
  * so a 2×2 mosaic still reads as ~60 fps when the main thread is keeping up.
  */
+
+import { onSmokePresentedFrame } from "./smoke-harness";
 
 const SHOW_MS = 1000;
 /** Keep a 1-minute trail so auto-tune can average a recovery window. */
@@ -63,22 +68,29 @@ export function windowFps(now: number, windowMs = SHOW_MS, since = Number.NEGATI
 }
 
 /** Call from every animation callback with that callback's rAF timestamp. */
-export function markFrame(ts: number): void {
-  if (ts === lastTs) return;
-  lastTs = ts;
-  for (const fn of presentListeners) fn(ts);
-  stamps.push(ts);
-  const cutoff = ts - KEEP_MS;
+export function markFrame(ts: FrameTs): void {
+  const n = Number(ts);
+  if (n === lastTs) return;
+  lastTs = n;
+  onSmokePresentedFrame();
+  for (const fn of presentListeners) fn(n);
+  stamps.push(n);
+  const cutoff = n - KEEP_MS;
   let i = 0;
   while (i < stamps.length && stamps[i]! < cutoff) i++;
   if (i) stamps.splice(0, i);
   if (!el || stamps.length < 2) return;
-  const fps = windowFps(ts, SHOW_MS);
+  const fps = windowFps(n, SHOW_MS);
   if (fps == null) return;
   const next = String(Math.round(fps));
   if (next === shown) return;
   shown = next;
   el.textContent = next;
+}
+
+/** Test / QE: FPS over the last second at monotonic time `now`. */
+export function hostWindowFps(now: MonoMs, windowMs = SHOW_MS): number | null {
+  return windowFps(Number(now), windowMs);
 }
 
 export function setFpsHint(text: string): void {
@@ -94,6 +106,7 @@ export class PaneFps {
   private stamps: number[] = [];
   private lastTs = -1;
   private shown = "";
+  private changes = 0;
 
   constructor(parent: HTMLElement) {
     const badge = document.createElement("span");
@@ -108,10 +121,16 @@ export class PaneFps {
     this.el.title = text;
   }
 
+  /** Monotonic count of picture changes (tile health stillness probe). */
+  get changeCount(): number {
+    return this.changes;
+  }
+
   /** This pane's pixels differed from the previous sample. */
   mark(ts: number): void {
     if (ts === this.lastTs) return;
     this.lastTs = ts;
+    this.changes++;
     this.stamps.push(ts);
     this.expire(ts);
     this.paint(ts);

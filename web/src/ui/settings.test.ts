@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { compileMatcher, Settings } from "./settings";
 import type { Device } from "../core/types";
+import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 
 const d = (over: Partial<Device> = {}): Device => ({
   ip: "192.168.86.4", mac: "", vendor: "Google", hostnames: ["Nest-Cam"], names: ["Nest-Cam"],
@@ -9,6 +10,10 @@ const d = (over: Partial<Device> = {}): Device => ({
 });
 
 describe("compileMatcher", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
   it("matches CIDR, prefixes, names, and globs", () => {
     expect(compileMatcher("")(undefined, "1.1.1.1")).toBe(false);
     const cidr = compileMatcher("192.168.86.0/24");
@@ -108,7 +113,7 @@ describe("Settings panes", () => {
   it("shows plugin options and config knobs on This view", () => {
     const s = new Settings({ storePrefix: "zoto-viz-view-knobs", onChange: () => {} });
     s.bindView({
-      id: "lan-heat", name: "LAN heat", version: 1, engine: "graph", base: "talkers",
+      id: "lan-heat", packName: "LAN heat", version: 1, engine: "graph", base: "talkers",
       options: [{ key: "rank", label: "rank by", values: [["rate", "current rate"], ["bytes", "bytes"]], default: "rate" }],
       config: [{ key: "internet", label: "internet hosts", type: "select", values: [["dim", "dim"], ["hide", "hide"]], default: "dim" }],
     });
@@ -116,7 +121,7 @@ describe("Settings panes", () => {
     expect(pane?.textContent).toMatch(/rank by/);
     expect(pane?.textContent).toMatch(/internet hosts/);
     expect(pane?.querySelector("textarea[aria-label=prompt]")).toBeTruthy();
-    s.bindView({ id: "agent", name: "Agent", version: 1 });
+    s.bindView({ id: "agent", packName: "Agent", version: 1 });
     expect(s.el.querySelector('[data-pane="view"]')?.querySelector("textarea[aria-label=prompt]")).toBeTruthy();
     expect(s.el.querySelector('[data-pane="view"]')?.textContent).not.toMatch(/no extra settings/);
   });
@@ -135,7 +140,7 @@ describe("Settings panes", () => {
     const extra = document.createElement("button");
     extra.type = "button";
     extra.textContent = "source";
-    s.bindView({ id: "netpong", name: "NetPong", version: 1, engine: "netpong" }, undefined, null, [extra]);
+    s.bindView({ id: "netpong", packName: "NetPong", version: 1, engine: "netpong" }, undefined, null, [extra]);
     const pane = s.el.querySelector('[data-pane="view"]');
     expect(pane?.textContent).toMatch(/source/);
     const prompt = pane?.querySelector("textarea[aria-label=prompt]");
@@ -158,7 +163,7 @@ describe("Settings panes", () => {
     expect(view?.textContent).toMatch(/1×/);
     expect(view?.textContent).toMatch(/hero/);
     expect(s.el.querySelector('[data-pane="motion"]')?.textContent).not.toMatch(/assign a view to every pane/);
-    s.bindView({ id: "nest-cams", name: "Nest cams", version: 1, engine: "graph" });
+    s.bindView({ id: "nest-cams", packName: "Nest cams", version: 1, engine: "graph" });
     const thisView = s.el.querySelector('[data-pane="view"]');
     expect(thisView?.textContent).toMatch(/View/);
     expect(thisView?.textContent).toMatch(/Wall/);
@@ -195,5 +200,45 @@ describe("Settings panes", () => {
     expect(s.openPane).toBe("appearance");
     s.showPane("view");
     expect(n).toBe(2);
+  });
+
+  it("keeps plugin settings announcer on the view pane after randomise", () => {
+    const s = new Settings({ storePrefix: "zoto-plugin-ann-rand", onChange: () => {} });
+    const spec = loadSettingsDeclFixture();
+    s.bindView(spec, spec.config);
+    const pane = s.el.querySelector('[data-pane="view"]')!;
+    const announcer = pane.querySelector(":scope > .plugin-settings-announcer");
+    const viewHost = [...pane.children].find(
+      (el) => !el.classList.contains("plugin-settings-announcer"),
+    ) as HTMLElement;
+    expect(announcer).toBeTruthy();
+    viewHost.querySelector<HTMLButtonElement>('[data-toolbar-action="randomise"]')?.click();
+    expect(pane.querySelector(":scope > .plugin-settings-announcer")).toBe(announcer);
+    expect(viewHost.contains(announcer)).toBe(false);
+  });
+
+  it("mounts plugin settings announcer on the view pane outside the view layer", () => {
+    const s = new Settings({ storePrefix: "zoto-plugin-announcer", onChange: () => {} });
+    const spec = loadSettingsDeclFixture();
+    s.bindView(spec, spec.config);
+    const pane = s.el.querySelector('[data-pane="view"]');
+    const announcer = pane?.querySelector(":scope > .plugin-settings-announcer");
+    const viewLayer = pane?.querySelector('[data-layer="view"]');
+    expect(announcer).toBeTruthy();
+    expect(viewLayer?.contains(announcer)).toBe(false);
+    s.bindView(spec, spec.config);
+    expect(pane?.querySelector(":scope > .plugin-settings-announcer")).toBe(announcer);
+  });
+
+  it("hides pack scope note for production-shaped mosaic walls", () => {
+    const s = new Settings({ storePrefix: "zoto-pack-scope", onChange: () => {} });
+    s.addAnimation(() => {}, { el: document.createElement("div") });
+    s.applyAnim({
+      ...s.animSettings,
+      mosaic: "4",
+      mosaicTiles: ["plugin:settings-fixture", "plugin:topology", "plugin:memory", "plugin:disk"],
+    });
+    s.bindView(loadSettingsDeclFixture(), loadSettingsDeclFixture().config);
+    expect(s.el.querySelector('[data-pane="view"]')?.textContent).not.toMatch(/Applies to all/);
   });
 });

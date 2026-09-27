@@ -126,7 +126,7 @@ config:
     type: select
     default: auto
     values:
-      - [auto, Auto (wide, no cuts)]
+      - [auto, "Auto (wide, no cuts)"]
       - [on, On]
       - [off, Off]
     hint: Holds wide shots; no fast camera rolls or shake.

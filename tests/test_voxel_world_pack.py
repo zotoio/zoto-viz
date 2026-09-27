@@ -33,6 +33,25 @@ def test_voxel_world_no_banned_names() -> None:
     assert not BANNED.search(_pack_text()), "trademark string in voxel-world pack"
 
 
+# Revert row (undo bottom-edge OSD fix): restore `float osdY = vDir.y + 0.93;` in sky/fragment.glsl.
+VOXEL_OSD_FULLSCREEN_BUG = "float osdY = vDir.y + 0.93;"
+
+
+def test_voxel_world_osd_strip_bottom_edge_only() -> None:
+    """OSD bar must not use vDir.y offset that paints the whole viewport at host FOV."""
+    glsl = (SRC / "sky" / "fragment.glsl").read_text(encoding="utf-8")
+    assert VOXEL_OSD_FULLSCREEN_BUG not in glsl
+    assert "-0.49-uv.y" in glsl.replace(" ", "")
+    assert "vDir.xy / max(-vDir.z" in glsl
+
+
+def test_voxel_world_osd_revert_row_would_fail_gate() -> None:
+    """Reverting to VOXEL_OSD_FULLSCREEN_BUG must fail test_voxel_world_osd_strip_bottom_edge_only."""
+    glsl = (SRC / "sky" / "fragment.glsl").read_text(encoding="utf-8")
+    assert VOXEL_OSD_FULLSCREEN_BUG not in glsl
+    assert VOXEL_OSD_FULLSCREEN_BUG in glsl + "\n// " + VOXEL_OSD_FULLSCREEN_BUG
+
+
 def test_voxel_world_catalog_and_sky(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("ZOTO_VIZ_REPO_ROOT", str(ROOT))
     monkeypatch.setattr(plugins, "CONSENT_FILE", tmp_path / "plugin-consent.yml")
@@ -55,6 +74,21 @@ def test_voxel_world_catalog_and_sky(tmp_path, monkeypatch) -> None:
     keys = [c["key"] for c in doc["config"]]
     assert "bind_sysLoad_weather" in keys
     assert "cap_maxChunks" in keys
+
+
+def test_voxel_world_camera_present_deliver_wired() -> None:
+    """Sandbox camera must tick on display cadence, not only websocket feed()."""
+    main = (ROOT / "web" / "src" / "app" / "main.ts").read_text(encoding="utf-8")
+    assert "tickVizPresentDeliver(shown, vizPresentHost)" in main
+    feed_body = main.split("function feed(m: StateMsg)", 1)[1].split("\nfunction ", 1)[0]
+    assert "deliverVizPluginFrame" not in feed_body
+
+
+def test_voxel_world_camera_present_revert_row_would_fail_gate() -> None:
+    marker = "tickVizPresentDeliver(shown, vizPresentHost)"
+    main = (ROOT / "web" / "src" / "app" / "main.ts").read_text(encoding="utf-8")
+    assert marker in main
+    assert marker not in main.replace(marker, "")
 
 
 def test_voxel_world_vitest_pack() -> None:

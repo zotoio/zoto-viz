@@ -1,3 +1,7 @@
+node_modules/.modules.yaml
+node_modules/.pnpm-workspace-state-v1.json
+node_modules/.pnpm-task-run-state-v1/
+.pnpm-workspace-state-v1.json
 .env
 .env.*
 !.env.example
@@ -8,6 +12,8 @@ web/.env.*
 data/
 out/
 web/node_modules/
+**/node_modules/.modules.yaml
+**/node_modules/.pnpm-workspace-state-v1.json
 web/dist/
 node_modules/
 service/cursor-bridge/node_modules/
@@ -27,4 +33,7 @@ sys-config.yml
 plugins/.runtime/
 plugins/*.zip
 dist/
-
+plugins/src/.pack-sdk/
+**/.zip-install-blocks.json
+**/.install-catalog-records.json
+revert-proofs/**/red/*.txt

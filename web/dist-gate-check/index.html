@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Plugin sandbox srcdoc runs inline JS; the iframe csp attribute cannot loosen this parent policy. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self' ws: wss: stun: turn: turns:; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; frame-src 'self' blob:;" />
+    <title>zoto-viz · live</title>
+    <script type="module" crossorigin src="/assets/main-DWxYF8J5.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-DK3Fl9T5.js">
+    <link rel="modulepreload" crossorigin href="/assets/preload-helper-CqwWvUnY.js">
+    <link rel="modulepreload" crossorigin href="/assets/http-B80QYO4L.js">
+    <link rel="modulepreload" crossorigin href="/assets/pack-asset-navigation-DnpEv3bP.js">
+    <link rel="stylesheet" crossorigin href="/assets/main-Dw1f3FMw.css">
+  </head>
+  <body class="view-booting">
+    <div id="wall">
+      <div id="scene"></div>
+      <div id="pong" class="arcade" hidden></div>
+      <div id="invaders" class="arcade" hidden></div>
+      <div id="command" class="arcade" hidden></div>
+      <div id="frogger" class="arcade" hidden></div>
+      <div id="cpupong" class="arcade" hidden></div>
+      <div id="doom" class="arcade" hidden></div>
+      <div id="waves" class="arcade" hidden></div>
+      <div id="orbits" class="arcade" hidden></div>
+      <div id="helix" class="arcade" hidden></div>
+      <div id="skyline" class="arcade" hidden></div>
+      <div id="pacman" class="arcade" hidden></div>
+      <div id="tetris" class="arcade" hidden></div>
+      <div id="portal" class="arcade" hidden></div>
+      <div id="carousel" class="arcade" hidden></div>
+    </div>
+    <div id="boot" role="status" aria-live="polite">
+      <div class="boot-stage" aria-hidden="true">
+        <div class="boot-cube">
+          <span></span><span></span><span></span><span></span><span></span><span></span>
+        </div>
+      </div>
+      <div class="boot-track"><i id="bootBar"></i></div>
+      <div id="bootLabel">starting</div>
+    </div>
+    <header id="bar">
+      <div class="row top">
+        <span id="conn" class="dot"></span>
+        <strong class="brand">zoto-viz<span id="brandProfile" class="brand-profile" hidden></span></strong>
+        <span id="net"></span>
+        <span class="sp"></span>
+        <span class="stat"><b id="pps">0</b> pkt/s</span>
+        <span class="stat"><b id="bps">0</b></span>
+        <span class="stat" title="this host, gateway, LAN and local"><b id="lanDevs">0</b> devices <em>·</em> <b id="lanOnline">0</b> online</span>
+        <span class="stat" title="internet hosts"><b id="netSvcs">0</b> services <em>·</em> <b id="netOnline">0</b> online</span>
+        <span class="stat"><b id="flows">0</b> flows <em>·</em> <b id="active">0</b> active</span>
+      </div>
+      <div class="row controls">
+        <span id="modeBox"></span>
+        <span id="modeOpts"></span>
+        <span class="sp"></span>
+        <span id="dreamBox"></span>
+        <span id="feedBox"></span>
+        <span id="chatBox"></span>
+        <span id="debugBox"></span>
+        <span id="labelsBox"></span>
+        <span id="senseBox" class="sense-pair">
+          <span id="cameraBox"></span>
+          <span id="micBox"></span>
+          <span id="soundBox"></span>
+        </span>
+        <span id="diceBox"></span>
+        <span id="aiBox"></span>
+        <div id="quick" hidden></div>
+        <span id="settingsBox"></span>
+      </div>
+    </header>
+    <aside id="panel" hidden></aside>
+    <div id="livefeed" hidden></div>
+    <div id="livechat" hidden></div>
+    <aside id="debuglog" hidden></aside>
+    <div id="foot">
+      <div id="hint"></div>
+      <div id="legend"></div>
+    </div>
+  </body>
+</html>

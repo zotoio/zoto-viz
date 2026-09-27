@@ -38,6 +38,10 @@ export interface PluginField {
   min?: number;
   max?: number;
   step?: number;
+  /** Settings drawer section title (collapsible groups). */
+  section?: string;
+  randomise?: boolean;
+  randomRange?: [number, number];
 }
 export interface Legend { color: string; label: string; line?: boolean }
 export interface Overlay { id: string; x: number; y: number; z: number; html: string }
@@ -175,7 +179,7 @@ export function arcadeSlotFor(m: Pick<ViewMode, "id" | "standalone" | "arcadeId"
 /** Menu / mosaic caption: `NET Topology`, `AIR SSIDs`, `CPU cores`, `SYS Memory`, `SRC Source web`. */
 export function viewCaption(m: Pick<ViewMode, "id" | "label" | "graphBase" | "arcadeId">): string {
   const tag = viewSource(m);
-  let name = m.label.trim().replace(/^(NET|AIR|BT|CPU|SYS|SRC)\s+/i, "");
+  let name = (m.label ?? "").trim().replace(/^(NET|AIR|BT|CPU|SYS|SRC)\s+/i, "");
   if (tag === "AIR") name = name.replace(/^Air\s+/i, "");
   return `${tag} ${name}`;
 }
@@ -1082,7 +1086,7 @@ export const tetris: ViewMode = {
   id: "tetris",
   label: "Tetris",
   standalone: true,
-  hint: "A glass 3D well. Each packet becomes a bevelled tetromino coloured by protocol. Gravity follows packet rate; a full row clears. The stack is visual only — it never drops a flow.",
+  hint: "A glass 3D well. Each packet becomes a bevelled tetromino coloured by protocol. Gravity follows packet rate; a full row clears. Pieces autoplay with a standard line-clear heuristic — rotate and slide into place, then drop.",
   legend: () => [
     { color: "#42a5f5", label: "TLS" },
     { color: "#ffee58", label: "DNS" },

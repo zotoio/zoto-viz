@@ -75,6 +75,9 @@ def test_sanitize_drops_junk() -> None:
     assert reload["reloadPlugins"] is True
     assert "exec" not in reload
     assert live.sanitize_patch({"reloadPlugins": False}) == {}
+    consent = live.sanitize_patch({"pluginConsent": {"id": "heat", "kind": "reviewed", "nope": 1}})
+    assert consent["pluginConsent"] == {"id": "heat", "kind": "reviewed"}
+    assert live.sanitize_patch({"pluginConsent": {"id": "", "kind": "reviewed"}}) == {}
     assert live.sanitize_patch({"reloadClient": True})["reloadClient"] is True
     assert live.sanitize_patch({"reloadClient": False}) == {}
     chat = live.sanitize_patch({"chat": {"on": True, "textSize": 18, "exec": "nope"}})
@@ -95,6 +98,7 @@ def test_sanitize_drops_junk() -> None:
     assert live.sanitize_patch({"anim": {"backdrop": "earth"}})["anim"]["backdrop"] == "earth"
     assert live.sanitize_patch({"anim": {"backdrop": "amazon"}})["anim"]["backdrop"] == "amazon"
     assert live.sanitize_patch({"anim": {"backdrop": "fungi"}})["anim"]["backdrop"] == "fungi"
+    assert live.sanitize_patch({"anim": {"backdrop": "alpine"}})["anim"]["backdrop"] == "alpine"
     assert anim["gravity"] == 1.5
     assert anim["mosaic"] == "4"
     assert anim["hero"] == "left"

@@ -18,15 +18,27 @@ import { type CamPolicy } from "../camera/want";
 import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
 import { liveSound } from "../audio/sound";
-import { fillPluginFields } from "../plugins/plugin-ui";
-import type { PluginLook, PluginView } from "../plugins/plugin";
-import type { SdmDevice } from "../plugins/nest-cams-look";
-import { viewSelectOptions, fillViewSelect } from "../plugins/plugin";
+import { fillPluginFields, syncPackScopeNote } from "../plugins/plugin-ui";
+import { loadPluginConfig, viewSelectOptions, fillViewSelect, type PluginLook, type PluginView } from "../plugins/plugin";
+import { nestPickPressed, parseNestLook, streamableCameras, type SdmDevice } from "../plugins/nest-cams-look";
 import { pluginViewKnobs } from "../plugins/plugin-visualisation";
+import { packWallScopeFromAnim } from "../plugins/pack-wall-scope";
+import type { PackWallScope } from "../plugins/instances";
+import { packLastTileDiscardMessage } from "../plugins/pack-shared-copy";
+import type { DrawerKey } from "../graph/mosaic-tile-id";
+import { buildDrawerContext } from "./drawer-context";
+import {
+  countPackTiles,
+  firstPackTileInReadingOrder,
+  tileSlotOnWall,
+} from "../app/mosaic-view-drawer-layout";
+import { clearViewDrawerHost, rebuildViewDrawerContent } from "./view-drawer-module";
 import {
   DEFAULT_DICE, DICE_INCLUDE_META, DICE_PERIOD, normalizeDice, type DiceConfig, type DiceIncludeKey, type DiceMosaicMax,
 } from "../core/shuffle";
 import { guardReadableAnim } from "../graph/readable";
+import { applyDreamAnimWithTileLimit, dreamAnimBootFromStorage } from "../graph/mosaic-viz-tile-guard";
+import { renderManifestBlockedPanel } from "../plugins/plugin-manifest-blocked";
 import {
   AUTH_SETUPS,
   renderAuthSetup,
@@ -175,6 +187,16 @@ export class Settings {
   private viewMosaicSec: HTMLElement | null = null;
   private viewCog: HTMLButtonElement | null = null;
   private viewFocusId = "";
+  private viewDrawerKey: DrawerKey | null = null;
+  private viewPluginDirty = false;
+  private viewPluginDraft: Record<string, string> = {};
+  private readonly viewDrawerStatusEl: HTMLDivElement;
+  private readonly mosaicWallStatusEl: HTMLDivElement;
+  private bootRefusedMosaicTilesRawValue: string | null = null;
+  lastMosaicTileLimitMessage = "";
+  private mosaicLayoutPickerTrigger: HTMLButtonElement | null = null;
+  /** Focus target when the view drawer closes (Layout picker or the menu/cog that opened it). */
+  private viewDrawerReturnFocus: HTMLElement | null = null;
   private nestDevices: SdmDevice[] = [];
   private nestDeviceKey = "";
   private viewBind: {
@@ -183,6 +205,7 @@ export class Settings {
     look?: PluginLook | null;
     extras?: HTMLElement[];
   } | null = null;
+  private pluginSettingsAnnouncer: HTMLDivElement | null = null;
   private deviceUi: { cam: Toggle; mic: Toggle; sound: Toggle } | null = null;
   private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
   private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
@@ -204,14 +227,14 @@ export class Settings {
   onMicPolicy?: (p: MicPolicy) => void;
   onSoundPolicy?: (on: boolean) => void;
   onPluginChange?: (id: string, values: Record<string, string>) => void;
+  onShowView?: () => void;
   /** Live wall: swap one tile's view (returns false when the pick could not be applied). */
-  onMosaicPanePick?: (fromId: string, toId: string) => boolean;
+  onMosaicPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
+  onMicResume?: () => void;
   onInstancesChange?: () => void;
   onClose?: () => void;
   onDice?: () => void;
   onDiceChange?: (c: DiceConfig) => void;
-  /** Bind This view to the focused pane (or the solo header view) when that tab opens. */
-  onShowView?: () => void;
 
   constructor(private cfg: SettingsConfig) {
     this.el = document.createElement("div");
@@ -260,10 +283,34 @@ export class Settings {
     const handle = document.createElement("div");
     handle.textContent = "settings";
     this.pop.append(handle, this.nav, this.body);
-    this.el.append(this.btn, this.pop);
+    this.viewDrawerStatusEl = document.createElement("div");
+    this.viewDrawerStatusEl.className = "view-drawer-status sec-hint";
+    this.viewDrawerStatusEl.setAttribute("role", "status");
+    this.viewDrawerStatusEl.hidden = true;
+    this.mosaicWallStatusEl = document.createElement("div");
+    this.mosaicWallStatusEl.className = "mosaic-wall-status sec-hint";
+    this.mosaicWallStatusEl.setAttribute("role", "status");
+    this.mosaicWallStatusEl.hidden = true;
+    this.el.append(this.viewDrawerStatusEl, this.mosaicWallStatusEl, this.btn, this.pop);
     bindFloatPanel(this.pop, handle, "settings", { pin: () => this.pinFloat(), min: { w: 360, h: 280 } });
 
-    this.anim = loadAnim(cfg.storePrefix);
+    const prefix = cfg.storePrefix;
+    const rawMosaicTiles = localStorage.getItem(`${prefix}.anim.mosaicTiles`);
+    const loadedAnim = loadAnim(prefix);
+    let parsedRaw: unknown = loadedAnim.mosaicTiles;
+    if (rawMosaicTiles) {
+      try {
+        parsedRaw = JSON.parse(rawMosaicTiles) as unknown;
+      } catch {
+        parsedRaw = loadedAnim.mosaicTiles;
+      }
+    }
+    const boot = dreamAnimBootFromStorage(loadedAnim, parsedRaw);
+    this.anim = boot.anim;
+    if (boot.bootRefused) {
+      this.bootRefusedMosaicTilesRawValue = rawMosaicTiles;
+      if (boot.message) this.setMosaicTileLimitMessage(boot.message);
+    }
     this.feed = loadFeed(cfg.storePrefix);
     this.chat = loadChat(cfg.storePrefix);
     const split = migrateFeedChatSplit(cfg.storePrefix);
@@ -296,6 +343,10 @@ export class Settings {
     this.syncViewCog();
   }
 
+  get openPane(): string {
+    return this.activePane;
+  }
+
   /** Cog next to the view selector: opens This view (plugin options, config, arcade knobs). */
   attachViewCog(host: HTMLElement, onOpen?: () => void): HTMLButtonElement {
     const btn = makeViewCogButton({
@@ -319,13 +370,85 @@ export class Settings {
       this.close();
       return;
     }
+    this.viewDrawerReturnFocus = this.resolveViewDrawerReturnFocus();
     this.viewFocusId = want;
     this.open("view");
     this.animUi?.syncTiles();
   }
 
   get viewFocus(): string { return this.viewFocusId; }
-  get openPane(): string { return this.activePane; }
+
+  /** Raw `.anim.mosaicTiles` localStorage bytes when boot refused an oversized wall (H6). */
+  bootRefusedMosaicTilesRaw(): string | null {
+    return this.bootRefusedMosaicTilesRawValue;
+  }
+
+  private setMosaicTileLimitMessage(message: string): void {
+    this.lastMosaicTileLimitMessage = message;
+    this.mosaicWallStatusEl.textContent = message;
+    this.mosaicWallStatusEl.hidden = false;
+  }
+
+  private clearMosaicTileLimitMessage(): void {
+    if (!this.lastMosaicTileLimitMessage) return;
+    this.lastMosaicTileLimitMessage = "";
+    this.mosaicWallStatusEl.textContent = "";
+    this.mosaicWallStatusEl.hidden = true;
+  }
+
+  /** Used by host applyMode to skip drawer rebuild when pack + view are unchanged. */
+  viewDrawerOpenWithSpec(): boolean {
+    return this.isOpen && this.activePane === "view" && !!this.viewBind?.spec;
+  }
+
+  get activePaneId(): string { return this.activePane; }
+
+  /** Keep This view open across mosaic layout changes (gear / Esc still work). */
+  reopenViewPane(): void {
+    const focus = this.viewFocusId;
+    if (!this.isOpen) this.open();
+    this.showPane("view");
+    this.viewFocusId = focus;
+    this.syncViewCog();
+    this.animUi?.syncTiles();
+  }
+
+  private preserveViewBind = false;
+  private lastViewCogFocus: HTMLElement | null = null;
+
+  hasViewEdits(): boolean {
+    return !!this.viewHost?.querySelector(".field-dirty");
+  }
+
+  /** Before mosaic.setSize: keep drawer open when the focused tile survives; else prompt discard. */
+  prepareMosaicLayoutChange(nextTiles: string[]): void {
+    this.lastViewCogFocus = null;
+    if (!this.isOpen || this.activePane !== "view") return;
+    const focus = this.viewFocusId.trim();
+    if (!focus) {
+      this.preserveViewBind = true;
+      return;
+    }
+    if (nextTiles.includes(focus)) {
+      this.preserveViewBind = true;
+      return;
+    }
+    if (this.hasViewEdits() && !window.confirm("Discard unsaved changes to this view's settings?")) {
+      this.preserveViewBind = true;
+      return;
+    }
+    const cog = document.querySelector<HTMLElement>(`.mosaic-pane-cog[data-pane="${CSS.escape(focus)}"]`)
+      ?? this.viewCog;
+    this.lastViewCogFocus = cog;
+    this.close();
+    queueMicrotask(() => this.lastViewCogFocus?.focus());
+  }
+
+  consumePreserveViewBind(): boolean {
+    const v = this.preserveViewBind;
+    this.preserveViewBind = false;
+    return v;
+  }
 
   private syncViewCog(): void {
     const on = this.isOpen && this.activePane === "view";
@@ -438,71 +561,90 @@ export class Settings {
     this.pulseNow = fn;
   }
 
-  bindView(spec: PluginView | null, fields?: PluginField[], look?: PluginLook | null, extras?: HTMLElement[]): void {
-    this.viewBind = { spec, fields, look, extras };
+  /** Blocked catalog packs (unknown manifest keys / newer SDK). */
+  bindManifestBlockedCatalog(onRetry: () => void | Promise<void>): void {
+    this.viewBind = { spec: null, fields: undefined, look: null, extras: undefined };
     const host = this.viewHost;
     if (!host) return;
     host.replaceChildren();
-    if (spec) {
-      const layers = packLayerNames(spec);
-      host.append(pluginLayer(
-        "pack",
-        spec.name,
-        `Plugin pack · ${layers.join(" · ")}. Datasource, backend, and frontend are reusable; this tab is the selected view. Wall composes other views.`,
-      ));
-    }
-    if (look && Object.keys(look).length) {
-      const front = pluginLayer(
-        "frontend",
-        "Frontend",
-        spec
-          ? `Look pins from ${spec.name}'s visualisation — they override matching Motion / Appearance controls while this view is selected.`
-          : "Look pins from the plugin pack — they override matching Motion / Appearance controls while selected.",
-      );
-      const row = document.createElement("div");
-      row.className = "pin-chips";
-      for (const [k, v] of Object.entries(look)) {
-        if (v === undefined) continue;
-        const c = document.createElement("span");
-        c.className = "pin-chip";
-        c.textContent = `${k}: ${String(v)}`;
-        row.appendChild(c);
-      }
-      front.append(row);
-      host.append(front);
-    }
-    const extra = extras?.filter(Boolean) ?? [];
-    if (spec) {
-      const view = pluginLayer(
-        "view",
-        "View",
-        spec.instanceId && spec.instanceId !== spec.id
-          ? `Instance ${spec.instanceId} of ${spec.id}. Corner cog on a mosaic tile opens that tile's view.`
-          : "This catalog row. Corner cog on a mosaic tile opens that tile's view.",
-      );
-      fillPluginFields(view, spec, pluginViewKnobs(spec, fields), (id, values) => {
-        this.onPluginChange?.(id, values);
-        this.cfg.onPersist?.();
-      }, { skipEmpty: extra.length > 0, devices: this.nestDevices });
-      if (extra.length) {
-        const sec = document.createElement("div");
-        sec.className = "sec";
-        const row = document.createElement("div");
-        row.className = "sec-controls";
-        for (const el of extra) row.appendChild(el);
-        sec.append(row);
-        const prompt = view.querySelector(".view-prompt");
-        if (prompt) view.insertBefore(sec, prompt);
-        else view.append(sec);
-      }
-      host.append(view);
-    } else if (!look && !extra.length && !this.viewMosaicSec) {
-      const empty = document.createElement("div");
-      empty.className = "sec";
-      empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">This view has no extra fields. On a single view, the cog next to the header view menu opens this tab. On a wall, use the corner cog on that pane — the header has no view menu. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
-      host.append(empty);
+    renderManifestBlockedPanel(host);
+    for (const btn of host.querySelectorAll<HTMLButtonElement>("[data-action=retry-catalog]")) {
+      btn.addEventListener("click", () => { void onRetry(); });
     }
     this.attachViewMosaic();
+  }
+
+  bindView(
+    spec: PluginView | null,
+    fields?: PluginField[],
+    look?: PluginLook | null,
+    extras?: HTMLElement[],
+    modeIdForDrawerKey?: string,
+  ): void {
+    this.viewBind = { spec, fields, look, extras };
+    const host = this.viewHost;
+    if (!host) return;
+    const modeForKey = modeIdForDrawerKey?.trim() || this.viewFocusId.trim() || spec?.id || "";
+    const draftValues = this.viewPluginDirty ? { ...this.viewPluginDraft } : undefined;
+    if (!spec) {
+      this.viewDrawerKey = null;
+      this.viewPluginDirty = false;
+      this.viewPluginDraft = {};
+      this.pop.removeAttribute("data-view-plugin-dirty");
+      clearViewDrawerHost(host, this.viewMosaicSec);
+      this.attachViewMosaic();
+      return;
+    }
+    const ctx = buildDrawerContext({
+      modeId: modeForKey,
+      spec,
+      fields,
+      look,
+      extras,
+      wallScope: packWallScopeFromAnim(this.anim),
+      nestDevices: this.nestDevices,
+      draftValues,
+    });
+    if (ctx.key && ctx.key === this.viewDrawerKey && host.querySelector('.plugin-layer[data-layer="view"]')) {
+      return;
+    }
+    this.viewDrawerKey = ctx.key;
+    this.viewPluginDirty = false;
+    this.viewPluginDraft = {};
+    this.pop.removeAttribute("data-view-plugin-dirty");
+    rebuildViewDrawerContent(host, {
+      ...ctx,
+      viewMosaicSec: this.viewMosaicSec,
+      onPluginPersist: (id, values) => {
+        this.onPluginChange?.(id, values);
+        this.cfg.onPersist?.();
+        this.viewPluginDirty = false;
+        this.viewPluginDraft = {};
+        this.pop.removeAttribute("data-view-plugin-dirty");
+      },
+      onPluginFieldInput: (key, value) => {
+        this.viewPluginDirty = true;
+        this.viewPluginDraft[key] = value;
+        this.pop.dataset.viewPluginDirty = "1";
+      },
+      pluginSettingsAnnouncer: this.ensurePluginSettingsAnnouncer(),
+    });
+    this.attachViewMosaic();
+  }
+
+  private ensurePluginSettingsAnnouncer(): HTMLDivElement {
+    if (!this.pluginSettingsAnnouncer) {
+      const el = document.createElement("div");
+      el.className = "sr-only plugin-settings-announcer";
+      el.setAttribute("aria-live", "polite");
+      el.setAttribute("aria-atomic", "true");
+      this.pluginSettingsAnnouncer = el;
+    }
+    const pane = this.viewHost?.parentElement;
+    if (pane && this.pluginSettingsAnnouncer.parentElement !== pane) {
+      pane.insertBefore(this.pluginSettingsAnnouncer, this.viewHost);
+    }
+    return this.pluginSettingsAnnouncer;
   }
 
   private attachViewMosaic(): void {
@@ -513,6 +655,23 @@ export class Settings {
     this.animUi?.syncTiles();
   }
 
+  focusMosaicLayoutPickerTrigger(): void {
+    this.focusViewDrawerReturnTarget();
+  }
+
+  private resolveViewDrawerReturnFocus(): HTMLElement | null {
+    const el = document.activeElement;
+    if (el instanceof HTMLElement) {
+      if (el.classList.contains("mosaic-layout-picker-trigger")) return el;
+      if (el === this.viewCog || el.classList.contains("mosaic-pane-cog")) return el;
+    }
+    return this.mosaicLayoutPickerTrigger;
+  }
+
+  private focusViewDrawerReturnTarget(): void {
+    (this.viewDrawerReturnFocus ?? this.mosaicLayoutPickerTrigger)?.focus();
+  }
+
   /** Refresh Nest camera chips when Device Access lists devices. */
   setNestDevices(devices: SdmDevice[]): void {
     const key = devices.map((d) => d.id).join("|");
@@ -520,6 +679,7 @@ export class Settings {
     this.nestDeviceKey = key;
     this.nestDevices = devices;
     if (this.viewBind?.spec?.id === "nest-cams") {
+      this.viewDrawerKey = null;
       this.bindView(this.viewBind.spec, this.viewBind.fields, this.viewBind.look, this.viewBind.extras);
     }
   }
@@ -944,6 +1104,23 @@ export class Settings {
     });
     const tileHost = document.createElement("div");
     tileHost.className = "mosaic-slots";
+    tileHost.id = `mosaic-layout-slots-${this.cfg.storePrefix}`;
+    const layoutPickerTrigger = document.createElement("button");
+    layoutPickerTrigger.type = "button";
+    layoutPickerTrigger.className = "mosaic-layout-picker-trigger";
+    layoutPickerTrigger.setAttribute("aria-label", "Layout");
+    layoutPickerTrigger.setAttribute("aria-controls", tileHost.id);
+    layoutPickerTrigger.setAttribute("aria-expanded", "true");
+    this.mosaicLayoutPickerTrigger = layoutPickerTrigger;
+    layoutPickerTrigger.addEventListener("click", () => {
+      const open = tileHost.hidden;
+      tileHost.hidden = !open;
+      layoutPickerTrigger.setAttribute("aria-expanded", open ? "true" : "false");
+      if (open) tileHost.querySelector<HTMLSelectElement>(".mosaic-slot")?.focus();
+    });
+    const tilePicker = document.createElement("div");
+    tilePicker.className = "mosaic-layout-picker";
+    tilePicker.append(layoutPickerTrigger, tileHost);
     const syncTiles = () => this.fillMosaicSlots(tileHost);
     const resetBtn = document.createElement("button");
     resetBtn.type = "button";
@@ -968,7 +1145,7 @@ export class Settings {
     });
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
-    mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. The header view menu hides while a wall is up. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
+    mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
     const mosaicBtns = document.createElement("div");
     mosaicBtns.className = "sec-links";
     mosaicBtns.append(resetBtn, equalBtn);
@@ -977,7 +1154,7 @@ export class Settings {
     mosaicBits.append(
       labeled("views", mosaic.el),
       labeled("hero", hero.el),
-      labeled("tiles", tileHost),
+      labeled("tiles", tilePicker),
       sharedTheme.el,
       mosaicHint,
       mosaicBtns,
@@ -1344,7 +1521,7 @@ export class Settings {
       <div class="sec-hint">RSS, public HTTPS JSON/text, local files under $HOME / ~/.zoto-viz, the user journal, and the kernel ring (/dev/kmsg). HTTP JSON can map list / title / caption / image fields. Views (carousel, rain, term) are instances of one plugin pointed at a source — do not fork a tree per feed. Sources that need a key show the signup link here and stay out of dice until they work.</div>`;
     const include = new Toggle({
       label: "headlines on feed",
-      title: "show RSS, HTTP, journal, kernel, and local-file titles on the live feed ticker. Each title stays on one line.",
+      title: "show RSS / HTTP / file / journal / kmsg titles on the live feed ticker",
       checked: this.feed.includeSources !== false,
       onChange: (v) => { this.feed.includeSources = v; this.persistFeed(); },
     });
@@ -1619,7 +1796,7 @@ export class Settings {
     const sec = document.createElement("section");
     sec.className = "sec";
     sec.innerHTML = `<div class="sec-title">Live feed</div>
-      <div class="sec-hint">Decoded packets beside the graph. RSS, HTTP, journal, kernel, and local-file titles ride the ticker as one line each. Chat is a separate panel (header chat / C). Header feed / F shows or hides this overlay.</div>`;
+      <div class="sec-hint">Decoded packets beside the graph. Headlines from Sources can ride the ticker. Chat is a separate panel (header chat / C). Header feed / F shows or hides this overlay.</div>`;
     const on = new Toggle({
       label: "show feed",
       title: "ticker and/or protocol bars on the right of the scene (header feed switch or F)",
@@ -1706,16 +1883,27 @@ export class Settings {
   }
 
   applyAnim(a: DreamAnim): void {
-    this.anim = guardReadableAnim({
+    const rawTileList = Array.isArray(a.mosaicTiles)
+      ? a.mosaicTiles.filter((row): row is string => typeof row === "string" && row.trim().length > 0)
+      : [];
+    const incoming = guardReadableAnim({
       ...DEFAULT_DREAM,
       ...a,
       mosaicTree: parseMosaicNode(a.mosaicTree) ?? a.mosaicTree ?? null,
       mosaicMaxId: typeof a.mosaicMaxId === "string" ? a.mosaicMaxId : "",
-      mosaicTiles: parseMosaicTiles(a.mosaicTiles),
+      mosaicTiles: parseMosaicTiles(rawTileList.length ? rawTileList : a.mosaicTiles),
       mosaicSharedTheme: !!a.mosaicSharedTheme,
       mosaicUniqueSkies: a.mosaicUniqueSkies,
       mosaicSkies: a.mosaicSkies,
     });
+    const forLimit = rawTileList.length ? { ...incoming, mosaicTiles: rawTileList } : incoming;
+    const limited = applyDreamAnimWithTileLimit(forLimit, this.anim);
+    if (limited.refused && limited.message) {
+      this.setMosaicTileLimitMessage(limited.message);
+    } else if (!this.bootRefusedMosaicTilesRawValue) {
+      this.clearMosaicTileLimitMessage();
+    }
+    this.anim = limited.anim;
     this.syncAnimUi();
     this.syncTheme();
     this.persistAnim();
@@ -1729,6 +1917,7 @@ export class Settings {
     uniqueSkies?: boolean;
     skies?: DreamAnim["mosaicSkies"];
   }): void {
+    const prevTiles = [...this.anim.mosaicTiles];
     this.anim.mosaicTree = parseMosaicNode(patch.tree);
     this.anim.mosaicMaxId = patch.maximized ?? "";
     this.anim.mosaicTiles = parseMosaicTiles(patch.tiles);
@@ -1738,9 +1927,127 @@ export class Settings {
     }
     this.persistAnim();
     this.animUi?.syncTiles();
+    this.onMosaicLayoutDrawerChange(prevTiles, this.anim.mosaicTiles);
+    if (this.shouldSyncPackScopeNoteAfterLayout(prevTiles, this.anim.mosaicTiles)) {
+      this.syncPackScopeNoteFromAnim();
+    }
+    if (
+      this.viewPluginDirty
+      && this.isOpen
+      && this.activePane === "view"
+      && this.viewDrawerStatusEl.hidden
+    ) {
+      const gain = this.viewHost?.querySelector<HTMLInputElement>(
+        '.plugin-layer[data-layer="view"] .slider input[type=range]',
+      );
+      gain?.focus();
+    }
+    if (this.viewBind?.spec?.id === "nest-cams") this.syncNestCamChipPressedFromConfig();
+  }
+
+  private shouldSyncPackScopeNoteAfterLayout(prevTiles: string[], nextTiles: string[]): boolean {
+    if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec?.id) return true;
+    const packId = this.viewBind.spec.id;
+    return countPackTiles(prevTiles, packId) !== countPackTiles(nextTiles, packId);
+  }
+
+  private onMosaicLayoutDrawerChange(prevTiles: string[], nextTiles: string[]): void {
+    if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec?.id) return;
+    const packId = this.viewBind.spec.id;
+    const focus = this.viewFocusId;
+    const nextCount = countPackTiles(nextTiles, packId);
+    if (nextCount === 0) {
+      const unsaved = this.viewPluginDirty;
+      const packLabel = this.viewBind.spec.packName || this.viewBind.spec.name || this.viewBind.spec.id;
+      const msg = unsaved ? packLastTileDiscardMessage(packLabel) : null;
+      this.teardownViewDrawerAfterLastPackTile(msg);
+      return;
+    }
+    if (focus && !tileSlotOnWall(focus, nextTiles)) {
+      const nextFocus = firstPackTileInReadingOrder(nextTiles, packId);
+      if (nextFocus) this.retargetViewFocus(nextFocus);
+    }
+  }
+
+  private retargetViewFocus(slotModeId: string): void {
+    this.viewFocusId = slotModeId;
+    this.animUi?.syncTiles();
+    this.syncViewCog();
+  }
+
+  private teardownViewDrawerAfterLastPackTile(discardMessage: string | null): void {
+    if (discardMessage) {
+      this.showViewDrawerStatus(discardMessage);
+      this.viewPluginDirty = false;
+      this.viewPluginDraft = {};
+      this.pop.removeAttribute("data-view-plugin-dirty");
+      this.viewDrawerKey = null;
+      this.viewFocusId = "";
+      this.syncViewCog();
+      const layoutBtn = this.mosaicLayoutPickerTrigger;
+      if (layoutBtn) queueMicrotask(() => layoutBtn.focus());
+      return;
+    }
+    this.clearViewDrawerStatus();
+    this.viewPluginDirty = false;
+    this.viewPluginDraft = {};
+    this.pop.removeAttribute("data-view-plugin-dirty");
+    this.viewDrawerKey = null;
+    this.viewFocusId = "";
+    this.pop.hidden = true;
+    this.el.classList.remove("open");
+    this.btn.setAttribute("aria-expanded", "false");
+    this.syncViewCog();
+    document.removeEventListener("pointerdown", this.onDocDown, true);
+    cancelAnimationFrame(this.meterRaf);
+    this.meterRaf = 0;
+    this.onClose?.();
+    this.focusMosaicLayoutPickerTrigger();
+  }
+
+  showViewDrawerStatus(message: string): void {
+    this.viewDrawerStatusEl.textContent = message;
+    this.viewDrawerStatusEl.hidden = false;
+    this.viewDrawerStatusEl.classList.remove("fail");
+  }
+
+  private clearViewDrawerStatus(): void {
+    this.viewDrawerStatusEl.textContent = "";
+    this.viewDrawerStatusEl.hidden = true;
   }
 
   refreshMosaicSlots(): void { this.animUi?.syncTiles(); }
+
+  private syncPackScopeNoteFromAnim(): void {
+    if (!this.isOpen || this.activePane !== "view" || !this.viewBind?.spec || !this.viewHost) return;
+    const wall = packWallScopeFromAnim(this.anim);
+    syncPackScopeNote(this.viewHost, this.viewBind.spec, wall);
+    this.syncNestCamChipPressedFromConfig();
+  }
+
+  private syncNestCamChipPressedFromConfig(): void {
+    const spec = this.viewBind?.spec;
+    const host = this.viewHost;
+    if (!spec || spec.id !== "nest-cams" || !host) return;
+    const fields = this.viewBind?.fields ?? [];
+    const values = loadPluginConfig(spec, fields);
+    const look = parseNestLook(values);
+    const cams = streamableCameras(this.nestDevices);
+    for (const field of host.querySelectorAll<HTMLElement>(".nest-cam-field")) {
+      if (field.querySelector(".subcap")?.textContent !== "cameras") continue;
+      const row = field.querySelector(".nest-cam-chips");
+      if (!row) continue;
+      for (const btn of row.querySelectorAll<HTMLButtonElement>("button")) {
+        const label = btn.textContent ?? "";
+        if (label === "all") {
+          btn.setAttribute("aria-pressed", !look.pick ? "true" : "false");
+          continue;
+        }
+        const cam = cams.find((c) => c.label === label);
+        if (cam) btn.setAttribute("aria-pressed", nestPickPressed(look.pick, cam) ? "true" : "false");
+      }
+    }
+  }
 
   private fillMosaicSlots(host: HTMLElement): void {
     host.replaceChildren();
@@ -1776,14 +2083,23 @@ export class Settings {
         const to = sel.value;
         if (!from || from === to) return;
         if (this.onMosaicPanePick) {
-          if (!this.onMosaicPanePick(from, to)) fillViewSelect(sel, from);
+          const outcome = this.onMosaicPanePick(from, to);
+          const finish = (ok: boolean) => {
+            if (!ok) fillViewSelect(sel, from);
+            else this.syncPackScopeNoteFromAnim();
+          };
+          if (outcome && typeof outcome === "object" && "then" in outcome) {
+            void Promise.resolve(outcome).then(finish);
+          } else {
+            finish(!!outcome);
+          }
         } else {
           const next = nextPaneTiles(ids, from, to);
           this.anim.mosaicTiles = parseMosaicTiles(next);
           if (this.anim.mosaicTree) this.anim.mosaicTree = assignTiles(this.anim.mosaicTree, this.anim.mosaicTiles);
           this.persistAnim();
+          this.animUi?.syncTiles();
         }
-        this.animUi?.syncTiles();
       });
       row.append(cap, sel);
       host.appendChild(row);
@@ -1803,18 +2119,41 @@ export class Settings {
     this.persistDice();
   }
 
-  /** Show or hide the right-hand activity list. Syncs the cog toggle and persists. */
-  setFeedOn(on: boolean): void {
+  /** Session-only cypher-cic panel collapse (never persist collapsed visibility). */
+  setCypherCicPanelCollapsed(collapsed: boolean): void {
+    this.cypherCicPanelCollapsed = collapsed;
+  }
+
+  readPersistedFeedOn(): boolean {
+    return localStorage.getItem(`${this.cfg.storePrefix}.feed.on`) !== "0";
+  }
+
+  readPersistedChatOn(): boolean {
+    return localStorage.getItem(`${this.cfg.storePrefix}.chat.on`) !== "0";
+  }
+
+  private cypherCicPanelCollapsed = false;
+
+  /** Show or hide the right-hand activity list. Syncs the cog toggle and persists unless `persist` is false. */
+  setFeedOn(on: boolean, opts?: { persist?: boolean }): void {
     this.feed.on = on;
     if (this.feedUi) this.feedUi.on.checked = on;
-    this.persistFeed();
+    if (opts?.persist === false) {
+      this.onFeedChange(this.feed);
+      return;
+    }
+    this.persistFeed({ onFromMemory: true });
   }
 
   /** Show or hide the agent chat panel. */
-  setChatOn(on: boolean): void {
+  setChatOn(on: boolean, opts?: { persist?: boolean }): void {
     this.chat.on = on;
     if (this.chatUi) this.chatUi.on.checked = on;
-    this.persistChat();
+    if (opts?.persist === false) {
+      this.onChatChange(this.chat);
+      return;
+    }
+    this.persistChat({ onFromMemory: true });
   }
 
   /** Watchword: open the chat panel (pins to the latest line). */
@@ -2039,8 +2378,10 @@ export class Settings {
     if (a.mosaicTree) localStorage.setItem(`${p}.anim.mosaicTree`, JSON.stringify(a.mosaicTree));
     else localStorage.removeItem(`${p}.anim.mosaicTree`);
     localStorage.setItem(`${p}.anim.mosaicMaxId`, a.mosaicMaxId || "");
-    if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
-    else localStorage.removeItem(`${p}.anim.mosaicTiles`);
+    if (this.bootRefusedMosaicTilesRawValue === null) {
+      if (a.mosaicTiles?.length) localStorage.setItem(`${p}.anim.mosaicTiles`, JSON.stringify(a.mosaicTiles));
+      else localStorage.removeItem(`${p}.anim.mosaicTiles`);
+    }
     localStorage.setItem(`${p}.anim.mosaicSharedTheme`, a.mosaicSharedTheme ? "1" : "0");
     if (a.mosaicUniqueSkies === true) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "1");
     else if (a.mosaicUniqueSkies === false) localStorage.setItem(`${p}.anim.mosaicUniqueSkies`, "0");
@@ -2080,10 +2421,15 @@ export class Settings {
     this.cfg.onPersist?.();
   }
 
-  private persistFeed(): void {
+  private persistFeed(opts?: { onFromMemory?: boolean }): void {
     const p = this.cfg.storePrefix;
     const c = this.feed;
-    localStorage.setItem(`${p}.feed.on`, c.on ? "1" : "0");
+    const on = opts?.onFromMemory
+      ? this.cypherCicPanelCollapsed
+        ? this.readPersistedFeedOn()
+        : c.on
+      : c.on;
+    localStorage.setItem(`${p}.feed.on`, on ? "1" : "0");
     localStorage.setItem(`${p}.feed.layout`, c.layout);
     localStorage.setItem(`${p}.feed.scope`, c.scope);
     localStorage.setItem(`${p}.feed.source`, c.source);
@@ -2095,10 +2441,15 @@ export class Settings {
     this.cfg.onPersist?.();
   }
 
-  private persistChat(): void {
+  private persistChat(opts?: { onFromMemory?: boolean }): void {
     const p = this.cfg.storePrefix;
     const c = this.chat;
-    localStorage.setItem(`${p}.chat.on`, c.on ? "1" : "0");
+    const on = opts?.onFromMemory
+      ? this.cypherCicPanelCollapsed
+        ? this.readPersistedChatOn()
+        : c.on
+      : c.on;
+    localStorage.setItem(`${p}.chat.on`, on ? "1" : "0");
     localStorage.setItem(`${p}.chat.textSize`, String(c.textSize));
     this.onChatChange(c);
     this.cfg.onPersist?.();
@@ -2150,6 +2501,8 @@ export class Settings {
 
   close(): void {
     this.viewFocusId = "";
+    this.viewDrawerKey = null;
+    this.viewDrawerReturnFocus = null;
     this.pop.hidden = true;
     this.el.classList.remove("open");
     this.btn.setAttribute("aria-expanded", "false");

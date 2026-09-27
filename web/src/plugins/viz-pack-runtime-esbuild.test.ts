@@ -3,13 +3,19 @@ import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, type TestContext } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const esbuildBin = path.join(repoRoot, "web/node_modules/.bin/esbuild");
-const pythonBin = existsSync(path.join(repoRoot, ".venv/bin/python3"))
-  ? path.join(repoRoot, ".venv/bin/python3")
-  : "python3";
+/** Same interpreter as README / `.cursor/hooks/restart-stale-monitor.sh` (repo-root venv). */
+const projectPython = path.join(repoRoot, ".venv/bin/python");
+const hasProjectVenv = existsSync(projectPython);
+
+function requireProjectPython(ctx: TestContext): string {
+  if (hasProjectVenv) return projectPython;
+  if (process.env.CI) throw new Error("no project venv in CI");
+  return ctx.skip("no project venv");
+}
 
 /** Packs migrated to `import type` from `plugins/sdk/viz-contract` (viz.read frontends). */
 const MIGRATED_VIZ_PACKS = [
@@ -34,22 +40,24 @@ function resolveFrontendEntry(packHome: string): string {
   return path.join(packHome, entry);
 }
 
-function esbuildPackFromHome(packHome: string): string {
+function esbuildPackFromHome(packHome: string, opts: { sdkAlias?: boolean } = {}): string {
   const entry = resolveFrontendEntry(packHome);
   expect(existsSync(entry)).toBe(true);
-  return execFileSync(
-    esbuildBin,
-    [
-      entry,
-      "--bundle",
-      "--format=esm",
-      "--platform=browser",
-      "--target=es2022",
-      "--external:three",
-      "--external:d3-force-3d",
-    ],
-    { encoding: "utf8" },
-  );
+  const args = [
+    entry,
+    "--bundle",
+    "--format=esm",
+    "--platform=browser",
+    "--target=es2022",
+    "--external:three",
+    "--external:d3-force-3d",
+  ];
+  if (opts.sdkAlias) {
+    args.push(`--alias:plugins/sdk=${path.join(repoRoot, "plugins/sdk")}`);
+  } else {
+    args.push("--external:../../../sdk/viz-zoto", "--external:../../../sdk/viz-pack-host");
+  }
+  return execFileSync(esbuildBin, args, { encoding: "utf8" });
 }
 
 function stageLocalRuntimePack(packId: string, zotoHome: string): string {
@@ -65,7 +73,7 @@ describe("viz pack runtime esbuild", () => {
     try {
       for (const packId of MIGRATED_VIZ_PACKS) {
         const home = stageLocalRuntimePack(packId, zotoHome);
-        const js = esbuildPackFromHome(home);
+        const js = esbuildPackFromHome(home, { sdkAlias: true });
         expect(js.length).toBeGreaterThan(32);
         expect(js).not.toMatch(/viz-contract/);
       }
@@ -74,7 +82,24 @@ describe("viz pack runtime esbuild", () => {
     }
   });
 
-  it.skipIf(!existsSync(esbuildBin))("bundles cypher-cic and syscon from zip-unpacked local runtime", () => {
+  it.skipIf(!existsSync(esbuildBin))(
+    "bundles cypher-cic unpacked outside plugins/src with 0 module resolution errors",
+    () => {
+      const outsideRoot = mkdtempSync(path.join(os.tmpdir(), "zoto-unpacked-pack-"));
+      try {
+        const packHome = path.join(outsideRoot, "cypher-cic");
+        cpSync(path.join(repoRoot, "plugins/src/cypher-cic"), packHome, { recursive: true });
+        expect(() => esbuildPackFromHome(packHome, { sdkAlias: true })).not.toThrow();
+        const js = esbuildPackFromHome(packHome, { sdkAlias: true });
+        expect(js.length).toBeGreaterThan(64);
+      } finally {
+        rmSync(outsideRoot, { recursive: true, force: true });
+      }
+    },
+  );
+
+  it.skipIf(!existsSync(esbuildBin))("bundles cypher-cic and syscon from zip-unpacked local runtime", (ctx) => {
+    const python = requireProjectPython(ctx);
     const zotoHome = mkdtempSync(path.join(os.tmpdir(), "zoto-viz-zip-"));
     try {
       for (const packId of ["cypher-cic", "syscon"] as const) {
@@ -102,7 +127,7 @@ doc = yaml.safe_load((runtime / "plugin.yml").read_text(encoding="utf-8"))
 out = plugins.compile_typescript(doc, runtime / "plugin.yml")
 assert out.get("hash"), out
 `;
-        execFileSync(pythonBin, ["-c", script], {
+        execFileSync(python, ["-c", script], {
           cwd: repoRoot,
           encoding: "utf8",
           env: { ...process.env, ZOTO_VIZ_HOME: zotoHome, PYTHONPATH: repoRoot },

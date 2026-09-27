@@ -1,6 +1,7 @@
 """Shipped Backrooms pack: catalog row, idle fixture, consented sky."""
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -38,3 +39,19 @@ def test_backrooms_catalog_and_sky(tmp_path, monkeypatch) -> None:
     assert "zotoVizSlots" in ok.text
     assert "bool walled(" in ok.text
     assert row.get("viz", {}).get("maxBuffers") == 2
+
+
+def test_backrooms_present_pack_vitest() -> None:
+    web = ROOT / "web"
+    subprocess.run(
+        [
+            "pnpm",
+            "exec",
+            "vitest",
+            "run",
+            "--config",
+            "../plugins/src/backrooms/vitest.config.ts",
+        ],
+        cwd=web,
+        check=True,
+    )

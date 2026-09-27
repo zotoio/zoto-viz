@@ -1,31 +1,57 @@
 name: pack-boundary
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, labeled, unlabeled]
+  pull_request_target:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+      - ready_for_review
 
 permissions:
   contents: read
-  pull-requests: read
   issues: read
+  pull-requests: read
 
 jobs:
   pack-boundary:
+    if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-      - name: Enforce pack PR boundary
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Log checked-out base revision
         env:
+          PACK_BOUNDARY_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          echo "pack-boundary: base checkout only (required check)."
+          echo "pack-boundary: git HEAD=$(git rev-parse HEAD)"
+          echo "pack-boundary: pull_request.base.sha=${PACK_BOUNDARY_BASE_SHA}"
+      - name: Fetch PR head tree (read-only data, not executed)
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if ! git show "${{ github.event.pull_request.base.sha }}:scripts/check_pack_pr_boundary.py" \
-            > /tmp/check_pack_pr_boundary.py 2>/dev/null; then
-            cp scripts/check_pack_pr_boundary.py /tmp/check_pack_pr_boundary.py
-          fi
-          python3 /tmp/check_pack_pr_boundary.py \
-            "${{ github.event.pull_request.base.sha }}" \
-            "${{ github.event.pull_request.head.sha }}" \
-            --repo "${{ github.repository }}" \
-            --pr-number "${{ github.event.pull_request.number }}"
+          set -euo pipefail
+          PR_HEAD_DIR="${GITHUB_WORKSPACE}/_pr_head"
+          mkdir -p "${PR_HEAD_DIR}"
+          git -c protocol.file.allow=never fetch --no-tags --depth=1 \
+            "https://x-access-token:${GITHUB_TOKEN}@github.com/${HEAD_REPO}.git" \
+            "${HEAD_SHA}"
+          git -c protocol.file.allow=never archive --format=tar FETCH_HEAD | tar -x -C "${PR_HEAD_DIR}"
+      - name: Enforce pack PR boundary (secure)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PACK_BOUNDARY_PR_HEAD_DIR: ${{ github.workspace }}/_pr_head
+          PACK_BOUNDARY_BASE_ROOT: ${{ github.workspace }}
+          PACK_BOUNDARY_EVENT_ACTION: ${{ github.event.action }}
+          PACK_BOUNDARY_EVENT_LABEL_NAME: ${{ github.event.label.name }}
+          PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ${{ github.event.pull_request.updated_at }}
+        run: python3 scripts/check_pack_pr_boundary.py --secure-ci

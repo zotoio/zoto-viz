@@ -1,10 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { applyInstance, configStoreId, expandPluginInstances, parsePluginId, parsePluginInstance, pluginViewId } from "./instances";
+import {
+  applyInstance,
+  configStoreId,
+  expandPluginInstances,
+  parsePluginId,
+  parsePluginInstance,
+  pluginSpecForStoreId,
+  pluginViewId,
+} from "./instances";
 import type { PluginView } from "./plugin";
 
 const pack = (over: Partial<PluginView> = {}): PluginView => ({
   id: "carousel",
-  name: "Carousel",
+  packName: "Carousel",
   version: 1,
   engine: "carousel",
   config: [
@@ -35,7 +43,7 @@ describe("plugin instances", () => {
     expect(rows).toHaveLength(2);
     expect(pluginViewId(rows[0]!.id, rows[0]!.instanceId)).toBe("plugin:carousel");
     expect(pluginViewId(rows[1]!.id, rows[1]!.instanceId)).toBe("plugin:carousel:apod");
-    expect(rows[1]!.name).toBe("APOD");
+    expect(rows[1]!.instanceLabel).toBe("APOD");
     expect(rows[1]!.config?.find((f) => f.key === "source")?.default).toBe("apod");
   });
 
@@ -43,5 +51,19 @@ describe("plugin instances", () => {
     const view = applyInstance(pack(), { id: "met", source: "met", filter: "has-image" });
     expect(view.instanceId).toBe("met");
     expect(view.config?.find((f) => f.key === "source")?.default).toBe("met");
+  });
+
+  it("resolves instance store ids against the catalog tree", () => {
+    expect.hasAssertions();
+    const catalog = pack({
+      instances: [
+        { id: "carousel", source: "nasa" },
+        { id: "apod", source: "apod" },
+      ],
+    });
+    const apod = pluginSpecForStoreId([catalog], "carousel:apod");
+    expect(apod?.instanceId).toBe("apod");
+    expect(pluginSpecForStoreId([catalog], "carousel")).toBeTruthy();
+    expect(pluginSpecForStoreId([catalog], "carousel:missing")).toBeNull();
   });
 });

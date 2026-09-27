@@ -1,13 +1,20 @@
 import * as THREE from "three";
 import { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
+import { PLUGIN_SKY_HOST_UNIFORMS } from "../plugins/plugin-sky-uniforms";
 import { VIZ_UBO, VIZ_UBO_GLSL } from "../plugins/viz-host";
 import { liveCam } from "../camera/livecam";
 import { SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL } from "../core/themes";
 import { currentSkyRecipe, DEFAULT_SKY_RECIPE, cloneSkyRecipe, lerpSkyRecipe, skyRecipeKey, type SkyRecipe } from "./sky-ai";
 import { VIEW_MORPH_S, mixFade } from "./morph";
 import { wrapAgentSky } from "./sky-agent";
-import { releaseThrowawayGl } from "./webgl";
 import { loadHtmlImage } from "../core/load-image";
+import { smokeBackroomsSkyTime } from "../core/smoke-harness";
+import { prefersReducedMotion, subscribeReducedMotion } from "../core/motion";
+import {
+  probePluginSkyCompile,
+  probePluginSkyVertCompile,
+  wrapPluginSky,
+} from "../plugins/plugin-sky-probe";
 
 /**
  * Far-field sky behind the graph: a huge inward sphere around the origin so orbiting the network
@@ -16,7 +23,9 @@ import { loadHtmlImage } from "../core/load-image";
 
 export type PhotoSkyKind =
   | "earth" | "meadow" | "tunnel" | "bomb" | "reef" | "tornado" | "desert" | "amazon"
-  | "aquarium" | "macaws" | "ruins" | "fungi";
+  | "aquarium" | "macaws" | "ruins" | "fungi"
+  | "alpine" | "bamboo" | "blossom" | "fjord" | "glacier" | "lagoon" | "lava" | "lavender"
+  | "saltflat" | "seastacks";
 
 export type BackdropKind =
   | "none" | "fractal" | "space" | "matrix" | "live"
@@ -40,14 +49,26 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
   macaws: "/skies/macaws.jpg",
   ruins: "/skies/ruins.jpg",
   fungi: "/skies/fungi.jpg",
+  alpine: "/skies/alpine.jpg",
+  bamboo: "/skies/bamboo.jpg",
+  blossom: "/skies/blossom.jpg",
+  fjord: "/skies/fjord.jpg",
+  glacier: "/skies/glacier.jpg",
+  lagoon: "/skies/lagoon.jpg",
+  lava: "/skies/lava.jpg",
+  lavender: "/skies/lavender.jpg",
+  saltflat: "/skies/saltflat.jpg",
+  seastacks: "/skies/seastacks.jpg",
 };
 
 /** Target length of a photo-sky video loop (seconds). Stills Ken-Burns on this period until a clip lands. */
 export const PHOTO_LOOP_S = 5;
 /** Crossfade from the last frames onto a second decoder at t=0 so the wrap has no hitch. */
 export const PHOTO_LOOP_FADE_S = 0.35;
+/** Crossfade between still photo plates when switching sky (seconds on the sky clock). */
+export const PHOTO_SKY_CROSSFADE_S = 3;
 
-/** 0..1 phase of the photo-sky loop. */
+/** 0..1 linear phase of a timed loop. */
 export function photoLoopPhase(t: number, period = PHOTO_LOOP_S): number {
   const p = period > 0 ? period : PHOTO_LOOP_S;
   return (((t % p) + p) % p) / p;
@@ -63,6 +84,14 @@ export function photoLoopMix(t: number, duration: number, fade = PHOTO_LOOP_FADE
   const start = duration - fade;
   if (p < start) return 0;
   return (p - start) / fade;
+}
+
+/** Seam fade for a looping video plate; capped for short clips. */
+export function photoVideoSeamFadeSec(duration: number, target = PHOTO_LOOP_FADE_S): number {
+  if (!Number.isFinite(duration) || duration <= 0) return 0;
+  const fade = Math.min(target, duration / 3);
+  if (fade <= 0 || duration <= fade * 2) return 0;
+  return fade;
 }
 
 /** Cover-fit Ken Burns UV + breath. Closed over `period` (t and t+period match). */
@@ -90,7 +119,7 @@ export function isPhotoVideoUrl(url: string): boolean {
   return /\.(webm|mp4|ogv)(?:[?#]|$)/i.test(url);
 }
 
-/** Prefer a 5 s muted loop, then the JPEG poster. Drop `/skies/<id>.webm` beside the still. */
+/** Prefer a muted loop clip, then the JPEG poster. Drop `/skies/<id>.webm` beside the still. */
 export function photoSkyCandidates(kind: PhotoSkyKind): string[] {
   return [`/skies/${kind}.webm`, `/skies/${kind}.mp4`, PHOTO_SKIES[kind]];
 }
@@ -149,6 +178,16 @@ export const BACKDROP_OPTIONS: { value: BackdropKind; label: string; hint: strin
   { value: "macaws", label: "macaws", hint: "photo / video loop: macaws in jungle", group: "photo" },
   { value: "ruins", label: "ruins", hint: "photo / video loop: Incan ruins", group: "photo" },
   { value: "fungi", label: "fungi", hint: "photo / video loop: bioluminescent mushroom forest", group: "photo" },
+  { value: "alpine", label: "alpine", hint: "photo / video loop: alpine peaks at dusk", group: "photo" },
+  { value: "bamboo", label: "bamboo", hint: "photo / video loop: bamboo forest", group: "photo" },
+  { value: "blossom", label: "blossom", hint: "photo / video loop: cherry blossom", group: "photo" },
+  { value: "fjord", label: "fjord", hint: "photo / video loop: Norwegian fjord", group: "photo" },
+  { value: "glacier", label: "glacier", hint: "photo / video loop: glacier ice", group: "photo" },
+  { value: "lagoon", label: "lagoon", hint: "photo / video loop: tropical lagoon", group: "photo" },
+  { value: "lava", label: "lava", hint: "photo / video loop: night lava field, amber cracks", group: "photo" },
+  { value: "lavender", label: "lavender", hint: "photo / video loop: lavender fields", group: "photo" },
+  { value: "saltflat", label: "saltflat", hint: "photo / video loop: salt flat mirror", group: "photo" },
+  { value: "seastacks", label: "seastacks", hint: "photo / video loop: sea stacks at dusk", group: "photo" },
   { value: "dynamic", label: "AI Dynamic", hint: "Gemma rebuilds this sky on a timer", group: "live" },
   { value: "custom", label: "agent shader", hint: "GLSL the local agent wrote into the model-named profile", group: "live" },
   { value: "plugin", label: "plugin shader", hint: "GLSL shipped in the selected plugin zip", group: "live" },
@@ -160,7 +199,9 @@ export const CYCLE_SKIES: BackdropKind[] = [
   "fractal", "space", "matrix", "aurora", "rain", "ocean", "fire", "warp", "clouds", "circuit", "plasma", "lattice",
   "dusk", "void", "vhs", "nebula", "acid", "ice", "dawn", "phosphor",
   "earth", "meadow", "tunnel", "bomb", "reef", "tornado", "desert", "amazon",
-  "aquarium", "macaws", "ruins", "fungi", "live",
+  "aquarium", "macaws", "ruins", "fungi",
+  "alpine", "bamboo", "blossom", "fjord", "glacier", "lagoon", "lava", "lavender", "saltflat", "seastacks",
+  "live",
 ];
 
 /** Cycle pool minus live when the camera was denied or is missing. */
@@ -169,13 +210,16 @@ export function cycleSkyPool(): BackdropKind[] {
   return CYCLE_SKIES;
 }
 
-const VERT = /* glsl */ `
+/** Host sky sphere vertex shared by plugin skies (tests compile this with the fragment probe). */
+export const pluginSkyVertGlsl = /* glsl */ `
 out vec3 vDir;
 void main() {
   vDir = normalize(position);
   gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
+
+const VERT = pluginSkyVertGlsl;
 
 const FRAG = /* glsl */ `
 uniform float uTime;
@@ -525,6 +569,8 @@ const MODE_NUM: Record<BackdropKind, number> = {
   earth: 25, meadow: 26, tunnel: 27,
   bomb: 28, reef: 29, tornado: 30, desert: 31, amazon: 32,
   aquarium: 33, macaws: 34, ruins: 35, fungi: 36,
+  alpine: 37, bamboo: 38, blossom: 39, fjord: 40, glacier: 41, lagoon: 42, lava: 43, lavender: 44,
+  saltflat: 45, seastacks: 46,
 };
 
 const LIVE_VERT = /* glsl */ `
@@ -583,6 +629,7 @@ in vec2 vUv;
 out vec4 fragColor;
 
 ${SKY_LUMA_CAP_GLSL}
+
 void main() {
   vec2 canvas = max(uCanvas, vec2(1.0));
   vec2 video = max(uVideoSize, vec2(1.0));
@@ -618,8 +665,68 @@ function blankTex(): THREE.DataTexture {
   return t;
 }
 
-type PhotoVideoSlot = { el: HTMLVideoElement; tex: THREE.VideoTexture };
-type PhotoVideoLoop = { url: string; slots: [PhotoVideoSlot, PhotoVideoSlot]; active: 0 | 1; incoming: boolean };
+export type PhotoVideoSlot = { el: HTMLVideoElement; tex: THREE.VideoTexture };
+export type PhotoVideoLoop = { url: string; slots: [PhotoVideoSlot, PhotoVideoSlot]; active: 0 | 1; incoming: boolean };
+
+/** Still plates: mipmapped so slow Ken Burns pan does not shimmer in small tiles. */
+export function configurePhotoStillTexture(tex: THREE.Texture): void {
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.generateMipmaps = true;
+  tex.minFilter = THREE.LinearMipmapLinearFilter;
+  tex.magFilter = THREE.LinearFilter;
+  tex.needsUpdate = true;
+}
+
+export function releasePhotoVideoElement(el: HTMLVideoElement): void {
+  el.pause();
+  el.removeAttribute("src");
+  el.load();
+}
+
+export function releasePhotoVideoSlot(slot: PhotoVideoSlot): void {
+  slot.tex.dispose();
+  releasePhotoVideoElement(slot.el);
+}
+
+export function disposePhotoVideoPack(pack: PhotoVideoLoop): void {
+  for (const slot of pack.slots) releasePhotoVideoSlot(slot);
+}
+
+/** URLs that may stay in the photo caches (current sky + outgoing crossfade). */
+export function photoCacheRetainUrls(current: string | null, outgoing: string | null): Set<string> {
+  const retain = new Set<string>();
+  if (current) retain.add(current);
+  if (outgoing) retain.add(outgoing);
+  return retain;
+}
+
+export function prunePhotoTextureCache(
+  cache: Map<string, THREE.Texture>,
+  retain: ReadonlySet<string>,
+): string[] {
+  const removed: string[] = [];
+  for (const [url, tex] of cache) {
+    if (retain.has(url)) continue;
+    tex.dispose();
+    cache.delete(url);
+    removed.push(url);
+  }
+  return removed;
+}
+
+export function prunePhotoVideoCache(
+  cache: Map<string, PhotoVideoLoop>,
+  retain: ReadonlySet<string>,
+): string[] {
+  const removed: string[] = [];
+  for (const [url, pack] of cache) {
+    if (retain.has(url)) continue;
+    disposePhotoVideoPack(pack);
+    cache.delete(url);
+    removed.push(url);
+  }
+  return removed;
+}
 
 function makeSkyVideo(url: string): HTMLVideoElement {
   const el = document.createElement("video");
@@ -651,78 +758,25 @@ let lastCustomFrag: string | null = null;
 let lastPlugin: { id: string; frag: string } | null = null;
 
 export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
-export const PLUGIN_SKY_MAX = 128_000;
+export {
+  PLUGIN_SKY_MAX,
+  pluginShaderError,
+  probePluginSkyCompile,
+  probePluginSkyVertCompile,
+  wrapPluginSky,
+} from "../plugins/plugin-sky-probe";
 export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
 
-/** Compile the wrapped fragment on a throwaway WebGL2 context. `null` if no GPU or it linked. */
-export function probePluginSkyCompile(frag: string): string | null {
-  if (typeof document === "undefined") return null;
-  let gl: WebGL2RenderingContext | null = null;
-  try {
-    gl = document.createElement("canvas").getContext("webgl2", { failIfMajorPerformanceCaveat: false });
-    if (!gl) return null;
-    const sh = gl.createShader(gl.FRAGMENT_SHADER);
-    if (!sh) return null;
-    gl.shaderSource(sh, `#version 300 es\nprecision highp float;\n${frag}`);
-    gl.compileShader(sh);
-    if (gl.getShaderParameter(sh, gl.COMPILE_STATUS)) return null;
-    return (gl.getShaderInfoLog(sh) || "compile failed").replace(/\0/g, "").trim() || "compile failed";
-  } catch {
-    return null;
-  } finally {
-    releaseThrowawayGl(gl);
-  }
+let pluginSkyMaterialsCreated = 0;
+let pluginSkyMaterialsDisposed = 0;
+
+export function pluginSkyMaterialStats(): { created: number; disposed: number } {
+  return { created: pluginSkyMaterialsCreated, disposed: pluginSkyMaterialsDisposed };
 }
 
-const PLUGIN_UNIFORM_RE =
-  /\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234]|int|uint|bool|mat[234]|sampler(?:2D|3D|Cube))\s+(\w+)\s*;/g;
-const PLUGIN_ALLOWED = new Set<string>(PLUGIN_SKY_UNIFORMS);
-
-/** Reject includes and any uniform outside the frozen plugin sky contract. */
-export function pluginShaderError(src: string): string | null {
-  if (!src.trim()) return "empty shader";
-  if (src.length > PLUGIN_SKY_MAX) return "shader too long";
-  if (/#\s*include\b/i.test(src) || /\bimport\s/.test(src)) return "shader includes are not allowed";
-  if (/\bbinding\s*=/.test(src) || /\blayout\s*\(\s*std140/.test(src)) {
-    return "UBO layout/binding qualifiers are not portable; use zotoVizSlots";
-  }
-  const names = new Set<string>();
-  const re = new RegExp(PLUGIN_UNIFORM_RE.source, "g");
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(src))) names.add(m[1]!);
-  for (const n of names) {
-    if (!PLUGIN_ALLOWED.has(n)) return `non-whitelisted uniform ${n}`;
-  }
-  if (!/\bvoid\s+main\s*\(/.test(src)) return "shader needs void main()";
-  const reserved = src.match(
-    /\b(?:float|int|uint|bool|vec[234]|ivec[234]|bvec[234]|uvec[234]|mat[234])\s+(half|fixed|double|short|long|unsigned)\b/,
-  );
-  if (reserved) return `reserved identifier ${reserved[1]}`;
-  return null;
-}
-
-/** Bind the whitelist preamble to a self-contained plugin fragment. */
-export function wrapPluginSky(raw: string): { frag: string } | { error: string } {
-  const err = pluginShaderError(raw);
-  if (err) return { error: err };
-  const body = raw.replace(/#version[^\n]*\n?/g, "").replace(/\bprecision\s+\w+\s+float\s*;/g, "").trim();
-  const stripped = body
-    .replace(/\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(?:float|vec[234])\s+(?:uTime|uOpacity|uBright|uAudio|uAccent|uBg)\s*;/g, "")
-    .replace(/\bin\s+vec3\s+vDir\s*;/g, "")
-    .replace(/\bout\s+vec4\s+fragColor\s*;/g, "")
-    .trim();
-  const preamble = /* glsl */ `${VIZ_UBO_GLSL}
-uniform float uTime;
-uniform float uOpacity;
-uniform float uBright;
-uniform float uAudio;
-uniform vec3 uAccent;
-uniform vec3 uBg;
-in vec3 vDir;
-out vec4 fragColor;
-
-`;
-  return { frag: preamble + stripped };
+export function resetPluginSkyMaterialStatsForTests(): void {
+  pluginSkyMaterialsCreated = 0;
+  pluginSkyMaterialsDisposed = 0;
 }
 
 export class Backdrop {
@@ -736,12 +790,22 @@ export class Backdrop {
   private readonly photoCache = new Map<string, THREE.Texture>();
   private readonly photoVideoCache = new Map<string, PhotoVideoLoop>();
   private photoWant: string | null = null;
+  private photoOutgoingUrl: string | null = null;
+  private photoEvictAt = 0;
+  private photoPlateMorphT = 1;
+  private photoKenBurnsDesired = false;
   private photoLoadGen = 0;
   private photoVideoUrl: string | null = null;
+  private readonly unsubscribeMotion = subscribeReducedMotion(() => this.applyReducedMotion());
   private pluginMat: THREE.ShaderMaterial | null = null;
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
   private readonly pluginUbo = new Float32Array(VIZ_UBO.totalFloats);
+  private pluginRenderScale = 1;
+  private pluginExposeRenderScale = false;
+  private viewportW = 16;
+  private viewportH = 9;
+  private viewportDpr = 1;
   private kind: BackdropKind = "none";
   private customFrag: string | null = null;
   /** the sky's animation clock, in shader seconds: integrates dt × current speed */
@@ -905,7 +969,10 @@ export class Backdrop {
    * Compile a plugin ``sky/fragment.glsl`` onto the sphere. Returns a contract/compile
    * error, or null if the host accepted it. ``null`` source restores the shipped program.
    */
-  setPluginShader(opts: { id: string; source: string } | null): string | null {
+  setPluginShader(
+    opts: { id: string; source: string } | null,
+    gpuProbe?: () => string | null,
+  ): string | null {
     if (!opts) {
       lastPlugin = null;
       this.pluginId = null;
@@ -923,7 +990,10 @@ export class Backdrop {
       if (this.kind === "plugin") this.setKind("plugin");
       return wrapped.error;
     }
-    const gpuErr = probePluginSkyCompile(wrapped.frag);
+    const prevMat = this.mesh.material;
+    this.ensurePluginMat(opts.id, wrapped.frag);
+    const gpuErr = gpuProbe ? gpuProbe() : probePluginSkyCompile(wrapped.frag);
+    if (this.kind !== "plugin") this.mesh.material = prevMat;
     if (gpuErr) {
       lastPlugin = null;
       this.pluginId = null;
@@ -982,21 +1052,18 @@ export class Backdrop {
   }
 
   private loadPhotoStill(url: string, gen: number): void {
-    this.photoWant = url;
     const hit = this.photoCache.get(url);
     if (hit) {
       if (gen !== this.photoLoadGen) return;
-      this.bindPhoto(hit, true);
+      this.bindPhoto(hit, true, url);
       return;
     }
     void loadHtmlImage(new Image(), url).then((img) => {
       const t = new THREE.Texture(img);
-      t.colorSpace = THREE.SRGBColorSpace;
-      t.minFilter = THREE.LinearFilter;
-      t.needsUpdate = true;
+      configurePhotoStillTexture(t);
       this.photoCache.set(url, t);
       if (gen !== this.photoLoadGen) return;
-      this.bindPhoto(t, true);
+      this.bindPhoto(t, true, url);
     }).catch(() => undefined);
   }
 
@@ -1041,7 +1108,7 @@ export class Backdrop {
   }
 
   private bindPhotoVideo(pack: PhotoVideoLoop): void {
-    this.photoWant = pack.url;
+    this.beginPhotoTransition(pack.url);
     this.photoVideoUrl = pack.url;
     this.pausePhotoVideos(pack.url);
     pack.active = 0;
@@ -1053,10 +1120,14 @@ export class Backdrop {
     this.photoMat.uniforms.uAnimate.value = 0;
     this.photoMat.uniforms.uLoopMix.value = 0;
     this.photoMat.uniforms.uVideoB.value = nxt.tex;
-    this.bindPhoto(cur.tex, false);
+    this.bindPhoto(cur.tex, false, pack.url);
     try { cur.el.currentTime = 0; } catch { /* */ }
-    const play = cur.el.play();
-    if (play) void play.catch(() => undefined);
+    if (!prefersReducedMotion()) {
+      const play = cur.el.play();
+      if (play) void play.catch(() => undefined);
+    } else {
+      cur.el.pause();
+    }
   }
 
   private pausePhotoVideos(except?: string): void {
@@ -1071,6 +1142,7 @@ export class Backdrop {
   }
 
   private tickPhotoVideoLoop(): void {
+    if (this.photoPlateMorphT < 1) return;
     const url = this.photoVideoUrl;
     if (!url) return;
     const pack = this.photoVideoCache.get(url);
@@ -1081,12 +1153,18 @@ export class Backdrop {
     if (cur.el.videoWidth > 0) {
       (this.photoMat.uniforms.uVideoSize.value as THREE.Vector2).set(cur.el.videoWidth, cur.el.videoHeight);
     }
-    if (!Number.isFinite(dur) || dur <= PHOTO_LOOP_FADE_S * 2) {
+    const seamFade = photoVideoSeamFadeSec(dur);
+    if (seamFade <= 0) {
       this.photoMat.uniforms.uLoopMix.value = 0;
+      if (cur.el.ended) {
+        try { cur.el.currentTime = 0; } catch { /* */ }
+        const play = cur.el.play();
+        if (play) void play.catch(() => undefined);
+      }
       return;
     }
     const t = cur.el.ended ? dur : cur.el.currentTime;
-    const mix = photoLoopMix(t, dur);
+    const mix = photoLoopMix(t, dur, seamFade);
     this.photoMat.uniforms.uLoopMix.value = mix;
     this.photoMat.uniforms.uVideoB.value = nxt.tex;
     if (mix > 0 && !pack.incoming) {
@@ -1109,14 +1187,66 @@ export class Backdrop {
     }
   }
 
-  private bindPhoto(t: THREE.Texture, animate: boolean): void {
-    this.photoMat.uniforms.uVideo.value = t;
-    this.photoMat.uniforms.uAnimate.value = animate ? 1 : 0;
-    this.photoMat.uniforms.uLoopMix.value = 0;
-    if (animate) {
-      this.photoVideoUrl = null;
-      this.photoMat.uniforms.uVideoB.value = t;
+  private beginPhotoTransition(nextUrl: string): void {
+    const prev = this.photoWant;
+    if (prev && prev !== nextUrl) {
+      this.photoOutgoingUrl = prev;
+      this.photoEvictAt = this.clock + PHOTO_SKY_CROSSFADE_S;
+      const outStill = this.photoCache.get(prev);
+      const outVideo = this.photoVideoCache.get(prev)?.slots[0]?.tex;
+      const outTex = outStill ?? outVideo ?? null;
+      if (outTex) {
+        this.photoMat.uniforms.uVideo.value = outTex;
+        this.photoPlateMorphT = 0;
+        this.photoMat.uniforms.uLoopMix.value = 0;
+      }
     }
+    this.photoWant = nextUrl;
+  }
+
+  private syncPhotoCacheSize(): void {
+    const retain = photoCacheRetainUrls(this.photoWant, this.photoOutgoingUrl);
+    prunePhotoTextureCache(this.photoCache, retain);
+    prunePhotoVideoCache(this.photoVideoCache, retain);
+  }
+
+  private tickPhotoCacheEviction(): void {
+    if (!this.photoOutgoingUrl || this.clock < this.photoEvictAt) return;
+    this.photoOutgoingUrl = null;
+    this.syncPhotoCacheSize();
+  }
+
+  private applyReducedMotion(): void {
+    const reduce = prefersReducedMotion();
+    this.photoMat.uniforms.uAnimate.value = this.photoKenBurnsDesired && !reduce ? 1 : 0;
+    if (this.photoVideoUrl) {
+      const pack = this.photoVideoCache.get(this.photoVideoUrl);
+      if (pack) {
+        for (const slot of pack.slots) {
+          if (reduce) slot.el.pause();
+          else if (slot.el.paused && slot.el.readyState >= 2) {
+            const play = slot.el.play();
+            if (play) void play.catch(() => undefined);
+          }
+        }
+      }
+    }
+  }
+
+  private bindPhoto(t: THREE.Texture, animate: boolean, url?: string): void {
+    if (url) this.beginPhotoTransition(url);
+    this.photoKenBurnsDesired = animate;
+    const morphing = this.photoPlateMorphT < 1 && this.photoOutgoingUrl !== null;
+    if (morphing) {
+      this.photoMat.uniforms.uVideoB.value = t;
+    } else {
+      this.photoMat.uniforms.uVideo.value = t;
+      if (this.photoPlateMorphT >= 1) this.photoMat.uniforms.uLoopMix.value = 0;
+      if (animate) this.photoMat.uniforms.uVideoB.value = t;
+    }
+    this.photoMat.uniforms.uAnimate.value = animate && !prefersReducedMotion() ? 1 : 0;
+    if (animate) this.photoVideoUrl = null;
+    this.syncPhotoCacheSize();
     const img = t.image as {
       naturalWidth?: number;
       naturalHeight?: number;
@@ -1135,17 +1265,46 @@ export class Backdrop {
     this.mat.needsUpdate = true;
   }
 
+  /** Which pack-declared sky uniforms are active (e.g. uRenderScale). */
+  setPluginSkyContract(uniforms: readonly string[] | undefined): void {
+    this.pluginExposeRenderScale = !!uniforms?.includes("uRenderScale");
+    this.syncPluginHostUniforms();
+  }
+
   private pluginUniforms(): THREE.ShaderMaterial["uniforms"] {
     const u = this.mat.uniforms;
     return {
+      uResolution: { value: new THREE.Vector2(16, 9) },
       uTime: { value: u.uTime.value },
       uOpacity: { value: u.uOpacity.value },
       uBright: { value: u.uBright.value },
       uAudio: { value: u.uAudio.value },
       uAccent: { value: (u.uAccent.value as THREE.Color).clone() },
       uBg: { value: (u.uBg.value as THREE.Color).clone() },
+      uRenderScale: { value: 1 },
       [VIZ_UBO.threeUniform]: { value: this.pluginUbo },
     };
+  }
+
+  /** Host adaptive render scale (1 when governor inactive). */
+  setPluginRenderScale(scale: number): void {
+    const s = Number.isFinite(scale) && scale > 0 ? Math.min(1, scale) : 1;
+    if (Math.abs(s - this.pluginRenderScale) < 0.0005) return;
+    this.pluginRenderScale = s;
+    this.syncPluginHostUniforms();
+  }
+
+  private syncPluginHostUniforms(): void {
+    const mat = this.pluginMat;
+    if (!mat || this.mesh.material !== mat) return;
+    const rw = Math.max(1, Math.floor(this.viewportW * this.viewportDpr * this.pluginRenderScale));
+    const rh = Math.max(1, Math.floor(this.viewportH * this.viewportDpr * this.pluginRenderScale));
+    const res = mat.uniforms.uResolution?.value as THREE.Vector2 | undefined;
+    if (res) res.set(rw, rh);
+    if (this.pluginExposeRenderScale) {
+      const u = mat.uniforms.uRenderScale;
+      if (u) u.value = this.pluginRenderScale;
+    }
   }
 
   private ensurePluginMat(id: string, frag: string): void {
@@ -1171,6 +1330,7 @@ export class Backdrop {
       fog: false,
       toneMapped: false,
     });
+    pluginSkyMaterialsCreated += 1;
     this.mesh.material = this.pluginMat;
   }
 
@@ -1208,6 +1368,7 @@ export class Backdrop {
     if (this.mesh.material === this.pluginMat) this.mesh.material = this.mat;
     if (this.pluginMat) {
       this.pluginMat.dispose();
+      pluginSkyMaterialsDisposed += 1;
       this.pluginMat = null;
     }
     if (clear) {
@@ -1265,9 +1426,13 @@ export class Backdrop {
     this.applyRecipe(this.paintedRecipe);
   }
 
-  setViewport(w: number, h: number): void {
+  setViewport(w: number, h: number, dpr = 1): void {
+    this.viewportW = Math.max(1, w);
+    this.viewportH = Math.max(1, h);
+    this.viewportDpr = Math.max(0.25, dpr);
     (this.liveMat.uniforms.uCanvas.value as THREE.Vector2).set(w, h);
     (this.photoMat.uniforms.uCanvas.value as THREE.Vector2).set(w, h);
+    this.syncPluginHostUniforms();
   }
 
   setColors(accent: number, bg: number): void {
@@ -1377,7 +1542,10 @@ export class Backdrop {
     const target = this.speed * (1 + this.audio * PULSE_ACCEL);
     const tau = 0.04 + EASE_MAX_S * this.ease * this.ease;
     this.curSpeed += (target - this.curSpeed) * (1 - Math.exp(-dt / tau));
-    this.clock += dt * this.curSpeed;
+    const dClock = dt * this.curSpeed;
+    const frozenSky = smokeBackroomsSkyTime();
+    if (frozenSky !== null) this.clock = frozenSky;
+    else this.clock += dClock;
     this.mat.uniforms.uTime.value = this.clock;
     this.photoMat.uniforms.uTime.value = this.clock;
     this.syncPluginLook();
@@ -1397,6 +1565,22 @@ export class Backdrop {
       }
     } else if (this.photoVideoUrl) {
       this.tickPhotoVideoLoop();
+    }
+    this.tickPhotoPlateMorph(dClock);
+    this.tickPhotoCacheEviction();
+  }
+
+  dispose(): void {
+    this.unsubscribeMotion();
+  }
+
+  private tickPhotoPlateMorph(dClock: number): void {
+    if (this.photoPlateMorphT >= 1) return;
+    this.photoPlateMorphT = Math.min(1, this.photoPlateMorphT + dClock / PHOTO_SKY_CROSSFADE_S);
+    this.photoMat.uniforms.uLoopMix.value = mixFade(this.photoPlateMorphT);
+    if (this.photoPlateMorphT >= 1) {
+      this.photoMat.uniforms.uLoopMix.value = 0;
+      this.photoMat.uniforms.uVideo.value = this.photoMat.uniforms.uVideoB.value;
     }
   }
 }

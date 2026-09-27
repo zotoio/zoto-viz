@@ -1,27 +1,23 @@
+
 /** Phosphor rain — HN / host source headlines become the glyph stream. */
 
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook, type HnRainLook } from "./crawl";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "plugins/sdk/viz-zoto";
+const host = getVizZoto();
 
-declare const zoto: {
-  onFrame: ((frame: Pick<VizDataFrame, "t" | "audio" | "packets" | "headlines">) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
 
-let look: HnRainLook = parseHnRainLook(zoto.getConfig?.());
+let look: HnRainLook = parseHnRainLook(host.getConfig?.());
 
-zoto.onConfig = (cfg) => {
+host.onConfig = (cfg) => {
   look = parseHnRainLook(cfg);
 };
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame) => {
   const titles = frame.headlines ?? [];
   const field = frame.packets[0]?.field ?? 0;
-  zoto.writeBuffer(0, packHnRainBuffer(titles, field, frame.audio, look, hnRainCanvasSize()));
-  zoto.writeUniform("uBright", 0.92 + Math.min(0.2, titles.length * 0.02) + frame.audio * 0.18);
-  zoto.writeUniform("uAudio", frame.audio);
-  zoto.writeUniform("uAccent", [0.35, 1.0, 0.42]);
+  host.writeBuffer(0, packHnRainBuffer(titles, field, frame.audio, look, hnRainCanvasSize()));
+  host.writeUniform("uBright", 0.92 + Math.min(0.2, titles.length * 0.02) + frame.audio * 0.18);
+  host.writeUniform("uAudio", frame.audio);
+  host.writeUniform("uAccent", [0.35, 1.0, 0.42]);
 };

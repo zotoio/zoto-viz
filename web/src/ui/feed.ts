@@ -4,8 +4,14 @@ import { decodePacket, type FeedKind } from "../inspect/decode";
 import { idsOf, type Packet, type TrafficMsg } from "../core/types";
 import type { NetScene } from "../graph/scene";
 import { markFrame } from "../core/fps";
+import { frameTsFromRaf } from "../core/time-ms";
 import { followScrollTop } from "./feed-reveal";
 import { bindFloatPanel } from "./float-drag";
+import {
+  devicePxRatioNumber,
+  layoutDevicePxRatio,
+  onLayoutDevicePxRatioChange,
+} from "../graph/render-host-device-px-ratio";
 export type { ChatRole, TranscriptTurn } from "./chat";
 
 const POLL_MS = 800;
@@ -126,6 +132,13 @@ export class LiveFeed {
   private followTick = false;
   private lastScrollTop = 0;
 
+  /** Operator-facing install / catalog copy in the feed chrome (not ticker rows). */
+  showOperatorNotice(text: string): void {
+    const msg = text.trim();
+    this.hint.textContent = msg;
+    this.hint.hidden = !msg;
+  }
+
   constructor(host: HTMLElement, private scene: NetScene) {
     this.el = host;
     this.el.className = "livefeed";
@@ -143,6 +156,9 @@ export class LiveFeed {
     this.ticker.addEventListener("click", (e) => {
       const row = (e.target as HTMLElement).closest<HTMLElement>("[data-host]");
       if (row?.dataset.host) this.scene.selectIp(row.dataset.host);
+    });
+    onLayoutDevicePxRatioChange(() => {
+      if (this.cfg.layout === "bars" || this.cfg.layout === "both") this.drawBars();
     });
     this.ticker.addEventListener("scroll", () => {
       if (this.followTick) {
@@ -407,7 +423,7 @@ export class LiveFeed {
 
   private loop(ts: number): void {
     this.raf = requestAnimationFrame(this.loop);
-    markFrame(ts);
+    markFrame(frameTsFromRaf(ts));
     const dt = this.lastTick ? Math.min(0.05, (ts - this.lastTick) / 1000) : 1 / 60;
     this.lastTick = ts;
     if (!this.cfg.on) return;
@@ -422,10 +438,12 @@ export class LiveFeed {
     const wrap = this.bars.parentElement!;
     const w = Math.max(80, wrap.clientWidth);
     const h = Math.max(80, wrap.clientHeight || 160);
-    const dpr = Math.min(2, devicePixelRatio || 1);
-    if (this.bars.width !== Math.round(w * dpr) || this.bars.height !== Math.round(h * dpr)) {
-      this.bars.width = Math.round(w * dpr);
-      this.bars.height = Math.round(h * dpr);
+    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
+    const devW = Math.round(w * dpr);
+    const devH = Math.round(h * dpr);
+    if (this.bars.width !== devW || this.bars.height !== devH) {
+      this.bars.width = devW;
+      this.bars.height = devH;
       this.bars.style.width = `${w}px`;
       this.bars.style.height = `${h}px`;
     }

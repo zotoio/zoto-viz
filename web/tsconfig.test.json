@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["vite/client", "vitest/globals"]
+  },
+  "include": [
+    "src/core/d3-force-3d.d.ts",
+    "src/plugins/glsl-raw.d.ts",
+    "src/ui/drawer-context.nest-devices-required.typecheck.ts",
+    "test-support/pack-mirror-rect.boundary.ts",
+    "src/graph/render-host-fb-viewport.test.ts",
+    "src/graph/render-host-gpu-viewport-css.test.ts"
+    "src/graph/pack-mirror-lifecycle.test.ts",
+    "src/graph/pack-mirror-rect-converters.test.ts",
+    "src/graph/pack-mirror-readback.test.ts",
+    "src/graph/render-host-fb-viewport.test.ts",
+    "src/graph/render-host-fb-viewport-software.test.ts",
+    "test/node/pack-mirror-readback-chrome.ts",
+    "test/node/pack-mirror-readback-vite.ts"
+  ],
+  "exclude": []
+}

@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 
 const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
-const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const webRoot = path.dirname(fileURLToPath(import.meta.url));
+const repoRoot = path.resolve(webRoot, "..");
 
 function gitShortRev(): string {
   try {
@@ -22,6 +23,7 @@ function gitShortRev(): string {
 export default defineConfig({
   define: {
     "import.meta.env.VITE_ZOTO_REV": JSON.stringify(gitShortRev()),
+    __VIZ_BUILD_COUNTERS__: JSON.stringify(Boolean(process.env.VITEST)),
   },
   server: {
     port: 5173,
@@ -29,16 +31,43 @@ export default defineConfig({
     proxy: {
       "/ws": { target: `ws://127.0.0.1:${monitorPort}`, ws: true },
       "/api": { target: `http://127.0.0.1:${monitorPort}` },
+      "/pack-assets": { target: `http://127.0.0.1:${monitorPort}` },
     },
   },
   // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same
   // bytes in with `?inline` (no Node fs types in the browser tsconfig)
   assetsInclude: ["**/*.wasm", "**/*.glsl"],
-  build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
+  build: { outDir: "dist", emptyOutDir: true, sourcemap: false,
+    rollupOptions: {
+      input: {
+        main: path.resolve(webRoot, "index.html"),
+        "plugin-sandbox": path.resolve(webRoot, "plugin-sandbox.html"),
+      },
+    },
+  },
   test: {
-    environment: "happy-dom",
-    setupFiles: ["src/test/setup.ts"],
-    include: ["src/**/*.test.ts"],
+    projects: [
+      {
+        extends: true,
+        test: {
+          name: "unit",
+          environment: "happy-dom",
+          setupFiles: ["src/test/setup.ts"],
+          include: ["src/**/*.test.ts"],
+          exclude: ["src/plugins/nixie-local-wall-tz-sydney.test.ts"],
+        },
+      },
+      {
+        extends: true,
+        test: {
+          name: "tz-sydney",
+          include: ["src/plugins/nixie-local-wall-tz-sydney.test.ts"],
+          environment: "node",
+          pool: "forks",
+          env: { TZ: "Australia/Sydney" },
+        },
+      },
+    ],
     coverage: {
       provider: "v8",
       reporter: ["text", "text-summary"],

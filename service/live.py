@@ -84,6 +84,8 @@ BACKDROPS = (
     "earth", "meadow", "tunnel",
     "bomb", "reef", "tornado", "desert", "amazon",
     "aquarium", "macaws", "ruins", "fungi",
+    "alpine", "bamboo", "blossom", "fjord", "glacier", "lagoon", "lava", "lavender", "saltflat",
+    "seastacks",
     "dynamic", "custom", "plugin",
 )
 FLOOR_SHAPES = ("square", "hex", "triangle", "diamond", "circle")
@@ -423,6 +425,12 @@ def sanitize_patch(raw: Any) -> dict[str, Any]:
         out["shuffle"] = True
     if raw.get("reloadPlugins") is True:
         out["reloadPlugins"] = True
+    pc = raw.get("pluginConsent")
+    if isinstance(pc, dict):
+        pid = pc.get("id")
+        kind = pc.get("kind")
+        if isinstance(pid, str) and pid.strip() and kind in {"reviewed", "authored"}:
+            out["pluginConsent"] = {"id": pid.strip()[:64], "kind": kind}
     if raw.get("reloadClient") is True:
         out["reloadClient"] = True
     dice = _dice(raw.get("dice"))

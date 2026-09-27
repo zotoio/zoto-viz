@@ -1,0 +1,164 @@
+{
+  "violations": [
+    {
+      "file": "plugins/src/ant-colony/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/ant-colony/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/aquarium/frontend/aquarium.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/aquarium/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/cypher-cic/frontend/pack.ts",
+      "rule": "sandbox-escape",
+      "target": "parent."
+    },
+    {
+      "file": "plugins/src/koi-pond/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/koi-pond/frontend/index.test.ts",
+      "rule": "sandbox-escape",
+      "target": "parent."
+    },
+    {
+      "file": "plugins/src/koi-pond/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "node:fs"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/metro-lines/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/nixie-clock/frontend/index.ts",
+      "rule": "sandbox-escape",
+      "target": "typeof parent"
+    },
+    {
+      "file": "plugins/src/nixie-clock/frontend/tubes.ts",
+      "rule": "sandbox-escape",
+      "target": "parent."
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "node:child_process"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "node:fs"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/rocket-car-soccer/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/syscon/frontend/telemetry.ts",
+      "rule": "sandbox-escape",
+      "target": "parent."
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/index.ts",
+      "rule": "inline-zoto-declare",
+      "target": "declare-const-zoto"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/world.test.ts",
+      "rule": "host-import",
+      "target": "node:fs"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/world.test.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/world.test.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/voxel-world/frontend/world.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/backrooms/shipped-pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/backrooms/vitest.config.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/backrooms/vitest.config.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/backrooms/vitest.config.ts",
+      "rule": "host-import",
+      "target": "vitest/config"
+    },
+    {
+      "file": "plugins/src/fractal-zoom/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    }
+  ]
+}

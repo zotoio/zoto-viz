@@ -3,6 +3,7 @@
 export const VIZ_PLUGIN_SDK = `
 function vizAllowed(cap) { return allowed.has(cap); }
 zoto.onFrame = null;
+zoto.onPresent = null;
 zoto.writeBuffer = function(slot, data) {
   if (!vizAllowed("viz.write")) return;
   const arr = Array.isArray(data) ? data : Array.from(data);
@@ -17,9 +18,20 @@ zoto.writeParticles = function(data, stride) {
   const arr = Array.isArray(data) ? data : Array.from(data);
   send("writeParticles", { data: arr, stride: stride || 4 });
 };
+zoto.reportDrawState = function(drawing) {
+  send("drawState", { drawing: !!drawing });
+};
+zoto.loseHostContext = function() {
+  send("loseHostContext", {});
+};
 window.addEventListener("message", (ev) => {
   const d = ev.data;
   if (!d || d.source !== "zoto-viz-host") return;
-  if (d.type === "frame" && vizAllowed("viz.read") && window.zoto.onFrame) window.zoto.onFrame(d.frame);
+  if (d.type === "frame" && vizAllowed("viz.read")) {
+    if (window.zoto.onFrame) window.zoto.onFrame(d.frame);
+  }
+  if (d.type === "present" && vizAllowed("viz.write") && window.zoto.onPresent) {
+    window.zoto.onPresent(d.tick);
+  }
 });
 `;

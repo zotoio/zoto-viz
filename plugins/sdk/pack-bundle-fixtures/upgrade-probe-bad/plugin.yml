@@ -1,0 +1,5 @@
+id: upgrade-probe
+name: Upgrade probe v2 bad
+version: 2
+frontend:
+  entry: frontend/index.ts

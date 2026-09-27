@@ -14,7 +14,10 @@ from .plugin_zip import plugin_sha256
 
 SHADER_REL = "sky/fragment.glsl"
 SHADER_MAX = 128_000
-ALLOWED_UNIFORMS = frozenset({"uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"})
+ALLOWED_UNIFORMS = frozenset({
+    "uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg",
+    "uResolution", "uRenderScale",
+})
 BANNED_UNIFORMS = frozenset({
     "uMode", "uMotif", "uA", "uB", "uWarp", "uGrain", "uBands",
     "projectionMatrix", "modelViewMatrix", "cameraPosition",

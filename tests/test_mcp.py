@@ -78,6 +78,31 @@ def test_install_plugin_zip_writes_catalog(tmp_path: Path, monkeypatch: pytest.M
     assert cached.stdout.strip() == ""
 
 
+def test_mcp_same_sha_install_uses_pipeline_not_verify_only(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from service import plugin_install as pi
+
+    repo = _repo(tmp_path, monkeypatch)
+    _git_init(repo)
+    raw = _zip({"plugin.yml": MINIMAL})
+    calls = 0
+    real = pi.install_zip_to_runtime
+
+    def counting(*args: object, **kwargs: object) -> object:
+        nonlocal calls
+        calls += 1
+        return real(*args, **kwargs)
+
+    monkeypatch.setattr("service.plugin_install.install_zip_to_runtime", counting)
+    first = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(raw), "force": True})
+    assert first["isError"] is False
+    again = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(raw), "force": True})
+    assert again["isError"] is False
+    assert calls == 2
+
+
 def test_overwrite_guard_and_same_sha(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = _repo(tmp_path, monkeypatch)
     _git_init(repo)
@@ -226,6 +251,20 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
     assert schema["properties"]["autoconsent"]["type"] == "boolean"
     auto = json.loads(plugin_mcp.call_tool("set_settings", {"autoconsent": True})["content"][0]["text"])
     assert auto["applied"]["autoconsent"] is True
+
+
+def test_call_tool_list_features_not_shadowed_by_consent_branch(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Regression: an inner `from . import live` in consent_plugin made `live` local for all of call_tool."""
+    _repo(tmp_path, monkeypatch)
+    before = json.loads(plugin_mcp.call_tool("list_features", {})["content"][0]["text"])
+    assert before["ok"] is True
+    denied = plugin_mcp.call_tool("consent_plugin", {"id": "no-such-plugin", "kind": "reviewed"})
+    assert denied["isError"] is True
+    after = json.loads(plugin_mcp.call_tool("list_features", {})["content"][0]["text"])
+    assert after["ok"] is True
+    assert "temper" in after["agent"]
 
 
 def test_list_plugins_includes_prompt_knob(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

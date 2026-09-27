@@ -5,8 +5,22 @@ import { rIp, rName } from "../core/redact";
 import { displayName, idsOf, type Device, type Packet, type Role, type StateMsg, type TrafficMsg } from "../core/types";
 import { DEFAULT_THEME, type Theme } from "../core/themes";
 import { markFrame, PaneFps } from "../core/fps";
+import {
+  devicePxRatioNumber,
+  layoutBackingDevicePx,
+  layoutDevicePxRatio,
+  onLayoutDevicePxRatioChange,
+} from "../graph/render-host-device-px-ratio";
+import type { FrameTs } from "../core/time-ms";
+import { frameTsFromRaf } from "../core/time-ms";
 import { timeGpu } from "../core/gpu-time";
 import { CanvasChangeProbe, PaneChangeProbe } from "../graph/pane-change";
+import {
+  asCanvasDeviceHeight,
+  deviceRect,
+  type GlRectMut,
+  toGlRectInto,
+} from "../graph/pack-mirror-rect";
 import { probeWebGL } from "../graph/webgl";
 import { observeResize } from "../core/resize";
 import { POLL_MS, REPLAY_S, isKnown } from "./arcade";
@@ -23,6 +37,7 @@ export abstract class Stage3D {
   protected running = false;
   protected W = 0;
   protected H = 0;
+  private layoutDpr = 0;
   protected pps = 0;
   protected lastT = 0;
   protected readonly world = new THREE.Scene();
@@ -48,6 +63,7 @@ export abstract class Stage3D {
   private readonly paneFps: PaneFps;
   private readonly picture = new PaneChangeProbe();
   private readonly flatPicture = new CanvasChangeProbe();
+  private readonly paneGlVpScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
 
   constructor(protected readonly container: HTMLElement, protected readonly scene: NetScene) {
     this.paneFps = new PaneFps(container);
@@ -72,6 +88,7 @@ export abstract class Stage3D {
     this.container.addEventListener("pointerleave", this.onPtrUp);
     this.container.addEventListener("wheel", this.onWheel, { passive: false });
     observeResize(this.container, () => this.fit());
+    onLayoutDevicePxRatioChange(() => this.fit());
   }
 
   start(preferIp?: string | null): void {
@@ -85,8 +102,40 @@ export abstract class Stage3D {
       if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
       void this.poll();
     }
-    cancelAnimationFrame(this.raf);
-    this.raf = requestAnimationFrame(this.frame);
+    if (!this.useHostFrameLoop()) {
+      cancelAnimationFrame(this.raf);
+      this.raf = requestAnimationFrame(this.frame);
+    }
+  }
+
+  /** When true, the shared host rAF drives {@link hostFrameTick} (no private arcade loop). */
+  protected useHostFrameLoop(): boolean {
+    return false;
+  }
+
+  /** One host-frame step for standalone tiles; caller supplies the sole present timestamp. */
+  hostFrameTick(presentTs: FrameTs, dtSec: number): void {
+    if (!this.running) return;
+    const ts = Number(presentTs);
+    if (!this.useHostFrameLoop()) markFrame(presentTs);
+    this.paneFps.tick(ts);
+    const now = ts / 1000;
+    this.fit();
+    if (!this.W || !this.H) return;
+    this.step(now, dtSec);
+    this.applyCamera();
+    if (this.renderer) {
+      const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
+      const draw = () => this.renderer?.render(this.world, this.camera);
+      if (gl) {
+        timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
+        const vp = { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+        this.picture.tick(gl, vp, ts, (at) => this.paneFps.mark(at));
+      } else draw();
+    } else if (this.fallback && this.canvas) {
+      this.drawFallback(this.fallback, now);
+      if (this.flatPicture.sample(this.fallback, this.canvas)) this.paneFps.mark(ts);
+    }
   }
 
   stop(): void {
@@ -117,7 +166,20 @@ export abstract class Stage3D {
   protected abstract step(now: number, dt: number): void;
   protected onStart(_preferIp: string | null): void {}
   protected onSnapshot(): void {}
+  /** Called when `/api/traffic` returns no new packets (subclasses may enable demo feeds). */
+  protected onTrafficPollEmpty(): void {}
   protected variant(): string { return ""; }
+
+  /** TEST-ONLY: lit well stage signature (lights + fog), not a flat grey fill. */
+  testWellLitSkySignature(): string {
+    let lights = 0;
+    for (const ch of this.world.children) {
+      if (ch instanceof THREE.Light) lights++;
+    }
+    const bg = this.world.background instanceof THREE.Color ? this.world.background.getHexString() : "none";
+    const fog = this.world.fog instanceof THREE.FogExp2 ? this.world.fog.color.getHexString() : "none";
+    return `lights:${lights},bg:${bg},fog:${fog}`;
+  }
 
   protected reset(): void {
     this.gen++;
@@ -150,8 +212,9 @@ export abstract class Stage3D {
   protected fit(): void {
     const W = this.container.clientWidth, H = this.container.clientHeight;
     if (!W || !H) return;
-    this.W = W; this.H = H;
-    const dpr = Math.min(1.75, devicePixelRatio || 1);
+    const dpr = devicePxRatioNumber(layoutDevicePxRatio());
+    if (W === this.W && H === this.H && dpr === this.layoutDpr) return;
+    this.W = W; this.H = H; this.layoutDpr = dpr;
     if (this.renderer) {
       this.renderer.setPixelRatio(dpr);
       this.renderer.setSize(W, H, false);
@@ -216,7 +279,11 @@ export abstract class Stage3D {
       const m = (await r.json()) as TrafficMsg;
       if (gen !== this.gen) return;
       const pk = m.packets.slice().reverse();
-      if (!pk.length) { this.pps *= 0.6; return; }
+      if (!pk.length) {
+        this.pps *= 0.6;
+        this.onTrafficPollEmpty();
+        return;
+      }
       const newest = pk[pk.length - 1]![0];
       if (this.lastT === 0) this.lastT = newest - REPLAY_S;
       const fresh = pk.filter((p) => p[0] > this.lastT);
@@ -233,7 +300,7 @@ export abstract class Stage3D {
   private frame = (ts: number): void => {
     if (!this.running) return;
     this.raf = requestAnimationFrame(this.frame);
-    markFrame(ts);
+    markFrame(frameTsFromRaf(ts));
     this.paneFps.tick(ts);
     const now = ts / 1000;
     const dt = Math.min(0.05, this.lastFrame ? now - this.lastFrame : 0.016);
@@ -247,7 +314,12 @@ export abstract class Stage3D {
       const draw = () => this.renderer?.render(this.world, this.camera);
       if (gl) {
         timeGpu(gl, draw, (ms) => this.paneFps.noteGpu(ms));
-        const vp = { x: 0, y: 0, w: gl.drawingBufferWidth, h: gl.drawingBufferHeight };
+        const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+        const vp = toGlRectInto(
+          dev,
+          asCanvasDeviceHeight(gl.drawingBufferHeight),
+          this.paneGlVpScratch,
+        );
         this.picture.tick(gl, vp, ts, (at) => this.paneFps.mark(at));
       } else draw();
     } else if (this.fallback && this.canvas) {

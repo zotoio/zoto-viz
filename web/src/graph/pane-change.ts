@@ -15,6 +15,10 @@ export function bytesDiffer(prev: Uint8Array, next: ArrayLike<number>): boolean 
 
 const PATCH = 16;
 
+export function bindDefaultFramebufferForRead(gl: WebGL2RenderingContext): void {
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+}
+
 export class CanvasChangeProbe {
   private prev: Uint8Array | null = null;
 
@@ -97,15 +101,28 @@ export class PaneChangeProbe {
     if (gl.isContextLost()) return;
     while (this.inFlight.length) {
       const s = this.inFlight[0]!;
-      if (gl.getSyncParameter(s.sync!, gl.SYNC_STATUS) !== gl.SIGNALED) break;
+      if (!s.sync) break;
+      const wait = gl.clientWaitSync(s.sync, 0, 0);
+      if (wait === gl.TIMEOUT_EXPIRED) break;
+      if (wait === gl.WAIT_FAILED) {
+        gl.deleteSync(s.sync);
+        s.sync = null;
+        this.inFlight.shift();
+        this.free.push(s);
+        continue;
+      }
       this.inFlight.shift();
-      gl.deleteSync(s.sync!);
+      gl.deleteSync(s.sync);
       s.sync = null;
       if (this.buf.length < s.bytes) this.buf = new Uint8Array(s.bytes);
       const view = this.buf.subarray(0, s.bytes);
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, s.pbo);
       gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, view);
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      if (gl.getError() !== gl.NO_ERROR) {
+        this.free.push(s);
+        continue;
+      }
       const prev = this.prev;
       if (prev && prev.length === s.bytes && bytesDiffer(prev, view)) onChange(s.ts);
       if (!prev || prev.length !== s.bytes) this.prev = new Uint8Array(s.bytes);
@@ -124,6 +141,7 @@ export class PaneChangeProbe {
       slot.cap = bytes;
     }
     try {
+      bindDefaultFramebufferForRead(gl);
       let off = 0;
       for (const l of lines) {
         gl.readPixels(l.x, l.y, l.w, l.h, gl.RGBA, gl.UNSIGNED_BYTE, off);
@@ -135,10 +153,13 @@ export class PaneChangeProbe {
     } finally {
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     }
-    if (!slot.sync) {
+    if (!slot.sync || gl.getError() !== gl.NO_ERROR) {
+      if (slot.sync) gl.deleteSync(slot.sync);
+      slot.sync = null;
       this.free.push(slot);
       return;
     }
+    gl.flush();
     slot.bytes = bytes;
     slot.ts = ts;
     this.inFlight.push(slot);

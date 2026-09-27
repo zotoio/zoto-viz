@@ -509,6 +509,13 @@ def poll_once(cfg: CatalogConfig | None = None, *, fetcher: CatalogFetcher | Non
             results.append({"id": pid, "action": "error", "error": str(exc)})
             log.warning("plugin catalog install %s failed: %s", pid, exc)
             continue
+        if not info.get("ok"):
+            results.append({
+                "id": pid,
+                "action": "error",
+                "error": info.get("message") or info.get("error") or "install failed",
+            })
+            continue
         installed_map[pid] = {
             "version": want_ver,
             "sha256": expect_sha,

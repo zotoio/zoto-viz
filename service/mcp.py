@@ -666,6 +666,7 @@ def install_catalog_zip(
     *,
     overwrite: bool = False,
     force: bool = False,
+    zip_display_name: str | None = None,
 ) -> dict[str, Any]:
     """Validate, write ``plugins/<id>.zip``, unpack. Never git-add or git-commit."""
     tmp_path: Path | None = None
@@ -674,16 +675,27 @@ def install_catalog_zip(
     tmp_path = Path(tmp_name)
     try:
         tmp_path.write_bytes(raw)
-        manifest = pz.inspect_zip(tmp_path)
-        doc = plugins.validate_doc(manifest.plugin)
+        from . import pack_safe_zip as psz
+
+        try:
+            pack_read = psz.read_pack_zip(tmp_path)
+        except ValueError as e:
+            return plugin_local._zip_blocked_result(e, zip_display_name=zip_display_name, zip_path=tmp_path)
+        doc = plugins.validate_doc(pack_read.manifest)
         pid = str(doc["id"])
         dest = paths.plugin_zips_dir() / f"{pid}.zip"
-        raw, doc, dest, reminted_from = plugin_local.remint_zip(raw, dest, overwrite=overwrite)
+        pack_read, doc, dest, reminted_from = plugin_local.remint_pack_read(
+            pack_read,
+            dest,
+            overwrite=overwrite,
+            incoming_sha=pz.plugin_sha256(tmp_path),
+        )
         pid = str(doc["id"])
-        tmp_path.write_bytes(raw)
+        if reminted_from:
+            tmp_path.write_bytes(plugin_local.zip_bytes_from_staged(pack_read))
         runtime = paths.plugin_runtime_dir() / pid
         incoming = pz.plugin_sha256(tmp_path)
-        if dest.is_file() and pz.plugin_sha256(dest) == incoming:
+        if dest.is_file() and pz.plugin_sha256(dest) == incoming and not force:
             unpacked = pz.unpack_zip(dest, runtime)
             info = _install_result(doc, dest, unpacked, wrote=False)
             if reminted_from:
@@ -696,10 +708,20 @@ def install_catalog_zip(
         if dest.is_file() and not overwrite:
             raise ValueError(f"plugin {pid!r} already exists (pass overwrite: true)")
         dest.parent.mkdir(parents=True, exist_ok=True)
-        staged = dest.with_name(dest.name + ".tmp")
-        shutil.copy2(tmp_path, staged)
-        os.replace(staged, dest)
-        unpacked = pz.unpack_zip(dest, runtime)
+        from .plugin_install import install_zip_to_runtime
+
+        upgrade = dest.is_file() and runtime.is_dir()
+        unpacked = install_zip_to_runtime(
+            tmp_path,
+            dest,
+            runtime,
+            doc,
+            rel=str(dest),
+            sha256=incoming,
+            upgrade=upgrade,
+            force=force,
+            pack_read=pack_read,
+        )
         info = _install_result(doc, dest, unpacked, wrote=True)
         if reminted_from:
             info["remintedFrom"] = reminted_from
@@ -845,6 +867,23 @@ def _require_state(app: web.Application | None) -> Any:
     return state
 
 
+def _consent_plugin_result(args: dict[str, Any]) -> dict[str, Any]:
+    """Grant plugin source-review consent. Kept out of call_tool so local imports here cannot shadow module-level live."""
+    pid = str(args.get("id") or "").strip()
+    kind = str(args.get("kind") or "").strip()
+    found = plugins._plugin_row(pid) if pid else None
+    if not found:
+        raise ValueError(f"unknown plugin {pid!r}")
+    if not plugins.needs_review(found):
+        return {"ok": True, "needed": False, "id": pid}
+    plugins.grant_consent(found, kind)
+    from . import hooks
+
+    hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
+    live.queue_patch({"pluginConsent": {"id": pid, "kind": kind}})
+    return {"ok": True, "needed": True, "id": pid, "kind": kind}
+
+
 def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application | None = None) -> dict[str, Any]:
     args = arguments if isinstance(arguments, dict) else {}
     try:
@@ -980,17 +1019,7 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             refresh_hop_plan(state)
             return _tool_text({"ok": True, **state.radio.watch_status(time.time())})
         if name == "consent_plugin":
-            pid = str(args.get("id") or "").strip()
-            kind = str(args.get("kind") or "").strip()
-            found = plugins._plugin_row(pid) if pid else None
-            if not found:
-                raise ValueError(f"unknown plugin {pid!r}")
-            if not plugins.needs_review(found):
-                return _tool_text({"ok": True, "needed": False, "id": pid})
-            plugins.grant_consent(found, kind)
-            from . import hooks
-            hooks.sync(plugins.scan().get("plugins") or [], allow=plugins.python_allow)
-            return _tool_text({"ok": True, "needed": True, "id": pid, "kind": kind})
+            return _tool_text(_consent_plugin_result(args))
         if name == "draft_plugin":
             info = agent.draft_plugin(args)
             return _tool_text(info, is_error=not info.get("ok"))
@@ -1026,10 +1055,14 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             return _tool_text(info, is_error=not info.get("ok"))
         if name == "install_plugin_zip":
             raw = decode_zip_b64(str(args.get("zip_b64") or ""))
+            zip_name = args.get("zip_name") or args.get("filename")
+            display = str(zip_name).strip() if isinstance(zip_name, str) and zip_name.strip() else None
+            force = bool(args.get("force"))
             info = install_catalog_zip(
                 raw,
-                overwrite=bool(args.get("overwrite")),
-                force=bool(args.get("force")),
+                overwrite=bool(args.get("overwrite")) or force,
+                force=force,
+                zip_display_name=display,
             )
             return _tool_text(info, is_error=bool(info.get("consentRequired")))
         return _tool_text({"error": f"unknown tool {name}"}, is_error=True)

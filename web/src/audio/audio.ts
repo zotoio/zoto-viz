@@ -5,6 +5,7 @@
  */
 
 import { askUserMedia } from "../ui/media-ask";
+import { queryMicPermissionState } from "./mic-permission";
 
 /**
  * Log-spaced 0–1 bands from an analyser byte spectrum (dB, low frequency first).
@@ -48,16 +49,28 @@ export class AudioPulse {
   private stream: MediaStream | null = null;
   private wanted = false;
   private starting = false;
+  /** Mic policy is on but capture waits for a click (Permissions API not granted yet). */
+  awaitingClick = false;
 
   get listening(): boolean { return this.analyser != null; }
 
-  async enable(): Promise<void> {
+  async enable(fromUserGesture = false): Promise<void> {
     this.wanted = true;
     if (this.analyser || this.starting) return;
     if (!navigator.mediaDevices?.getUserMedia) return;
+    if (!fromUserGesture) {
+      const perm = await queryMicPermissionState();
+      if (perm !== "granted") {
+        this.awaitingClick = perm !== "denied";
+        return;
+      }
+    }
+    this.awaitingClick = false;
     this.starting = true;
     try {
-      const stream = await askUserMedia({ audio: true, video: false }, "pulse microphone");
+      const stream = fromUserGesture
+        ? await navigator.mediaDevices.getUserMedia({ audio: true, video: false }).catch(() => null)
+        : await askUserMedia({ audio: true, video: false }, "pulse microphone");
       if (!stream) return;
       if (!this.wanted) {
         for (const t of stream.getTracks()) t.stop();
@@ -91,6 +104,7 @@ export class AudioPulse {
 
   disable(): void {
     this.wanted = false;
+    this.awaitingClick = false;
     if (this.stream) {
       for (const t of this.stream.getTracks()) t.stop();
       this.stream = null;
@@ -104,6 +118,10 @@ export class AudioPulse {
     this.frames = [];
     this.level = 0;
     this.bass = 0;
+  }
+
+  resumeFromUserClick(): Promise<void> {
+    return this.enable(true);
   }
 
   /**

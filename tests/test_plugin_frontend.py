@@ -13,8 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 
 FRONTEND_TS = """\
 type Node = { id: string; rate: number; role: string };
-declare const zoto: { onTick: ((nodes: Node[]) => void) | null; setStyle: (s: Record<string, unknown>) => void };
-zoto.onTick = (nodes) => { zoto.setStyle({ n: nodes.length }); };
+import { getVizZoto } from "../../../sdk/viz-zoto";
+const zoto = getVizZoto();
+zoto.onTick = (nodes: Node[]) => { zoto.setStyle?.({ n: nodes.length }); };
 """
 
 

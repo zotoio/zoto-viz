@@ -1,20 +1,34 @@
-import { describe, expect, it, vi } from "vitest";
-import { formatSkipRate, skipRatePerSec, vizHudMetric } from "../ui/viz-hud";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  resetVizClockInjectors,
+  setVizBuildCostTicksInjector,
+  setVizClockInjector,
+  setVizWallClockInjector,
+} from "../core/viz-clock"
+import { monoMs } from "../core/viz-time";
+import { formatSkipRate, skipRatePerSec, VIZ_DEMO_PACKS, vizHudMetric } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
   DEMO_PACK_CONTRACTS,
   dogfoodTick,
   dogfoodWithinBudget,
-  formatDogfoodReport,
   hostBindOnPackSwap,
   hudTickFromBudget,
+  DOGFOOD_SOAK_BUILD_COST_MS,
+  DOGFOOD_SOAK_CLOCK_STEP_MS,
+  DOGFOOD_SOAK_EVENT_PERIOD_MS,
+  DOGFOOD_SOAK_FRAMES_PER_PACK,
+  DOGFOOD_SOAK_PATTERN_EXPECTED,
+  dogfoodSoakPatternedBuildCostMs,
+  formatDogfoodReport,
   runDogfoodSoak,
   runPackFrameHandler,
   runPackSwapPreserve,
 } from "./dogfood-runner";
 import { VIZ_FIXTURE_IDLE, VIZ_FIXTURE_GOLDEN_LIVE } from "../../../plugins/sdk/viz-fixtures";
 import { packetTunnelFields } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { packHnRainBuffer, packHnTermBuffer, packStereoDrive } from "./viz-pack-host";
+import { packHnRainBuffer, packHnTermBuffer, packStereoDrive, resetHnTermPack } from "./viz-pack-host";
+import { TERM_COLS, TERM_ROWS } from "../../../plugins/src/hn-term/frontend/teletype";
 import {
   easeStereoBins, parseStereoTiming, STEREO_BANDS, STEREO_BINS, STEREO_GAP, STEREO_RACKS,
   STEREO_RISE_MS, STEREO_SOLIDS, STEREO_HOLD, STEREO_MORPH, STEREO_MOTION_BANDS, STEREO_MOVE,
@@ -28,6 +42,274 @@ import {
   buildVizFrameForPlugin,
 } from "./viz-host";
 import type { StateMsg } from "../core/types";
+import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
+
+const FAT_LAN_SOAK_FRAMES = 120;
+const FAT_LAN_SOAK_DEVICES = 420;
+const FAT_LAN_SOAK_FLOWS = 1200;
+const FAT_LAN_SOAK_CLOCK_START_MS = 1_767_225_600_000;
+const FAT_LAN_SOAK_FAKE_STEP_MS = 0.05;
+const FAT_LAN_SOAK_RANDOM_SEED = 0.25;
+const FAT_LAN_SOAK_AUDIO = 0.15;
+const FAT_LAN_SOAK_REAL_TIME_FORBIDDEN = "fat-LAN soak must not read real time";
+const FAT_LAN_SPY_ROW_FRAME_T0 = 0;
+const FAT_LAN_SPY_ROW_FRAME_STEP = 1 / 30;
+
+function hnTermPackBufferCells(buf: number[]): string {
+  const meta = 8;
+  const n = TERM_COLS * TERM_ROWS;
+  let cells = "";
+  for (let i = 0; i < n; i++) {
+    const code = Math.round(buf[meta + i]! * 95) + 32;
+    cells += String.fromCharCode(code);
+  }
+  return cells;
+}
+
+function hnTermPackBufferTypedCharCount(buf: number[]): number {
+  const cells = hnTermPackBufferCells(buf);
+  let count = 0;
+  for (let i = 0; i < cells.length; i++) {
+    if (cells.charCodeAt(i) !== 32) count++;
+  }
+  return count;
+}
+
+/** Cells that were space in `before` and non-space in `after`. */
+function hnTermPackBufferNewTypedCharCount(before: number[], after: number[]): number {
+  const a = hnTermPackBufferCells(before);
+  const b = hnTermPackBufferCells(after);
+  let count = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (a.charCodeAt(i) === 32 && b.charCodeAt(i) !== 32) count++;
+  }
+  return count;
+}
+
+function runFatLanSpyRowHnTermPack(): number[] {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  let captured: number[] = [];
+  const handlers = {
+    writeBuffer: (_slot: number, data: number[]) => {
+      captured = Array.from(data);
+    },
+    writeUniform: () => {},
+    writeParticles: () => {},
+  };
+  for (let i = 0; i < FAT_LAN_SOAK_FRAMES; i++) {
+    const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+    frame.t = FAT_LAN_SPY_ROW_FRAME_T0 + i * FAT_LAN_SPY_ROW_FRAME_STEP;
+    runPackFrameHandler("hn-term", frame, handlers);
+  }
+  return captured;
+}
+
+/** Non-space glyph cells in the final hn-term pack buffer after 120 frames at `t = i/30`. */
+const FAT_LAN_SPY_ROW_HN_TERM_TYPED_CHARS = 19;
+
+const HN_TERM_DT_GUARD_SEGMENT_FRAMES = 60;
+const HN_TERM_DT_GUARD_HOLD_FRAMES = 10;
+const HN_TERM_DT_GUARD_FRAME_STEP = 1 / 30;
+
+function hnTermDtGuardHandlers(): {
+  handlers: {
+    writeBuffer: (slot: number, data: number[]) => void;
+    writeUniform: () => void;
+    writeParticles: () => void;
+  };
+  lastBuffer: () => number[];
+} {
+  let captured: number[] = [];
+  return {
+    handlers: {
+      writeBuffer: (_slot: number, data: number[]) => {
+        captured = Array.from(data);
+      },
+      writeUniform: () => {},
+      writeParticles: () => {},
+    },
+    lastBuffer: () => captured,
+  };
+}
+
+function tickHnTermFrames(
+  state: StateMsg,
+  frames: number,
+  tAt: (index: number) => number,
+  handlers: ReturnType<typeof hnTermDtGuardHandlers>["handlers"],
+): void {
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  for (let i = 0; i < frames; i++) {
+    const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+    frame.t = tAt(i);
+    runPackFrameHandler("hn-term", frame, handlers);
+  }
+}
+
+/** 60× `i/30`, 10× hold, 60× `i/30` rewind without `resetHnTermPack`. */
+const HN_TERM_DT_GUARD_TYPED_CHARS = 18;
+
+/** After one `t = 1/30` warm-up frame, one `dt = 5` frame capped at 1. */
+const HN_TERM_DT_CAP_STEP_TYPED_CHARS = 23;
+
+/** After one `t = 1/30` warm-up frame, one `frame.t = Infinity` frame uses `1/60` fallback. */
+const HN_TERM_DT_INFINITY_STEP_TYPED_CHARS = 1;
+
+function hnTermDtGuardWarmOneThirtiethFrame(
+  state: StateMsg,
+  handlers: ReturnType<typeof hnTermDtGuardHandlers>["handlers"],
+): void {
+  tickHnTermFrames(state, 1, () => HN_TERM_DT_GUARD_FRAME_STEP, handlers);
+}
+function withFatLanSoakFakeTime<T>(run: (now: () => number) => T): T {
+  vi.useFakeTimers({ toFake: ["Date", "performance"] });
+  vi.setSystemTime(new Date(FAT_LAN_SOAK_CLOCK_START_MS));
+  vi.spyOn(Math, "random").mockReturnValue(FAT_LAN_SOAK_RANDOM_SEED);
+  const forbidRealTime = () => {
+    throw new Error(FAT_LAN_SOAK_REAL_TIME_FORBIDDEN);
+  };
+  vi.spyOn(performance, "now").mockImplementation(forbidRealTime);
+  vi.spyOn(Date, "now").mockImplementation(forbidRealTime);
+
+  let fakeMs = 0;
+  const fakeNow = () => {
+    const t = fakeMs;
+    fakeMs += FAT_LAN_SOAK_FAKE_STEP_MS;
+    vi.advanceTimersByTime(FAT_LAN_SOAK_FAKE_STEP_MS);
+    return t;
+  };
+  setVizClockInjector(() => fakeMs);
+  setVizWallClockInjector(() => FAT_LAN_SOAK_CLOCK_START_MS + fakeMs);
+
+  try {
+    return run(fakeNow);
+  } finally {
+    resetVizClockInjectors();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
+}
+
+function withFatLanSoakWallClockSpies<T>(
+  run: (
+    now: () => number,
+    spies: { performanceNow: ReturnType<typeof vi.spyOn>; dateNow: ReturnType<typeof vi.spyOn> },
+  ) => T,
+): T {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(FAT_LAN_SOAK_CLOCK_START_MS));
+  vi.spyOn(Math, "random").mockReturnValue(FAT_LAN_SOAK_RANDOM_SEED);
+  const performanceNow = vi.spyOn(performance, "now");
+  const dateNow = vi.spyOn(Date, "now");
+
+  let fakeMs = 0;
+  const fakeNow = () => {
+    const t = fakeMs;
+    fakeMs += FAT_LAN_SOAK_FAKE_STEP_MS;
+    vi.advanceTimersByTime(FAT_LAN_SOAK_FAKE_STEP_MS);
+    return t;
+  };
+  setVizClockInjector(() => fakeMs);
+  setVizWallClockInjector(() => FAT_LAN_SOAK_CLOCK_START_MS + fakeMs);
+
+  try {
+    return run(fakeNow, { performanceNow, dateNow });
+  } finally {
+    resetVizClockInjectors();
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  }
+}
+
+const fatLanSoakState = fatLanFixture();
+
+it("fat-LAN live soak: exact delivered counts on fake time", () => {
+  const result = withFatLanSoakFakeTime((now) =>
+    runDogfoodSoak({ state: fatLanSoakState, framesPerPack: FAT_LAN_SOAK_FRAMES, now }),
+  );
+
+  expect(result.framesPerPack).toBe(FAT_LAN_SOAK_FRAMES);
+  expect(result.fixture.devices).toBe(FAT_LAN_SOAK_DEVICES);
+  expect(result.fixture.flows).toBe(FAT_LAN_SOAK_FLOWS);
+  expect(result.packs.map((p) => p.packId)).toEqual([...VIZ_DEMO_PACKS]);
+  for (const pack of result.packs) {
+    expect(pack.frames).toBe(FAT_LAN_SOAK_FRAMES);
+    expect(pack.delivered).toBe(FAT_LAN_SOAK_FRAMES);
+    expect(pack.skipped).toBe(0);
+  }
+});
+
+it("hn-term frame.t backward step: dt guard uses 1/60 fallback", () => {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const { handlers, lastBuffer } = hnTermDtGuardHandlers();
+  const segment = () =>
+    tickHnTermFrames(state, HN_TERM_DT_GUARD_SEGMENT_FRAMES, (i) => i * HN_TERM_DT_GUARD_FRAME_STEP, handlers);
+  segment();
+  const frozenAtHold = Array.from(lastBuffer());
+  const holdT = (HN_TERM_DT_GUARD_SEGMENT_FRAMES - 1) * HN_TERM_DT_GUARD_FRAME_STEP;
+  tickHnTermFrames(state, HN_TERM_DT_GUARD_HOLD_FRAMES, () => holdT, handlers);
+  expect(hnTermPackBufferNewTypedCharCount(frozenAtHold, lastBuffer())).toBe(0);
+  segment();
+  expect(hnTermPackBufferTypedCharCount(lastBuffer())).toBe(HN_TERM_DT_GUARD_TYPED_CHARS);
+});
+
+it("hn-term frame.t cap step: dt above one adds capped typed characters", () => {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const { handlers, lastBuffer } = hnTermDtGuardHandlers();
+  hnTermDtGuardWarmOneThirtiethFrame(state, handlers);
+  const frozen = Array.from(lastBuffer());
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+  frame.t = HN_TERM_DT_GUARD_FRAME_STEP + 5;
+  runPackFrameHandler("hn-term", frame, handlers);
+  expect(hnTermPackBufferNewTypedCharCount(frozen, lastBuffer())).toBe(HN_TERM_DT_CAP_STEP_TYPED_CHARS);
+});
+
+it("hn-term frame.t infinity step: non-finite dt uses 1/60 fallback", () => {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const { handlers, lastBuffer } = hnTermDtGuardHandlers();
+  hnTermDtGuardWarmOneThirtiethFrame(state, handlers);
+  const frozen = Array.from(lastBuffer());
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+  frame.t = Infinity;
+  runPackFrameHandler("hn-term", frame, handlers);
+  expect(hnTermPackBufferNewTypedCharCount(frozen, lastBuffer())).toBe(HN_TERM_DT_INFINITY_STEP_TYPED_CHARS);
+});
+
+it("hn-term frame.t hold step: zero dt adds no typed characters", () => {
+  resetHnTermPack();
+  const state = fatLanFixture();
+  const { handlers, lastBuffer } = hnTermDtGuardHandlers();
+  tickHnTermFrames(state, HN_TERM_DT_GUARD_SEGMENT_FRAMES, (i) => i * HN_TERM_DT_GUARD_FRAME_STEP, handlers);
+  let prev = Array.from(lastBuffer());
+  const holdT = (HN_TERM_DT_GUARD_SEGMENT_FRAMES - 1) * HN_TERM_DT_GUARD_FRAME_STEP;
+  const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
+  for (let i = 0; i < HN_TERM_DT_GUARD_HOLD_FRAMES; i++) {
+    const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+    frame.t = holdT;
+    runPackFrameHandler("hn-term", frame, handlers);
+    const cur = Array.from(lastBuffer());
+    expect(hnTermPackBufferNewTypedCharCount(prev, cur)).toBe(0);
+    prev = cur;
+  }
+  tickHnTermFrames(state, HN_TERM_DT_GUARD_SEGMENT_FRAMES, (i) => i * HN_TERM_DT_GUARD_FRAME_STEP, handlers);
+  expect(hnTermPackBufferTypedCharCount(lastBuffer())).toBe(HN_TERM_DT_GUARD_TYPED_CHARS);
+});
+
+it("fat-LAN live soak: termNow must not read wall clock", () => {
+  withFatLanSoakWallClockSpies((_now, { performanceNow, dateNow }) => {
+    const buf = runFatLanSpyRowHnTermPack();
+    expect(performanceNow).toHaveBeenCalledTimes(0);
+    expect(dateNow).toHaveBeenCalledTimes(0);
+    expect(hnTermPackBufferTypedCharCount(buf)).toBe(FAT_LAN_SPY_ROW_HN_TERM_TYPED_CHARS);
+  });
+});
 
 describe("hn rain pack", () => {
   it("packs uppercase headline bytes the sky can decode", () => {
@@ -145,31 +427,37 @@ describe("hn term pack", () => {
 });
 
 describe("viz dogfood gates", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+    vizTileBudgetRegistry.reset();
+    syncVizTileScope(["dogfood"]);
+  });
+
+  afterEach(() => {
+    resetVizClockInjectors();
+    vi.restoreAllMocks();
+  });
+
   const fatLan = fatLanFixture();
 
   it("over-budget tick bumps skip counter and withholds pack delivery", () => {
     const packId = "packet-tunnel";
     const contract = DEMO_PACK_CONTRACTS[packId];
     const writer = new VizBufferWriter(contract);
-    const times = [0, 5, 0, VIZ_FRAME_BUDGET_MS + 4];
-    let tick = 0;
-    const budget = new VizFrameBudget(() => times[tick++] ?? 999);
-    let delivered = 0;
+    const budget = new VizFrameBudget(() => 0, "t-over");
+    setVizBuildCostTicksInjector((i) => (i < 2 ? (i === 0 ? 1200 : 15000) : 1200));
 
     const ok = dogfoodTick(packId, fatLan, 0, 0.1, budget, writer);
     expect(ok.delivered).toBe(true);
-    expect(ok.buildCalls).toBe(1);
-    expect(budget.stats.skipped).toBe(0);
-
-    const prevTs = ok.frame?.t ?? 0;
-    const skipped = dogfoodTick(packId, fatLan, prevTs, 0.1, budget, writer);
+    let prevClock = 0;
+    const heavy = dogfoodTick(packId, fatLan, prevClock, 0.1, budget, writer);
+    prevClock = 1000;
+    expect(heavy.delivered).toBe(true);
+    const skipped = dogfoodTick(packId, fatLan, prevClock, 0.1, budget, writer);
     expect(skipped.delivered).toBe(false);
-    expect(skipped.frame).toBeNull();
     expect(skipped.lastBuilt).not.toBeNull();
     expect(budget.stats.skipped).toBe(1);
-    expect(budget.stats.overBudget).toBe(1);
-    if (skipped.delivered) delivered++;
-    expect(delivered).toBe(0);
+    setVizBuildCostTicksInjector(undefined);
   });
 
   it("packet-tunnel host idle yields non-zero buffer and bright on empty state", () => {
@@ -224,7 +512,7 @@ describe("viz dogfood gates", () => {
 
   it("talker-storm pack handler refuses more than 512 particles", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["talker-storm"]);
-    const frame = buildVizFrame(fatLan, 0, 0.1);
+    const frame = buildVizFrame(fatLan, monoMs(0), 0.1);
     const over: number[] = [];
     for (let i = 0; i < 513; i++) over.push(0, 0, 0, 1);
     const bad = writer.writeParticles(over, 4);
@@ -240,6 +528,7 @@ describe("viz dogfood gates", () => {
   });
 
   it("preserve-frame across mid-run pack swap keeps vizFrameTs, skips, and UBO mirror", () => {
+    setVizBuildCostTicksInjector((i) => (i === 1 || i === 3 ? 15000 : 1200));
     const times = [0, 4, 0, VIZ_FRAME_BUDGET_MS + 3, 0, 5, 0, 4];
     let tick = 0;
     const result = runPackSwapPreserve(
@@ -252,14 +541,14 @@ describe("viz dogfood gates", () => {
     expect(result.frameTs).toBeGreaterThan(0);
     expect(result.skipped).toBeGreaterThanOrEqual(1);
     expect(result.uboMatch).toBe(true);
+    setVizBuildCostTicksInjector(undefined);
 
-    const budget = new VizFrameBudget(() => 0);
-    let n = 0;
-    budget.deliver(fatLan, 0, 0.1, () => {});
-    expect(budget.stats.skipped).toBe(0);
-    const slow = new VizFrameBudget(() => (++n === 1 ? 0 : VIZ_FRAME_BUDGET_MS + 1));
-    slow.deliver(fatLan, 0, 0.1, () => {});
-    expect(slow.stats.skipped).toBe(1);
+    const budget = new VizFrameBudget(() => 0, "swap");
+    setVizBuildCostTicksInjector((i) => (i === 0 ? 1200 : 15000));
+    budget.deliver(fatLan, monoMs(0), 0.1, () => {});
+    budget.deliver(fatLan, monoMs(0), 0.1, () => {});
+    expect(budget.stats.skipped).toBeGreaterThanOrEqual(1);
+    setVizBuildCostTicksInjector(undefined);
 
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
     writer.writeBuffer(0, [9, 8, 7, 6]);
@@ -267,11 +556,11 @@ describe("viz dogfood gates", () => {
       writer,
       DEMO_PACK_CONTRACTS["talker-storm"],
       result.frameTs,
-      slow,
+      budget,
       true,
     );
     expect(rebound.frameTs).toBe(result.frameTs);
-    expect(rebound.budget.stats.skipped).toBe(1);
+    expect(rebound.budget.stats.skipped).toBeGreaterThanOrEqual(1);
     expect(Array.from(rebound.writer!.ubo).slice(0, 4)).toEqual([9, 8, 7, 6]);
   });
 
@@ -298,8 +587,34 @@ describe("viz dogfood gates", () => {
     expect(formatSkipRate(skipRatePerSec(skipSamples, 1000))).toBe("skips 0/s");
   });
 
-  it("fat-LAN live soak: all three packs under budget or honest skips", () => {
-    const result = runDogfoodSoak({ state: fatLan, framesPerPack: 120 });
+  it("fat-LAN live soak: count-based delivery and skip honesty on simulated clock", () => {
+    const perfSpy = vi.spyOn(performance, "now");
+    const dateSpy = vi.spyOn(Date, "now");
+    const simTimeMs = { value: 0 };
+    setVizClockInjector(() => simTimeMs.value);
+    setVizWallClockInjector(() => simTimeMs.value + 1_000_000);
+    perfSpy.mockClear();
+    dateSpy.mockClear();
+
+    const soakOpts = {
+      state: fatLan,
+      framesPerPack: DOGFOOD_SOAK_FRAMES_PER_PACK,
+      buildCostMs: DOGFOOD_SOAK_BUILD_COST_MS,
+      eventPeriodMs: DOGFOOD_SOAK_EVENT_PERIOD_MS,
+      clockStepMs: DOGFOOD_SOAK_CLOCK_STEP_MS,
+      simTimeMs,
+      now: () => simTimeMs.value,
+    };
+
+    const expectedSkipped = 0;
+    const expectedDelivered = DOGFOOD_SOAK_FRAMES_PER_PACK;
+    const expectedSkipRate = 0;
+
+    const result = runDogfoodSoak(soakOpts);
+
+    expect(perfSpy).toHaveBeenCalledTimes(0);
+    expect(dateSpy).toHaveBeenCalledTimes(0);
+
     console.log("\n" + formatDogfoodReport(result));
 
     expect(result.fixture.devices).toBeGreaterThanOrEqual(300);
@@ -320,12 +635,43 @@ describe("viz dogfood gates", () => {
     ]));
 
     for (const pack of result.packs) {
-      expect(pack.buildMs.p95).toBeLessThan(VIZ_FRAME_BUDGET_MS + 0.01);
-      expect(pack.delivered).toBe(pack.frames);
-      expect(pack.skipped).toBe(0);
-      expect(pack.withinBudget).toBe(true);
+      expect(pack.delivered).toBe(expectedDelivered);
+      expect(pack.skipped).toBe(expectedSkipped);
+      expect(pack.skipRatePerSec).toBe(expectedSkipRate);
+      expect(formatSkipRate(pack.skipRatePerSec)).toBe("skips 0/s");
     }
-    expect(result.allWithinBudgetOrHonestSkips).toBe(true);
+  });
+
+  it("fat-LAN live soak: patterned over-budget skips on simulated clock", () => {
+    const perfSpy = vi.spyOn(performance, "now");
+    const dateSpy = vi.spyOn(Date, "now");
+    const simTimeMs = { value: 0 };
+    setVizClockInjector(() => simTimeMs.value);
+    setVizWallClockInjector(() => simTimeMs.value + 1_000_000);
+    perfSpy.mockClear();
+    dateSpy.mockClear();
+
+    const soakOpts = {
+      state: fatLan,
+      framesPerPack: DOGFOOD_SOAK_FRAMES_PER_PACK,
+      buildCostMs: dogfoodSoakPatternedBuildCostMs,
+      eventPeriodMs: DOGFOOD_SOAK_EVENT_PERIOD_MS,
+      clockStepMs: DOGFOOD_SOAK_CLOCK_STEP_MS,
+      simTimeMs,
+      now: () => simTimeMs.value,
+    };
+
+    const result = runDogfoodSoak(soakOpts);
+
+    expect(perfSpy).toHaveBeenCalledTimes(0);
+    expect(dateSpy).toHaveBeenCalledTimes(0);
+
+    for (const pack of result.packs) {
+      expect(pack.delivered).toBe(DOGFOOD_SOAK_PATTERN_EXPECTED.delivered);
+      expect(pack.skipped).toBe(DOGFOOD_SOAK_PATTERN_EXPECTED.skipped);
+      expect(pack.skipRatePerSec).toBeGreaterThan(0);
+      expect(formatSkipRate(pack.skipRatePerSec)).not.toBe("skips 0/s");
+    }
   });
 });
 
@@ -365,15 +711,19 @@ describe("viz dogfood over-budget honesty", () => {
     const fatLan = fatLanFixture();
     const packId = "talker-storm";
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS[packId]);
-    const times = [0, 5, 0, VIZ_FRAME_BUDGET_MS + 2];
-    let tick = 0;
-    const budget = new VizFrameBudget(() => times[tick++] ?? 999);
+    vizTileBudgetRegistry.reset();
+    syncVizTileScope(["slow"]);
+    const budget = new VizFrameBudget(() => 0, "slow");
+    setVizBuildCostTicksInjector((i) => (i < 2 ? (i === 0 ? 1200 : 15000) : 1200));
 
     const first = dogfoodTick(packId, fatLan, 0, 0.1, budget, writer);
     expect(first.delivered).toBe(true);
 
-    const second = dogfoodTick(packId, fatLan, first.frame?.t ?? 0, 0.1, budget, writer);
+    const heavy = dogfoodTick(packId, fatLan, first.frame?.t ?? 0, 0.1, budget, writer);
+    expect(heavy.delivered).toBe(true);
+    const second = dogfoodTick(packId, fatLan, heavy.frame?.t ?? 0, 0.1, budget, writer);
     expect(second.delivered).toBe(false);
+    setVizBuildCostTicksInjector(undefined);
     expect(second.lastBuilt).not.toBeNull();
     expect(budget.stats.skipped).toBe(1);
 

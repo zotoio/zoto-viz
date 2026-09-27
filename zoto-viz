@@ -720,12 +720,28 @@ def _venv_python() -> Path:
     return root / ".venv" / "bin" / "python"
 
 
+def _venv_can_import_service(py: Path) -> bool:
+    """Skip re-exec when the checkout venv exists but install never finished."""
+    try:
+        res = subprocess.run(
+            [str(py), "-c", "from service import plugins"],
+            cwd=ROOT,
+            capture_output=True,
+            timeout=30,
+        )
+        return res.returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
 def _reexec_venv() -> None:
     """Prefer the checkout venv so plugin/batch commands see installed deps."""
     if os.environ.get("ZOTO_VIZ_NO_REEXEC") == "1":
         return
     py = _venv_python()
     if not py.is_file():
+        return
+    if not _venv_can_import_service(py):
         return
     # venv python is usually a symlink to the system interpreter — compare the
     # invocation path, not the resolved inode.

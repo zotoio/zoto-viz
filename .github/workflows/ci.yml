@@ -27,17 +27,22 @@ jobs:
       - name: Python tests
         run: |
           python -m pip install -r requirements.txt pytest
+          python scripts/check_ci_test_needs.py .github/workflows/ci.yml
           pytest tests
 
   web:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - name: Python deps for vitest integration tests
-        run: python -m pip install -r requirements.txt
+        run: |
+          python -m venv .venv
+          .venv/bin/pip install -r requirements.txt
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
@@ -49,8 +54,26 @@ jobs:
         run: |
           pnpm install
           pnpm approve-builds esbuild
+      - name: Playwright Chromium (media-ask focus, starter pack smoke)
+        working-directory: web
+        run: pnpm exec playwright install chromium --with-deps
+      - name: Revert-proof self-test (head runner, head tests)
+        run: bash scripts/revert-proof-ci-selftest.sh head
+      - name: Revert-proof self-test (head runner, base tests)
+        if: github.event_name == 'pull_request'
+        run: bash scripts/revert-proof-ci-selftest.sh base "${{ github.event.pull_request.base.sha }}"
+      - uses: browser-actions/setup-chrome@v1
+        id: chrome
+        with:
+          chrome-version: "148.0.7778.96"
+      - name: Brand cast lint (FrameTs guard)
+        working-directory: web
+        run: pnpm lint
       - name: Web tests and coverage
         working-directory: web
+        env:
+          ZOTO_VIZ_EXPECT_RENDERER: swiftshader
+          PACK_MIRROR_CHROME_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: pnpm test:coverage
 
   build:
@@ -71,6 +94,11 @@ jobs:
       - name: Typecheck and production build
         working-directory: web
         run: pnpm build
+      - name: Prod bundle guard (vizWallClock stripped)
+        working-directory: web
+        env:
+          VIZ_REQUIRE_DIST: "1"
+        run: pnpm exec vitest run src/core/viz-dev-wall-flags.test.ts -t "prod bundle"
 
   dogfood:
     runs-on: ubuntu-latest
@@ -91,6 +119,71 @@ jobs:
         working-directory: web
         run: pnpm dogfood
 
+  backrooms-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python deps for monitor backend
+        run: python -m pip install -r requirements.txt
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install web deps
+        working-directory: web
+        run: |
+          pnpm install
+          pnpm approve-builds esbuild
+      - name: Typecheck and production build
+        working-directory: web
+        run: pnpm build
+      - name: Backrooms browser smoke
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          bash scripts/dev.sh start backend
+          cd web && pnpm exec playwright install chromium
+          xvfb-run -a env ZOTO_VIZ_URL=http://127.0.0.1:7020/ pnpm test:backrooms-smoke
+          bash ../scripts/dev.sh stop backend
+
+  sandbox-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Python deps for monitor backend
+        run: python -m pip install -r requirements.txt
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: pnpm
+          cache-dependency-path: web/pnpm-lock.yaml
+      - name: Install web deps
+        working-directory: web
+        run: |
+          pnpm install
+          pnpm approve-builds esbuild
+      - name: Typecheck and production build
+        working-directory: web
+        run: pnpm build
+      - name: Sandbox plugin draw smoke
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y xvfb
+          bash scripts/dev.sh start backend
+          cd web && pnpm exec playwright install chromium
+          xvfb-run -a env ZOTO_VIZ_URL=http://127.0.0.1:7020/ pnpm test:sandbox-plugin-smoke
+          xvfb-run -a env ZOTO_VIZ_URL=http://127.0.0.1:7020/ pnpm test:sandbox-draws-smoke
+          bash ../scripts/dev.sh stop backend
+
   docs:
     runs-on: ubuntu-latest
     steps:
@@ -109,28 +202,20 @@ jobs:
   # Branch protection requires this check name (workflow ci, job test).
   test:
     runs-on: ubuntu-latest
-    needs: [python, web, build, dogfood, docs]
+    needs: [python, web, build, dogfood, backrooms-smoke, sandbox-smoke, docs]
     if: always()
     steps:
       - name: Require all CI jobs to succeed
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
         run: |
           set -euo pipefail
-          declare -A results=(
-            [python]="${{ needs.python.result }}"
-            [web]="${{ needs.web.result }}"
-            [build]="${{ needs.build.result }}"
-            [dogfood]="${{ needs.dogfood.result }}"
-            [docs]="${{ needs.docs.result }}"
-          )
-          failed=0
-          for job in python web build dogfood docs; do
-            status="${results[$job]}"
-            echo "$job: $status"
-            if [ "$status" != "success" ]; then
-              failed=1
-            fi
-          done
-          if [ "$failed" -ne 0 ]; then
-            echo "One or more CI jobs did not succeed."
+          if [ -z "$NEEDS_JSON" ] || [ "$NEEDS_JSON" = "null" ] || [ "$NEEDS_JSON" = "{}" ]; then
+            echo "needs is empty"
+            exit 1
+          fi
+          echo "$NEEDS_JSON" | jq -r 'to_entries[] | "\(.key): \(.value.result)"'
+          if ! echo "$NEEDS_JSON" | jq -e 'to_entries | length > 0 and all(.value.result == "success")' >/dev/null; then
+            echo "One or more CI jobs did not succeed (expected every needs.*.result == success)."
             exit 1
           fi

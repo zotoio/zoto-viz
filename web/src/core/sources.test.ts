@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
-  FEED_HEADLINE_LIMIT, illustratedSourceBind, oneLineTitle, sourceHeadlines, stripMarkup, type SourceLive,
+  countEligibleSourceHeadlines,
+  FEED_HEADLINE_LIMIT,
+  illustratedSourceBind,
+  oneLineTitle,
+  sourceHeadlines,
+  stripMarkup,
+  type SourceLive,
 } from "./sources";
 
 describe("sourceHeadlines", () => {
@@ -94,6 +100,22 @@ describe("sourceHeadlines", () => {
       source: "hn",
       filter: "has-image",
     })).map((h) => h.text)).toEqual(["One", "Pic"]);
+  });
+
+  it("countEligible matches uncapped sourceHeadlines length", () => {
+    const sources: Record<string, SourceLive> = {
+      feed: {
+        id: "feed",
+        kind: "file",
+        label: "Feed",
+        ok: true,
+        feed: true,
+        text: Array.from({ length: 72 }, (_, i) => `Item ${i}`).join("\n"),
+      },
+    };
+    const bind = { source: "feed" };
+    const uncapped = sourceHeadlines(sources, Number.MAX_SAFE_INTEGER, bind).length;
+    expect(countEligibleSourceHeadlines(sources, bind)).toBe(uncapped);
   });
 
   it("strips HTML from article blurbs", () => {

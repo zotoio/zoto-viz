@@ -1,0 +1,22 @@
+id: tile-health-detail
+name: Tile health — dark detail
+version: 1
+hint: Host dogfood pack — dark sky with high contrast detail (must not flag empty).
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  maxBuffers: 1
+  maxBufferFloats: 4
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+    - uAccent
+    - uBg
+    - uOpacity
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts

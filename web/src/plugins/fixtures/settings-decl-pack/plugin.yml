@@ -1,0 +1,4 @@
+# Host test fixture — paired with visualisation.yml (real catalog layout).
+id: settings-fixture
+name: Settings fixture
+version: 1

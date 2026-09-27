@@ -2,20 +2,37 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://zoto-viz.local/schema/plugin.schema.json",
   "title": "zoto-viz unified plugin",
-  "description": "Canonical schema for a zoto-viz plugin. First-party trees live at `plugins/src/<id>/`. A zip (`<id>.zip`) is the contrib / interchange format (`plugin add`, drop into `plugins/`, MCP `install_plugin_zip`).\n\nFolder layout (convention-over-config; only plugin.yml is required):\n  plugin.yml                 required metadata (this document)\n  visualisation.yml          optional engine / base / look / style / layout / options / config\n  frontend/**                optional TypeScript module (+ tests)\n  sky/sky.yml                optional sky recipe / pins (AI-generated or hand-authored)\n  sky/fragment.glsl          optional custom far-field GLSL (see $defs/shader)\n  datasource/streams.yml     optional consumes[] / produces[] + field remaps\n  datasource/collector.py    optional trusted collector (consent + ZOTO_VIZ_PLUGIN_SERVICE)\n  backend/service.py         optional on_snapshot / setup / teardown hooks\n\nZip contract (enforced by service/plugin_zip.py):\n  required member: plugin.yml at the archive root\n  size limits: 12000000 bytes compressed (12 MB), 24000000 bytes uncompressed (24 MB), at most 80 files\n  allowed suffixes: .yml .yaml .json .py .ts .tsx .js .mjs .css .html .md .txt .svg .png .jpg .jpeg .webp .gif .glsl\n  hard rejects: absolute paths, `..` traversal, symlinks\n\nPlugin shader uniform contract (sky/fragment.glsl; subtask 07 enforces at compile time):\n  allowed uniforms: uTime (float), uOpacity (float), uBright (float), uAudio (float), uAccent (vec3), uBg (vec3)\n  plus varying `in vec3 vDir` from the shipped vertex program\n  exclude uMode (shipped-enum index — implementation-specific)\n  exclude AI Dynamic uniforms uMotif / uA / uB / uWarp / uGrain / uBands (private state)",
+  "description": "Canonical schema for a zoto-viz plugin. First-party trees live at `plugins/src/<id>/`. A zip (`<id>.zip`) is the contrib / interchange format (`plugin add`, drop into `plugins/`, MCP `install_plugin_zip`).\n\nFolder layout (convention-over-config; only plugin.yml is required):\n  plugin.yml                 required metadata (this document)\n  visualisation.yml          optional engine / base / look / style / layout / options / config\n  frontend/**                optional TypeScript module (+ tests)\n  sky/sky.yml                optional sky recipe / pins (AI-generated or hand-authored)\n  sky/fragment.glsl          optional custom far-field GLSL (see $defs/shader)\n  datasource/streams.yml     optional consumes[] / produces[] + field remaps\n  datasource/collector.py    optional trusted collector (consent + ZOTO_VIZ_PLUGIN_SERVICE)\n  backend/service.py         optional on_snapshot / setup / teardown hooks\n\nZip contract (enforced by service/plugin_zip.py):\n  required member: plugin.yml at the archive root\n  size limits: 12000000 bytes compressed (12 MB), 24000000 bytes uncompressed (24 MB), at most 80 files\n  allowed suffixes: .yml .yaml .json .py .ts .tsx .js .mjs .css .html .md .txt .svg .png .jpg .jpeg .webp .gif .glsl\n  hard rejects: absolute paths, `..` traversal, symlinks\n\nPlugin shader uniform contract (sky/fragment.glsl; subtask 07 enforces at compile time):\n  allowed uniforms: uTime (float), uOpacity (float), uBright (float), uAudio (float), uAccent (vec3), uBg (vec3)\n  plus varying `in vec3 vDir` from the shipped vertex program\n  exclude uMode (shipped-enum index \u2014 implementation-specific)\n  exclude AI Dynamic uniforms uMotif / uA / uB / uWarp / uGrain / uBands (private state)",
   "type": "object",
   "additionalProperties": false,
-  "required": ["id", "name", "version"],
+  "required": [
+    "id",
+    "name",
+    "version"
+  ],
   "properties": {
     "id": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_-]{0,31}$",
       "description": "Stable plugin id. The live view is addressed as plugin:<id>."
     },
-    "name": { "type": "string", "minLength": 1, "maxLength": 48 },
-    "version": { "type": "integer", "minimum": 1 },
-    "description": { "type": "string", "maxLength": 2000 },
-    "hint": { "type": "string", "maxLength": 280 },
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 48
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "description": {
+      "type": "string",
+      "maxLength": 2000
+    },
+    "hint": {
+      "type": "string",
+      "maxLength": 512
+    },
     "frontend": {
       "type": "object",
       "additionalProperties": false,
@@ -25,6 +42,11 @@
           "pattern": "^(?!.*\\.\\.)[A-Za-z0-9._/-]+\\.(ts|tsx|js|mjs)$",
           "maxLength": 120,
           "description": "TypeScript/JS module relative to the plugin root (typically frontend/index.ts)."
+        },
+        "bundle": {
+          "type": "boolean",
+          "default": true,
+          "description": "When false, the monitor serves the entry file verbatim (preserves relative imports for pack-assets)."
         }
       }
     },
@@ -54,7 +76,10 @@
     },
     "runtime": {
       "type": "string",
-      "enum": ["yaml", "typescript"],
+      "enum": [
+        "yaml",
+        "typescript"
+      ],
       "description": "Legacy view-plugin runtime flag. typescript requires entry or frontend.entry."
     },
     "capabilities": {
@@ -63,28 +88,52 @@
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "enum": ["graph.read", "graph.style", "ui.overlay", "config.read", "viz.read", "viz.write", "typesafe"]
+        "enum": [
+          "graph.read",
+          "graph.style",
+          "ui.overlay",
+          "config.read",
+          "viz.read",
+          "viz.write",
+          "typesafe"
+        ]
       },
-      "description": "Frontend host API allowlist. camera, mic, parent DOM, and network are never granted. viz.read receives host-decimated data frames; viz.write fills reserved buffer/uniform slots (see $defs/vizContract). typesafe opts into lazy TypeSafe/Jev Sense (shadow plugin_state only — see $defs/typesafeContract)."
+      "description": "Frontend host API allowlist. camera, mic, parent DOM, and network are never granted. viz.read receives host-decimated data frames; viz.write fills reserved buffer/uniform slots (see $defs/vizContract). typesafe opts into lazy TypeSafe/Jev Sense (shadow plugin_state only \u2014 see $defs/typesafeContract)."
     },
     "viz": {
       "$ref": "#/$defs/vizContract",
       "description": "VizPlugin contract: caps, buffer slots, particle limit, no full-graph walk. Required when viz.read or viz.write is declared."
     },
+    "render": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "scale": {
+          "$ref": "#/$defs/renderScale"
+        }
+      },
+      "description": "Optional host-owned render hints. When render.scale is set, the web host runs a per-view adaptive render-scale governor (GPU-timed when available) and exposes uResolution (scaled render size) plus optional opt-in uRenderScale host uniform."
+    },
     "typesafe": {
       "$ref": "#/$defs/typesafeContract",
-      "description": "Optional TypeSafe/Jev contract (or inline typesafe.yml merge). Dark by default — host lazy-loads SDK only when typesafe capability is declared and the user opts in."
+      "description": "Optional TypeSafe/Jev contract (or inline typesafe.yml merge). Dark by default \u2014 host lazy-loads SDK only when typesafe capability is declared and the user opts in."
     },
     "overlay": {
       "description": "When true or a mode/plugin id, this plugin overlays look onto that catalog row instead of adding a second view.",
       "oneOf": [
-        { "type": "boolean" },
-        { "type": "string", "minLength": 1, "maxLength": 48 }
+        {
+          "type": "boolean"
+        },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48
+        }
       ]
     },
     "mode_id": {
       "type": "string",
-      "pattern": "^[a-z][a-z0-9_-]{0,31}$",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
       "description": "Optional catalog id to overlay when it differs from `id`."
     },
     "instances": {
@@ -98,32 +147,68 @@
         "consumes": {
           "type": "array",
           "maxItems": 16,
-          "items": { "$ref": "#/$defs/streamRef" }
+          "items": {
+            "$ref": "#/$defs/streamRef"
+          }
         },
         "produces": {
           "type": "array",
           "maxItems": 16,
-          "items": { "$ref": "#/$defs/streamRef" }
+          "items": {
+            "$ref": "#/$defs/streamRef"
+          }
         }
       }
     },
-    "engine": { "$ref": "#/$defs/engine" },
-    "base": { "$ref": "#/$defs/base" },
-    "look": { "$ref": "#/$defs/look" },
-    "style": { "$ref": "#/$defs/style" },
-    "layout": { "$ref": "#/$defs/layout" },
-    "options": { "$ref": "#/$defs/freeMap" },
-    "config": { "$ref": "#/$defs/freeMap" },
+    "engine": {
+      "$ref": "#/$defs/engine"
+    },
+    "base": {
+      "$ref": "#/$defs/base"
+    },
+    "look": {
+      "$ref": "#/$defs/look"
+    },
+    "style": {
+      "$ref": "#/$defs/style"
+    },
+    "layout": {
+      "$ref": "#/$defs/layout"
+    },
+    "options": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/freeMap"
+        },
+        {
+          "$ref": "#/$defs/pluginConfigList"
+        }
+      ]
+    },
+    "config": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/pluginConfigList"
+        },
+        {
+          "$ref": "#/$defs/freeObject"
+        }
+      ]
+    },
     "produces": {
       "type": "array",
       "maxItems": 16,
-      "items": { "$ref": "#/$defs/streamRef" },
+      "items": {
+        "$ref": "#/$defs/streamRef"
+      },
       "description": "Legacy top-level produces. Prefer datasource.produces."
     },
     "consumes": {
       "type": "array",
       "maxItems": 16,
-      "items": { "$ref": "#/$defs/streamRef" },
+      "items": {
+        "$ref": "#/$defs/streamRef"
+      },
       "description": "Legacy top-level consumes. Prefer datasource.consumes."
     },
     "scripts": {
@@ -139,20 +224,68 @@
     "skills": {
       "type": "array",
       "maxItems": 16,
-      "items": { "type": "string", "maxLength": 80 },
+      "items": {
+        "type": "string",
+        "maxLength": 80
+      },
       "description": "Legacy skills paths. Not part of unified v1."
+    },
+    "zoto_sdk_version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Pack SDK / manifest contract version; values above the host support appear in Blocked."
+    },
+    "settings": {
+      "$ref": "#/$defs/pluginSettings"
+    },
+    "presets": {
+      "type": "array",
+      "maxItems": 32,
+      "items": {
+        "$ref": "#/$defs/pluginPreset"
+      },
+      "description": "Named config starting points (prefer settings.presets)."
+    },
+    "presetField": {
+      "type": "string",
+      "maxLength": 64,
+      "description": "Config key holding the active preset id (prefer settings.presetField)."
+    },
+    "hud": {
+      "$ref": "#/$defs/pluginHud"
+    },
+    "sections": {
+      "type": "array",
+      "maxItems": 24,
+      "items": {
+        "$ref": "#/$defs/pluginSection"
+      }
     }
   },
   "allOf": [
     {
       "if": {
-        "properties": { "runtime": { "const": "typescript" } },
-        "required": ["runtime"]
+        "properties": {
+          "runtime": {
+            "const": "typescript"
+          }
+        },
+        "required": [
+          "runtime"
+        ]
       },
       "then": {
         "anyOf": [
-          { "required": ["entry"] },
-          { "required": ["frontend"] }
+          {
+            "required": [
+              "entry"
+            ]
+          },
+          {
+            "required": [
+              "frontend"
+            ]
+          }
         ]
       }
     },
@@ -160,20 +293,41 @@
       "if": {
         "anyOf": [
           {
-            "properties": { "capabilities": { "contains": { "const": "viz.read" } } },
-            "required": ["capabilities"]
+            "properties": {
+              "capabilities": {
+                "contains": {
+                  "const": "viz.read"
+                }
+              }
+            },
+            "required": [
+              "capabilities"
+            ]
           },
           {
-            "properties": { "capabilities": { "contains": { "const": "viz.write" } } },
-            "required": ["capabilities"]
+            "properties": {
+              "capabilities": {
+                "contains": {
+                  "const": "viz.write"
+                }
+              }
+            },
+            "required": [
+              "capabilities"
+            ]
           }
         ]
       },
       "then": {
-        "required": ["viz"],
+        "required": [
+          "viz"
+        ],
         "properties": {
           "viz": {
-            "required": ["graphWalk", "idle"]
+            "required": [
+              "graphWalk",
+              "idle"
+            ]
           }
         }
       }
@@ -193,19 +347,110 @@
       "description": "Graph wrap target when engine is graph. Known values today: topology, talkers, services, protocols, layers, drone-show, watch, wifi, bluetooth, cpu, cores, load, sources, memory, disk, gpu, sockets, cgroups, units, udev, bridge. Open so new wrap targets do not need a schema bump."
     },
     "freeMap": {
-      "description": "Free-form map with additionalProperties: true. Arrays are accepted so legacy view-plugin options/config lists still validate through the $ref shims.",
-      "type": ["object", "array"],
+      "description": "Legacy free-form object map (options/config as key\u2192field objects). Lists use pluginConfigList.",
+      "type": "object",
       "additionalProperties": true
+    },
+    "freeObject": {
+      "description": "Free-form object map (additionalProperties: true). Used for plugin config objects so oneOf with pluginConfigList stays unambiguous.",
+      "type": "object",
+      "additionalProperties": true
+    },
+    "pluginConfigField": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "key"
+      ],
+      "properties": {
+        "key": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "label": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "type": {
+          "type": "string",
+          "enum": [
+            "boolean",
+            "select",
+            "number",
+            "text",
+            "textarea"
+          ]
+        },
+        "section": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48,
+          "description": "Settings drawer section title (collapsible group)."
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "default": {},
+        "min": {
+          "type": "number"
+        },
+        "max": {
+          "type": "number"
+        },
+        "step": {
+          "type": "number"
+        },
+        "values": {
+          "type": "array",
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          }
+        },
+        "randomise": {
+          "type": "boolean"
+        },
+        "randomRange": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 2,
+          "items": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    "pluginConfigList": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "$ref": "#/$defs/pluginConfigField"
+      }
     },
     "look": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Per-view look pins. Free-form map (additionalProperties: true) — do not treat any look key as required; web/src/core/modes.ts and web/src/plugins/plugin.ts grow one-off knobs faster than this schema can track. Keys that exist in the codebase today (hints only, not required): theme, chrome, backdrop, stageOnly, skyOpacity, skyBright, skySpeed, skyEase, skyAudio, skyCycle, bgColor, bgOpacity, bgAudio, gridShape, gridColor, gridSize, gridFollow, gridOpacity, gridBright, gridAudio, audioDrive, audioSens, audioCamera, audioNodes, themeCycle, edgeGlow, edgeGlowAmt, edgeGlowSpeed, graphFabric (off|tubes|cloth|ribbon), graphSpace (auto|space|plane), graphLayout (auto|force|tree|radial|concentric|cluster|dag|globe|bars|scatter|helix|vortex|bloom|ripple|weave|cascade|knot|hourglass|coral|tide|mobius|spine|halo|fold|drift|sierpinski|hilbert|koch|julia|spectrum|waterfall|carrier|phased|heap|trie|hashmap|matrix|queue), graphLinks (auto|arrows|bundle|both), mosaic (4|6|8), hero (off|left|center|right), mosaicTiles (catalog view ids), mosaicSharedTheme. mosaic + mosaicTiles open a split wall when the plugin is selected (Syscon uses this). stageOnly defaults on for demo packs (viz.read/write, backdrop plugin, or a sky shader); set false to keep the LAN graph. Related ViewMode knobs (not look-schema-required): graphBase, arcadeId, flatten, camera, standalone, fabric. Theme ids today: midnight, ocean, nord, dracula, solarized, gruvbox, ember, neon, tactical, paper, dusk, void, vhs, acid, ice, phosphor. BackdropKind today: none, fractal, space, matrix, live, aurora, rain, ocean, fire, warp, clouds, circuit, plasma, lattice, dusk, void, vhs, nebula, acid, ice, dawn, phosphor, earth, meadow, tunnel, dynamic, custom, plugin. FloorShape today: square, hex, triangle, diamond, circle. Fields that are NOT in the current codebase and must not be gated: chromatic, film_noise, film_flicker, halo, drop_amount, cursor_pulse, aim_size, target_size, scanline, follow_zoom_curve, follow_zoom_max, follow_zoom_min."
+      "description": "Per-view look pins. Free-form map (additionalProperties: true) \u2014 do not treat any look key as required; web/src/core/modes.ts and web/src/plugins/plugin.ts grow one-off knobs faster than this schema can track. Keys that exist in the codebase today (hints only, not required): theme, chrome, backdrop, stageOnly, skyOpacity, skyBright, skySpeed, skyEase, skyAudio, skyCycle, bgColor, bgOpacity, bgAudio, gridShape, gridColor, gridSize, gridFollow, gridOpacity, gridBright, gridAudio, audioDrive, audioSens, audioCamera, audioNodes, themeCycle, edgeGlow, edgeGlowAmt, edgeGlowSpeed, graphFabric (off|tubes|cloth|ribbon), graphSpace (auto|space|plane), graphLayout (auto|force|tree|radial|concentric|cluster|dag|globe|bars|scatter|helix|vortex|bloom|ripple|weave|cascade|knot|hourglass|coral|tide|mobius|spine|halo|fold|drift|sierpinski|hilbert|koch|julia|spectrum|waterfall|carrier|phased|heap|trie|hashmap|matrix|queue), graphLinks (auto|arrows|bundle|both), mosaic (4|6|8), hero (off|left|center|right), mosaicTiles (catalog view ids), mosaicSharedTheme. mosaic + mosaicTiles open a split wall when the plugin is selected (Syscon uses this). stageOnly defaults on for demo packs (viz.read/write, backdrop plugin, or a sky shader); set false to keep the LAN graph. Related ViewMode knobs (not look-schema-required): graphBase, arcadeId, flatten, camera, standalone, fabric. Theme ids today: midnight, ocean, nord, dracula, solarized, gruvbox, ember, neon, tactical, paper, dusk, void, vhs, acid, ice, phosphor. BackdropKind today: none, fractal, space, matrix, live, aurora, rain, ocean, fire, warp, clouds, circuit, plasma, lattice, dusk, void, vhs, nebula, acid, ice, dawn, phosphor, earth, meadow, tunnel, dynamic, custom, plugin. FloorShape today: square, hex, triangle, diamond, circle. Fields that are NOT in the current codebase and must not be gated: chromatic, film_noise, film_flicker, halo, drop_amount, cursor_pulse, aim_size, target_size, scanline, follow_zoom_curve, follow_zoom_max, follow_zoom_min."
     },
     "style": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Free-form style map. Keys used today (hints only): nodeColor (role|kind|heat|proto|hash), nodeScale (default|bytes|rate), labels (default|all|none|top), flatten, fabric (true|tubes|cloth|ribbon — nodes and edges become an animated mesh with the same hover/selection/glow)."
+      "description": "Free-form style map. Keys used today (hints only): nodeColor (role|kind|heat|proto|hash), nodeScale (default|bytes|rate), labels (default|all|none|top), flatten, fabric (true|tubes|cloth|ribbon \u2014 nodes and edges become an animated mesh with the same hover/selection/glow)."
     },
     "layout": {
       "type": "object",
@@ -215,40 +460,99 @@
     "pluginInstance": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id"],
+      "required": [
+        "id"
+      ],
       "properties": {
         "id": {
           "type": "string",
-          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+          "pattern": "^[a-z0-9][a-z0-9-]*$"
         },
-        "name": { "type": "string", "minLength": 1, "maxLength": 48 },
-        "hint": { "type": "string", "maxLength": 280 },
-        "source": { "type": "string", "maxLength": 32 },
-        "title": { "type": "string", "maxLength": 64 },
-        "caption": { "type": "string", "maxLength": 64 },
-        "image": { "type": "string", "maxLength": 64 },
-        "link": { "type": "string", "maxLength": 64 },
-        "filter": { "type": "string", "maxLength": 80 }
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48
+        },
+        "hint": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "source": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "title": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "caption": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "image": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "link": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "filter": {
+          "type": "string",
+          "maxLength": 80
+        },
+        "defaults": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          },
+          "description": "Per-instance config defaults applied before pack-wide fallback."
+        }
       }
     },
     "pluginInstances": {
       "type": "array",
       "maxItems": 32,
-      "items": { "$ref": "#/$defs/pluginInstance" }
+      "items": {
+        "$ref": "#/$defs/pluginInstance"
+      }
     },
     "streamRef": {
       "description": "A monitor stream this plugin consumes or produces. Known names today (not a closed enum): devices, flows, packets, traffic, wifi, bluetooth, cpu, audio, feed, graph, hud, plugin_state, rf, sources. Objects may remap fields.",
       "oneOf": [
-        { "type": "string", "minLength": 1, "maxLength": 64 },
+        {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
         {
           "type": "object",
           "additionalProperties": true,
-          "required": ["stream"],
+          "required": [
+            "stream"
+          ],
           "properties": {
-            "stream": { "type": "string", "minLength": 1, "maxLength": 64 },
+            "stream": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
             "map": {
               "type": "object",
-              "additionalProperties": { "type": "string" }
+              "additionalProperties": {
+                "type": "string"
+              }
             }
           }
         }
@@ -260,15 +564,86 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "engine": { "$ref": "#/$defs/engine" },
-        "base": { "$ref": "#/$defs/base" },
-        "look": { "$ref": "#/$defs/look" },
-        "style": { "$ref": "#/$defs/style" },
-        "layout": { "$ref": "#/$defs/layout" },
-        "options": { "$ref": "#/$defs/freeMap" },
-        "config": { "$ref": "#/$defs/freeMap" },
-        "idle": { "$ref": "#/$defs/vizIdle" }
+        "engine": {
+          "$ref": "#/$defs/engine"
+        },
+        "base": {
+          "$ref": "#/$defs/base"
+        },
+        "look": {
+          "$ref": "#/$defs/look"
+        },
+        "style": {
+          "$ref": "#/$defs/style"
+        },
+        "layout": {
+          "$ref": "#/$defs/layout"
+        },
+        "options": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/freeMap"
+            },
+            {
+              "$ref": "#/$defs/pluginConfigList"
+            }
+          ]
+        },
+        "config": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/freeMap"
+            },
+            {
+              "$ref": "#/$defs/pluginConfigList"
+            }
+          ]
+        },
+        "idle": {
+          "$ref": "#/$defs/vizIdle"
+        },
+        "dataMapping": {
+          "type": "array",
+          "maxItems": 32,
+          "description": "Maps host data fields to visual effects (pack-specific rows; parsed in frontend).",
+          "items": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        },
+        "workBudget": {
+          "$ref": "#/$defs/manifestWorkBudget"
+        },
+        "settings": {
+          "$ref": "#/$defs/pluginSettings"
+        },
+        "presets": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/pluginPreset"
+          }
+        },
+        "presetField": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "hud": {
+          "$ref": "#/$defs/pluginHud"
+        },
+        "sections": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "$ref": "#/$defs/pluginSection"
+          }
+        }
       }
+    },
+    "manifestWorkBudget": {
+      "title": "workBudget",
+      "description": "Per-frame work caps (shape in plugins/sdk); host ceilings in service/policy/work-budget-ceilings.json (#45).",
+      "$ref": "../plugins/sdk/manifest-work-budget.schema.json"
     },
     "sky": {
       "title": "sky.yml",
@@ -280,27 +655,47 @@
           "type": "object",
           "additionalProperties": true,
           "properties": {
-            "name": { "type": "string", "maxLength": 40 },
-            "motif": { "type": "number" },
+            "name": {
+              "type": "string",
+              "maxLength": 40
+            },
+            "motif": {
+              "type": "number"
+            },
             "a": {
               "type": "array",
               "minItems": 3,
               "maxItems": 3,
-              "items": { "type": "number" }
+              "items": {
+                "type": "number"
+              }
             },
             "b": {
               "type": "array",
               "minItems": 3,
               "maxItems": 3,
-              "items": { "type": "number" }
+              "items": {
+                "type": "number"
+              }
             },
-            "warp": { "type": "number" },
-            "grain": { "type": "number" },
-            "bands": { "type": "number" }
+            "warp": {
+              "type": "number"
+            },
+            "grain": {
+              "type": "number"
+            },
+            "bands": {
+              "type": "number"
+            }
           }
         },
-        "pins": { "type": "object", "additionalProperties": true },
-        "notes": { "type": "string" }
+        "pins": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "notes": {
+          "type": "string"
+        }
       }
     },
     "streams": {
@@ -312,31 +707,88 @@
         "consumes": {
           "type": "array",
           "maxItems": 16,
-          "items": { "$ref": "#/$defs/streamRef" }
+          "items": {
+            "$ref": "#/$defs/streamRef"
+          }
         },
         "produces": {
           "type": "array",
           "maxItems": 16,
-          "items": { "$ref": "#/$defs/streamRef" }
+          "items": {
+            "$ref": "#/$defs/streamRef"
+          }
         },
-        "bindings": { "type": "object", "additionalProperties": true }
+        "bindings": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      }
+    },
+    "renderScale": {
+      "title": "Adaptive render-scale governor",
+      "description": "Host steps down when p95 frame time stays over the 16.7 ms budget for ~0.5 s and steps up after ~2 s under 80% of budget. Packs never implement their own governor.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min"
+      ],
+      "properties": {
+        "min": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "description": "Lowest allowed render scale (must be > 0 and at most 1)."
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "number",
+            "exclusiveMinimum": 0,
+            "maximum": 1
+          },
+          "description": "Descending allowed scales clamped at or above min. Defaults to [1, 0.75, 0.5, 0.35]."
+        }
       }
     },
     "vizUboLayout": {
       "title": "VizPlugin GLSL UBO binding",
-      "description": "Fixed std140 buffer→shader layout for all viz packs. Slot `s` float `f` maps to `zotoVizSlots[s * 16 + f / 4][f % 4]` in the host preamble. Per-pack vertex attributes are a later escape hatch, not the default transport.",
+      "description": "Fixed std140 buffer\u2192shader layout for all viz packs. Slot `s` float `f` maps to `zotoVizSlots[s * 16 + f / 4][f % 4]` in the host preamble. Per-pack vertex attributes are a later escape hatch, not the default transport.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "block": { "const": "ZotoVizData" },
-        "binding": { "const": 0 },
-        "layout": { "const": "std140" },
-        "hostUniform": { "const": "zotoVizSlots" },
-        "slotCount": { "const": 8 },
-        "slotFloats": { "const": 64 },
-        "slotVec4s": { "const": 16 },
-        "totalVec4s": { "const": 128 },
-        "totalBytes": { "const": 2048 }
+        "block": {
+          "const": "ZotoVizData"
+        },
+        "binding": {
+          "const": 0
+        },
+        "layout": {
+          "const": "std140"
+        },
+        "hostUniform": {
+          "const": "zotoVizSlots"
+        },
+        "contractVersion": {
+          "const": 1
+        },
+        "slotCount": {
+          "const": 8
+        },
+        "slotFloats": {
+          "const": 64
+        },
+        "slotVec4s": {
+          "const": 16
+        },
+        "totalVec4s": {
+          "const": 128
+        },
+        "totalBytes": {
+          "const": 2048
+        }
       }
     },
     "typesafeContract": {
@@ -351,62 +803,153 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["id", "prompt"],
+            "required": [
+              "id",
+              "prompt"
+            ],
             "properties": {
-              "id": { "type": "string", "minLength": 1, "maxLength": 64 },
-              "prompt": { "type": "string", "minLength": 1, "maxLength": 512 }
+              "id": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "prompt": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512
+              }
             }
           },
           "description": "Optional Sense prompts passed to Jev when enabled."
         },
         "stateRemap": {
           "type": "object",
-          "additionalProperties": { "type": "string", "minLength": 1, "maxLength": 64 },
-          "description": "Rename top-level monitor state keys before Sense (e.g. devices → nodes)."
+          "additionalProperties": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          },
+          "description": "Rename top-level monitor state keys before Sense (e.g. devices \u2192 nodes)."
         }
       }
     },
     "vizPacketSample": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["proto", "size", "field"],
+      "required": [
+        "proto",
+        "size",
+        "field"
+      ],
       "properties": {
-        "proto": { "type": "string", "minLength": 1, "maxLength": 32 },
-        "size": { "type": "number", "minimum": 0 },
-        "field": { "type": "number", "minimum": 0, "maximum": 1 }
+        "proto": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "size": {
+          "type": "number",
+          "minimum": 0
+        },
+        "field": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     },
     "vizRfBeacon": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["ssid", "rssi", "channel"],
+      "required": [
+        "ssid",
+        "rssi",
+        "channel"
+      ],
       "properties": {
-        "ssid": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "rssi": { "type": "number", "minimum": 0, "maximum": 1 },
-        "channel": { "type": "number", "minimum": 0, "maximum": 255 }
+        "ssid": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "rssi": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "channel": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 255
+        }
       }
     },
     "vizTalkerSample": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "rate", "role"],
+      "required": [
+        "id",
+        "rate",
+        "role"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "rate": { "type": "number", "minimum": 0 },
-        "role": { "type": "string", "minLength": 1, "maxLength": 32 }
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "rate": {
+          "type": "number",
+          "minimum": 0
+        },
+        "role": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 32
+        },
+        "failed": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        }
       }
     },
     "vizHeadline": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["id", "label", "text"],
+      "required": [
+        "id",
+        "label",
+        "text"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1, "maxLength": 64 },
-        "label": { "type": "string", "minLength": 1, "maxLength": 48 },
-        "text": { "type": "string", "minLength": 1, "maxLength": 240 },
-        "kind": { "type": "string", "maxLength": 32 },
-        "summary": { "type": "string", "maxLength": 512 },
-        "image": { "type": "string", "maxLength": 512 }
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 240
+        },
+        "kind": {
+          "type": "string",
+          "maxLength": 32
+        },
+        "summary": {
+          "type": "string",
+          "maxLength": 512
+        },
+        "image": {
+          "type": "string",
+          "maxLength": 512
+        }
       }
     },
     "vizIdleSeed": {
@@ -415,33 +958,61 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "audio": { "type": "number", "minimum": 0, "maximum": 1 },
+        "audio": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1
+        },
         "packets": {
           "type": "array",
           "maxItems": 32,
-          "items": { "$ref": "#/$defs/vizPacketSample" }
+          "items": {
+            "$ref": "#/$defs/vizPacketSample"
+          }
         },
         "rf": {
           "type": "array",
           "maxItems": 24,
-          "items": { "$ref": "#/$defs/vizRfBeacon" }
+          "items": {
+            "$ref": "#/$defs/vizRfBeacon"
+          }
         },
         "talkers": {
           "type": "array",
           "maxItems": 24,
-          "items": { "$ref": "#/$defs/vizTalkerSample" }
+          "items": {
+            "$ref": "#/$defs/vizTalkerSample"
+          }
         },
         "headlines": {
           "type": "array",
           "maxItems": 16,
-          "items": { "$ref": "#/$defs/vizHeadline" }
+          "items": {
+            "$ref": "#/$defs/vizHeadline"
+          }
         }
       },
       "anyOf": [
-        { "required": ["packets"] },
-        { "required": ["rf"] },
-        { "required": ["talkers"] },
-        { "required": ["headlines"] }
+        {
+          "required": [
+            "packets"
+          ]
+        },
+        {
+          "required": [
+            "rf"
+          ]
+        },
+        {
+          "required": [
+            "talkers"
+          ]
+        },
+        {
+          "required": [
+            "headlines"
+          ]
+        }
       ]
     },
     "vizIdle": {
@@ -451,24 +1022,38 @@
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["fixture"],
+          "required": [
+            "fixture"
+          ],
           "properties": {
             "fixture": {
               "const": "host",
-              "description": "Use buildIdleVizFrame() — modest demo packets, RF beacons, talkers, and headlines."
+              "description": "Use buildIdleVizFrame() \u2014 modest demo packets, RF beacons, talkers, and headlines."
             }
           }
         },
-        { "$ref": "#/$defs/vizIdleSeed" }
+        {
+          "$ref": "#/$defs/vizIdleSeed"
+        }
       ]
     },
     "vizContract": {
       "title": "VizPlugin host contract",
-      "description": "Host owns ingest and the 16.7 ms frame budget. Plugins consume pre-decimated VizDataFrames and write only to reserved buffer/uniform slots declared here. graphWalk must be false — plugins never traverse the full device graph per frame. Buffer slots bind through the fixed UBO in $defs/vizUboLayout (separate from graph.read monitor plugins). When viz.read or viz.write is declared, idle is required — live slices win over idle when non-empty.",
+      "description": "Host owns ingest and the 16.7 ms frame budget. Plugins consume pre-decimated VizDataFrames and write only to reserved buffer/uniform slots declared here. graphWalk must be false \u2014 plugins never traverse the full device graph per frame. Buffer slots bind through the fixed UBO in $defs/vizUboLayout (separate from graph.read monitor plugins). When viz.read or viz.write is declared, idle is required \u2014 live slices win over idle when non-empty.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["graphWalk"],
+      "required": [
+        "graphWalk"
+      ],
       "properties": {
+        "contract": {
+          "type": "integer",
+          "enum": [
+            1,
+            2
+          ],
+          "description": "VizDataFrame slice version the host delivers to this pack. Omit for v1 (lifetime talker counts, no links or talkers[].failed). Use 2 for live packet rates, links, and per-host TCP failure ratios."
+        },
         "ubo": {
           "$ref": "#/$defs/vizUboLayout",
           "description": "Optional explicit pin; omit to use the fixed host layout. When present every field must match the const values."
@@ -499,32 +1084,61 @@
           "const": false,
           "description": "Must be false. Enforced at validate time and runtime."
         },
+        "presentTick": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true with viz.write, the host delivers rAF present timestamps to the sandbox so the pack can advance simulation on its own clock."
+        },
         "uniforms": {
           "type": "array",
           "maxItems": 6,
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "enum": ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"]
+            "enum": [
+              "uTime",
+              "uOpacity",
+              "uBright",
+              "uAudio",
+              "uAccent",
+              "uBg",
+              "uRenderScale"
+            ]
           },
           "description": "Sky uniforms this plugin may write via viz.write (subset of $defs/shader allowedUniforms)."
         },
         "idle": {
           "$ref": "#/$defs/vizIdle",
           "description": "Demo frame fallback when live monitor slices are empty. Required with viz.read or viz.write."
+        },
+        "mayBeStatic": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, the host tile-health probe skips the stillness (no new frames) empty rule. Flat/uniform panels are still detected."
         }
       }
     },
     "shader": {
       "title": "Plugin sky fragment uniform contract",
-      "description": "sky/fragment.glsl may declare and read only these uniforms: uTime (float), uOpacity (float), uBright (float), uAudio (float), uAccent (vec3), uBg (vec3), plus varying in vec3 vDir from the shipped vertex program. Explicitly exclude uMode (shipped-enum index — implementation-specific). Explicitly exclude AI Dynamic uniforms uMotif / uA / uB / uWarp / uGrain / uBands (private state). Subtask 07 enforces the contract at compile time.",
+      "description": "sky/fragment.glsl may declare and read only these uniforms: uTime (float), uOpacity (float), uBright (float), uAudio (float), uAccent (vec3), uBg (vec3), plus varying in vec3 vDir from the shipped vertex program. Explicitly exclude uMode (shipped-enum index \u2014 implementation-specific). Explicitly exclude AI Dynamic uniforms uMotif / uA / uB / uWarp / uGrain / uBands (private state). Subtask 07 enforces the contract at compile time.",
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "allowedUniforms": {
           "type": "array",
-          "items": { "type": "string" },
-          "const": ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg"]
+          "items": {
+            "type": "string"
+          },
+          "const": [
+            "uTime",
+            "uOpacity",
+            "uBright",
+            "uAudio",
+            "uAccent",
+            "uBg",
+            "uResolution",
+            "uRenderScale"
+          ]
         }
       }
     },
@@ -540,19 +1154,40 @@
       "description": "Frozen zip contract: plugin.yml required at the archive root; optional roots visualisation.yml, frontend/**, sky/sky.yml, sky/fragment.glsl, datasource/streams.yml, datasource/collector.py, backend/service.py. Limits: 12 MB compressed (12000000), 24 MB uncompressed (24000000), at most 80 files. Hard rejects: absolute paths, `..` traversal, symlinks.",
       "type": "object",
       "additionalProperties": false,
-      "required": ["members"],
+      "required": [
+        "members"
+      ],
       "properties": {
         "members": {
           "type": "array",
           "minItems": 1,
           "maxItems": 80,
-          "contains": { "const": "plugin.yml" },
-          "items": { "$ref": "#/$defs/zipMember" }
+          "contains": {
+            "const": "plugin.yml"
+          },
+          "items": {
+            "$ref": "#/$defs/zipMember"
+          }
         },
-        "compressedBytes": { "type": "integer", "minimum": 0, "maximum": 12000000 },
-        "uncompressedBytes": { "type": "integer", "minimum": 0, "maximum": 24000000 },
-        "fileCount": { "type": "integer", "minimum": 1, "maximum": 80 },
-        "hasSymlinks": { "type": "boolean", "const": false }
+        "compressedBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 12000000
+        },
+        "uncompressedBytes": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 24000000
+        },
+        "fileCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 80
+        },
+        "hasSymlinks": {
+          "type": "boolean",
+          "const": false
+        }
       }
     },
     "zipContract": {
@@ -561,18 +1196,157 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "maxCompressedBytes": { "const": 12000000 },
-        "maxUncompressedBytes": { "const": 24000000 },
-        "maxFiles": { "const": 80 },
-        "requiredMember": { "const": "plugin.yml" },
+        "maxCompressedBytes": {
+          "const": 12000000
+        },
+        "maxUncompressedBytes": {
+          "const": 24000000
+        },
+        "maxFiles": {
+          "const": 80
+        },
+        "requiredMember": {
+          "const": "plugin.yml"
+        },
         "allowedSuffixes": {
           "const": [
-            ".yml", ".yaml", ".json", ".py", ".ts", ".tsx", ".js", ".mjs",
-            ".css", ".html", ".md", ".txt", ".svg", ".png", ".jpg", ".jpeg",
-            ".webp", ".gif", ".glsl"
+            ".yml",
+            ".yaml",
+            ".json",
+            ".py",
+            ".ts",
+            ".tsx",
+            ".js",
+            ".mjs",
+            ".css",
+            ".html",
+            ".md",
+            ".txt",
+            ".svg",
+            ".png",
+            ".jpg",
+            ".jpeg",
+            ".webp",
+            ".gif",
+            ".glsl"
           ]
         }
       }
+    },
+    "pluginPreset": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "values"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48
+        },
+        "values": {
+          "type": "object",
+          "additionalProperties": {
+            "oneOf": [
+              {
+                "type": "string",
+                "maxLength": 120
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "boolean"
+              }
+            ]
+          }
+        }
+      }
+    },
+    "pluginHud": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "labelFields": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "maxLength": 64
+          }
+        }
+      }
+    },
+    "pluginSection": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "title"
+      ],
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 48
+        },
+        "collapsed": {
+          "type": "boolean"
+        }
+      }
+    },
+    "pluginSettings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "presets": {
+          "type": "array",
+          "maxItems": 32,
+          "items": {
+            "$ref": "#/$defs/pluginPreset"
+          }
+        },
+        "presetField": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "hud": {
+          "$ref": "#/$defs/pluginHud"
+        },
+        "sections": {
+          "type": "array",
+          "maxItems": 24,
+          "items": {
+            "$ref": "#/$defs/pluginSection"
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "presets": {
+                "type": "array",
+                "minItems": 1
+              }
+            },
+            "required": [
+              "presets"
+            ]
+          },
+          "then": {
+            "required": [
+              "presetField"
+            ]
+          }
+        }
+      ]
     }
   }
 }

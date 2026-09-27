@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 import yaml
 
 from service import plugins
@@ -97,6 +98,7 @@ def test_scan_examples() -> None:
 def test_scan_zip_catalog(tmp_path: Path) -> None:
     from service import plugin_zip as pz
 
+    plugins.reset_bundles()
     repo = tmp_path / "repo"
     pack = tmp_path / "pack" / "catalog"
     pack.mkdir(parents=True)

@@ -1,0 +1,29 @@
+name: pack-boundary-preview
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+      - labeled
+      - unlabeled
+      - ready_for_review
+
+permissions:
+  contents: read
+  issues: read
+  pull-requests: read
+
+jobs:
+  informational-preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+      - name: Preview (informational — not a required check)
+        run: |
+          echo "pack-boundary-preview: informational only."
+          echo "Branch protection must require the pack-boundary workflow (pull_request_target), not this job."

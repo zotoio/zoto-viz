@@ -128,8 +128,7 @@ void main() {
   vec3 fwd = vec3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch));
   vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
   vec3 up = cross(fwd, right);
-  vec2 uv = dir.xy / max(0.18, -dir.z);
-  vec3 rd = normalize(fwd + right * uv.x + up * uv.y);
+  vec3 rd = normalize(dir.x * right + dir.y * up + dir.z * fwd);
 
   float t = 0.2;
   for (int i = 0; i < 64; i++) {

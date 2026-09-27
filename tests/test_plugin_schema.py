@@ -13,7 +13,16 @@ from service import plugins
 ROOT = Path(__file__).resolve().parents[1]
 SCHEMA_PATH = ROOT / "schema" / "plugin.schema.json"
 
-ALLOWED_UNIFORMS = ("uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg")
+ALLOWED_UNIFORMS = (
+    "uTime",
+    "uOpacity",
+    "uBright",
+    "uAudio",
+    "uAccent",
+    "uBg",
+    "uResolution",
+    "uRenderScale",
+)
 EXCLUDED_UNIFORMS = ("uMode", "uMotif", "uA", "uB", "uWarp", "uGrain", "uBands")
 
 MINIMAL = {"id": "pulse", "name": "Pulse", "version": 1}
@@ -133,6 +142,51 @@ def test_minimal_plugin_yml_validates() -> None:
     _validator().validate(MINIMAL)
 
 
+def test_merged_semantics_reject_schema_valid_bad_preset_field(tmp_path: Path) -> None:
+    home = tmp_path / "bad-merged"
+    home.mkdir()
+    (home / "plugin.yml").write_text(
+        "id: bad-merged\nname: Bad\nversion: 1\n",
+        encoding="utf-8",
+    )
+    (home / "visualisation.yml").write_text(
+        "engine: graph\n"
+        "settings:\n"
+        "  presetField: nope\n"
+        "  presets:\n"
+        "    - id: a\n"
+        "      label: A\n"
+        "      values: {gain: 1, preset: a}\n"
+        "config:\n"
+        "  - key: preset\n"
+        "    type: select\n"
+        "    values: [[a, A]]\n"
+        "  - key: gain\n"
+        "    type: number\n"
+        "    min: 0\n"
+        "    max: 10\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(ValueError, match="presetField"):
+        plugins.validate_plugin_home(home)
+
+
+def test_legacy_options_list_in_plugin_yml_validates() -> None:
+    doc = {
+        **MINIMAL,
+        "engine": "graph",
+        "options": [
+            {
+                "key": "group",
+                "label": "group",
+                "default": "each",
+                "values": [["each", "each"]],
+            },
+        ],
+    }
+    plugins.validate_doc(doc)
+
+
 def test_maximal_plugin_and_parts_validate() -> None:
     _validator().validate(MAX_PLUGIN)
     _def_validator("visualisation").validate(MAX_VISUALISATION)
@@ -249,12 +303,29 @@ def test_viz_contract_in_schema() -> None:
 
 
 def test_viz_plugin_yml_validates() -> None:
-    for pid in ("packet-tunnel", "rf-constellation", "talker-storm",
-                "kefrens-bars", "roto-proto", "blob-mesh", "star-sines", "hn-rain", "hn-term",
-                "stereo-gram", "syscon", "cypher-cic", "nixie-clock", "ant-colony", "rocket-car-soccer", "metro-lines"):
+    for pid in (
+        "packet-tunnel",
+        "rf-constellation",
+        "talker-storm",
+        "kefrens-bars",
+        "roto-proto",
+        "blob-mesh",
+        "star-sines",
+        "hn-rain",
+        "hn-term",
+        "stereo-gram",
+        "syscon",
+        "cypher-cic",
+        "nixie-clock",
+        "ant-colony",
+        "rocket-car-soccer",
+        "metro-lines",
+        "fractal-zoom",
+    ):
         doc = plugins.load_file(ROOT / "plugins" / "src" / pid / "plugin.yml")
         assert doc["viz"]["graphWalk"] is False
         assert doc["viz"]["idle"]["fixture"] == "host"
+        assert doc["viz"].get("contract", 1) in (1, 2)
         assert "viz.read" in doc["capabilities"]
 
 
@@ -295,6 +366,22 @@ def test_viz_idle_required_with_viz_caps() -> None:
         })
 
 
+def test_viz_contract_must_be_one_or_two() -> None:
+    base = {
+        "id": "cv-pack",
+        "name": "Contract",
+        "version": 1,
+        "capabilities": ["viz.read"],
+        "viz": {"graphWalk": False, "idle": {"fixture": "host"}},
+    }
+    plugins.validate_doc({**base, "viz": {**base["viz"], "contract": 1}})
+    plugins.validate_doc({**base, "viz": {**base["viz"], "contract": 2}})
+    with pytest.raises(ValueError, match=r"viz\.contract must be 1 or 2"):
+        plugins._check_semantics({**base, "viz": {**base["viz"], "contract": 3}})
+    with pytest.raises(ValueError, match=r"viz\.contract must be 1 or 2"):
+        plugins._check_semantics({**base, "viz": {**base["viz"], "contract": 0}})
+
+
 def test_typesafe_capability_in_schema() -> None:
     caps = _schema()["properties"]["capabilities"]["items"]["enum"]
     assert "typesafe" in caps
@@ -311,6 +398,79 @@ def test_typesafe_capability_in_schema() -> None:
             "stateRemap": {"devices": "nodes"},
         },
     })
+
+
+def test_plugin_config_field_section_validates() -> None:
+    _validator().validate({
+        "id": "sections-demo",
+        "name": "Sections",
+        "version": 1,
+        "config": [
+            {
+                "key": "gain",
+                "label": "gain",
+                "type": "number",
+                "default": 1,
+                "section": "Motion",
+            },
+        ],
+    })
+
+
+def test_plugin_config_field_section_rejects_non_string() -> None:
+    bad_sections = (
+        123,
+        None,
+        ["Motion"],
+        {"title": "Motion"},
+    )
+    validator = _validator()
+    for section in bad_sections:
+        err: ValidationError | None = None
+        try:
+            validator.validate({
+                "id": "sections-bad",
+                "name": "Sections",
+                "version": 1,
+                "config": [
+                    {
+                        "key": "gain",
+                        "label": "gain",
+                        "type": "number",
+                        "default": 1,
+                        "section": section,
+                    },
+                ],
+            })
+        except ValidationError as exc:
+            err = exc
+        assert err is not None, f"section {section!r} must be rejected"
+def test_render_scale_in_schema() -> None:
+    text = SCHEMA_PATH.read_text(encoding="utf-8")
+    assert "renderScale" in text
+    assert "uRenderScale" in text
+    assert "uResolution" in text
+    assert "vizFrameUboLayout" not in text
+    _validator().validate({
+        "id": "scale-pack",
+        "name": "Scale",
+        "version": 1,
+        "render": {"scale": {"min": 0.35, "steps": [1, 0.75, 0.5, 0.35]}},
+    })
+    with pytest.raises(ValidationError):
+        _validator().validate({
+            "id": "bad-scale",
+            "name": "Bad",
+            "version": 1,
+            "render": {"scale": {"min": 0}},
+        })
+    with pytest.raises(ValueError, match="render.scale.min"):
+        plugins.validate_doc({
+            "id": "bad-scale",
+            "name": "Bad",
+            "version": 1,
+            "render": {"scale": {"min": 1.5}},
+        })
 
 
 def test_viz_graph_walk_true_fails_schema() -> None:
