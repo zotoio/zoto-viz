@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "scripts/revert-proof.lib.test.ts",
-  "testName": "sidecar red value > (5-red-shape) structured object sidecar is rejected",
-  "description": "Accept a non-object red (message string)",
-  "red": "AssertionError: expected 'row r: sidecar JSON missing string field \"red\"' to be 'row r: red must be a single-line string, not an object (got structured sidecar)' // Object.is equality"
-}

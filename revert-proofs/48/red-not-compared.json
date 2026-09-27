@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "scripts/revert-proof.lib.test.ts",
-  "testName": "sidecar red value > (5-red-mismatch) one-character red line mismatch is rejected",
-  "description": "Compare only red.expected, ignoring actual",
-  "red": "row r: red line mismatch (expected \"AssertionError: expected 2 to be 1 // Object.is equality\", got \"AssertionError: expected 3 to be 1 // Object.is equality\")"
-}

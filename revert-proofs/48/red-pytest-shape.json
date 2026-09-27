@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "scripts/revert-proof.lib.test.ts",
-  "testName": "sidecar red value > (5-red-shape) pytest red must be assert source",
-  "description": "Drop the pytest { assert } shape check",
-  "red": "AssertionError: expected undefined to be 'row r: pytest red must start with \"assert \" (rewritten assert source)' // Object.is equality"
-}

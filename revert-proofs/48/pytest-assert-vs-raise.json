@@ -1,7 +1,0 @@
-{
-  "runner": "vitest",
-  "testFile": "scripts/revert-proof.lib.test.ts",
-  "testName": "strict pytest red from plugin JSON only > (4) accepts rewritten assert, rejects hand-raised AssertionError",
-  "description": "Accept any present pytest revertProofAssertion value, not just true",
-  "red": "AssertionError: expected 'assertion' to be 'build break' // Object.is equality"
-}
