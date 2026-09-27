@@ -106,6 +106,8 @@ import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsen
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
+import { deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
+import { bindVizDriveElement, noteHostDirect } from "../plugins/viz-drive";
 
 ignoreResizeLoopError();
 
@@ -143,6 +145,8 @@ const renderHost = new RenderHost($("wall"));
 mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
+scene.retargetPanel("main");
+bindVizDriveElement("main", $("scene"));
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
 scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
@@ -1005,7 +1009,10 @@ function feed(m: StateMsg): void {
     const frame = vizBudget.deliver(shown, vizFrameTs, audio, (f) => {
       if (packId === "stereo-gram") f.spectrum = scene.heardSpectrum(STEREO_BINS).spectrum;
       sandbox.frame(f);
-      if (packId) {
+      if (mosaic?.on) {
+        deliverMosaicDemoPacks(mosaic, f, modeById, pluginSpecForMode, optsFor);
+      } else if (packId) {
+        noteHostDirect("main");
         runPackFrameHandler(packId, f, {
           writeBuffer: (slot, data) => sandbox.handlers.writeBuffer?.(slot, data),
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
