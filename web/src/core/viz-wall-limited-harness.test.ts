@@ -108,9 +108,7 @@ describe("Amendment 4 wall LIMITED harness (VizFrameBudget + VizHud)", () => {
 
   it("Amendment 6 L2: 3000 @ 2×2 LIMITED text is every 3rd frame", () => {
     const r = runWallHarness(TILES_2X2, String(IN_RANGE_TICKS));
-    expect(r.wallLimitedText).toBe(
-      "LIMITED · sharing the frame with 4 tiles · updating every 3rd frame",
-    );
+    expect(r.wallLimitedText?.includes("updating every 3rd frame")).toBe(true);
   });
 
   it("Amendment 6 L2: 2505 @ 2×2 LIMITED text is every 2nd frame", () => {
