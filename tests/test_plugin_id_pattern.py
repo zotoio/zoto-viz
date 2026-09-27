@@ -55,7 +55,7 @@ def test_schema_rejects_uppercase_plugin_id() -> None:
 
 @pytest.mark.parametrize(
     "doc_id",
-    ["../x", "a/b", "x.json", "bad_underscore"],
+    ["../x", "a/b", "x.json", "9leading-digit"],
 )
 def test_schema_rejects_nonconforming_plugin_ids(doc_id: str) -> None:
     doc = {"id": doc_id, "name": "Probe", "version": 1}
