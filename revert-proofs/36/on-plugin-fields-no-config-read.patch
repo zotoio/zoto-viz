@@ -1,5 +1,5 @@
 diff --git a/web/src/plugins/plugin-config-sync.ts b/web/src/plugins/plugin-config-sync.ts
-index 517bb2bd..e79cce34 100644
+index 517bb2bd..b85ccc18 100644
 --- a/web/src/plugins/plugin-config-sync.ts
 +++ b/web/src/plugins/plugin-config-sync.ts
 @@ -20,6 +20,6 @@ export function allowOnPluginFieldsConfigPush(
@@ -7,6 +7,6 @@ index 517bb2bd..e79cce34 100644
    hasConfigRead: boolean,
  ): boolean {
 -  if (!hasConfigRead || !loadedConfigStoreId) return false;
-+  if (!loadedConfigStoreId) return false;
++  if (false && (!hasConfigRead || !loadedConfigStoreId)) return false;
    return loadedConfigStoreId === iframeConfigStoreId;
  }
