@@ -1,0 +1,7 @@
+{
+  "description": "Revert production guard (row-21-type-status-action-autoclear)",
+  "runner": "command",
+  "command": "pnpm typecheck",
+  "cwd": "web",
+  "red": "typecheck/wall-notice-region.typecheck.ts(8,3): error TS2578: Unused '@ts-expect-error' directive."
+}

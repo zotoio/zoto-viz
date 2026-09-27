@@ -1,0 +1,13 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf1..418ffd10 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -26,7 +26,7 @@ export type StatusKey = Exclude<NoticeKey, AlertKey>;
+ type NoticeAction = { label: string; onClick: () => void };
+ export type WallNoticeArgs =
+   | { key: StatusKey; text: string; action?: undefined; autoClearMs?: number }
+-  | { key: NoticeKey; text: string; action?: NoticeAction; autoClearMs?: undefined };
++  | { key: NoticeKey; text: string; action: NoticeAction; autoClearMs?: number };
+ export type WallNoticeHandle = { dismiss(): void; readonly live: boolean };
+ const MAX_VISIBLE = 3;
+ type Entry = {

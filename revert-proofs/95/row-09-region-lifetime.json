@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > clears timers and children without rebuilding the region node",
+  "description": "Revert production guard (row-09-region-lifetime)",
+  "red": "AssertionError: expected 10 to be +0 // Object.is equality"
+}

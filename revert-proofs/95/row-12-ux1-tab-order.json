@@ -1,0 +1,7 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/wall-notice-region.test.ts",
+  "testName": "wall notice region > puts action buttons in the tab order",
+  "description": "Revert production guard (row-12-ux1-tab-order)",
+  "red": "AssertionError: expected -1 to be +0 // Object.is equality"
+}

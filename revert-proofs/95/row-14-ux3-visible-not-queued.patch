@@ -1,0 +1,12 @@
+diff --git a/web/src/core/wall-notice-region.ts b/web/src/core/wall-notice-region.ts
+index 3fccbf1..c1cacec 100644
+--- a/web/src/core/wall-notice-region.ts
++++ b/web/src/core/wall-notice-region.ts
+@@ -178,7 +178,6 @@ export function postWallNotice(args: WallNoticeArgs): WallNoticeHandle {
+     live.autoClearMs = autoClearMs;
+     writeRowContent(live);
+     syncNoticeTimer(live, textChanged);
+-    return live.handle;
+   }
+   const queued = queue.get(key);
+   if (queued) {
