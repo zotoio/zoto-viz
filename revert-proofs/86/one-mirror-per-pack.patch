@@ -1,6 +1,8 @@
---- a/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:38:23.494464985 +0000
-+++ b/web/src/graph/pack-mirror-gl.ts	2026-09-26 18:39:26.373924707 +0000
-@@ -271,7 +271,8 @@
+diff --git a/web/src/graph/pack-mirror-gl.ts b/web/src/graph/pack-mirror-gl.ts
+index dcd4781..f8cd6f6 100644
+--- a/web/src/graph/pack-mirror-gl.ts
++++ b/web/src/graph/pack-mirror-gl.ts
+@@ -319,7 +319,8 @@ export class PackMirrorRegistry {
      for (const [key, scope] of scopes) {
        if (scope.tileCount < 2) continue;
        if (!this.sessions.has(key)) {

@@ -1,8 +1,8 @@
 diff --git a/web/src/graph/letterbox-fill.ts b/web/src/graph/letterbox-fill.ts
-index 4ef0ef1..a4dff98 100644
+index 9d1b774..bc0fe10 100644
 --- a/web/src/graph/letterbox-fill.ts
 +++ b/web/src/graph/letterbox-fill.ts
-@@ -93,11 +93,8 @@ export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLet
+@@ -97,11 +97,8 @@ export function surfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLet
  
  /** Hot-path fill: one instance per `clearHex`, rebuilt only when the scene clear changes. */
  export function getSurfaceLetterboxFill(clearHex: number, grain = 0.25): SurfaceLetterboxFill {

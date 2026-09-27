@@ -1,5 +1,5 @@
 diff --git a/web/src/core/fps.ts b/web/src/core/fps.ts
-index 0000000..0000000 100644
+index ad319ac..6d6aea4 100644
 --- a/web/src/core/fps.ts
 +++ b/web/src/core/fps.ts
 @@ -1,3 +1,4 @@
