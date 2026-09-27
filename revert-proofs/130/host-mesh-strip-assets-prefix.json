@@ -1,7 +1,0 @@
-{
-  "description": "Revert strip assets/ prefix in host mesh assetUrl",
-  "runner": "pytest",
-  "testFile": "tests/test_host_mesh_loader_gaps.py",
-  "testName": "test_host_mesh_lane_strips_assets_prefix_in_api_url",
-  "red": "assert 'replace(/^assets\\\\//i, \"\")' in text"
-}

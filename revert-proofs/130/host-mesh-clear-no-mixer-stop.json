@@ -1,8 +1,0 @@
-{
-  "description": "Revert stopSkinnedMixer on clearAssetLive",
-  "runner": "vitest",
-  "testFile": "web/src/graph/host-mesh-lane.test.ts",
-  "testName": "host mesh lane > clear() exact teardown counts (Performance Pedant)",
-  "red": "AssertionError: expected \"stopAllAction\" to be called 2 times, but got 0 times",
-  "project": "web"
-}
