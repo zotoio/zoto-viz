@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 from unittest.mock import MagicMock
@@ -20,6 +21,7 @@ async def make_app_server(
     bind: str = "127.0.0.1",
     insecure_lan: bool = False,
     listen_port: int = 0,
+    clock: Callable[[], float] | None = None,
 ) -> AsyncIterator[tuple[str, int, web.AppRunner]]:
     state = MagicMock()
     orig_dist = monitor.WEB_DIST
@@ -27,17 +29,21 @@ async def make_app_server(
     if web_dist is not None:
         monitor.WEB_DIST = web_dist
         pack_assets.WEB_DIST = web_dist
+    initial_port = listen_port if listen_port else 7020
     app = monitor.make_app(
         state,
         "",
         bind=bind,
-        port=7020,
+        port=initial_port,
         allowed_hosts=allowed_hosts or [],
         insecure_lan=insecure_lan,
     )
     app.on_startup.clear()
     app.on_shutdown.clear()
     app.on_cleanup.clear()
+    if clock is not None:
+        app["request_guard_clock"] = clock
+        app["request_guard_last_if_lookup"] = clock()
     runner = web.AppRunner(app, access_log=monitor.run_app_kwargs().get("access_log"))
     await runner.setup()
     site = web.TCPSite(
@@ -47,12 +53,13 @@ async def make_app_server(
     )
     await site.start()
     port = int(site._server.sockets[0].getsockname()[1])
-    request_guard.configure_request_guard(
-        app,
-        bind=bind,
-        port=port,
-        allowed_hosts=allowed_hosts or [],
-    )
+    if port != initial_port:
+        request_guard.configure_request_guard(
+            app,
+            bind=bind,
+            port=port,
+            allowed_hosts=allowed_hosts or [],
+        )
     try:
         yield "127.0.0.1", port, runner
     finally:
