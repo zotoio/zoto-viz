@@ -125,10 +125,12 @@ export function parseInstances(raw: unknown): PluginInstance[] | undefined {
 
 export function applyInstance(spec: PluginView, inst: PluginInstance): PluginView {
   const config = (spec.config ?? []).map((field) => patchField(field, inst));
+  const label = inst.name?.trim();
   return {
     ...spec,
     instanceId: inst.id,
     name: inst.name || spec.name,
+    instanceLabel: label || undefined,
     hint: inst.hint || spec.hint,
     look: spec.look,
     config,
@@ -159,4 +161,12 @@ export function bindDefaults(inst?: PluginInstance): Record<string, string> {
     linkField: inst?.link ?? "link",
     filter: inst?.filter ?? "all",
   };
+}
+
+/** Resolve a catalog row from a config store id (`pack` or `pack:instance`). */
+export function pluginSpecForStoreId(catalog: PluginView[], storeId: string): PluginView | null {
+  const expanded = catalog.flatMap((spec) => expandPluginInstances(spec));
+  return expanded.find((p) => configStoreId(p) === storeId)
+    ?? expanded.find((p) => p.id === storeId)
+    ?? null;
 }

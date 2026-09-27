@@ -197,6 +197,9 @@ export interface PluginView {
   hint?: string;
   /** Catalog row when this spec was expanded from plugin.yml instances. */
   instanceId?: string;
+  /** Short label for mosaic tiles when distinct from {@link name}. */
+  instanceLabel?: string;
+  packName?: string;
   /** Defaults from the matched plugin.yml instance row (before pack fallback). */
   instanceDefaults?: Record<string, string | number | boolean>;
   instances?: PluginInstance[];
@@ -278,6 +281,7 @@ export {
   configStoreIdForMode,
   parsePluginId,
   parsePluginInstance,
+  pluginSpecForStoreId,
   pluginViewId,
 } from "./instances";
 
@@ -290,6 +294,11 @@ export function pluginNeedsReview(spec: PluginView): boolean {
 
 export function pluginHasFrontend(spec: PluginView | null | undefined): boolean {
   return !!spec && (spec.has_frontend === true || spec.runtime === "typescript");
+}
+
+/** Tile chrome title: instance label, then pack name, then catalog name. */
+export function tileDisplayName(spec: PluginView): string {
+  return spec.instanceLabel || spec.packName || spec.name || spec.id;
 }
 
 export function pluginModulePath(id: string, hash?: string): string {

@@ -88,30 +88,10 @@ describe("PluginSandbox", () => {
     spy.mockRestore();
   });
 
-  it("bakes contractVersion into sandbox srcdoc before init", async () => {
+  it("negotiates pack viz.contract on MessageChannel boot (replaces legacy srcdoc init)", async () => {
     const box = new PluginSandbox();
     await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
-    const iframe = document.querySelector("iframe");
-    expect(iframe?.srcdoc).toContain(`__zotoContractVersion = ${VIZ_CONTRACT_VERSION}`);
-    box.unload();
-  });
-
-  it("posts contractVersion on init", async () => {
-    const inits: { type?: string; contractVersion?: number }[] = [];
-    const append = document.body.appendChild.bind(document.body);
-    document.body.appendChild = (node: Node) => {
-      const out = append(node);
-      if (node instanceof HTMLIFrameElement && node.contentWindow) {
-        vi.spyOn(node.contentWindow, "postMessage").mockImplementation((data) => {
-          inits.push(data as { type?: string; contractVersion?: number });
-        });
-      }
-      return out;
-    };
-    const box = new PluginSandbox();
-    await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
-    document.body.appendChild = append;
-    expect(inits.find((m) => m.type === "init")?.contractVersion).toBe(VIZ_CONTRACT_VERSION);
+    expect(box.contract()?.contract).toBe(VIZ_CONTRACT_VERSION);
     box.unload();
   });
 
@@ -186,25 +166,24 @@ describe("PluginSandbox module load", () => {
       {},
       defaultVizContract({ presentTick: true }),
     );
-    const iframe = document.querySelector("iframe")!;
-    const cw = iframe.contentWindow!;
-    const spy = vi.spyOn(cw, "postMessage");
+    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const spy = vi.spyOn(port, "postMessage");
     box.deliverPresentTick(1, "plugin:demo");
-    expect(spy).toHaveBeenCalled();
+    expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(true);
     box.unload();
     spy.mockClear();
     box.deliverPresentTick(2, "plugin:demo");
-    expect(spy).not.toHaveBeenCalled();
+    expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(false);
     spy.mockRestore();
   });
 
   it("does not post present when presentTick is off", async () => {
     const box = new PluginSandbox();
     await box.load("demo", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
-    const cw = document.querySelector("iframe")!.contentWindow!;
-    const spy = vi.spyOn(cw, "postMessage");
+    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const spy = vi.spyOn(port, "postMessage");
     box.deliverPresentTick(1, "x");
-    expect(spy).not.toHaveBeenCalled();
+    expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(false);
     spy.mockRestore();
     box.unload();
   });

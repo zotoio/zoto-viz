@@ -35,8 +35,9 @@ export function mainVizBuildFrame(
   audio: number,
   idle?: VizIdleConfig,
   bind?: SourceBind | Record<string, string>,
+  packContract = 2,
 ): VizDataFrame {
   return idle
-    ? buildVizFrameForPlugin(state, prevClockMs, audio, idle, bind)
+    ? buildVizFrameForPlugin(state, prevClockMs, audio, idle, packContract, bind)
     : buildVizFrame(state, prevClockMs, audio, bind);
 }

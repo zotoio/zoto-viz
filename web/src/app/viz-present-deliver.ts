@@ -85,7 +85,7 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
     prevClockMs,
     state: shown,
     audio,
-    buildFrame: (s, pt, a) => mainVizBuildFrame(s, pt, a, idle, bind),
+    buildFrame: (s, pt, a) => mainVizBuildFrame(s, pt, a, idle, bind, active?.viz?.contract ?? 2),
     onFrame: (f) => {
       if (packId === "stereo-gram") f.spectrum = host.scene.heardSpectrum(STEREO_BINS).spectrum;
       const coalesceMosaic = !!(host.mosaic?.on && mosaicDemoPacks);
