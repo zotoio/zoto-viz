@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_safe_zip_install.py",
   "testName": "test_qe_crash_staging_removed_at_boot",
   "description": "Crash-leftover .staging removed once at boot.",
-  "patchedFailure": "tests/test_pack_safe_zip_install.py:729: AssertionError: crash staging removed at boot"
+  "patchedFailure": "tests/test_pack_safe_zip_install.py:729: AssertionError"
 }

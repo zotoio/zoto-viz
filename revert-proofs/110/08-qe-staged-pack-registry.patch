@@ -1,8 +1,8 @@
 diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
-index 5e20f1b..e831ef2 100644
+index c4fde32..e34d5bf 100644
 --- a/service/pack_safe_zip.py
 +++ b/service/pack_safe_zip.py
-@@ -353,7 +353,6 @@ def go_live(
+@@ -329,7 +329,6 @@ def go_live(
  ) -> bool:
      """Rename staging into ``runtime``; upgrade swaps via ``.bak``. Returns True when upgraded."""
      _assert_staged_token(getattr(staged, "_token", None))

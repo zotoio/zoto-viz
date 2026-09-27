@@ -1,5 +1,5 @@
 diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
-index 3b65b11..4552de0 100644
+index 171944c..a8e6759 100644
 --- a/service/pack_install_copy.py
 +++ b/service/pack_install_copy.py
 @@ -23,9 +23,7 @@ ZIP_UX_DROP_ALREADY_EXISTS_TAIL = "This pack is already in the drop zone."

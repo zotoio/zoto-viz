@@ -3,5 +3,5 @@
   "testFile": "tests/test_pack_zip_install_ux.py",
   "testName": "test_zip_ux_literal_encrypted_tail",
   "description": "Literal encrypted zip tail copy.",
-  "patchedFailure": "tests/test_pack_zip_install_ux.py:37: AssertionError: zip ux encrypted tail"
+  "patchedFailure": "tests/test_pack_zip_install_ux.py:37: AssertionError"
 }

@@ -1,13 +1,12 @@
 diff --git a/service/pack_safe_zip.py b/service/pack_safe_zip.py
-index 5e20f1b..c3d4e5f 100644
+index c4fde32..d79013d 100644
 --- a/service/pack_safe_zip.py
 +++ b/service/pack_safe_zip.py
-@@ -331,7 +331,7 @@ def remint(staged: StagedPack, new_id: str) -> StagedPack:
+@@ -306,7 +306,6 @@ def remint(staged: StagedPack, new_id: str) -> StagedPack:
+     member_sha = dict(staged.member_sha256)
+     member_sha[_REQUIRED] = hashlib.sha256(yml_bytes).hexdigest()
      tree_digests = dict(member_sha)
-     tree_digests[pz.SHA256_NAME] = hashlib.sha256((staged.zip_sha256 + "\n").encode()).hexdigest()
+-    tree_digests[pz.SHA256_NAME] = hashlib.sha256((staged.zip_sha256 + "\n").encode()).hexdigest()
      doc = _parse_plugin_yml(yml_bytes)
--    tree_sha = tree_hash_from_digests(tree_digests)
-+    tree_sha = staged.tree_sha256
+     tree_sha = tree_hash_from_digests(tree_digests)
      return _make_staged_pack(
-         staging_dir=root,
-         zip_sha256=staged.zip_sha256,

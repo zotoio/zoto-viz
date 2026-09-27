@@ -1,5 +1,5 @@
 diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
-index 3b65b11..3b985ce 100644
+index 171944c..119d585 100644
 --- a/service/pack_install_copy.py
 +++ b/service/pack_install_copy.py
 @@ -18,7 +18,7 @@ ZIP_UX_ENCRYPTED_TAIL = "It's password-protected. Zip it again without a passwor

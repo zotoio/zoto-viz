@@ -1,5 +1,5 @@
 diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
-index 3b65b11..0133274 100644
+index 171944c..1664457 100644
 --- a/service/pack_install_copy.py
 +++ b/service/pack_install_copy.py
 @@ -17,7 +17,7 @@ ZIP_UX_CORRUPT_PRIOR_SUFFIX = ", so version {version} is still installed."

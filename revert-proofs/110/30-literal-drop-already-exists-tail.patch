@@ -1,5 +1,5 @@
 diff --git a/service/pack_install_copy.py b/service/pack_install_copy.py
-index 3b65b11..9d56274 100644
+index 171944c..21d6ec8 100644
 --- a/service/pack_install_copy.py
 +++ b/service/pack_install_copy.py
 @@ -19,7 +19,7 @@ ZIP_UX_OVERSIZE_TAIL = "It unpacks to more than packs are allowed."
