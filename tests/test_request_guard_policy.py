@@ -294,7 +294,7 @@ async def _handler_500_frame_headers() -> None:
                 assert resp.status == 500
                 assert resp.content_type == "text/plain"
                 body = await resp.text()
-                assert "Reload to try again" in body
+                assert body == HANDLER_ERROR_BODY
                 assert "probe" not in body
                 assert "RuntimeError" not in body
                 assert "127.0.0.1" not in body

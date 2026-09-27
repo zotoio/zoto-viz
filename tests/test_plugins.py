@@ -97,6 +97,7 @@ def test_scan_examples() -> None:
 def test_scan_zip_catalog(tmp_path: Path) -> None:
     from service import plugin_zip as pz
 
+    plugins.reset_bundles()
     repo = tmp_path / "repo"
     pack = tmp_path / "pack" / "catalog"
     pack.mkdir(parents=True)

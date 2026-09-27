@@ -45,7 +45,7 @@ def test_history_delete_clears_cursor_session(monkeypatch: pytest.MonkeyPatch) -
 def test_node_harness_session_and_tools(tmp_path: Path) -> None:
     dest = tmp_path / "sess.json"
     script = """
-import { clearSession, readSession, toolPolicy, turnText, writeSession } from "./harness.mjs";
+import { clearSession, readSession, toolPolicy, turnText, writeSession } from "./session-tools.mjs";
 const off = toolPolicy(false);
 if (!off.tools.includes("mcp") || !off.disallowedTools.includes("shell")) process.exit(2);
 const on = toolPolicy(true);
