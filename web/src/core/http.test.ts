@@ -1,11 +1,24 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { SERVER_RESTART_NOTICE } from "./http-copy";
 import { apiFetch, bootSession, csrfToken, noteCsrf } from "./http";
 
 describe("apiFetch CSRF", () => {
+  const orig = globalThis.fetch;
+  let onRestart: ((e: Event) => void) | undefined;
+
+  beforeEach(() => {
+    expect.hasAssertions();
+    window.dispatchEvent(new Event("zoto-viz-server-restart-cleared"));
+    noteCsrf({ headers: new Headers({ "X-Zoto-Viz-Csrf": "stale" }) } as Response);
+  });
+
   afterEach(() => {
     globalThis.fetch = orig;
+    if (onRestart) {
+      window.removeEventListener("zoto-viz-server-restart", onRestart);
+      onRestart = undefined;
+    }
   });
-  const orig = globalThis.fetch;
 
   it("sends the header on mutating calls after a session boot", async () => {
     const seen: string[] = [];
@@ -25,7 +38,36 @@ describe("apiFetch CSRF", () => {
     expect(seen.at(-1)).toBe("tok");
   });
 
-  it("reboots the session and retries once on csrf required", async () => {
+  it("clears csrf before booting a fresh session after stale token", async () => {
+    const bootCsrf: string[] = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      const h = new Headers(init?.headers);
+      if (path.includes("/api/session")) {
+        bootCsrf.push(csrfToken());
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers({ "X-Zoto-Viz-Csrf": "fresh" }),
+          json: async () => ({ csrf: "fresh", aiControl: false, pluginService: false }),
+        } as Response;
+      }
+      if ((h.get("X-Zoto-Viz-Csrf") || "") !== "fresh") {
+        return {
+          ok: false,
+          status: 403,
+          headers: new Headers(),
+          clone() { return this; },
+          json: async () => ({ error: "csrf required" }),
+        } as Response;
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
+    }) as typeof fetch;
+    await apiFetch("/api/profiles/user", { method: "PUT" });
+    expect(bootCsrf[0]).toBe("");
+  });
+
+  it("after restart stale csrf refreshes once retries once and shows restart notice", async () => {
     const seen: string[] = [];
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
       const path = String(url);
@@ -56,11 +98,21 @@ describe("apiFetch CSRF", () => {
         json: async () => ({}),
       } as Response;
     }) as typeof fetch;
+    const notices: string[] = [];
+    onRestart = (e) => { notices.push((e as CustomEvent<string>).detail); };
+    window.addEventListener("zoto-viz-server-restart", onRestart);
+    const errs: string[] = [];
+    const origErr = console.error;
+    console.error = (...args: unknown[]) => { errs.push(String(args[0] ?? "")); };
     const r = await apiFetch("/api/profiles/user", { method: "PUT" });
+    console.error = origErr;
     expect(r.ok).toBe(true);
-    expect(seen.some((s) => s.startsWith("/api/session"))).toBe(true);
-    expect(seen.some((s) => s === "/api/profiles/user:fresh")).toBe(true);
+    expect(seen.filter((s) => s.startsWith("/api/session")).length).toBe(1);
+    expect(seen.filter((s) => s === "/api/profiles/user:stale").length).toBe(1);
+    expect(seen.filter((s) => s === "/api/profiles/user:fresh").length).toBe(1);
     expect(csrfToken()).toBe("fresh");
+    expect(notices).toEqual([SERVER_RESTART_NOTICE]);
+    expect(errs.length).toBe(0);
   });
 
   it("treats a failed session boot as unauthenticated", async () => {

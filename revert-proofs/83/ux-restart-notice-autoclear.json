@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http-notice.test.ts",
+  "testName": "server restart wall notice > auto clear > clears the restart notice after eight seconds",
+  "red": "AssertionError: expected 1 to be +0 // Object.is equality",
+  "description": "ux-restart-notice-autoclear",
+  "timeoutSec": 120
+}

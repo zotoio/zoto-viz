@@ -95,6 +95,7 @@ import { applyInstance } from "../plugins/instances";
 import { pluginViewKnobs, VIEW_PROMPT_KEY } from "../plugins/plugin-visualisation";
 import { ignoreResizeLoopError, observeResize } from "../core/resize";
 import { bootSession, apiFetch } from "../core/http";
+import { bindServerRestartWallNotice } from "../core/http-notice";
 import { mountWallNoticeRegion } from "../core/wall-notice-region";
 import { addPresentListener } from "../core/fps";
 import { markPresent, presentInterval } from "../core/present-clock";
@@ -2107,6 +2108,7 @@ function connect(): void {
   ws.onerror = () => ws.close();
 }
 
+bindServerRestartWallNotice();
 connect();
 
 window.addEventListener("keydown", (e) => {

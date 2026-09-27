@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http-notice.test.ts",
+  "testName": "server restart wall notice > failed retry > posts retry-failed copy on the alert lane",
+  "red": "AssertionError: expected null not to be null",
+  "description": "ux-restart-notice-wall-status",
+  "timeoutSec": 120
+}

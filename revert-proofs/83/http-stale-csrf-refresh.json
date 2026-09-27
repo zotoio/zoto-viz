@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http.test.ts",
+  "testName": "apiFetch CSRF > after restart stale csrf refreshes once retries once and shows restart notice",
+  "red": "AssertionError: expected false to be true // Object.is equality",
+  "description": "http-stale-csrf-refresh",
+  "timeoutSec": 120
+}

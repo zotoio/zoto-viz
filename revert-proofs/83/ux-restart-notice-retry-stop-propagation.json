@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http-notice.test.ts",
+  "testName": "server restart wall notice > retry button > does not dismiss the retry strip when Retry is clicked",
+  "red": "AssertionError: expected 0 to be greater than 0",
+  "description": "ux-restart-notice-retry-stop-propagation",
+  "timeoutSec": 120
+}

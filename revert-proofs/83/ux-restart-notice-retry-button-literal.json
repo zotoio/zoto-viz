@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http-notice.test.ts",
+  "testName": "server restart wall notice > retry button > shows Retry as an exact literal on the action button",
+  "red": "AssertionError: expected 'Try again' to be 'Retry' // Object.is equality",
+  "description": "ux-restart-notice-retry-button-literal",
+  "timeoutSec": 120
+}

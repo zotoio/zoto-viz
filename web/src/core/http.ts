@@ -1,6 +1,17 @@
 /** Same-origin fetches that carry the CSRF header minted by GET /api/session. */
 
+import { SERVER_RESTART_NOTICE, SESSION_RETRY_FAILED_NOTICE } from "./http-copy";
+
 let csrf = "";
+
+let sessionRefreshInFlight: Promise<void> | null = null;
+let restartNoticeEmitted = false;
+
+if (typeof window !== "undefined") {
+  window.addEventListener("zoto-viz-server-restart-cleared", () => {
+    restartNoticeEmitted = false;
+  });
+}
 
 export function csrfToken(): string {
   return csrf;
@@ -21,15 +32,42 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   return r;
 }
 
+async function refreshSessionAfterStaleToken(): Promise<void> {
+  if (!sessionRefreshInFlight) {
+    sessionRefreshInFlight = (async () => {
+      csrf = "";
+      await bootSession();
+      if (typeof window !== "undefined" && !restartNoticeEmitted) {
+        restartNoticeEmitted = true;
+        window.dispatchEvent(
+          new CustomEvent("zoto-viz-server-restart", { detail: SERVER_RESTART_NOTICE }),
+        );
+      }
+    })().finally(() => {
+      sessionRefreshInFlight = null;
+    });
+  }
+  await sessionRefreshInFlight;
+}
+
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
   let r = await send(path, init);
   if (method !== "GET" && method !== "HEAD" && r.status === 403) {
     const err = await r.clone().json().catch(() => ({})) as { error?: string };
     if (err.error === "csrf required") {
-      csrf = "";
-      await bootSession();
+      await refreshSessionAfterStaleToken();
       r = await send(path, init);
+      if (!r.ok && typeof window !== "undefined") {
+        window.dispatchEvent(
+          new CustomEvent("zoto-viz-mutate-retry-failed", {
+            detail: {
+              message: SESSION_RETRY_FAILED_NOTICE,
+              retry: () => apiFetch(path, init),
+            },
+          }),
+        );
+      }
     }
   }
   return r;

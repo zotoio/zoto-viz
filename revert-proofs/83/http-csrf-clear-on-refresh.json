@@ -1,0 +1,8 @@
+{
+  "runner": "vitest",
+  "testFile": "src/core/http.test.ts",
+  "testName": "apiFetch CSRF > clears csrf before booting a fresh session after stale token",
+  "red": "AssertionError: expected 'stale' to be '' // Object.is equality",
+  "description": "http-csrf-clear-on-refresh",
+  "timeoutSec": 120
+}
