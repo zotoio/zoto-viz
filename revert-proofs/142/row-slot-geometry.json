@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_marble_run_pack.py",
-  "testName": "test_marble_run_row_slot_geometry",
-  "description": "Revert marble-run production guard (row-slot-geometry)",
-  "red": "assert proc.returncode == 0, proc.stdout + proc.stderr"
-}

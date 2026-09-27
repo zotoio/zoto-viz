@@ -1,7 +1,0 @@
-{
-  "runner": "pytest",
-  "testFile": "tests/test_marble_run_pack.py",
-  "testName": "test_marble_run_row_yaml_and_sky",
-  "description": "Revert marble-run production guard (row-yaml-and-sky)",
-  "red": "assert proc.returncode == 0, proc.stdout + proc.stderr"
-}
