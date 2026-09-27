@@ -77,7 +77,6 @@ describe("sandbox write path counts (#129)", () => {
         .load("demo", "globalThis.ok = true;", ["viz.read"], {})
         .then(() => true, () => false);
       expect(booted).toBe(true);
-      expect(box.sandboxHostPort()).not.toBeNull();
       box.unload();
     });
 

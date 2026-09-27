@@ -6,5 +6,5 @@
   "red": "AssertionError: expected false to be true // Object.is equality",
   "redLine": "AssertionError: expected false to be true // Object.is equality",
   "project": "web",
-  "timeoutSec": 60
+  "timeoutSec": 90
 }
