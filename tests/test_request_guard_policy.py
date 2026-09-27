@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import tempfile
 from pathlib import Path
+from urllib.parse import quote
 
 import pytest
 from aiohttp import ClientSession
 
-from service import access, monitor, pack_asset_frames, request_guard
+from service import access, monitor, request_guard
 from service.request_guard import HANDLER_ERROR_BODY, HOST_HEADER_INVALID_BODY, HOST_REJECT_BODY
 from tests.monitor_app_test_util import host_header, make_app_server, raw_http_url
 from tests.pack_asset_test_util import SECRET, SESSION, mint, new_frame_id
@@ -79,18 +79,29 @@ def test_host_injection_returns_400_with_frame_headers() -> None:
     asyncio.run(_host_injection())
 
 
+def test_disallowed_host_rejected_with_frame_headers() -> None:
+    async def run() -> None:
+        async with make_app_server() as (ip, port, _runner):
+            async with ClientSession() as session:
+                async with session.get(
+                    f"http://{ip}:{port}/api/session",
+                    headers={"Host": f"not-in-allowlist.example:{port}"},
+                ) as resp:
+                    assert resp.status == 400
+                    _assert_frame_headers(resp)
+
+    asyncio.run(run())
+
+
 async def _lan_host_csp() -> None:
     lan = "192.168.1.20"
     dist = _dist_with_sandbox()
-    port_pin = 18420
-    async with make_app_server(web_dist=dist, listen_port=port_pin) as (ip, port, runner):
-        assert port == port_pin
+    async with make_app_server(web_dist=dist, listen_port=0) as (ip, port, runner):
         request_guard.configure_request_guard(
             runner.app, bind="127.0.0.1", port=port, allowed_hosts=[f"{lan}:{port}"],
         )
         runner.app["pack_asset_secret"] = SECRET
         frame = new_frame_id()
-        pack_asset_frames.registry_for_app(runner.app).register(SESSION, frame)
         tok = mint("_sandbox", session_id=SESSION, frame_id=frame, app=runner.app)
         async with ClientSession() as session:
             async with session.get(
@@ -101,11 +112,9 @@ async def _lan_host_csp() -> None:
                 },
             ) as resp:
                 assert resp.status == 200
-                from urllib.parse import quote
-
                 csp = resp.headers.get("Content-Security-Policy") or ""
                 script_src = csp.split("script-src ", 1)[1]
-                assert script_src.startswith("http://192.168.1.20:") is True
+                assert script_src.startswith(f"http://{lan}:") is True
                 assert "frame-ancestors 'self'" in csp
 
 
@@ -115,15 +124,10 @@ def test_lan_host_csp_uses_validated_origin_not_wildcard() -> None:
 
 async def _localhost_csp() -> None:
     dist = _dist_with_sandbox()
-    port_pin = 18421
-    async with make_app_server(web_dist=dist, listen_port=port_pin) as (ip, port, runner):
-        assert port == port_pin
+    async with make_app_server(web_dist=dist, listen_port=0) as (ip, port, runner):
         runner.app["pack_asset_secret"] = SECRET
         frame = new_frame_id()
-        pack_asset_frames.registry_for_app(runner.app).register(SESSION, frame)
         tok = mint("_sandbox", session_id=SESSION, frame_id=frame, app=runner.app)
-        from urllib.parse import quote
-
         tok_q = quote(tok, safe="")
         origin = f"http://localhost:{port}"
         async with ClientSession() as session:

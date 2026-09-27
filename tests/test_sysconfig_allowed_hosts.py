@@ -100,15 +100,23 @@ def test_api_docs_describe_bind_allowlist_branches() -> None:
     assert "**Loopback bind**" in text
     assert "**Wildcard bind**" in text
     assert "**Specific non-loopback bind**" in text
-    assert "all local interface addresses on that port" not in text
+    lan_scan_phrase = "all local interface addresses"
+    if lan_scan_phrase in text:
+        raise AssertionError(f"docs must not describe LAN scan as {lan_scan_phrase!r}")
 
 
 def test_sysconfig_header_documents_allowed_hosts_key() -> None:
-    assert "# allowed_hosts:" in sysconfig.HEADER
+    marker = "# allowed_hosts:"
+    if marker not in sysconfig.HEADER:
+        raise AssertionError(f"missing {marker!r} in sysconfig.HEADER")
 
 
-def test_sysconfig_does_not_define_unused_listen_keys_constant() -> None:
-    assert "LISTEN_KEYS" not in Path(sysconfig.__file__).read_text(encoding="utf-8")
+def test_sysconfig_listen_opts_includes_allowed_hosts_without_listen_keys() -> None:
+    cfg = {"allowed_hosts": ["lan.example:8080"], "bind": "127.0.0.1", "port": 7020}
+    opts = sysconfig.listen_opts(cfg)
+    assert opts["allowed_hosts"] == ["lan.example:8080"]
+    resolved = sysconfig.resolve_listen(cfg, bind="127.0.0.1", port=7020)
+    assert resolved["allowed_hosts"] == ["lan.example:8080"]
 
 
 def test_allowed_hosts_round_trips_through_dump_and_load(tmp_path) -> None:

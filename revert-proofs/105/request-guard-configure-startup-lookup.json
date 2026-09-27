@@ -1,6 +1,7 @@
 {
   "runner": "pytest",
-  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_dhcp_miss_within_30s_does_not_refresh_os_interfaces",
-  "red": "AssertionError: 100 unknown hosts within 30s: 0 fresh lookups",
+  "testId": "tests/test_request_guard_lan_interface_refresh.py::test_wildcard_bind_performs_startup_os_interface_lookup",
+  "red": "AssertionError: configure: at least one startup lookup",
+  "description": "Wildcard configure must call OS interface lookup at startup.",
   "timeoutSec": 120
 }

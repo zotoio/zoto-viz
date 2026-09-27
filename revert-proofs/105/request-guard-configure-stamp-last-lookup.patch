@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index e158a70..72e43a0 100644
+index 14224de3..8faa83ae 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -276,9 +276,6 @@
+@@ -320,9 +320,6 @@ def configure_request_guard(
      app["request_guard_extra_hosts"] = extra
      clk = app.get("request_guard_clock", time.monotonic)
      now = clk()

@@ -1,13 +1,13 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index 1e33abf..1650491 100644
+index 9c257b9f..e4bb65ff 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -54,7 +54,7 @@ def validate_allowed_host_entry(entry: str) -> str:
+@@ -63,8 +63,6 @@ def validate_allowed_host_entry(entry: str) -> str:
              p = int(port_part)
          except ValueError:
              raise ValueError(f"invalid allowed_hosts entry: {entry!r}") from None
 -        if not 1 <= p <= 65535:
-+        if False:
-             raise ValueError(f"invalid allowed_hosts entry: {entry!r}")
+-            raise ValueError(f"invalid allowed_hosts entry: {entry!r}")
      if not host_part:
          raise ValueError(f"invalid allowed_hosts entry: {entry!r}")
+     if host_part.lower() == "localhost":

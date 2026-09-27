@@ -1,0 +1,7 @@
+{
+  "runner": "pytest",
+  "testId": "tests/test_access.py::test_bind_is_loopback",
+  "red": "AssertionError: 127.0.0.2 must be treated as loopback bind",
+  "description": "bind_is_loopback must treat all loopback IPs (e.g. 127.0.0.2) as loopback.",
+  "timeoutSec": 120
+}

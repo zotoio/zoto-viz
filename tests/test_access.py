@@ -13,7 +13,7 @@ def test_bind_is_loopback() -> None:
     assert access.bind_is_loopback("127.0.0.1")
     assert access.bind_is_loopback("::1")
     assert access.bind_is_loopback("localhost")
-    assert access.bind_is_loopback("127.0.0.2")
+    assert access.bind_is_loopback("127.0.0.2"), "127.0.0.2 must be treated as loopback bind"
     assert not access.bind_is_loopback("0.0.0.0")
     assert not access.bind_is_loopback("192.168.1.5")
     assert not access.bind_is_loopback("nope")
@@ -124,7 +124,7 @@ def test_host_origin_csrf_helpers() -> None:
     assert not access.header_hostname("")
     assert not access.is_loopback_name("")
     assert access.header_hostname("[::1]:7020") == "::1"
-    assert access.bind_is_loopback("127.0.0.2")
+    assert access.bind_is_loopback("127.0.0.2"), "127.0.0.2 must be treated as loopback bind"
 
 
 

@@ -1,8 +1,8 @@
 diff --git a/service/request_guard.py b/service/request_guard.py
-index e158a70..c88983a 100644
+index 14224de3..4e7eca7d 100644
 --- a/service/request_guard.py
 +++ b/service/request_guard.py
-@@ -277,8 +277,6 @@
+@@ -321,8 +321,6 @@ def configure_request_guard(
      clk = app.get("request_guard_clock", time.monotonic)
      now = clk()
      app["request_guard_last_if_lookup"] = now
@@ -11,7 +11,7 @@ index e158a70..c88983a 100644
      _refresh_allowed_hosts(app)
  
  
-@@ -299,34 +297,6 @@
+@@ -343,34 +341,6 @@ def _host_header_values(request: web.Request) -> list[str]:
          return [single] if single else []
  
  
@@ -46,7 +46,7 @@ index e158a70..c88983a 100644
  async def _lookup_allowed(app: web.Application, key: str) -> bool:
      allowed: frozenset[str] = app.get("request_guard_allowed_hosts") or frozenset()
      if key in allowed:
-@@ -336,7 +306,8 @@
+@@ -380,7 +350,8 @@ async def _lookup_allowed(app: web.Application, key: str) -> bool:
      last = float(app.get("request_guard_last_if_lookup") or 0.0)
      if now - last < 30.0:
          return False
