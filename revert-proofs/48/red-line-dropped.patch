@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index a3ae968..6f5ce7c 100644
+index 4b69613..1e41d31 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -317,7 +317,7 @@ export function parseVitestJsonReport(report) {
+@@ -318,7 +318,7 @@ export function parseVitestJsonReport(report) {
            "expected" in revertProofRed
              ? { actual: revertProofRed.actual, expected: revertProofRed.expected }
              : null,

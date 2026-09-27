@@ -1,5 +1,5 @@
 diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
-index 4bef3f0..f0517d9 100644
+index 5a75cd3..282e8f3 100644
 --- a/scripts/revert-proof-vitest-runner.mjs
 +++ b/scripts/revert-proof-vitest-runner.mjs
 @@ -33,7 +33,7 @@ function noteFailure(test, err) {

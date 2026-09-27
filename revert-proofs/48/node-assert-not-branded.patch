@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
-index 0000000..0000000 100644
+index 5a75cd3..a7a4383 100644
 --- a/scripts/revert-proof-vitest-runner.mjs
 +++ b/scripts/revert-proof-vitest-runner.mjs
-@@ -28,12 +28,7 @@ function noteFailure(test, err) {
+@@ -28,11 +28,6 @@ function noteFailure(test, err) {
    if (verdict.has(test)) {
      return;
    }
@@ -11,8 +11,6 @@ index 0000000..0000000 100644
 -    verdict.set(test, false);
 -    return;
 -  }
--  if (!isObject(err) || !branded.has(err)) {
-+  if (!isObject(err)) {
+   if (!isObject(err) || !branded.has(err)) {
      verdict.set(test, false);
      return;
-   }

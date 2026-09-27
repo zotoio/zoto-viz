@@ -1,0 +1,16 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+index 4b69613..a60376b 100644
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -967,11 +967,6 @@ export function assertGitApplyCheckStrict(wtRoot, patchText) {
+     if (check.status !== 0) {
+       throw new Error(`git apply --check failed: ${verbose.trim()}`);
+     }
+-    for (const line of verbose.split("\n")) {
+-      if (GIT_APPLY_OFFSET_FUZZ_RE.test(line)) {
+-        throw new Error(`git apply --check reported offset or fuzz: ${line.trim()}`);
+-      }
+-    }
+   } finally {
+     try {
+       fs.unlinkSync(tmpPatch);

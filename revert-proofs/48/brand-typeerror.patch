@@ -1,10 +1,8 @@
 diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
-index 0000000..0000000 100644
+index 5a75cd3..282e8f3 100644
 --- a/scripts/revert-proof-vitest-runner.mjs
 +++ b/scripts/revert-proof-vitest-runner.mjs
-@@ -31,9 +31,9 @@ function noteFailure(test, err) {
-   if (isNodeAssertError(err)) {
-     nodeAssert.set(test, true);
+@@ -33,7 +33,7 @@ function noteFailure(test, err) {
      verdict.set(test, false);
      return;
    }

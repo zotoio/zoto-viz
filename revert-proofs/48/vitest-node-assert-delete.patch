@@ -1,0 +1,12 @@
+diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
+index 5a75cd3..4a5c13f 100644
+--- a/scripts/revert-proof-vitest-runner.mjs
++++ b/scripts/revert-proof-vitest-runner.mjs
+@@ -45,7 +45,6 @@ export default class RevertProofVitestRunner extends TestRunner {
+   async runTask(test) {
+     verdict.delete(test);
+     firstRed.delete(test);
+-    nodeAssert.delete(test);
+     takeSoftFailure(test);
+     const fn = TestRunner.getTestFn(test);
+     let threw = false;

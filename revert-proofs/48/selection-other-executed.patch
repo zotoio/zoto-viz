@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index a3ae968..1809d9f 100644
+index 4b69613..78932f7 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -347,10 +347,6 @@ export function assessVitestSelection(tests, testName) {
+@@ -348,10 +348,6 @@ export function assessVitestSelection(tests, testName) {
      return { ok: false, reason: "target not found", target: null };
    }
    const target = executedMatches[0];

@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
-index a3ae968..5204672 100644
+index 4b69613..7bf9ecf 100644
 --- a/scripts/revert-proof-lib.mjs
 +++ b/scripts/revert-proof-lib.mjs
-@@ -436,11 +436,8 @@ export function sanitizeReportText(text) {
+@@ -437,11 +437,8 @@ export function sanitizeReportText(text) {
  }
  
  export function validatePatchTouchesOnlyProduction(patchText, slug) {

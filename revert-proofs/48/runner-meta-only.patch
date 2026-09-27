@@ -1,8 +1,8 @@
 diff --git a/scripts/revert-proof-vitest-runner.mjs b/scripts/revert-proof-vitest-runner.mjs
-index 4bef3f0..a09753c 100644
+index 5a75cd3..2eb715d 100644
 --- a/scripts/revert-proof-vitest-runner.mjs
 +++ b/scripts/revert-proof-vitest-runner.mjs
-@@ -73,9 +73,9 @@ export default class RevertProofVitestRunner extends TestRunner {
+@@ -74,10 +74,10 @@ export default class RevertProofVitestRunner extends TestRunner {
      firstRed.delete(test);
      nodeAssert.delete(test);
      test.meta = Object.freeze({
