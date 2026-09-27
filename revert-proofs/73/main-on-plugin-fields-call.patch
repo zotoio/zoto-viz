@@ -1,8 +1,8 @@
 diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index 3017632..7669271 100644
+index 3017632..91ad855 100644
 --- a/web/src/app/main.ts
 +++ b/web/src/app/main.ts
-@@ -494,25 +494,6 @@ nestCams.onChange = (patch) => {
+@@ -494,25 +494,16 @@ nestCams.onChange = (patch) => {
  };
  
  function onPluginFields(): void {
@@ -25,6 +25,16 @@ index 3017632..7669271 100644
 -      void syncWifiWatch();
 -    },
 -  });
++  const m = modeById(modeSel.value);
++  const opts = optsFor(m);
++  currentOpts = opts;
++  setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
++  nestCams.setLook(opts);
++  if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
++  if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
++  else scene.setMode(m, opts);
++  renderLegend(m, opts);
++  void syncWifiWatch();
  }
  
  /**

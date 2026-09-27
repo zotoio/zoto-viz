@@ -1,8 +1,8 @@
 diff --git a/web/src/app/main.ts b/web/src/app/main.ts
-index 3017632..cc50c09 100644
+index 3017632..dd760fa 100644
 --- a/web/src/app/main.ts
 +++ b/web/src/app/main.ts
-@@ -564,14 +564,6 @@ function arcadeControls(m: ViewMode): HTMLElement[] {
+@@ -564,14 +564,15 @@ function arcadeControls(m: ViewMode): HTMLElement[] {
  }
  
  function bindThisView(modeId: string): void {
@@ -14,6 +14,15 @@ index 3017632..cc50c09 100644
 -    arcadeControls,
 -    paintViewAuth,
 -  }, modeId);
++  const m = modeById(modeId);
++  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
++  settings?.bindView(
++    spec ? { ...spec, options: m.options, config: m.config } : null,
++    spec ? m.config : undefined,
++    lookForMode(m.id) ?? spec?.look,
++    arcadeControls(m),
++  );
++  paintViewAuth(m, spec);
  }
  
  let tsWatch = 0;

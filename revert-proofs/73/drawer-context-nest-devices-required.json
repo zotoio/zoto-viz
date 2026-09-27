@@ -5,5 +5,5 @@
   "testName": "",
   "description": "NestCamsDrawerContext must require devices (empty array allowed); type guard expects a compile error without devices.",
   "redLine": "src/ui/drawer-context.nest-devices-required.typecheck.ts:5",
-  "redOutput": "error TS2578: Unused '@ts-expect-error' directive."
+  "redOutput": "src/ui/drawer-context.nest-devices-required.typecheck.ts(5,1): error TS2578: Unused '@ts-expect-error' directive."
 }

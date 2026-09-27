@@ -3,5 +3,5 @@
   "testFile": "src/plugins/pack-shared-copy.literals.test.ts",
   "testName": "^pack shared copy literals > per-tile scope note renders pack name as plain text$",
   "description": "Scope note must use textContent so hostile pack names stay plain text.",
-  "redOutput": "AssertionError: expected '' to be 'These settings apply to this tile onl…' // Object.is equality"
+  "redOutput": "AssertionError: expected '' to be 'These settings apply to this tile onl\u2026' // Object.is equality"
 }
