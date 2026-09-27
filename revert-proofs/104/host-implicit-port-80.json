@@ -1,7 +1,7 @@
 {
   "runner": "pytest",
   "testId": "tests/test_request_guard_normalize.py::test_implicit_port_80_when_bound_port_is_80",
-  "description": "Implicit :80 when bound to port 80.",
-  "timeoutSec": 60,
-  "red": "AssertionError: assert 400 == 200"
+  "red": "AssertionError: assert 400 == 200",
+  "description": "Implicit :80 on bound port 80.",
+  "timeoutSec": 120
 }

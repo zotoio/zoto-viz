@@ -1,0 +1,12 @@
+diff --git a/service/sysconfig.py b/service/sysconfig.py
+index 9fd0428..f9ed6c8 100644
+--- a/service/sysconfig.py
++++ b/service/sysconfig.py
+@@ -30,6 +30,7 @@ from .request_guard import validate_allowed_host_entry
+ from . import paths
+ 
+ KEYS = ("root", "hostname", "iface", "monitor_iface", "ssids")
++LISTEN_KEYS = ("bind", "port", "insecure_lan", "inhibit_screensaver")
+ DEFAULT_BIND = "127.0.0.1"
+ DEFAULT_PORT = 7020
+ HEADER = (
