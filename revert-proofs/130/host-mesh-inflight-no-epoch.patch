@@ -1,0 +1,15 @@
+diff --git a/web/src/graph/host-mesh-lane.ts b/web/src/graph/host-mesh-lane.ts
+index 481df945..ee402573 100644
+--- a/web/src/graph/host-mesh-lane.ts
++++ b/web/src/graph/host-mesh-lane.ts
+@@ -326,10 +326,6 @@ export class HostMeshLane {
+     const url = this.assetUrl(packId, decl.path, decl.sha256);
+     try {
+       const gltf = await this.loader.loadAsync(url);
+-      if (epoch !== this.loadEpoch) {
+-        disposeHostMeshObject3D(gltf.scene);
+-        return null;
+-      }
+       const template = gltf.scene;
+       template.visible = false;
+       template.updateMatrixWorld(true);

@@ -1,0 +1,7 @@
+{
+  "description": "Revert app csrf fallback when sandbox sends stale cookie only",
+  "runner": "pytest",
+  "testFile": "tests/test_access_sandbox_token.py",
+  "testName": "SandboxAssetTokenOriginTests::test_null_origin_pack_assets_with_stale_csrf_cookie",
+  "red": "assert resp.status == 200"
+}

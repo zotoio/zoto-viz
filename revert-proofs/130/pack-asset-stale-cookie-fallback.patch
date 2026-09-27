@@ -1,0 +1,14 @@
+diff --git a/service/access.py b/service/access.py
+index 471fbbce..ff44e079 100644
+--- a/service/access.py
++++ b/service/access.py
+@@ -83,8 +83,7 @@ def pack_asset_session_ids(request: web.Request) -> list[str]:
+         return out
+     if cookie:
+         add(cookie)
+-    if app_csrf:
+-        add(app_csrf)
++
+     return out
+ 
+ 

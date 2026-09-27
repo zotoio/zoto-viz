@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/host-mesh-lane.ts b/web/src/graph/host-mesh-lane.ts
+index 481df945..cc8ffacc 100644
+--- a/web/src/graph/host-mesh-lane.ts
++++ b/web/src/graph/host-mesh-lane.ts
+@@ -306,7 +306,7 @@ export class HostMeshLane {
+   }
+ 
+   private assetUrl(packId: string, path: string, sha256?: string): string {
+-    const rel = path.replace(/^\/+/, "").replace(/^assets\//i, "");
++    const rel = path.replace(/^\/+/, "");
+     const base = `/api/plugins/${encodeURIComponent(packId)}/asset/${rel.split("/").map(encodeURIComponent).join("/")}`;
+     return sha256 ? `${base}?h=${encodeURIComponent(sha256)}` : base;
+   }

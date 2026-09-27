@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/host-mesh-lane.ts b/web/src/graph/host-mesh-lane.ts
+index 481df945..5eedfeb3 100644
+--- a/web/src/graph/host-mesh-lane.ts
++++ b/web/src/graph/host-mesh-lane.ts
+@@ -292,7 +292,7 @@ export class HostMeshLane {
+     const skin = this.skinnedLive.get(assetId);
+     if (skin) {
+       for (const s of skin) {
+-        stopSkinnedMixer(s);
++        
+         s.root.removeFromParent();
+       }
+       this.skinnedLive.delete(assetId);

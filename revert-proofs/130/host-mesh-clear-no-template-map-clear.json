@@ -1,0 +1,8 @@
+{
+  "description": "Revert templates.clear() on HostMeshLane.clear",
+  "runner": "vitest",
+  "testFile": "src/graph/host-mesh-lane.test.ts",
+  "testName": "host mesh lane > clear() exact teardown counts (Performance Pedant)",
+  "red": "PLACEHOLDER",
+  "project": "web"
+}

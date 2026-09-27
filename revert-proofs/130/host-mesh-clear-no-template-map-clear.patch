@@ -1,0 +1,13 @@
+diff --git a/web/src/graph/host-mesh-lane.ts b/web/src/graph/host-mesh-lane.ts
+index 481df945..9158dd32 100644
+--- a/web/src/graph/host-mesh-lane.ts
++++ b/web/src/graph/host-mesh-lane.ts
+@@ -173,7 +173,7 @@ export class HostMeshLane {
+       t.template.removeFromParent();
+       disposeHostMeshObject3D(t.template);
+     }
+-    this.templates.clear();
++
+     this.pending.clear();
+     this.assetOrder = [];
+   }
