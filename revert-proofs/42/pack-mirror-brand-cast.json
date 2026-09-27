@@ -1,4 +1,5 @@
 {
+  "kind": "lint",
   "runner": "pnpm",
   "testFile": "src/graph/lint-brand-casts.test.ts",
   "testName": "^lint brand casts > passes on the production tree$",
