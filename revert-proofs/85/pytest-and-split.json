@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (l) pytest node id with a and b id selects one test",
   "description": "Split the pytest node id on spaces",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": 1,
+    "expected": 0
   }
 }

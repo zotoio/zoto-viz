@@ -4,7 +4,7 @@
   "testName": "revert-proof-lib guards > (pytest-json) plugin JSON lists pass/fail/skip outcomes",
   "description": "Drop the skipped-target rejection for pytest",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "other tests not skipped",
+    "expected": "target skipped"
   }
 }

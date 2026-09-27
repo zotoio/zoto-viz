@@ -4,7 +4,7 @@
   "testName": "revert-proof-lib guards > (allowTypeError-strict) string false does not enable allowTypeError",
   "description": "Treat any truthy allowTypeError as enabled",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": true,
+    "expected": false
   }
 }

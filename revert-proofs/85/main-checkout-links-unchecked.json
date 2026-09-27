@@ -4,7 +4,7 @@
   "testName": "isolation guards > (link-guard-main) rejects symlinks into the main checkout",
   "description": "Skip unscoped packages in the workspace link check",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": null,
+    "expected": "workspace link <root>/node_modules/escape-pkg resolves outside worktree: <repo>/scripts"
   }
 }

@@ -4,7 +4,7 @@
   "testName": "revert-proof-lib guards > (python-env) PYTHONPATH is set to worktree",
   "description": "Stop pointing PYTHONPATH at the worktree",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "",
+    "expected": "/wt"
   }
 }

@@ -4,7 +4,7 @@
   "testName": "vitest testName escaping > parseVitestJsonReport rebuilds fullName for selection",
   "description": "Stop rebuilding fullName from ancestorTitles",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "returns one",
+    "expected": "widget & alpha > returns one"
   }
 }

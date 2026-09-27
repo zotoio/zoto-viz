@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (j) testName with regex metacharacters selects exactly one test",
   "description": "Pass the sidecar name to -t without escaping",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": 1,
+    "expected": 0
   }
 }

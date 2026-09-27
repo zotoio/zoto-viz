@@ -4,7 +4,7 @@
   "testName": "patchTouchesTestFiles > flags tests paths",
   "description": "Stop treating tests/ as a test path",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": false,
+    "expected": true
   }
 }

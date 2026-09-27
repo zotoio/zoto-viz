@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (meta-spoof) test-written revertProofAssertion with a TypeError is rejected",
   "description": "Let test-written task.meta override the runner verdict and red",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": 0,
+    "expected": 1
   }
 }

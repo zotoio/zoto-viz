@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (filter-two) filter matching two tests is rejected",
   "description": "Drop the multiple-match rejection",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": 0,
+    "expected": 1
   }
 }

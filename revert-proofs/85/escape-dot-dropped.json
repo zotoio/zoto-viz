@@ -4,7 +4,7 @@
   "testName": "vitest testName escaping > escapes and anchors fullTestName for -t",
   "description": "Stop escaping `.` in the -t pattern",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "^widget \\(beta\\) > talkers\\[\\].failed$",
+    "expected": "^widget \\(beta\\) > talkers\\[\\]\\.failed$"
   }
 }

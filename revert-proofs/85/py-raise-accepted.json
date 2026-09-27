@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (py-raise) hand-raised AssertionError is rejected, not counted as assert red",
   "description": "Plugin accepts any failing statement in the test file, not only rewritten asserts",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "row py-raise: red value mismatch (expected {\"assert\":\"assert answer == 1\"}, got {\"assert\":\"raise AssertionError(\\\"answer != 1\\\")\"})",
+    "expected": "row py-raise: patch breaks build or pytest error (proves nothing)"
   }
 }

@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (d) row pointing at skipped test is rejected on baseline",
   "description": "Treat a skipped target as executed",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": "row skipped-target: baseline ran 0 tests (selection/filter error; never a pass)",
+    "expected": "row skipped-target: baseline test selection failed (target skipped; never a pass)"
   }
 }

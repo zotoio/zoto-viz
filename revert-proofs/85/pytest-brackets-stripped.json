@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (k) pytest node id with bracket parametrize id selects one test",
   "description": "Strip the parametrize id from pytest node ids",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": 1,
+    "expected": 0
   }
 }

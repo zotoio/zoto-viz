@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (vitest-json-multi) JSON report selects one executed test among skipped siblings",
   "description": "Select by leaf title instead of full name",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": false,
+    "expected": true
   }
 }

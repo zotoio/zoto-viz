@@ -4,7 +4,7 @@
   "testName": "revert-proof runner (fixture repo) > (j2) describe title containing literal ' > ' selects exactly one test",
   "description": "Stop rebuilding fullName from ancestorTitles",
   "red": {
-    "actual": "?",
-    "expected": "?"
+    "actual": 1,
+    "expected": 0
   }
 }
