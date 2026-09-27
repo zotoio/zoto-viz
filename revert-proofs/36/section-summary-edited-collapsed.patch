@@ -1,0 +1,25 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -11,21 +11,7 @@ export const FIELD_EDITED_ARIA = "Unsaved change";
+ 
+ function syncSectionSummaryEdited(details: HTMLDetailsElement): void {
+   const sum = details.querySelector("summary");
+-  if (!sum) return;
+-  const dirtyInside = !!details.querySelector(".field-dirty");
+-  const show = dirtyInside && !details.open;
+-  if (show) {
+-    if (!sum.querySelector(".field-edited-cue")) {
+-      const cue = document.createElement("span");
+-      cue.className = "field-edited-cue";
+-      cue.textContent = FIELD_EDITED_LABEL;
+-      cue.setAttribute("aria-hidden", "true");
+-      sum.append(cue);
+-    }
+-  } else {
+-    sum.querySelector(".field-edited-cue")?.remove();
+-  }
++  if (!sum) return;
+ }
+ 
+ function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {

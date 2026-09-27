@@ -10,6 +10,24 @@ export const FIELD_EDITED_LABEL = "Edited";
 /** Screen-reader hint when a control differs from its schema default (not colour-only). */
 export const FIELD_EDITED_ARIA = "Unsaved change";
 
+function syncSectionSummaryEdited(details: HTMLDetailsElement): void {
+  const sum = details.querySelector("summary");
+  if (!sum) return;
+  const dirtyInside = !!details.querySelector(".field-dirty");
+  const show = dirtyInside && !details.open;
+  if (show) {
+    if (!sum.querySelector(".field-edited-cue")) {
+      const cue = document.createElement("span");
+      cue.className = "field-edited-cue";
+      cue.textContent = FIELD_EDITED_LABEL;
+      cue.setAttribute("aria-hidden", "true");
+      sum.append(cue);
+    }
+  } else {
+    sum.querySelector(".field-edited-cue")?.remove();
+  }
+}
+
 function syncFieldEditedMarkers(el: HTMLElement, dirty: boolean): void {
   el.classList.toggle("field-dirty", dirty);
   if (dirty) {
@@ -34,11 +52,13 @@ function appendFieldControl(
   f: PluginField,
   values: Record<string, string>,
   persist: () => void,
+  onDirtyChange?: () => void,
 ): void {
   const current = values[f.key] ?? fieldDefault(f);
   const syncDirty = (el: HTMLElement) => {
     const cur = values[f.key] ?? fieldDefault(f);
     syncFieldEditedMarkers(el, String(cur) !== String(fieldDefault(f)));
+    onDirtyChange?.();
   };
   const wrap = (el: HTMLElement) => {
     syncDirty(el);
@@ -159,17 +179,24 @@ export function fillPluginFields(
         : document.createElement("div");
       if (container instanceof HTMLDetailsElement) {
         container.className = "sec sec-collapsible";
+        container.open = true;
         const sum = document.createElement("summary");
         sum.className = "sec-title";
         sum.textContent = section;
         container.append(sum);
+        container.addEventListener("toggle", () => syncSectionSummaryEdited(container));
       } else {
         container.className = "sec";
       }
       const row = document.createElement("div");
       row.className = "sec-controls";
-      for (const f of sectionFields) appendFieldControl(row, f, values, persist);
+      const sectionDetails = container instanceof HTMLDetailsElement ? container : undefined;
+      const onSectionDirty = sectionDetails
+        ? () => syncSectionSummaryEdited(sectionDetails)
+        : undefined;
+      for (const f of sectionFields) appendFieldControl(row, f, values, persist, onSectionDirty);
       container.append(row);
+      if (sectionDetails) syncSectionSummaryEdited(sectionDetails);
       host.append(container);
     }
   } else if (compact.length) {

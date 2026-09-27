@@ -74,6 +74,66 @@ describe("fillPluginFields", () => {
     localStorage.removeItem("zoto-viz.plugin.demo.a");
   });
 
+  it("renders section details open by default with no persisted collapse state", () => {
+    expect.hasAssertions();
+    const host = document.createElement("div");
+    const spec: PluginView = {
+      id: "sections-open", name: "Demo", version: 1, engine: "graph",
+      config: [
+        { key: "gain", label: "gain", type: "number", default: 1, min: 0, max: 10, section: "Motion" },
+      ],
+    };
+    fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
+    const details = host.querySelector("details.sec-collapsible") as HTMLDetailsElement;
+    expect(details).toBeTruthy();
+    expect(details.open).toBe(true);
+    expect(details.hasAttribute("open")).toBe(true);
+    details.open = false;
+    const hostReload = document.createElement("div");
+    fillPluginFields(hostReload, spec, spec.config!, () => {}, { skipEmpty: true });
+    const detailsReload = hostReload.querySelector("details.sec-collapsible") as HTMLDetailsElement;
+    expect(detailsReload.open).toBe(true);
+  });
+
+  it("shows Edited on collapsed section summary when a field inside is dirty", () => {
+    expect.hasAssertions();
+    const host = document.createElement("div");
+    const spec: PluginView = {
+      id: "section-dirty", name: "Demo", version: 1, engine: "graph",
+      config: [
+        { key: "gain", label: "gain", type: "number", default: 3, min: 0, max: 10, section: "Motion" },
+      ],
+    };
+    fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });
+    const details = host.querySelector("details.sec-collapsible") as HTMLDetailsElement;
+    const summary = details.querySelector("summary") as HTMLElement;
+    const range = host.querySelector('input[type="range"]') as HTMLInputElement;
+    range.value = "7";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    details.open = false;
+    details.dispatchEvent(new Event("toggle"));
+    const cue = summary.querySelector(".field-edited-cue");
+    expect(cue?.textContent).toBe(FIELD_EDITED_LABEL);
+
+    range.value = "3";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    expect(summary.querySelector(".field-edited-cue")).toBeNull();
+
+    range.value = "7";
+    range.dispatchEvent(new Event("input", { bubbles: true }));
+    details.open = false;
+    details.dispatchEvent(new Event("toggle"));
+    expect(summary.querySelector(".field-edited-cue")?.textContent).toBe(FIELD_EDITED_LABEL);
+    writePluginConfig(configStoreId(spec), { gain: "3" });
+    const hostSaved = document.createElement("div");
+    fillPluginFields(hostSaved, spec, spec.config!, () => {}, { skipEmpty: true });
+    const detailsSaved = hostSaved.querySelector("details.sec-collapsible") as HTMLDetailsElement;
+    const summarySaved = detailsSaved.querySelector("summary") as HTMLElement;
+    detailsSaved.open = false;
+    detailsSaved.dispatchEvent(new Event("toggle"));
+    expect(summarySaved.querySelector(".field-edited-cue")).toBeNull();
+  });
+
   function dirtySliderRow(spec: PluginView): { host: HTMLElement; range: HTMLInputElement; row: HTMLElement } {
     const host = document.createElement("div");
     fillPluginFields(host, spec, spec.config!, () => {}, { skipEmpty: true });

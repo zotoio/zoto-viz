@@ -1,0 +1,11 @@
+diff --git a/web/src/plugins/plugin-ui.ts b/web/src/plugins/plugin-ui.ts
+--- a/web/src/plugins/plugin-ui.ts
++++ b/web/src/plugins/plugin-ui.ts
+@@ -175,7 +175,6 @@ export function fillPluginFields(
+         : document.createElement("div");
+       if (container instanceof HTMLDetailsElement) {
+         container.className = "sec sec-collapsible";
+-        container.open = true;
+         const sum = document.createElement("summary");
+         sum.className = "sec-title";
+         sum.textContent = section;
