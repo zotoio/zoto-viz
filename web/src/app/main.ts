@@ -1392,7 +1392,7 @@ registerApplyModeTestBindings({
   setEnsureReviewedOverride: (fn) => { ensureReviewedOverride = fn; },
   setAskPluginReviewOverride: (fn) => { askPluginReviewOverride = fn; },
   setMosaic: (m) => { mosaic = m; },
-  setPluginSpecs: (specs) => { pluginSpecs = specs; },
+  setPluginSpecs: (specs) => { pluginSpecs = specs; catalogReady = true; },
   setLiveMode: (id) => { liveMode = id; },
   setModeSelValue: (id) => { modeSel.value = id; },
   refreshModeOptions: () => modeSel.setOptions(viewSelectOptions()),
