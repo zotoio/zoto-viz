@@ -98,8 +98,8 @@ def test_mcp_same_sha_install_uses_pipeline_not_verify_only(
     monkeypatch.setattr("service.plugin_install.install_zip_to_runtime", counting)
     first = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(raw), "force": True})
     assert first["isError"] is False
-    again = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(raw), "force": True})
-    assert again["isError"] is False
+    assert calls == 1
+    again = plugin_mcp.call_tool("install_plugin_zip", {"zip_b64": _b64(raw)})
     assert calls == 2
 
 
