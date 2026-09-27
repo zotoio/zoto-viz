@@ -1,8 +1,8 @@
 diff --git a/web/src/app/render-scale-governor-wiring.ts b/web/src/app/render-scale-governor-wiring.ts
-index 2810f2aa..00000000 100644
+index 05b1c37f..6d104ba5 100644
 --- a/web/src/app/render-scale-governor-wiring.ts
 +++ b/web/src/app/render-scale-governor-wiring.ts
-@@ -82,7 +82,7 @@ export function runRenderScaleGovernorPresentTick(
+@@ -83,7 +83,7 @@ export function runRenderScaleGovernorPresentTick(
  ): void {
    const panes = collectRenderScalePanes(host);
    for (const p of panes) p.renderScaleState.onPaneFrame(ts);
