@@ -89,6 +89,7 @@ export class MarbleSim {
   private nextId = 1;
   private opts: MarbleOptions;
   private seedKey = "";
+  private lastIntegrateSteps = 0;
   readonly work: SimWork = { drawCalls: 0, triangles: 0, instances: 0, gpuBytes: 0 };
 
   constructor(opts: MarbleOptions) {
@@ -173,7 +174,12 @@ export class MarbleSim {
       steps++;
     }
     if (this.acc > SIM_DT * 2) this.acc = SIM_DT;
+    this.lastIntegrateSteps = steps;
     this.estimateWork();
+  }
+
+  integrateStepsLastFrame(): number {
+    return this.lastIntegrateSteps;
   }
 
   private integrate(dt: number): void {
