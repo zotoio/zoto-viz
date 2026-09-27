@@ -17,4 +17,10 @@ describe("mosaic pane view assignment", () => {
     const assigned = assignTiles(tree!, next);
     expect(leafIds(assigned)).toEqual(["plugin:wifi", "plugin:topology"]);
   });
+
+  it("a pane pick of a view not on the wall is a load, not only a swap", () => {
+    const prev = ["plugin:topology", "plugin:wifi"];
+    const next = nextPaneTiles(prev, "plugin:topology", "plugin:talkers");
+    expect(next.filter((id) => !prev.includes(id))).toEqual(["plugin:talkers"]);
+  });
 });
