@@ -28,10 +28,12 @@ declare const zoto: {
 };
 
 let opts: MetroOptions = parseMetroOptions(zoto.getConfig?.());
+let tile = metroCanvasSize(zoto.getConfig?.());
 const sim = acquireMetroSim();
 
 zoto.onConfig = (cfg) => {
   opts = parseMetroOptions(cfg);
+  tile = metroCanvasSize(cfg);
   sim.runtime.resetLayoutState();
 };
 
@@ -41,7 +43,7 @@ zoto.onTeardown = () => {
 
 zoto.onFrame = (frame) => {
   const net = sim.step(frame, opts);
-  const slots = packMetroSlots(frame, net, opts, sim, metroCanvasSize());
+  const slots = packMetroSlots(frame, net, opts, sim, tile);
   const demo = isMetroDemoFrame(frame);
   const metric = demo ? "demo" : `${net.stations.length} st · ${net.edges.length} ln`;
   const hud = metroHudLabel(opts, metric, demo);

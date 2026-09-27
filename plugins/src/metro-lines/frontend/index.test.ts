@@ -19,6 +19,7 @@ import {
   buildTicker,
   fictionalLabel,
   isMetroDemoFrame,
+  metroCanvasSize,
   metroWorkCounts,
   packMetroSlots,
   parseMetroOptions,
@@ -85,6 +86,9 @@ describe("metro-lines pack", () => {
     expect("error" in wrapped).toBe(false);
     if ("error" in wrapped) return;
     expect(wrapped.frag).toContain("zotoVizSlots");
+    expect(FRAG).not.toMatch(/\bfloat\s+half\b/);
+    expect(FRAG).toMatch(/slot\s*\*\s*64/);
+    expect(FRAG).not.toMatch(/slot\s*\*\s*16\s*\+/);
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
@@ -264,6 +268,8 @@ describe("metro-lines pack", () => {
       expect(s.length).toBeLessThanOrEqual(64);
     }
     expect(slots[0]![0]).toBe(METRO_MARK);
+    expect(metroCanvasSize({ hostTileW: "1920", hostTileH: "1080" })).toEqual({ w: 1920, h: 1080 });
+    expect(metroCanvasSize({})).toEqual({ w: 1280, h: 800 });
     expect(net.stations.length).toBeLessThanOrEqual(METRO_MAX_STATIONS);
     expect(net.edges.length).toBeLessThanOrEqual(METRO_MAX_EDGES);
   });

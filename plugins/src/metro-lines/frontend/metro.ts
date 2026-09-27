@@ -701,14 +701,13 @@ export function buildMetroNetwork(frame: VizDataFrame, opts: MetroOptions): Metr
   return rt.tick(frame, opts);
 }
 
-export function metroCanvasSize(doc?: Document | null): { w: number; h: number } {
-  const root = doc ?? (typeof document !== "undefined" ? document : null);
-  const canvas = (root?.querySelector?.("canvas.render-host")
-    ?? root?.querySelector?.("#wall > canvas")
-    ?? root?.querySelector?.("#scene canvas")) as { width?: number; height?: number } | null;
-  const w = canvas?.width ?? 0;
-  const h = canvas?.height ?? 0;
-  return { w: w > 64 ? w : 1280, h: h > 64 ? h : 800 };
+export function metroCanvasSize(cfg?: Record<string, string> | null): { w: number; h: number } {
+  const w = Number(cfg?.hostTileW ?? cfg?.tileW);
+  const h = Number(cfg?.hostTileH ?? cfg?.tileH);
+  if (Number.isFinite(w) && w > 64 && Number.isFinite(h) && h > 64) {
+    return { w: Math.round(w), h: Math.round(h) };
+  }
+  return { w: 1280, h: 800 };
 }
 
 function packChars(text: string, max: number): number[] {

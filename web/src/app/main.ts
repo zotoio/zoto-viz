@@ -602,6 +602,16 @@ async function ensureReviewed(spec: PluginView | null): Promise<boolean> {
   }
 }
 
+function hostTileConfig(): Record<string, string> {
+  const canvas = document.querySelector("canvas.render-host") as HTMLCanvasElement | null;
+  const w = canvas?.width ?? 0;
+  const h = canvas?.height ?? 0;
+  return {
+    hostTileW: String(w > 64 ? w : 1280),
+    hostTileH: String(h > 64 ? h : 800),
+  };
+}
+
 async function loadTsPlugin(spec: PluginView | null): Promise<void> {
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
@@ -625,7 +635,7 @@ async function loadTsPlugin(spec: PluginView | null): Promise<void> {
     return;
   }
   try {
-    await attachPluginFrontend(sandbox, spec, loadPluginConfig(spec, spec.config));
+    await attachPluginFrontend(sandbox, spec, { ...loadPluginConfig(spec, spec.config), ...hostTileConfig() });
     const preserve = preserveVizUbo && isVizDemoPack(tsWatchId) && isVizDemoPack(spec.id);
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);

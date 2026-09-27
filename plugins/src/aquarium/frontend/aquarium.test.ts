@@ -104,6 +104,7 @@ describe("aquarium shipped pack", () => {
     if ("error" in wrapped) return;
     expect(wrapped.frag).toContain("zotoVizSlots");
     expect(FRAG).toContain("mapScene");
+    expect(FRAG).not.toMatch(/\+\s*sun\.xy\b/);
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 

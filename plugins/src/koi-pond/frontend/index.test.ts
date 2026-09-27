@@ -82,6 +82,8 @@ describe("koi-pond shipped pack", () => {
     expect("error" in wrapped).toBe(false);
     if ("error" in wrapped) return;
     expect(wrapped.frag).toContain("zotoVizSlots");
+    expect(FRAG).toContain("s * 64");
+    expect(FRAG).not.toMatch(/vec3\(\s*xz\s*\*[^)]*,[^)]*,/);
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
     expect(FRONT).toContain("KoiPondSim");
     expect(FRONT).not.toContain("parent.document");
