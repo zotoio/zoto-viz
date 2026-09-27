@@ -106,7 +106,7 @@ import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLa
 import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { deliverMosaicDemoPacks } from "../graph/mosaic-viz-feed";
-import { bindVizDriveElement, noteHostDirect } from "../plugins/viz-drive";
+import { bindVizDriveElement, clearVizDrive, noteHostDirect } from "../plugins/viz-drive";
 
 ignoreResizeLoopError();
 
@@ -1016,6 +1016,8 @@ function feed(m: StateMsg): void {
           writeUniform: (name, value) => sandbox.handlers.writeUniform?.(name, value),
           writeParticles: (data, stride) => sandbox.handlers.writeParticles?.(data, stride),
         }, optsFor(mode));
+      } else {
+        clearVizDrive("main");
       }
     }, buildFrame);
     if (frame) {
