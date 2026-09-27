@@ -1,0 +1,12 @@
+diff --git a/web/src/plugins/fixtures/golden-state.ts b/web/src/plugins/fixtures/golden-state.ts
+index 4d181841..ecdac7e4 100644
+--- a/web/src/plugins/fixtures/golden-state.ts
++++ b/web/src/plugins/fixtures/golden-state.ts
+@@ -111,7 +111,6 @@ export function mergeHostIdleForSlot(live: StateMsg, req: HostIdleViewRequest):
+   if (!req.idle || !("fixture" in req.idle) || req.idle.fixture !== "host") {
+     return { state: live, isDemo: false };
+   }
+-  if (!viewSliceEmpty(live, req.target)) return { state: live, isDemo: false };
+   const { state, applied } = applyGoldenSlice(live, req.target);
+   return { state, isDemo: applied };
+ }
