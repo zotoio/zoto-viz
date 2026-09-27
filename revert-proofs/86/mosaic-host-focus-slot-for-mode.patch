@@ -1,7 +1,7 @@
-diff --git a/web/src/app/mosaic-host-wiring.ts b/web/src/app/mosaic-host-wiring.ts
+diff --git a/web/src/app/mosaic-host-bindings.ts b/web/src/app/mosaic-host-bindings.ts
 index a24e82d3..76657ce9 100644
---- a/web/src/app/mosaic-host-wiring.ts
-+++ b/web/src/app/mosaic-host-wiring.ts
+--- a/web/src/app/mosaic-host-bindings.ts
++++ b/web/src/app/mosaic-host-bindings.ts
 @@ -14,7 +14,7 @@ export function mosaicPanePickFocusSlot(tileIds: readonly string[], toViewId: st
  
  /** Mosaic mode apply: focus tile slot that already shows this view id. */

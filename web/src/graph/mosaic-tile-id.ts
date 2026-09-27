@@ -35,11 +35,6 @@ export function mosaicWallUsesView(tileSlotIds: readonly string[], viewId: strin
   return tileSlotIds.some((id) => mosaicTileViewId(id) === viewId);
 }
 
-/** True when changing a pane to the pack view it already shows (duplicate slot suffix). */
-export function mosaicSetPaneViewWouldNoop(fromSlot: string, viewId: string): boolean {
-  return mosaicTileViewId(fromSlot) === viewId;
-}
-
 /** Pick a unique leaf id for another tile of the same pack view. */
 export function allocateMosaicTileSlot(viewId: string, existing: readonly string[]): string {
   const others = existing.filter((id) => mosaicTileViewId(id) === viewId);

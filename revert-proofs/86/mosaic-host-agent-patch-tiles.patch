@@ -1,7 +1,7 @@
-diff --git a/web/src/app/mosaic-host-wiring.ts b/web/src/app/mosaic-host-wiring.ts
+diff --git a/web/src/app/mosaic-host-bindings.ts b/web/src/app/mosaic-host-bindings.ts
 index a24e82d3..6bf91f20 100644
---- a/web/src/app/mosaic-host-wiring.ts
-+++ b/web/src/app/mosaic-host-wiring.ts
+--- a/web/src/app/mosaic-host-bindings.ts
++++ b/web/src/app/mosaic-host-bindings.ts
 @@ -28,7 +28,7 @@ export function agentPatchTilesWhenViewOffWall(
    focusedId: string | null | undefined,
    viewId: string,

@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "src/app/mosaic-host-wiring.test.ts",
-  "testName": "^mosaic host wiring > agentPatchTilesWhenViewOffWall skips when duplicate slot already shows the view$",
+  "testFile": "src/app/mosaic-host-bindings.test.ts",
+  "testName": "^mosaic host bindings > agentPatchTilesWhenViewOffWall skips when duplicate slot already shows the view$",
   "description": "Revert agent lockLayout tile rewrite guard (#86).",
   "expectedRed": "AssertionError: expected [ 'plugin:a', 'plugin:b' ] to be null"
 }

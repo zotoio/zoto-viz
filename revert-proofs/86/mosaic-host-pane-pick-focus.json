@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "src/app/mosaic-host-wiring.test.ts",
-  "testName": "^mosaic host wiring > mosaicPanePickFocusSlot focuses the slot that already shows the view id$",
+  "testFile": "src/app/mosaic-host-bindings.test.ts",
+  "testName": "^mosaic host bindings > mosaicPanePickFocusSlot focuses the slot that already shows the view id$",
   "description": "Revert pane-pick focus to from slot only (#86).",
   "expectedRed": "AssertionError: expected 'plugin:b' to be 'plugin:a!1' // Object.is equality"
 }

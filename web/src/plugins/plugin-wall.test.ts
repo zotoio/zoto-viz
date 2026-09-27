@@ -46,6 +46,10 @@ describe("plugin wall remnants", () => {
     expect(isWallRemnant(["plugin:cores!1", "plugin:memory"], walls)).toBe(true);
   });
 
+  it("inferWallOwner resolves sys wall for duplicate tile slots", () => {
+    expect(inferWallOwner(["plugin:cores!1", "plugin:memory"], walls)).toBe("plugin:syscon");
+  });
+
   it("lists catalog walls from looks", () => {
     const looks = new Map<string, PluginLook>([
       ["plugin:syscon", { mosaic: "8", hero: "off", mosaicTiles: SYS_TILES, mosaicSharedTheme: true }],

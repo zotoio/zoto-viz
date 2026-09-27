@@ -1,6 +1,9 @@
+import type { Settings } from "../ui/settings";
+import type { Mosaic } from "../graph/mosaic";
+import type { ViewMode } from "../core/modes";
 import type { BackdropKind } from "../graph/backdrop";
+import type { PluginLook, PluginView } from "../plugins/plugin";
 import { mosaicTileViewId, mosaicWallUsesView } from "../graph/mosaic-tile-id";
-import type { PluginLook } from "../plugins/plugin";
 
 /** Settings plugin refresh: map focused tile slot → catalog mode id. */
 export function modeIdForMosaicPluginChange(focusSlotId: string): string {
@@ -51,4 +54,49 @@ export function mosaicPluginSkyPaneView(
   const viewId = mosaicTileViewId(tileSlotId);
   const wantPlugin = tileSky === "plugin" || (!tileSky && lookForMode(viewId)?.backdrop === "plugin");
   return { viewId, wantPlugin };
+}
+
+export type MosaicHostBindings = {
+  getMosaic: () => Mosaic | null;
+  modeById: (id: string) => ViewMode;
+  optsFor: (m: ViewMode) => Record<string, string>;
+  pluginSpecForMode: (modeId: string) => PluginView | null;
+  ensureReviewed: (spec: PluginView | null) => Promise<boolean>;
+  skySpecForMode: (modeId: string, spec: PluginView | null) => PluginView | null;
+  syncPluginSky: (spec: PluginView | null) => Promise<void>;
+  arcadeSlotFor: (m: ViewMode) => string | null;
+};
+
+/** Production wiring from main.ts: settings mosaic pane pick + plugin field refresh. */
+export function bindMosaicHostSettings(
+  settings: Settings,
+  host: MosaicHostBindings,
+  hooks?: { beforePluginChange?: () => void },
+): void {
+  settings.onMosaicPanePick = (from, to) => {
+    const mosaic = host.getMosaic();
+    if (!mosaic?.on) return false;
+    if (!mosaic.setPaneView(from, to)) return false;
+    mosaic.focus(mosaicPanePickFocusSlot(mosaic.tileIds, to, from));
+    const pm = host.modeById(to);
+    const paneSpec = host.skySpecForMode(to, pm.pluginId ? host.pluginSpecForMode(pm.id) : null);
+    void (async () => {
+      const spec = pm.pluginId ? host.pluginSpecForMode(pm.id) : null;
+      if (!(await host.ensureReviewed(spec))) return;
+      if (pm.standalone || host.arcadeSlotFor(pm) !== "carousel") {
+        void host.syncPluginSky(paneSpec);
+      }
+    })();
+    return true;
+  };
+
+  settings.onPluginChange = () => {
+    hooks?.beforePluginChange?.();
+    const mosaic = host.getMosaic();
+    if (!mosaic?.on) return;
+    const focus = mosaic.focusedId;
+    if (!focus) return;
+    const pane = host.modeById(modeIdForMosaicPluginChange(focus));
+    mosaic.graphScene(focus)?.setMode(pane, host.optsFor(pane));
+  };
 }

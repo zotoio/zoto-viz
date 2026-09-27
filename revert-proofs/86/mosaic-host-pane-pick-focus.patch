@@ -1,7 +1,7 @@
-diff --git a/web/src/app/mosaic-host-wiring.ts b/web/src/app/mosaic-host-wiring.ts
+diff --git a/web/src/app/mosaic-host-bindings.ts b/web/src/app/mosaic-host-bindings.ts
 index a24e82d3..79b94a56 100644
---- a/web/src/app/mosaic-host-wiring.ts
-+++ b/web/src/app/mosaic-host-wiring.ts
+--- a/web/src/app/mosaic-host-bindings.ts
++++ b/web/src/app/mosaic-host-bindings.ts
 @@ -9,7 +9,7 @@ export function modeIdForMosaicPluginChange(focusSlotId: string): string {
  
  /** After pane picker assigns a view id, focus the matching tile slot (duplicate packs). */

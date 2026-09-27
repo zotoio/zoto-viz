@@ -1,12 +1,15 @@
-diff --git a/web/src/graph/mosaic-tile-id.ts b/web/src/graph/mosaic-tile-id.ts
---- a/web/src/graph/mosaic-tile-id.ts
-+++ b/web/src/graph/mosaic-tile-id.ts
-@@ -38,7 +38,7 @@ export function mosaicWallUsesView(tileSlotIds: readonly string[], viewId: string
+diff --git a/web/src/graph/mosaic.ts b/web/src/graph/mosaic.ts
+--- a/web/src/graph/mosaic.ts
++++ b/web/src/graph/mosaic.ts
+@@ -505,10 +505,10 @@ export class Mosaic {
+   }
  
- /** True when changing a pane to the pack view it already shows (duplicate slot suffix). */
- export function mosaicSetPaneViewWouldNoop(fromSlot: string, viewId: string): boolean {
--  return mosaicTileViewId(fromSlot) === viewId;
-+  return fromSlot === viewId;
- }
- 
- /** Pick a unique leaf id for another tile of the same pack view. */
+   /** Change one pane to a catalog view id (swap or allocate a duplicate tile slot). */
+   setPaneView(fromSlot: string, viewId: string): boolean {
+-    if (!this.tree || !viewId || mosaicTileViewId(fromSlot) === viewId) return false;
++    if (!this.tree || !viewId || fromSlot === viewId) return false;
+     const next = nextPaneTiles(this.tileIds, fromSlot, viewId);
+     if (next.join("\0") === this.tileIds.join("\0")) return false;
+     this.assignViews(next);
+     return true;
+   }

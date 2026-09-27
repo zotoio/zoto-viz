@@ -3,7 +3,6 @@ import {
   allocateMosaicTileSlot,
   mosaicPlacedTileIndices,
   mosaicTileSlotId,
-  mosaicSetPaneViewWouldNoop,
   mosaicTileViewId,
   mosaicWallUsesView,
 } from "./mosaic-tile-id";
@@ -13,11 +12,6 @@ import { parsePluginId } from "../plugins/instances";
 describe("mosaic tile slot ids", () => {
   beforeEach(() => {
     expect.hasAssertions();
-  });
-
-  it("treats duplicate slot suffix as noop for the same pack view", () => {
-    expect(mosaicSetPaneViewWouldNoop("plugin:topology!2", "plugin:topology")).toBe(true);
-    expect(mosaicSetPaneViewWouldNoop("plugin:topology", "plugin:memory")).toBe(false);
   });
 
   it("round-trips pack view ids and allocates duplicate slots", () => {

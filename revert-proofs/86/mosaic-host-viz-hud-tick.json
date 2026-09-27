@@ -1,7 +1,7 @@
 {
   "runner": "vitest",
-  "testFile": "src/app/mosaic-host-wiring.test.ts",
-  "testName": "^mosaic host wiring > shouldTickVizHudForFeed is false while mosaic is on$",
+  "testFile": "src/app/mosaic-host-bindings.test.ts",
+  "testName": "^mosaic host bindings > shouldTickVizHudForFeed is false while mosaic is on$",
   "description": "Revert viz HUD gating to always tick (#86).",
   "expectedRed": "AssertionError: expected true to be false // Object.is equality"
 }

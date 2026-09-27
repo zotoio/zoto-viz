@@ -1,7 +1,7 @@
-diff --git a/web/src/app/mosaic-host-wiring.ts b/web/src/app/mosaic-host-wiring.ts
+diff --git a/web/src/app/mosaic-host-bindings.ts b/web/src/app/mosaic-host-bindings.ts
 index a24e82d3..f0854234 100644
---- a/web/src/app/mosaic-host-wiring.ts
-+++ b/web/src/app/mosaic-host-wiring.ts
+--- a/web/src/app/mosaic-host-bindings.ts
++++ b/web/src/app/mosaic-host-bindings.ts
 @@ -4,7 +4,7 @@ import type { PluginLook } from "../plugins/plugin";
  
  /** Settings plugin refresh: map focused tile slot → catalog mode id. */

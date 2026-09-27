@@ -107,13 +107,12 @@ import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import {
   agentPatchTilesWhenViewOffWall,
-  modeIdForMosaicPluginChange,
+  bindMosaicHostSettings,
   mosaicFocusSlotForMode,
   mosaicModeAlreadyOnWall,
-  mosaicPanePickFocusSlot,
   mosaicPluginSkyPaneView,
   shouldTickVizHudForFeed,
-} from "./mosaic-host-wiring";
+} from "./mosaic-host-bindings";
 import { deliverVizPluginFrame } from "./viz-frame-tick";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 
@@ -1112,14 +1111,6 @@ settings = new Settings({
   },
   onPersist: () => touch(),
 });
-settings.onPluginChange = () => {
-  onPluginFields();
-  if (!mosaic?.on) return;
-  const focus = mosaic.focusedId;
-  if (!focus) return;
-  const pane = modeById(modeIdForMosaicPluginChange(focus));
-  mosaic.graphScene(focus)?.setMode(pane, optsFor(pane));
-};
 settings.onInstancesChange = () => {
   void (async () => {
     pluginSpecs = await installPlugins();
@@ -1178,21 +1169,20 @@ mosaic = new Mosaic({
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
 });
-settings.onMosaicPanePick = (from, to) => {
-  if (!mosaic?.on) return false;
-  if (!mosaic.setPaneView(from, to)) return false;
-  mosaic.focus(mosaicPanePickFocusSlot(mosaic.tileIds, to, from));
-  const pm = modeById(to);
-  const paneSpec = skySpecForMode(to, pm.pluginId ? pluginSpecForMode(pm.id) : null);
-  void (async () => {
-    const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
-    if (!(await ensureReviewed(spec))) return;
-    if (pm.standalone || arcadeSlotFor(pm) !== "carousel") {
-      void syncPluginSky(paneSpec);
-    }
-  })();
-  return true;
-};
+bindMosaicHostSettings(
+  settings,
+  {
+    getMosaic: () => mosaic,
+    modeById,
+    optsFor,
+    pluginSpecForMode,
+    ensureReviewed,
+    skySpecForMode,
+    syncPluginSky,
+    arcadeSlotFor,
+  },
+  { beforePluginChange: onPluginFields },
+);
 settings.addAnimation((a) => {
   const pin = pinViewLook();
   if (mosaic!.on) {
