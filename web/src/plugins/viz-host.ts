@@ -93,6 +93,8 @@ export interface VizPluginContract {
   hostMeshSlot?: number;
   /** Consecutive buffer slots after hostMeshSlot (default 1). */
   hostMeshSlotCount?: number;
+  /** Tile-health: pack may render a static sky without changing pixels every frame. */
+  mayBeStatic?: boolean;
 }
 
 export type {

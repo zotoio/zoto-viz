@@ -157,7 +157,17 @@ import { askPluginReview } from "../plugins/plugin-ui";
 import { vizContractFor } from "../plugins/plugin";
 import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract,
+  type VizDataFrame,
 } from "../plugins/viz-host";
+import {
+  TILE_HEAL_FALLBACK_MODE,
+  type HealStep,
+} from "../plugins/tile-health";
+import {
+  TileHealthMonitor,
+  readTileHealErrors,
+  writeTileHealErrors,
+} from "../plugins/tile-health-monitor";
 import {
   TypeSafeHost,
   parseTypeSafeEnable,
@@ -196,6 +206,8 @@ import {
 import { registerPackAssetRetry } from "../plugins/pack-asset-frame";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
+import { bindTileHealthPresentTick } from "./tile-health-present";
+import { createProductionTileHealthMonitor } from "./tile-health-boot";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
 import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
@@ -210,10 +222,10 @@ import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
 import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
-import { PluginSandbox, consentHash, tsPluginsAllowed } from "../plugins/host";
+import { PluginSandbox, consentHash, tsPluginsAllowed, type PluginHostHandlers } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
 import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
-import { pluginIdleOf, withGoldenIfIdle } from "../plugins/fixtures/golden-state";
+import { pluginIdleOf, withGoldenIfIdle, withGoldenSnapshot } from "../plugins/fixtures/golden-state";
 import { applyFeedSlotPaints, paintFeedState } from "./feed-paint";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { dropMosaicTileWriter } from "../graph/mosaic-viz-feed";
@@ -319,6 +331,9 @@ let activeArcade: string | null = null;
 (window as unknown as { znetviz: NetScene }).znetviz = scene; // one-release alias
 let mosaic: Mosaic | null = null;
 let lastRaw: StateMsg | null = null;
+let tileHealth: TileHealthMonitor | null = null;
+let lastVizFrame: VizDataFrame | null = null;
+let tileHealErrorsOn = readTileHealErrors();
 let typeSafeKeyOn = false;
 
 const themeSel = new Select({
@@ -627,9 +642,10 @@ function swapVizPack(packId: VizDemoPackId): void {
   applyMode(pluginViewId(packId), {}, { channel: "user" });
 }
 sandbox.handlers = {
-  setStyle: (s) => scene.setPluginStyle(s),
-  setNodeColor: (id, hex) => scene.setPluginNodeColor(id, hex),
-  writeBuffer: (slot, data) => {
+  setStyle: (s: Record<string, unknown>) => scene.setPluginStyle(s),
+  setNodeColor: (id: string, hex: number) => scene.setPluginNodeColor(id, hex),
+  writeBuffer: (slot: number, data: number[]) => {
+    tileHealth?.noteVizWrite();
     if (vizWriter?.writeBuffer(slot, data).ok) {
       broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
       tryApplyHostMeshBridge(
@@ -641,22 +657,31 @@ sandbox.handlers = {
       );
     }
   },
-  writeUniform: (name, value) => {
+  writeUniform: (name: string, value: import("../plugins/viz-host").VizUniformValue) => {
+    tileHealth?.noteVizWrite();
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
-  writeParticles: (data, stride) => { vizWriter?.writeParticles(data, stride); },
-  writeBatch: (batch) => {
+  writeParticles: (data: number[], stride?: number) => {
+    tileHealth?.noteVizWrite();
+    vizWriter?.writeParticles(data, stride);
+  },
+  writeBatch: (batch: import("../plugins/viz-write-batch").VizWriteBatchPayload) => {
     if (!vizWriter) return;
     const contract = vizContractFor(activePluginSpec);
     applyVizWriteBatch(vizWriter, batch, {
-      onBuffer: () => broadcastPluginUbo(scene, vizWriter!.ubo, mosaic?.on ? mosaic : null),
+      onBuffer: () => {
+        tileHealth?.noteVizWrite();
+        broadcastPluginUbo(scene, vizWriter!.ubo, mosaic?.on ? mosaic : null);
+      },
       onUniform: (name, value) => scene.setPluginUniform(name, value),
     });
     for (const b of batch.buffers) {
       tryApplyHostMeshBridge(hostMeshBridge, activePluginSpec, contract, b.slot, b.data);
     }
   },
-};
+  drawState: (drawing: boolean) => tileHealth?.setPackDrawingNothing(!drawing),
+  loseHostContext: () => renderHost.recreateContext(),
+} as PluginHostHandlers;
 const agent = new AgentPanel();
 const feedCtl: { feed: LiveFeed | null } = { feed: null };
 let feedShiftInited = false;
@@ -717,6 +742,11 @@ const vizPresentHost: VizPresentDeliverHost = {
   setVizFrameClockMs: (ms) => { vizFrameClockMs = ms; },
   syncVizBudgetTileScope,
   renderScaleGovernor: renderScaleGovernorHost,
+  noteVizWrite: () => tileHealth?.noteVizWrite(),
+  onVizFrameDelivered: (frame) => {
+    lastVizFrame = frame;
+    tileHealth?.noteVizFrameDelivered();
+  },
 };
 
 function shownForVizDeliver(): StateMsg | null {
@@ -777,6 +807,12 @@ function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
   const opts = optsFor(m);
   currentOpts = opts;
   setSkyPrompt(m.pluginId ?? m.id, opts[VIEW_PROMPT_KEY] ?? "");
+  if (mosaic?.on) {
+    const focus = mosaic.focusedId || mosaic.mainMode;
+    if (focus) noteTileHealthGrace(focus);
+  } else {
+    noteTileHealthGrace("main");
+  }
   nestCams.setLook(opts);
   if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
   if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
@@ -909,6 +945,8 @@ async function ensureReviewedImpl(spec: PluginView | null, signal: AbortSignal):
         spec.consent = kind;
         if (spec.hash) consentHash(spec.id, spec.hash);
         if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+        noteTileHealthGrace("main");
+        mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
         return "ok";
       } catch (e) {
         console.warn("zoto-viz plugin autoconsent:", e);
@@ -925,6 +963,8 @@ async function ensureReviewedImpl(spec: PluginView | null, signal: AbortSignal):
         spec.consent = kind;
         if (spec.hash) consentHash(spec.id, spec.hash);
         if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
+        noteTileHealthGrace("main");
+        mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
         return "ok";
       } catch (e) {
         console.warn("zoto-viz plugin consent:", e);
@@ -1108,6 +1148,33 @@ function pluginSpecForMode(modeId: string): PluginView | null {
   return row ? applyInstance(raw, row) : { ...raw, instanceId: inst };
 }
 
+function tileHealthModeId(tileId: string): string {
+  return tileId === "main" ? modeSel.value : tileId;
+}
+
+function tileHealthAwaitingApproval(tileId: string): boolean {
+  const m = modeById(tileHealthModeId(tileId));
+  const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
+  if (spec && pluginNeedsReview(spec) && !spec.consent) return true;
+  return !!viewAuthBlock({
+    id: m.id,
+    pluginId: m.pluginId,
+    source: bindSourceOf(spec, parseSourceBind(optsFor(m)).source),
+    capabilities: spec?.capabilities,
+  }, liveAuthCtx());
+}
+
+function noteTileHealthGrace(tileId: string): void {
+  tileHealth?.noteGrace(tileId);
+}
+
+function graphMsgForTile(tileId: string, msg: StateMsg): StateMsg {
+  const modeId = tileId === "main" ? modeSel.value : tileId;
+  const spec = pluginSpecForMode(modeId);
+  if (tileHealth?.forceDemo(tileId)) return withGoldenSnapshot(msg, pluginIdleOf(spec));
+  return msg;
+}
+
 /** Mosaic extras keep their own look; a wall row's plugin sky wins over a sky-less hero. */
 function skySpecForMode(modeId: string, fallback: PluginView | null): PluginView | null {
   const selected = fallback ?? pluginSpecForMode(modeId);
@@ -1255,7 +1322,11 @@ async function runMosaicPaneSwitch(
     mountView: mountMosaicPanelView,
     persistLayout: persistMosaicPickLayout,
   });
-  if (result.ok) syncMosaicPluginHudCaptions();
+  if (result.ok) {
+    noteTileHealthGrace(toViewId);
+    if (fromViewId) noteTileHealthGrace(fromViewId);
+    syncMosaicPluginHudCaptions();
+  }
   return result;
 }
 
@@ -1368,6 +1439,7 @@ function applySoloModeVisuals(m: ViewMode, opts: Record<string, string>, spec: P
 }
 
 function reapplyCommittedModeSurfaces(modeId: string): void {
+  noteTileHealthGrace("main");
   const m = modeById(modeId);
   const opts = optsFor(m);
   currentOpts = opts;
@@ -1713,6 +1785,7 @@ function feed(m: StateMsg): void {
     mosaicTileIds: mosaic?.tileIds ?? [],
     graphScene: (id) => mosaic?.graphScene(id) ?? null,
     arcadeViews: Object.values(arcade).map((a) => a.view),
+    remapSlotMsg: (slot, msg) => graphMsgForTile(slot === "hero" ? "main" : slot, msg),
   });
   applyStats(shown);
   feedCtl.feed?.setSourceHeadlines(sourceHeadlines(m.sources));
@@ -1842,6 +1915,16 @@ settings.addSection(
   [sysCpuIdle, sysLabels],
   "CPU graphs: idle processes fade, or hide at once. Labels apply to every graph.",
 );
+const tileHealToggle = new Toggle({
+  label: "tile heal errors",
+  title: "Show on-tile messages when the host heals a blank or stalled panel (off by default)",
+  checked: tileHealErrorsOn,
+  onChange: (on) => {
+    tileHealErrorsOn = on;
+    writeTileHealErrors(on);
+  },
+});
+settings.addSection("Tiles", [tileHealToggle], "Automatic empty-panel detection runs either way; this only controls visible heal messages.");
 const MOSAIC_FOCUS_KEY = "zoto-viz.mosaicFocus";
 function persistMosaicFocus(id: string | null | undefined): void {
   const v = id?.trim();
@@ -1860,6 +1943,7 @@ mosaic = new Mosaic({
   onFocus: (id) => {
     mosaic?.focus(id);
     persistMosaicFocus(id);
+    noteTileHealthGrace(id);
   },
   onPromote: (id, theme) => {
     applyMode(id, { keepLayout: true }, { channel: "user" });
@@ -1892,6 +1976,59 @@ mosaic = new Mosaic({
     aliasMap: lastRaw && mergeToggle.checked ? collapseByName(lastRaw).map : new Map(),
   }),
 });
+async function healTile(tileId: string, step: HealStep): Promise<void> {
+  const modeId = tileId === "main" ? modeSel.value : tileId;
+  const spec = pluginSpecForMode(modeId);
+  switch (step) {
+    case "resend-frame":
+      if (lastVizFrame) sandbox.frame(lastVizFrame);
+      break;
+    case "restart-pack": {
+      const m = modeById(modeId);
+      const sc = tileId === "main" ? scene : mosaic?.graphScene(tileId) ?? null;
+      if (sc) sc.setMode(m, optsFor(m));
+      if (spec && modeSel.value === m.id) await loadTsPlugin(spec, refreshPluginSignal.signal);
+      else void syncPluginSky(spec, refreshPluginSignal.signal);
+      sc?.refresh();
+      break;
+    }
+    case "recreate-context":
+      renderHost.recreateContext();
+      break;
+    case "demo-snapshot":
+      if (lastRaw && spec) {
+        const golden = withGoldenIfIdle(lastRaw, pluginIdleOf(spec));
+        const sc = tileId === "main" ? scene : mosaic?.graphScene(tileId) ?? null;
+        sc?.update(golden);
+      }
+      break;
+    case "fallback-pack":
+      if (mosaic?.on && tileId !== "main") mosaic.setPaneView(tileId, TILE_HEAL_FALLBACK_MODE);
+      else applyMode(TILE_HEAL_FALLBACK_MODE, {}, { channel: "user" });
+      break;
+  }
+}
+
+tileHealth = createProductionTileHealthMonitor({
+  host: renderHost,
+  mainScene: scene,
+  mosaic,
+  paneEl: (id) => (id === "main" ? scene.viewEl : mosaic?.graphScene(id)?.viewEl ?? null),
+  sceneFor: (id) => (id === "main" ? scene : mosaic?.graphScene(id) ?? null),
+  packFor: (id) => pluginSpecForMode(id === "main" ? modeSel.value : id),
+  mayBeStatic: (spec) => spec?.viz?.mayBeStatic === true,
+  awaitingApproval: (id) => tileHealthAwaitingApproval(id),
+  isVisible: (id) => {
+    const el = id === "main" ? scene.viewEl : mosaic?.graphScene(id)?.viewEl;
+    if (!el || el.hidden) return false;
+    const r = el.getBoundingClientRect();
+    return r.width > 8 && r.height > 8;
+  },
+  showErrors: () => tileHealErrorsOn,
+  onHeal: (tileId, step) => healTile(tileId, step),
+});
+bindTileHealthPresentTick(tileHealth, addPresentListener);
+
 settings.onMosaicPanePick = (from, to) => pickMosaicPane(from, to);
 
 async function pickMosaicPane(from: string, to: string): Promise<boolean> {
@@ -1900,6 +2037,8 @@ async function pickMosaicPane(from: string, to: string): Promise<boolean> {
     settings.refreshMosaicSlots();
     return false;
   }
+  noteTileHealthGrace(from);
+  noteTileHealthGrace(to);
   return true;
 }
 
