@@ -47,8 +47,8 @@ export function writeKoiHostMeshSlots(
     byAsset.set(assetIndex, list);
   };
 
-  push(4, hostMeshMatrixYawPos(0, 0, 0, 0), 0);
-  push(3, hostMeshMatrixYawPos(0.55, 0.02, 0.5, 0.4), 0);
+  push(4, hostMeshMatrixYawPos(0, 0, 0, 0.3, 0.9), 0);
+  push(3, hostMeshMatrixYawPos(0.55, 0.01, 0.5, 0.4, 0.32), 0);
 
   const koiCount = Math.round(Number(slot0[KOI_SLOT.koiCount]) || 0);
   let metaIdx = 0;
@@ -62,7 +62,7 @@ export function writeKoiHostMeshSlots(
     const { pattern, vigor } = unpackKoiMeta(metaPacked);
     const assetIndex = PATTERN_TO_ASSET[pattern] ?? 0;
     const phase = clock * (0.85 + vigor * 0.35) + metaIdx * 0.37;
-    push(assetIndex, hostMeshMatrixYawPos(x, 0.08 + wiggle, z, yaw), phase);
+    push(assetIndex, hostMeshMatrixYawPos(x, 0.04 + wiggle * 0.25, z, yaw, 0.48), phase);
   }
 
   const packets: number[][] = [];

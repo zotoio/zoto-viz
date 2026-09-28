@@ -46,7 +46,7 @@ export interface VoxOptions {
 const PRESETS: Record<Exclude<VoxPreset, "custom">, Partial<VoxOptions>> = {
   classic: {
     preset: "classic", seed: 4242, biome: "temperate", viewDist: 40, timeOfDay: 14, cycleSpeed: 0.35,
-    weather: "clear", camera: "fly", cameraSpeed: 1, fog: 0.5, textureStyle: "crisp", mobs: 3, clouds: true, palette: "verdant",
+    weather: "clear", camera: "walk", cameraSpeed: 1, fog: 0.5, textureStyle: "crisp", mobs: 3, clouds: true, palette: "verdant",
   },
   snowy: {
     preset: "snowy", seed: 9001, biome: "boreal", viewDist: 44, timeOfDay: 10, cycleSpeed: 0.15,
@@ -137,7 +137,7 @@ export function parseVoxConfig(cfg: Record<string, string> = {}): VoxOptions {
   }
   const base = preset === "custom"
     ? { preset: "custom" as const, seed: 4242, biome: "temperate" as const, viewDist: 40, timeOfDay: 14, cycleSpeed: 0,
-      weather: "clear" as const, camera: "fly" as const, cameraSpeed: 1, fog: 0.55, textureStyle: "crisp" as const,
+      weather: "clear" as const, camera: "walk" as const, cameraSpeed: 1, fog: 0.55, textureStyle: "crisp" as const,
       mobs: 3, clouds: true, palette: "verdant" as const, reducedMotion: false }
     : { ...PRESETS[preset], reducedMotion: false };
   const caps = capsFrom(filtered);

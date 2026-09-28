@@ -466,11 +466,12 @@ export class VizHud {
           continue;
         }
         if (!(el instanceof HTMLElement)) {
-          el = document.createElement("div");
-          el.className = "viz-stage-fail-label pane-status";
-          el.setAttribute("role", "status");
-          el.title = this.stageFailEl.title;
-          pane.append(el);
+          const created = document.createElement("div");
+          created.className = "viz-stage-fail-label pane-status";
+          created.setAttribute("role", "status");
+          created.title = this.stageFailEl.title;
+          pane.append(created);
+          el = created;
         }
         if (el.textContent !== text) el.textContent = text;
       }

@@ -321,10 +321,8 @@ vec3 aurora(vec3 dir, float t) {
   float w = fbm(vec2(lon * 1.4, dir.y * 3.2 + t * 0.08));
   float belt = exp(-pow(dir.y - 0.22, 2.0) * 3.2);
   float curtain = belt * smoothstep(0.18, 0.78, w) * (0.5 + 0.5 * max(0.0, dir.y + 0.4));
-  float band = sin(dir.y * 8.0 + w * 4.0 + t * 0.3);
   vec3 c = uBg * 0.16;
-  c += mix(uAccent, vec3(0.2, 0.95, 0.55), 0.55) * curtain * (0.75 + 0.35 * band);
-  c += vec3(0.55, 0.2, 0.9) * curtain * pow(max(0.0, band), 3.0) * 0.55;
+  c += mix(uAccent, vec3(0.2, 0.95, 0.55), 0.55) * curtain * 0.8;
   return c;
 }
 

@@ -113,13 +113,13 @@ export function voxelCamera(
     return { x, y, z, yaw, pitch };
   }
   if (o.camera === "walk") {
-    const path = phase * 6;
-    const x = villageX + Math.sin(path * 0.15) * 40 + Math.cos(path * 0.07) * 20;
-    const z = villageZ + path * 2.2 - 30;
+    const ang = reducedMotion ? 0.4 : phase * 0.55;
+    const x = villageX + 3.2 + Math.cos(ang) * 2.1;
+    const z = villageZ + 0.2 + Math.sin(ang) * 2.1;
     const ground = terrainHeight(x, z, o.seed, o.biome);
-    const y = ground + 1.62 + Math.sin(path * 2) * 0.04;
-    const yaw = Math.atan2(Math.cos(path * 0.15) * 6, 2.2);
-    const pitch = -0.05 + Math.sin(path) * 0.02;
+    const y = ground + 1.62 + Math.sin(phase * 2.4) * 0.035;
+    const yaw = Math.atan2(villageX + 2 - x, villageZ - z);
+    const pitch = -0.18 + Math.sin(phase * 1.7) * 0.03;
     return { x, y, z, yaw, pitch };
   }
   const x = villageX + Math.sin(phase * 0.4) * 55 + Math.sin(phase * 0.11) * 20;

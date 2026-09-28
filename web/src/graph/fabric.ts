@@ -165,6 +165,10 @@ export interface FabricNodePose {
   glow: number;
   opacity: number;
   visible: boolean;
+  /** Layout-space trail so the node sits behind the wires, along the cloud's travel. */
+  lx?: number;
+  ly?: number;
+  lz?: number;
 }
 
 export interface FabricEdgePose {
@@ -384,12 +388,11 @@ function fabricMaterial(): THREE.MeshStandardMaterial {
         `#include <begin_vertex>
 float wave = 0.0;
 if (aKind < 0.5) {
-  wave = 0.32 * aGlow * sin(uTime * 2.3 + aAlong * 4.0);
-  if (uKind > 0.5) wave *= 1.25;
+  wave = 0.0;
 } else if (aKind < 1.5) {
-  wave = aWave * sin(aAlong * 12.0 - uTime * 2.8);
+  wave = aWave * 0.06 * sin(aAlong * 3.0);
 } else {
-  wave = (0.22 + 0.18 * uPulse) * sin(uTime * 1.35 + aAlong * 6.4);
+  wave = 0.04 * sin(aAlong * 4.0);
 }
 transformed += normalize(objectNormal) * wave;
 float cometGlow = 0.0;
@@ -406,8 +409,9 @@ vAlpha = aAlpha;`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", "#include <common>\nvarying float vGlow;\nvarying float vAlpha;")
-      .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.a *= vAlpha;")
-      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance = vColor.rgb * vGlow;");
+      .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.rgb *= 0.48;\ndiffuseColor.a *= vAlpha;")
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance = vColor.rgb * min(vGlow, 0.35) * 0.06;")
+      .replace("#include <opaque_fragment>", "outgoingLight = min(outgoingLight, max(vColor.rgb, vec3(0.04)));\n#include <opaque_fragment>");
   };
   return mat;
 }
@@ -678,6 +682,7 @@ function writeElbow(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEd
 }
 
 function writeNodeKind(w: Writer, n: FabricNodePose, draw: NodeDraw, kind: FabricKind): void {
+  if (n.lx || n.ly || n.lz) n = { ...n, x: n.x + (n.lx ?? 0), y: n.y + (n.ly ?? 0), z: n.z + (n.lz ?? 0) };
   const squat = kind === "circuit";
   if (draw === "disc") {
     const scale = kind === "map" ? n.scale * 1.35 : kind === "constellation" ? n.scale * 0.55 : n.scale;
@@ -831,7 +836,8 @@ export class GraphFabric {
     }
     this.mat.opacity = 0.22 + 0.78 * k;
     this.mesh.scale.setScalar(0.86 + 0.14 * k);
-    this.mat.blending = opts.additive ? THREE.AdditiveBlending : THREE.NormalBlending;
+    // Lit tubes already carry the edge colour. Additive stacking at a hub clips to white.
+    this.mat.blending = THREE.NormalBlending;
     this.mesh.visible = this.verts > 0;
   }
 

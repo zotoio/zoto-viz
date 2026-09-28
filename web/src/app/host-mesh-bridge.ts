@@ -83,6 +83,42 @@ function pinAquariumContents(lane: HostMeshLane): void {
   }
 }
 
+/** Designer koi are ~1.6 m long; the pond camera sits about 1.7 m from the water. */
+const KOI_FISH_SCALE = 0.48;
+const KOI_LILY_SCALE = 0.32;
+const KOI_ROCK_SCALE = 0.9;
+
+function pinKoiContents(lane: HostMeshLane): void {
+  const fish: [number, number, number, number, number][] = [
+    [0, -0.55, 0.04, 0.15, 0.4],
+    [0, 0.35, 0.05, -0.4, 2.1],
+    [1, 0.1, 0.04, 0.45, -0.8],
+    [1, -0.2, 0.06, -0.55, 1.4],
+    [2, 0.6, 0.03, 0.2, -1.6],
+    [2, -0.7, 0.05, -0.15, 0.2],
+  ];
+  const byAsset = new Map<number, { matrix: number[]; extras: { animTime: number; param1: number; param2: number; flags: number } }[]>();
+  const push = (asset: number, matrix: number[], animTime: number) => {
+    const list = byAsset.get(asset) ?? [];
+    list.push({ matrix, extras: { animTime, param1: 0, param2: 0, flags: 0 } });
+    byAsset.set(asset, list);
+  };
+  push(4, hostMeshMatrixYawPos(0, 0, 0, 0.3, KOI_ROCK_SCALE), 0);
+  const pads: [number, number, number][] = [
+    [0.15, 0.35, 0.2],
+    [-0.45, -0.2, 1.1],
+    [0.5, -0.45, -0.4],
+    [-0.15, 0.6, 2.2],
+  ];
+  for (const [x, z, yaw] of pads) push(3, hostMeshMatrixYawPos(x, 0.01, z, yaw, KOI_LILY_SCALE), 0);
+  fish.forEach(([asset, x, y, z, yaw], i) => {
+    push(asset, hostMeshMatrixYawPos(x, y, z, yaw, KOI_FISH_SCALE), i * 0.37);
+  });
+  for (const [asset, instances] of byAsset) {
+    lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, instances));
+  }
+}
+
 export function createHostMeshBridge(scene: NetScene): HostMeshBridge {
   const lane = scene.hostMeshLane;
 
@@ -97,6 +133,8 @@ export function createHostMeshBridge(scene: NetScene): HostMeshBridge {
       if (spec.id === "aquarium") {
         lane.setScenery(buildAquariumTank());
         pinAquariumContents(lane);
+      } else if (spec.id === "koi-pond") {
+        pinKoiContents(lane);
       }
       return !lane.allAssetsFailed();
     },

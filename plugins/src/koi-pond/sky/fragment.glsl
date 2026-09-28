@@ -79,7 +79,6 @@ void main() {
   float clarity = slotF(0, 1.0);
   float murk = slotF(0, 2.0);
   float fail = slotF(0, 3.0);
-  float lilyDens = slotF(0, 6.0);
   float lotusN = slotF(0, 7.0);
   float lotusCol = slotF(0, 8.0);
   float ripple = slotF(0, 10.0);
@@ -91,28 +90,24 @@ void main() {
   float rainOn = slotF(0, 16.0);
   float camAng = slotF(0, 17.0);
   float camPhase = slotF(0, 18.0);
-  float sw = max(slotF(0, 19.0), 640.0);
-  float sh = max(slotF(0, 20.0), 360.0);
   float labelOn = slotF(0, 21.0);
   float legendOn = slotF(0, 22.0);
   float timeScale = max(slotF(0, 27.0), 0.05);
   float metricPeak = slotF(0, 28.0);
-  float tileScale = max(slotF(0, 30.0), 1.0);
   float labelMetric = slotF(0, 31.0);
   float sizeScale = slotF(0, 32.0);
   float simTime = uTime * timeScale;
 
-  vec2 fc = gl_FragCoord.xy;
-  vec2 fcSnap = floor(fc / tileScale) * tileScale + tileScale * 0.5;
-  vec2 uv = (fcSnap - 0.5 * vec2(sw, sh)) / min(sw, sh);
-
+  // Same eye as the host stage camera. vDir is the camera-local ray, the way the tank sky works.
   float tilt = camAng < 0.5 ? 0.02 : 0.22;
   vec3 ro = vec3(sin(camPhase) * 0.08, 1.35 + tilt, 1.05 + camAng * 0.35);
   vec3 ta = vec3(0.0, 0.0, 0.0);
   vec3 ww = normalize(ta - ro);
   vec3 uu = normalize(cross(vec3(0.0, 1.0, 0.0), ww));
   vec3 vv = cross(ww, uu);
-  vec3 dir = normalize(uv.x * uu + uv.y * vv + 1.2 * ww);
+  vec3 vd = normalize(vDir);
+  vec2 uv = vd.xy / max(-vd.z, 1e-4);
+  vec3 dir = normalize(uu * vd.x + vv * vd.y - ww * vd.z);
 
   float tPlane = -ro.y / dir.y;
   vec3 hit = ro + dir * max(tPlane, 0.01);
@@ -132,14 +127,8 @@ void main() {
   float caust2 = noise3(vec3(xz * 9.0 - wn.xz, simTime * 0.85));
   if (caustOn > 0.5) water += vec3(0.35, 0.75, 0.65) * (caust * 0.65 + caust2 * 0.35) * caustStr * 0.22 * (1.0 - murk);
 
-  int nKoi = int(clamp(slotF(0, 24.0), 0.0, 16.0));
-  {
-    // modelFlags: bit 2 (value 2) loaded, bit 1 (value 1) procedural. Host GLBs replace the ellipse koi.
-    float mf = floor(slotF(0, 52.0) + 0.001);
-    float loaded = step(0.5, mod(floor(mf / 2.0), 2.0));
-    float procedural = step(0.5, mod(mf, 2.0));
-    if (loaded * (1.0 - procedural) > 0.5) nKoi = 0;
-  }
+  // Fish and pads are host meshes, the same split as the tank. The sky keeps the water.
+  int nKoi = 0;
   for (int i = 0; i < 16; i++) {
     if (i >= nKoi) break;
     float fi = float(i * 4);
@@ -160,7 +149,7 @@ void main() {
     water += vec3(0.9, 0.95, 1.0) * exp(-body * 80.0) * ripple * 0.08;
   }
 
-  int padCount = int(clamp(4.0 + lilyDens * 8.0, 4.0, 12.0));
+  int padCount = 0;
   for (int j = 0; j < 12; j++) {
     if (j >= padCount) break;
     float fj = float(j * 4);

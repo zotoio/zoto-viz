@@ -1,8 +1,8 @@
 id: voxel-world
 name: Voxel World
 version: 2
-hint: Blocky procedural voxel terrain on the plugin sky. Greedy-meshed chunks drive stats; live host gauges tint weather, place torches, and flash Zoto fail red ahead of the spectacle.
-description: Stage-only blocky voxel landscape. All textures are procedural. Config, presets, caps, and live-data bindings are declared below and read only through config.read.
+hint: First-person block builder. The eye walks a yard of placed blocks; live host gauges tint weather, torches, and fail colour.
+description: Stage-only first-person block world. The camera stands at eye height inside a build and looks along the yard. All textures are procedural. Config, presets, caps, and live-data bindings are declared below and read only through config.read.
 capabilities:
   - viz.read
   - viz.write
@@ -88,7 +88,7 @@ config:
   - key: camera
     label: camera mode
     type: select
-    default: fly
+    default: walk
     values:
       - [fly, cinematic fly]
       - [walk, first-person walk]

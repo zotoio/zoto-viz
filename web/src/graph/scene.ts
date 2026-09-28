@@ -37,6 +37,10 @@ import { liveCam } from "../camera/livecam";
 import { cameraConsumers } from "../camera/want";
 import { Gaze } from "../camera/gaze";
 import { FloorGrid, easeFloorPose, floorPose, type FloorPose, type FloorShape } from "./floor";
+import {
+  applyDriftPoint, driftRig, graphDriftPose, lagIntoLayout, nodeLagReach, nodeTravelScale, stepNodeLag, unapplyDriftPoint,
+  type GraphDriftPose,
+} from "./graph-drift";
 import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
@@ -128,7 +132,7 @@ export interface GNode extends SimNode {
   /** last `--fade` written on the label, so CPU opacity is not a DOM write every frame */
   labelFade?: string;
 }
-export interface GLink extends SimLink<GNode> { id: string; flow: Flow; source: GNode; target: GNode; visible: boolean }
+export interface GLink extends SimLink<GNode> { id: string; flow: Flow; source: GNode; target: GNode; visible: boolean; shownBright?: number }
 
 const SHELL: Record<Role, number> = { self: 110, gateway: 0, local: 200, lan: 360, multicast: 440, internet: 580 };
 /** a shell is crowded when the nodes on it get less ring than this each (world units; a label is ~2× this) */
@@ -634,7 +638,10 @@ const _m = new THREE.Matrix4();
 const _pos = new THREE.Vector3();
 const _scl = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
+const _axisX = new THREE.Vector3(1, 0, 0);
 const _axisY = new THREE.Vector3(0, 1, 0);
+const _quatPitch = new THREE.Quaternion();
+const _quatYaw = new THREE.Quaternion();
 const _dir = new THREE.Vector3();
 const _sphere = new THREE.Sphere();
 const ARROW_CAP = 280;
@@ -1105,6 +1112,16 @@ export class NetScene implements HostedView, RenderScalePane {
   private links = new Map<string, GLink>();
   /** every drawn device sphere in one draw call; labels live in `labelLayer` (positioned by hand each frame) */
   private spheres: THREE.InstancedMesh;
+  /** Graph meshes only. Floor, sky, and host-mesh models stay on the scene root. */
+  private readonly graphRig = new THREE.Group();
+  private driftPose: GraphDriftPose = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0 };
+  /** Slower follower of the cloud pose. Nodes trail this, wires do not. */
+  private nodeFollow = { x: 0, y: 0, z: 0 };
+  private nodeFollowLive = false;
+  private driftClock = 0;
+  /** Layout-space trail shared by every node; per-node scale stretches it. */
+  private nodeLagLocal = { x: 0, y: 0, z: 0 };
+  private readonly driftPhase = Math.random();
   private readonly sphereMat = sphereMaterial();
   private readonly fabric = new GraphFabric();
   private arrows: THREE.InstancedMesh;
@@ -1447,10 +1464,11 @@ export class NetScene implements HostedView, RenderScalePane {
     this.scene.add(this.backdrop.photoMesh);
     this.backdrop.setColors(this.theme.scene.rim, this.theme.scene.clear);
 
-    // devices
+    // devices — parented on the rig so the cloud can drift off the floor and sky
+    this.scene.add(this.graphRig);
     this.spheres = sphereCloud(this.sphereMat, SPHERE_CAPACITY);
-    this.scene.add(this.spheres);
-    this.scene.add(this.fabric.mesh);
+    this.graphRig.add(this.spheres);
+    this.graphRig.add(this.fabric.mesh);
     const arrowGeo = new THREE.ConeGeometry(5.5, 16, 7);
     arrowGeo.translate(0, 8, 0);
     this.arrows = new THREE.InstancedMesh(arrowGeo, new THREE.MeshBasicMaterial({
@@ -1460,7 +1478,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.arrows.count = 0;
     this.arrows.frustumCulled = false;
     this.arrows.visible = false;
-    this.scene.add(this.arrows);
+    this.graphRig.add(this.arrows);
 
     // edges
     this.linePos = new Float32Array(0);
@@ -1470,7 +1488,7 @@ export class NetScene implements HostedView, RenderScalePane {
     // Light themes use normal blending and edgeColor() lerps from the background instead.
     this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.lines.frustumCulled = false;
-    this.scene.add(this.lines);
+    this.graphRig.add(this.lines);
     this.glowAlong = new Float32Array(0);
     this.glowAb = new Float32Array(0);
     this.glowBa = new Float32Array(0);
@@ -1479,7 +1497,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.glowLines = new THREE.LineSegments(new THREE.BufferGeometry(), this.glowMat);
     this.glowLines.frustumCulled = false;
     this.glowLines.renderOrder = 1;
-    this.scene.add(this.glowLines);
+    this.graphRig.add(this.glowLines);
 
     // traffic particles
     this.partPos = new Float32Array(MAX_PARTICLES * 3);
@@ -1490,7 +1508,7 @@ export class NetScene implements HostedView, RenderScalePane {
     pg.setDrawRange(0, 0);
     this.particles = new THREE.Points(pg, new THREE.PointsMaterial({ size: 3.2, vertexColors: true, transparent: true, opacity: 0.95, sizeAttenuation: true, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.particles.frustumCulled = false;
-    this.scene.add(this.particles);
+    this.graphRig.add(this.particles);
     this.applyBlending();
 
     // Layout forces run in a Worker (see layout-core.ts). The client is created on the first tick that
@@ -1765,17 +1783,20 @@ export class NetScene implements HostedView, RenderScalePane {
     const th = this.theme.scene;
     const segs: { ax: number; ay: number; az: number; bx: number; by: number; bz: number; r: number; g: number; b: number }[] = [];
     for (let i = 0; i + 5 < this.linePos.length; i += 6) {
+      const a = this.viewOf(this.linePos[i]!, this.linePos[i + 1]!, this.linePos[i + 2]!);
+      const b = this.viewOf(this.linePos[i + 3]!, this.linePos[i + 4]!, this.linePos[i + 5]!);
       segs.push({
-        ax: this.linePos[i]!, ay: this.linePos[i + 1]!, az: this.linePos[i + 2]!,
-        bx: this.linePos[i + 3]!, by: this.linePos[i + 4]!, bz: this.linePos[i + 5]!,
+        ax: a.x, ay: a.y, az: a.z,
+        bx: b.x, by: b.y, bz: b.z,
         r: this.lineCol[i] ?? 0, g: this.lineCol[i + 1] ?? 0, b: this.lineCol[i + 2] ?? 0,
       });
     }
     const partN = this.particles.geometry.drawRange.count;
     const particles = [];
     for (let i = 0; i < partN; i++) {
+      const p = this.viewOf(this.partPos[i * 3] ?? 0, this.partPos[i * 3 + 1] ?? 0, this.partPos[i * 3 + 2] ?? 0);
       particles.push({
-        x: this.partPos[i * 3] ?? 0, y: this.partPos[i * 3 + 1] ?? 0, z: this.partPos[i * 3 + 2] ?? 0,
+        x: p.x, y: p.y, z: p.z,
         r: this.partCol[i * 3] ?? 1, g: this.partCol[i * 3 + 1] ?? 1, b: this.partCol[i * 3 + 2] ?? 1,
       });
     }
@@ -1785,10 +1806,15 @@ export class NetScene implements HostedView, RenderScalePane {
     for (const n of this.nodes.values()) {
       if (!n.visible && n.scale <= COLLAPSED_SCALE) continue;
       const look = this.mode.liveLook?.(n, wall, modeCtx);
+      const baseX = (n.x ?? 0) + (look?.dx ?? 0);
+      const baseY = (n.y ?? 0) + (look?.dy ?? 0);
+      const baseZ = (n.z ?? 0) + (look?.dz ?? 0);
+      const shift = this.nodeShift(n.id, n === this.dragging, n.scale * this.anim.nodeWeight);
+      const p = this.viewOf(baseX + shift.x, baseY + shift.y, baseZ + shift.z);
       nodes.push({
-        x: (n.x ?? 0) + (look?.dx ?? 0),
-        y: (n.y ?? 0) + (look?.dy ?? 0),
-        z: (n.z ?? 0) + (look?.dz ?? 0),
+        x: p.x,
+        y: p.y,
+        z: p.z,
         scale: n.scale * this.anim.nodeWeight * (look?.scale ?? 1),
         r: n.color.r, g: n.color.g, b: n.color.b, a: n.opacity,
         glow: n.glow,
@@ -1928,7 +1954,6 @@ export class NetScene implements HostedView, RenderScalePane {
       this.controls.update();
     }
     this.applyGraphMarks();
-    this.particles.visible = !on;
     this.arrows.visible = !on && graphLinksArrows(this.anim.graphLinks);
     this.labelLayer.domElement.style.display = on ? "none" : "";
     this.labelLayer.domElement.style.visibility = on ? "hidden" : "";
@@ -1954,6 +1979,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.glowLines.visible = show && !mesh && this.anim.edgeGlow !== "off";
     this.arrows.visible = show && !mesh && graphLinksArrows(this.anim.graphLinks);
     this.fabric.mesh.visible = mesh;
+    this.particles.visible = show && !mesh;
     this.inputEl.dataset.fabric = kind;
   }
 
@@ -2208,7 +2234,8 @@ export class NetScene implements HostedView, RenderScalePane {
       const obj = this.decoObjs.get(d.id);
       if (!obj) continue;
       this.decoPoint(d.at, _hot);
-      obj.position.copy(_hot);
+      const dp = this.viewOf(_hot.x, _hot.y, _hot.z);
+      obj.position.set(dp.x, dp.y, dp.z);
     }
   }
 
@@ -3250,9 +3277,10 @@ export class NetScene implements HostedView, RenderScalePane {
     n.fx = n.x ?? 0;
     n.fy = n.y ?? 0;
     n.fz = n.z ?? 0;
+    const held = this.viewOf(n.fx, n.fy, n.fz);
     this.dragPlane.setFromNormalAndCoplanarPoint(
-      _off.copy(this.camera.position).sub(_pos.set(n.fx, n.fy, n.fz)).normalize(),
-      _pos.set(n.fx, n.fy, n.fz),
+      _off.copy(this.camera.position).sub(_pos.set(held.x, held.y, held.z)).normalize(),
+      _pos.set(held.x, held.y, held.z),
     );
     this.inputEl.style.cursor = "grabbing";
     this.dragVel.set(0, 0, 0);
@@ -3265,10 +3293,11 @@ export class NetScene implements HostedView, RenderScalePane {
     if (!n) return;
     this.raycaster.setFromCamera(this.pointer, this.camera);
     if (!this.raycaster.ray.intersectPlane(this.dragPlane, this.dragHit)) return;
-    this.dragVel.set(this.dragHit.x - (n.x ?? 0), this.dragHit.y - (n.y ?? 0), this.dragHit.z - (n.z ?? 0));
-    n.x = n.fx = this.dragHit.x;
-    n.y = n.fy = this.dragHit.y;
-    n.z = n.fz = this.dragHit.z;
+    const laid = unapplyDriftPoint(this.dragHit.x, this.dragHit.y, this.dragHit.z, this.driftPose, this.focus);
+    this.dragVel.set(laid.x - (n.x ?? 0), laid.y - (n.y ?? 0), laid.z - (n.z ?? 0));
+    n.x = n.fx = laid.x;
+    n.y = n.fy = laid.y;
+    n.z = n.fz = laid.z;
     this.pinDrag(n);
   }
 
@@ -3675,12 +3704,12 @@ export class NetScene implements HostedView, RenderScalePane {
   /** Double the instance capacity; the per-frame write fills the new mesh before it is first drawn. */
   private growSpheres(): void {
     const cap = Math.max(SPHERE_CAPACITY, this.spheres.instanceMatrix.count * 2);
-    this.scene.remove(this.spheres);
+    this.graphRig.remove(this.spheres);
     this.spheres.geometry.dispose();
     this.spheres.dispose();
     this.spheres = sphereCloud(this.sphereMat, cap);
     this.spheres.visible = !this.stageOnly;
-    this.scene.add(this.spheres);
+    this.graphRig.add(this.spheres);
   }
 
   private removeNode(n: GNode): void {
@@ -3929,6 +3958,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.lastTuneK = this.tune.k;
     this.easePhys(dt);
     const wall = wallMs / 1000;
+    this.stepGraphDrift(wall);
     this.backdrop.tick(wall);
     if (!this.satellite && this.anim.backdrop === "dynamic") ensureSkyRecipe(this.anim.skyAiMin * 60_000);
     this.applyLook(dt);
@@ -4012,9 +4042,13 @@ export class NetScene implements HostedView, RenderScalePane {
       const z = (n.z ?? 0) + (look?.dz ?? 0);
       const beat = this.anim.audioNodes ? 1 + 0.32 * this.pulseBass * (n === this.selected || n === this.dragging ? 1.55 : 1) : 1;
       const s = n.visible ? n.scale * beat * this.anim.nodeWeight * (look?.scale ?? 1) * (0.86 + 0.14 * mixFade(this.viewMorphT)) : 0;
+      const shift = this.nodeShift(n.id, n === this.dragging, s);
+      const nx = x + shift.x;
+      const ny = y + shift.y;
+      const nz = z + shift.z;
       if (look?.spin != null) _quat.setFromAxisAngle(_axisY, look.spin);
       else _quat.identity();
-      sp.setMatrixAt(ni, _m.compose(_pos.set(x, y, z), _quat, _scl.set(s, s, s)));
+      sp.setMatrixAt(ni, _m.compose(_pos.set(nx, ny, nz), _quat, _scl.set(s, s, s)));
       if (look) {
         liveStyle = true;
         _colA.copy(n.color);
@@ -4033,13 +4067,17 @@ export class NetScene implements HostedView, RenderScalePane {
       glowAttr.setX(ni, instGlow);
       alphaAttr.setX(ni, n.opacity);
       const cr = look ? _colA.r : n.color.r, cg = look ? _colA.g : n.color.g, cb = look ? _colA.b : n.color.b;
-      const pose: FabricNodePose = { id: n.id, x, y, z, scale: Math.max(s, 0.35), r: cr, g: cg, b: cb, glow: instGlow, opacity: n.opacity, visible: n.visible && s > 0.05 };
+      const pose: FabricNodePose = {
+        id: n.id, x, y, z, lx: shift.x, ly: shift.y, lz: shift.z,
+        scale: Math.max(s, 0.35), r: cr, g: cg, b: cb, glow: instGlow, opacity: n.opacity, visible: n.visible && s > 0.05,
+      };
       fabricNodes.push(pose);
       fabricById.set(n.id, pose);
       ni++;
       if (n.label.visible) {
         labelsOn++;
-        n.label.position.set(x, y + 1.9 * n.scale * this.anim.nodeWeight, z);
+        const lp = this.viewOf(nx, ny + 1.9 * n.scale * this.anim.nodeWeight, nz);
+        n.label.position.set(lp.x, lp.y, lp.z);
       }
       if (cpuView) {
         const fade = n.opacity.toFixed(3);
@@ -4085,6 +4123,11 @@ export class NetScene implements HostedView, RenderScalePane {
       if (!tether && mode.linkBright) bright = mode.linkBright(l, ctx, bright);
       bright = edgeHighlightBright(bright, !!(sel && (a === sel || b === sel)), !!sel, l.visible);
       bright *= this.anim.edgeWeight * Math.min(a.opacity, b.opacity);
+      bright = Math.min(bright, this.additiveMarks() ? 0.42 : 1.05);
+      const prevBright = l.shownBright ?? bright;
+      const brightK = 1 - Math.exp(-Math.max(dt, 0) / 2.4);
+      bright = prevBright + (bright - prevBright) * brightK;
+      l.shownBright = bright;
       const isLan = a.device.role !== "internet" && b.device.role !== "internet";
       const mc = tether ? undefined : mode.linkColor?.(l, ctx);
       const ca = Array.isArray(mc) ? mc[0] : mc ?? (tether ? th.tether : isLan ? th.lanEdge : th.wanEdge);
@@ -4221,7 +4264,8 @@ export class NetScene implements HostedView, RenderScalePane {
           this.labelLayer.add(obj);
           this.overlayObjs.set(o.id, obj);
         }
-        obj.position.set(o.x, o.y, o.z);
+        const op = this.viewOf(o.x, o.y, o.z);
+        obj.position.set(op.x, op.y, op.z);
         if (obj.element.innerHTML !== o.html) obj.element.innerHTML = o.html;
       }
     }
@@ -4274,7 +4318,13 @@ export class NetScene implements HostedView, RenderScalePane {
     for (const n of this.nodes.values()) {
       if (!n.visible || n.scale < 0.5) continue;
       const look = this.mode.liveLook?.(n, t, ctx);
-      _sphere.center.set((n.x ?? 0) + (look?.dx ?? 0), (n.y ?? 0) + (look?.dy ?? 0), (n.z ?? 0) + (look?.dz ?? 0));
+      const shift = this.nodeShift(n.id, n === this.dragging, n.scale * this.anim.nodeWeight);
+      const picked = this.viewOf(
+        (n.x ?? 0) + (look?.dx ?? 0) + shift.x,
+        (n.y ?? 0) + (look?.dy ?? 0) + shift.y,
+        (n.z ?? 0) + (look?.dz ?? 0) + shift.z,
+      );
+      _sphere.center.set(picked.x, picked.y, picked.z);
       _sphere.radius = n.scale * this.anim.nodeWeight * (look?.scale ?? 1) * (fabricActive(this.fabricKind()) ? 1.45 : 1);
       if (!ray.intersectSphere(_sphere, _hit)) continue;
       const d = _hit.distanceToSquared(ray.origin);
@@ -4378,6 +4428,68 @@ export class NetScene implements HostedView, RenderScalePane {
     this.lookPinned = false;
     this.cameraGoalDir = new THREE.Vector3(cam[0], cam[1], cam[2]).normalize();
     this.focus.n = 0;
+  }
+
+  /**
+   * Slide and nod the graph on its own eased figure-8. Floor, sky, and host
+   * meshes stay put, so the cloud does not lock to their pitch or speed.
+   */
+  private stepGraphDrift(timeSec: number): void {
+    if (this.stageOnly || !this.nodes.size) {
+      this.driftPose = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0 };
+      this.nodeFollow = { x: 0, y: 0, z: 0 };
+      this.nodeFollowLive = false;
+      this.nodeLagLocal = { x: 0, y: 0, z: 0 };
+      this.driftClock = timeSec;
+    } else {
+      const sphere = !resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace, this.anim.graphLayout);
+      this.driftPose = graphDriftPose(timeSec, {
+        pitchDeg: this.anim.pitchDeg,
+        pitchPeriod: this.anim.pitchPeriod,
+        yawPeriod: this.anim.yawPeriod,
+      }, this.driftPhase, sphere);
+      const dt = this.nodeFollowLive ? Math.min(0.1, Math.max(0, timeSec - this.driftClock)) : 0;
+      this.driftClock = timeSec;
+      if (!this.nodeFollowLive) {
+        this.nodeFollow = { x: this.driftPose.x, y: this.driftPose.y, z: this.driftPose.z };
+        this.nodeFollowLive = true;
+      } else {
+        this.nodeFollow = stepNodeLag(this.nodeFollow, this.driftPose, dt);
+      }
+      this.nodeLagLocal = lagIntoLayout({
+        x: this.nodeFollow.x - this.driftPose.x,
+        y: this.nodeFollow.y - this.driftPose.y,
+        z: this.nodeFollow.z - this.driftPose.z,
+      }, this.driftPose);
+    }
+    const rig = driftRig(this.driftPose, this.focus);
+    _quatPitch.setFromAxisAngle(_axisX, rig.pitch);
+    _quatYaw.setFromAxisAngle(_axisY, rig.yaw);
+    this.graphRig.quaternion.multiplyQuaternions(_quatYaw, _quatPitch);
+    this.graphRig.position.set(rig.x, rig.y, rig.z);
+    this.graphRig.updateMatrix();
+  }
+
+  /**
+   * Inertia trail for one node. The shared lag follows the core drift slowly;
+   * each node is held to just behind its own connector, so the line end stays
+   * in front of the glyph.
+   */
+  private nodeShift(id: string, held: boolean, scale: number): { x: number; y: number; z: number } {
+    if (held) return { x: 0, y: 0, z: 0 };
+    const lx = this.nodeLagLocal.x;
+    const ly = this.nodeLagLocal.y;
+    const lz = this.nodeLagLocal.z;
+    const len = Math.hypot(lx, ly, lz);
+    if (len < 0.05) return { x: 0, y: 0, z: 0 };
+    const dist = Math.min(len, nodeLagReach(scale)) * nodeTravelScale(id);
+    const k = dist / len;
+    return { x: lx * k, y: ly * k, z: lz * k };
+  }
+
+  /** Layout point as currently drawn (drifted). */
+  private viewOf(x: number, y: number, z: number): { x: number; y: number; z: number } {
+    return applyDriftPoint(x, y, z, this.driftPose, this.focus);
   }
 
   /** Sit the floor under the live cloud. Camera moves then keep graph and tiles together. */

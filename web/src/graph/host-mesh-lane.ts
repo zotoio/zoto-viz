@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+import { GLTFLoader, type GLTFLoaderPlugin } from "three/addons/loaders/GLTFLoader.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.js";
 import { clone as cloneSkinnedRoot } from "three/addons/utils/SkeletonUtils.js";
 import {
@@ -203,10 +203,7 @@ type EmbeddedImageParser = {
   getDependency: (type: string, index: number) => Promise<ArrayBuffer>;
 };
 
-export function embeddedImageTexturePlugin(parser: EmbeddedImageParser): {
-  name: string;
-  loadTexture: (textureIndex: number) => Promise<THREE.Texture | null> | null;
-} {
+export function embeddedImageTexturePlugin(parser: EmbeddedImageParser): GLTFLoaderPlugin {
   return {
     name: "ZOTO_EMBEDDED_IMAGE",
     loadTexture(textureIndex) {
@@ -234,7 +231,7 @@ export function embeddedImageTexturePlugin(parser: EmbeddedImageParser): {
           return texture;
         } catch (e) {
           console.warn("zoto-viz host mesh: embedded image", source.name || bufferView, e);
-          return null;
+          throw e;
         }
       });
     },
