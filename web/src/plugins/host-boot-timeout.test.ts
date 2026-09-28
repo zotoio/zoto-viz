@@ -1,16 +1,17 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PluginSandbox, setSandboxBootWaitInTests, setSandboxMsgTimeoutMs } from "./host";
+import { PluginSandbox, setSandboxMsgTimeoutMs } from "./host";
+import { setSandboxTestHandshakeEnabled } from "./sandbox-test-harness";
 
 describe("PluginSandbox boot handshake", () => {
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
-    setSandboxBootWaitInTests(false);
+    setSandboxTestHandshakeEnabled(true);
     setSandboxMsgTimeoutMs(15_000);
     vi.restoreAllMocks();
   });
 
   it("rejects with frame-ready timeout when the sandbox iframe stays silent", async () => {
-    setSandboxBootWaitInTests(true);
+    setSandboxTestHandshakeEnabled(false);
     setSandboxMsgTimeoutMs(40);
     vi.useFakeTimers();
     const box = new PluginSandbox();

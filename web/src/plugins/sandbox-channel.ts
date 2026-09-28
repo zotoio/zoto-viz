@@ -1,5 +1,7 @@
 /** Host ↔ sandbox messaging after the one-time boot postMessage (MessageChannel port). */
 
+import type { VizPresentTick } from "./viz-host";
+
 export const HOST_SOURCE = "zoto-viz-host";
 export const PLUGIN_SOURCE = "zoto-viz-plugin";
 
@@ -28,7 +30,10 @@ export type HostPortMsg =
   | { source: typeof HOST_SOURCE; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
   | { source: typeof HOST_SOURCE; type: "frame"; frame: unknown }
   | { source: typeof HOST_SOURCE; type: "config"; config: Record<string, string> }
-  | { source: typeof HOST_SOURCE; type: "present"; tick: { frameMs: number; tileId: string; pluginClock?: number } };
+  | { source: typeof HOST_SOURCE; type: "present"; tick: VizPresentTick };
+
+/** Host runtime traffic on the MessagePort after boot (excludes the one-time boot payload). */
+export type HostSandboxPortMsg = Exclude<HostPortMsg, HostBootPayload>;
 
 export type PluginPortMsg =
   | { source: typeof PLUGIN_SOURCE; type: "ready"; bootNonce?: string }
@@ -48,7 +53,32 @@ export type PluginPortMsg =
   }
   | { source: typeof PLUGIN_SOURCE; type: "publishBitmap"; payload: { bitmap: ImageBitmap } }
   | { source: typeof PLUGIN_SOURCE; type: "publishBitmapFailed"; payload: Record<string, never> }
+  | { source: typeof PLUGIN_SOURCE; type: "drawState"; payload: { drawing: boolean } }
+  | { source: typeof PLUGIN_SOURCE; type: "loseHostContext"; payload: Record<string, never> }
   | { source: typeof PLUGIN_SOURCE; type: "log"; payload: string };
+
+/** Plugin → host on `window` before / beside the MessageChannel (no `payload` wrapper). */
+export type PluginWindowMsg =
+  | { source: typeof PLUGIN_SOURCE; type: "frame-ready" }
+  | { source: typeof PLUGIN_SOURCE; type: "publishBitmap"; payload: { bitmap: ImageBitmap } }
+  | { source: typeof PLUGIN_SOURCE; type: "publishBitmapFailed"; payload: Record<string, never> };
+
+export type PluginHostMsg = PluginPortMsg | PluginWindowMsg;
+
+const PLUGIN_PORT_MSG_TYPES: ReadonlySet<PluginPortMsg["type"]> = new Set([
+  "ready",
+  "setStyle",
+  "setNodeColor",
+  "writeBuffer",
+  "writeUniform",
+  "writeParticles",
+  "writeBatch",
+  "publishBitmap",
+  "publishBitmapFailed",
+  "drawState",
+  "loseHostContext",
+  "log",
+]);
 
 export function isHostBootChannel(data: unknown): data is HostBootChannelMsg {
   const d = data as HostBootChannelMsg | undefined;
@@ -58,5 +88,26 @@ export function isHostBootChannel(data: unknown): data is HostBootChannelMsg {
 
 export function isPluginPortMsg(data: unknown): data is PluginPortMsg {
   const d = data as PluginPortMsg | undefined;
-  return !!d && d.source === PLUGIN_SOURCE && typeof d.type === "string";
+  return !!d && d.source === PLUGIN_SOURCE && typeof d.type === "string"
+    && PLUGIN_PORT_MSG_TYPES.has(d.type as PluginPortMsg["type"]);
 }
+
+export function hostAllows(type: PluginPortMsg["type"], caps: string[]): boolean {
+  const rules: Record<PluginPortMsg["type"], (c: string[]) => boolean> = {
+    ready: () => true,
+    setStyle: (c) => c.includes("graph.style"),
+    setNodeColor: (c) => c.includes("graph.style"),
+    writeBuffer: (c) => c.includes("viz.write"),
+    writeUniform: (c) => c.includes("viz.write"),
+    writeParticles: (c) => c.includes("viz.write"),
+    writeBatch: (c) => c.includes("viz.write"),
+    publishBitmap: (c) => c.includes("viz.write"),
+    publishBitmapFailed: (c) => c.includes("viz.write"),
+    drawState: () => true,
+    loseHostContext: () => true,
+    log: () => true,
+  };
+  return rules[type](caps);
+}
+
+export type { VizPresentTick };

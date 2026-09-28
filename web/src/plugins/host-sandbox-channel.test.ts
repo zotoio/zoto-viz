@@ -6,7 +6,6 @@ import {
   PluginSandbox,
   resetSandboxFramePostMessageCountForTests,
   sandboxFramePostMessageCountForTests,
-  setSandboxBootWaitInTests,
 } from "./host";
 describe("PluginSandbox MessageChannel boot", () => {
   beforeEach(() => {
@@ -14,19 +13,21 @@ describe("PluginSandbox MessageChannel boot", () => {
     vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
     setPackAssetTokenForTests("_sandbox", "tok-sandbox");
     resetSandboxFramePostMessageCountForTests();
-    setSandboxBootWaitInTests(false);
   });
 
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
     vi.restoreAllMocks();
     setPackAssetTokenForTests("_sandbox", "");
-    setSandboxBootWaitInTests(false);
   });
 
   it("uses exactly one window postMessage to the frame for boot-channel", async () => {
     const box = new PluginSandbox();
-    await box.loadModuleUrl("blob:http://127.0.0.1/fake", ["graph.read"], {});
+    await box.loadModuleUrl(
+      `data:text/javascript,${encodeURIComponent("globalThis.ok = true;")}`,
+      ["graph.read"],
+      {},
+    );
     expect(sandboxFramePostMessageCountForTests()).toBe(1);
     box.unload();
   });
@@ -37,7 +38,6 @@ describe("PluginSandbox navigation teardown", () => {
     vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
     vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
     setPackAssetTokenForTests("_sandbox", "tok-sandbox");
-    setSandboxBootWaitInTests(false);
   });
 
   afterEach(() => {
@@ -52,7 +52,11 @@ describe("PluginSandbox navigation teardown", () => {
     const box = new PluginSandbox();
     box.setActiveTile("plugin:demo");
     box.setActivePackLabel("Demo Pack");
-    await box.loadModuleUrl("blob:http://127.0.0.1/fake", ["graph.read"], {});
+    await box.loadModuleUrl(
+      `data:text/javascript,${encodeURIComponent("globalThis.ok = true;")}`,
+      ["graph.read"],
+      {},
+    );
     const iframe = document.querySelector("iframe");
     expect(iframe).toBeTruthy();
     iframe!.dispatchEvent(new Event("load"));
