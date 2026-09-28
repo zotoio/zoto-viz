@@ -81,7 +81,7 @@ export interface VizHudTick {
   /** Active mosaic / viz tiles (for LIMITED label mate count). */
   activeTiles?: number;
   /** Per-tile budget lines when mosaic shares the wall budget. */
-  tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats }[];
+  tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats | null }[];
   /** When set, show the frame-budget overlay (GPU/CPU ms, p95, scale). */
   renderScale?: number | null;
   /** rAF present-to-present interval (last + rolling p95), from {@link presentFrameStats}. */
@@ -479,13 +479,16 @@ export class VizHud {
     const rate = skipRatePerSec(this.skipSamples, now);
     if (tileBudget) {
       const nowTick = Math.round(now * 300);
-      const wallTiles = (tileBudgetLines ?? []).map((l) => l.tile);
+      const wallTiles = (tileBudgetLines ?? [])
+        .map((l) => l.tile)
+        .filter((t): t is VizTileBudgetStats => t !== null);
+      const mateTileCount = wallTiles.length > 0 ? wallTiles.length : activeTiles;
       const chrome = wallTiles.length
-        ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
+        ? wallHudChrome(tileBudget, wallTiles, nowTick, mateTileCount)
         : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
       const limited =
         chrome.state === "limited" && chrome.limitedLabel
-          ? this.skipLabelLine.limitedLabel(activeTiles, chrome.cadenceK)
+          ? this.skipLabelLine.limitedLabel(mateTileCount, chrome.cadenceK)
           : null;
       const skipText = limited ?? formatSkipRate(rate);
       this.skipLabelLine.writeText(this.skipEl, skipText);
@@ -530,6 +533,7 @@ export class VizHud {
 
     const lines = tileBudgetLines ?? [];
     for (const { tileId, tile } of lines) {
+      if (!tile) continue;
       const row = this.mosaicTileLines.get(tileId);
       if (!row) continue;
       const nowTick = Math.round(now * 300);

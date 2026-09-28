@@ -1586,11 +1586,30 @@ export class NetScene implements HostedView {
     this.paneFps.noteGpu(ms);
     if (packPerfEnabled()) notePackHostGpuMs(ms);
   }
+  private _gpuContextLost = false;
+
+  /** True after webglcontextlost until restored. */
+  get gpuContextLost(): boolean {
+    return this._gpuContextLost;
+  }
+
+  get pictureSerial(): number {
+    return this.paneFps.changeCount;
+  }
+
+  get lastViewport(): Viewport | null {
+    return this.lastVp;
+  }
+
   hostContextLost(): void {
+    this._gpuContextLost = true;
     this.lumaProbe.reset();
     this.changeProbe.reset();
   }
-  hostContextRestored(): void { this.relayout(); }
+  hostContextRestored(): void {
+    this._gpuContextLost = false;
+    this.relayout();
+  }
 
   get software(): boolean {
     return this.host?.software ?? this.renderer instanceof SoftwareGpu;
@@ -2745,6 +2764,16 @@ export class NetScene implements HostedView {
       this.lumaProbe.tick(gl, gl.drawingBufferWidth / 2, gl.drawingBufferHeight / 2);
     }
     this.sampledLuma = this.lumaProbe.value;
+  }
+
+  /**
+   * Shared async 16×16 RGBA with {@link LumaProbe} (no synchronous readPixels).
+   * Null while a PBO read is still in flight — tile-health must skip that check.
+   */
+  tileHealthRgba(gl: WebGL2RenderingContext, now = performance.now()): Uint8Array | null {
+    const vp = this.lastVp;
+    if (!vp || vp.w < 4 || vp.h < 4) return null;
+    return this.lumaProbe.sampleForHealth(gl, vp, now);
   }
 
   /** Ease sky/floor dimming and blending toward the visibility tool's fix. Overlay only. */
