@@ -36,7 +36,7 @@
   ],
   "rf": [
     {
-      "ssid": "host-12",
+      "ssid": "host-17",
       "rssi": 0.3,
       "channel": 36
     },
@@ -125,15 +125,15 @@
   ],
   "sys": {
     "cpu": 0.42,
-    "mem": 0,
-    "disk": 0,
-    "gpu": 0,
-    "temp": 0,
-    "watts": 0,
-    "psi": 0,
-    "sockets": 0,
-    "failed": 0,
-    "udev": 0
+    "mem": 0.62,
+    "disk": 0.34,
+    "gpu": 0.44,
+    "temp": 0.36,
+    "watts": 0.59,
+    "psi": 1,
+    "sockets": 0.28125,
+    "failed": 0.25,
+    "udev": 0.25
   },
   "contract": 2,
   "links": [

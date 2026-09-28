@@ -86,3 +86,6 @@ export function applyFeedSlotPaints(input: ApplyFeedSlotPaintsInput): StateMsg {
 
   return heroPaint;
 }
+
+export { goldenHostViewSlices } from "../plugins/golden-host-views";
+export { shouldSkipHostIdleMerge } from "../plugins/host-idle-merge-guard";

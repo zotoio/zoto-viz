@@ -4,6 +4,7 @@ import { isSysBase } from "../../core/modes";
 import type { PluginView } from "../plugin";
 import type { VizIdleConfig } from "../viz-host";
 import { goldenLanFixture } from "./golden-lan-state";
+import { shouldSkipHostIdleMerge, type HostIdleTarget } from "../host-idle-merge-guard";
 import { smokeBackroomsHarnessArmed, smokeGoldenStateTs } from "../../core/smoke-harness";
 
 export type PluginIdleConfig = VizIdleConfig;
@@ -45,9 +46,7 @@ export function withGoldenSnapshot(live: StateMsg, idle?: PluginIdleConfig): Sta
   return withGoldenIfIdle({ ...live, devices: [], flows: [] }, idle);
 }
 
-export type HostIdleTarget =
-  | { kind: "main" }
-  | { kind: "view"; base: string };
+export type { HostIdleTarget } from "../host-idle-merge-guard";
 
 export function hostIdleTargetForMode(mode: ViewMode): HostIdleTarget {
   const base = mode.graphBase;
@@ -55,13 +54,6 @@ export function hostIdleTargetForMode(mode: ViewMode): HostIdleTarget {
     return { kind: "view", base };
   }
   return { kind: "main" };
-}
-
-function viewSliceEmpty(state: StateMsg, target: HostIdleTarget): boolean {
-  if (target.kind === "view") {
-    return (state.views?.[target.base]?.devices?.length ?? 0) === 0;
-  }
-  return stateNeedsGolden(state);
 }
 
 function applyGoldenSlice(live: StateMsg, target: HostIdleTarget): { state: StateMsg; applied: boolean } {
@@ -111,7 +103,7 @@ export function mergeHostIdleForSlot(live: StateMsg, req: HostIdleViewRequest): 
   if (!req.idle || !("fixture" in req.idle) || req.idle.fixture !== "host") {
     return { state: live, isDemo: false };
   }
-  if (!viewSliceEmpty(live, req.target)) return { state: live, isDemo: false };
+  if (shouldSkipHostIdleMerge(live, req.target)) return { state: live, isDemo: false };
   const { state, applied } = applyGoldenSlice(live, req.target);
   return { state, isDemo: applied };
 }
