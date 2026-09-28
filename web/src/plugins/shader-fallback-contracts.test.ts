@@ -20,12 +20,12 @@ describe("shader fallback contract typecheck", () => {
     const { status, out } = runTypecheck();
     expect(status).toBe(0);
     expect(out).not.toContain("shader-fallback-contracts.typecheck.ts");
-  });
+  }, 60_000);
 
   it("type-viz-zoto-hooks", () => {
     const { status } = runTypecheck();
     expect(status).toBe(0);
-  });
+  }, 60_000);
 
   it("type-nixie-zoto-hooks", () => {
     const src = readFileSync(

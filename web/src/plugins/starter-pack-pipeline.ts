@@ -69,7 +69,9 @@ errors = [e.get("error") or e.get("message") or str(e) for e in scan.get("errors
 ids = [p.get("id") for p in scan.get("plugins") or []]
 print(json.dumps({"errors": errors, "pluginIds": ids, "packId": ${JSON.stringify(packId)}}))
 `;
-  const raw = execFileSync("python3", ["-c", script], {
+  const venvPython = path.join(repoRoot, ".venv/bin/python");
+  const python = existsSync(venvPython) ? venvPython : "python3";
+  const raw = execFileSync(python, ["-c", script], {
     cwd: repoRoot,
     encoding: "utf8",
     env: { ...process.env, PYTHONPATH: repoRoot },

@@ -4,7 +4,7 @@ import yaml from "yaml";
 import type { ViewMode } from "../../core/modes";
 import { compilePlugin, type PluginView } from "../plugin";
 import { toPluginView } from "../plugin-visualisation";
-import { parseVizContract } from "../viz-host";
+import { parseVizContract, VIZ_CONTRACT_VERSION, VIZ_UBO } from "../viz-host";
 import { parsePluginIdle, pluginIdleOf } from "./golden-state";
 
 const HOST_IDLE_RE = /fixture:\s*host/;
@@ -49,11 +49,13 @@ export function loadShippedPackSpec(repoRoot: string, packId: string): PluginVie
       spec.viz = idle ? { ...contract, idle } : contract;
     } else if (idle) {
       spec.viz = {
+        contract: VIZ_CONTRACT_VERSION,
         graphWalk: false,
         maxBuffers: 1,
         maxBufferFloats: 8,
         maxParticles: 0,
         uniforms: [],
+        ubo: VIZ_UBO,
         idle,
       };
     }

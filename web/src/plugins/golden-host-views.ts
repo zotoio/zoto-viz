@@ -1,4 +1,4 @@
-import type { Device, Flow } from "../../core/types";
+import type { Device, Flow } from "../core/types";
 
 /** Deterministic pseudo-random in [0, 1) from integer seed (no Math.random). */
 function unit(seed: number): number {

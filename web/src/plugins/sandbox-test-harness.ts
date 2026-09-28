@@ -23,6 +23,7 @@ export function isSandboxTestHandshakeEnabled(): boolean {
 
 /** Wire real MessageChannel boot: iframe listener + synthetic frame-ready from parent. */
 export function installSandboxTestHandshake(): void {
+  if (typeof document === "undefined") return;
   if (appendHookInstalled) return;
   appendHookInstalled = true;
   const appendOrig = document.body.appendChild.bind(document.body);
@@ -86,6 +87,10 @@ export function installSandboxTestHandshake(): void {
 export function resetSandboxTestHarnessState(): void {
   handshakeEnabled = true;
   resetSandboxFrameRuntimeForTests();
+  if (typeof document === "undefined") {
+    appendHookInstalled = false;
+    return;
+  }
   if (!vi.isMockFunction(document.body.appendChild)) {
     appendHookInstalled = false;
   }
