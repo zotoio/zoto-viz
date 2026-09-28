@@ -114,10 +114,18 @@ import {
   viewSelectOptions,
   writePluginConfig,
   configStoreId,
+  pluginSpecForStoreId as lookupPluginSpecForStoreId,
   takePackInstallBlockedNotice,
   configStoreIdForMode,
   type PluginView,
 } from "../plugins/plugin";
+import {
+  mayPushSandboxOnPluginFields,
+  routePluginChangeSandboxPush,
+  sandboxConfigPostMatchesLoaded,
+  sandboxLoadedConfigStoreId,
+  type PendingSandboxConfigPush,
+} from "./plugin-sandbox-config-push-route";
 import {
   PACK_BLOCKED_SELECT_VALUE,
   formatBlockedCatalogNotice,
@@ -724,15 +732,15 @@ function sandboxPluginConfig(spec: PluginView): Record<string, string> {
 }
 
 const sandboxConfigBatcher = new SandboxConfigBatcher(
-  (packId, config) => {
-    if (packId === tsWatchId) sandbox.setConfig(config);
+  (storeId, config) => {
+    if (sandboxConfigPostMatchesLoaded(storeId, tsWatchStoreId)) sandbox.setConfig(config);
   },
   (cb) => requestAnimationFrame(cb),
   (id) => cancelAnimationFrame(id),
 );
 
-function scheduleSandboxSetConfig(packId: string, config: Record<string, string>): void {
-  sandboxConfigBatcher.schedule(packId, config);
+function scheduleSandboxSetConfig(storeId: string, config: Record<string, string>): void {
+  sandboxConfigBatcher.schedule(storeId, config);
 }
 
 function cancelScheduledSandboxConfig(): void {
@@ -757,7 +765,13 @@ function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
   renderLegend(m, opts);
   const spec = pluginSpecForMode(m.id);
   if (!flags.skipSandboxPush && spec && pluginHasFrontend(spec)) {
-    scheduleSandboxSetConfig(spec.id, sandboxPluginConfig(spec));
+    const loadedStore = sandboxLoadedConfigStoreId(
+      tsWatchStoreId,
+      tsWatchStoreId ? pluginSpecForStoreId(tsWatchStoreId) : null,
+    );
+    if (mayPushSandboxOnPluginFields(loadedStore, spec)) {
+      scheduleSandboxSetConfig(configStoreId(spec), sandboxPluginConfig(spec));
+    }
   }
   if (mosaic?.on && spec) {
     const store = configStoreId(spec);
@@ -854,6 +868,7 @@ function bindThisView(modeId: string): void {
 
 let tsWatch = 0;
 let tsWatchId = "";
+let tsWatchStoreId = "";
 let tsWatchHash = "";
 
 const refreshPluginSignal = new AbortController();
@@ -929,6 +944,7 @@ async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promi
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
+    tsWatchStoreId = spec ? configStoreId(spec) : "";
     return;
   }
   if (!tsPluginsAllowed()) {
@@ -937,6 +953,7 @@ async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promi
     bindVizWriter(spec);
     scene.clearPluginStyle();
     tsWatchId = spec?.id ?? "";
+    tsWatchStoreId = spec ? configStoreId(spec) : "";
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
@@ -947,6 +964,7 @@ async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promi
     bindVizWriter(null);
     scene.clearPluginStyle();
     tsWatchId = "";
+    tsWatchStoreId = "";
     paintPluginNeedsReviewNotice(modeSel.value);
     return;
   }
@@ -987,9 +1005,10 @@ async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promi
     preserveVizUbo = false;
     bindVizWriter(spec, preserve);
     tsWatchId = spec.id;
+    tsWatchStoreId = configStoreId(spec);
     tsWatchHash = spec.hash;
-    if (pendingSandboxPush?.packId === spec.id) {
-      scheduleSandboxSetConfig(pendingSandboxPush.packId, pendingSandboxPush.config);
+    if (pendingSandboxPush?.storeId === configStoreId(spec)) {
+      scheduleSandboxSetConfig(pendingSandboxPush.storeId, pendingSandboxPush.config);
       pendingSandboxPush = null;
     }
     const m = modeById(modeSel.value);
@@ -1759,23 +1778,27 @@ settings.onRemixClear = () => {
   deactivateRemix();
 };
 bindServerRestartWallNotice();
-let pendingSandboxPush: { packId: string; config: Record<string, string> } | null = null;
+let pendingSandboxPush: PendingSandboxConfigPush | null = null;
 
 function pluginSpecForStoreId(storeId: string): PluginView | null {
-  return pluginSpecs.find((p) => configStoreId(p) === storeId)
-    ?? pluginSpecs.find((p) => p.id === storeId)
-    ?? null;
+  return lookupPluginSpecForStoreId(pluginSpecs, storeId);
 }
 
 function maybePushSandboxForStore(storeId: string, values: Record<string, string>): void {
   const spec = pluginSpecForStoreId(storeId);
   if (!spec || !pluginHasFrontend(spec)) return;
-  const config = packConfigValues(values);
-  if (tsWatchId === spec.id) {
-    scheduleSandboxSetConfig(spec.id, config);
-    return;
-  }
-  pendingSandboxPush = { packId: spec.id, config };
+  const loadedStore = sandboxLoadedConfigStoreId(
+    tsWatchStoreId,
+    tsWatchStoreId ? pluginSpecForStoreId(tsWatchStoreId) : null,
+  );
+  const pending = routePluginChangeSandboxPush(
+    loadedStore,
+    storeId,
+    spec,
+    packConfigValues(values),
+    scheduleSandboxSetConfig,
+  );
+  if (pending) pendingSandboxPush = pending;
 }
 
 settings.onPluginChange = (storeId, values) => {
