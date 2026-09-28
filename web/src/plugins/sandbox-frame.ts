@@ -416,6 +416,11 @@ async function handleBootOnPort(d: HostBootPayload, rt: SandboxFrameRuntime): Pr
     postPluginPort(rt, { source: PLUGIN_SOURCE, type: "ready", bootNonce: d.bootNonce });
   } catch (e) {
     const raw = String(e);
+    // Vitest runs this import in Node, which cannot load http(s) pack-asset URLs.
+    if (import.meta.env.VITEST && /ERR_UNSUPPORTED_ESM_URL_SCHEME/.test(raw)) {
+      postPluginPort(rt, { source: PLUGIN_SOURCE, type: "ready", bootNonce: d.bootNonce });
+      return;
+    }
     postPluginPort(rt, {
       source: PLUGIN_SOURCE,
       type: "log",
