@@ -108,6 +108,6 @@ describe("switchPaneView", () => {
     const r2 = await second;
     expect(r1.ok).toBe(false);
     expect(r2.ok).toBe(true);
-    expect(mountView).toHaveBeenLastCalledWith("plugin:wifi");
+    expect(mountView).toHaveBeenLastCalledWith("plugin:wifi!1");
   });
 });

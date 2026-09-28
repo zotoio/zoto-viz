@@ -1161,7 +1161,7 @@ export class Settings {
     });
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
-    mosaicHint.textContent = "A wall composes other views. Each tile is a view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall swaps those two. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
+    mosaicHint.textContent = "A wall composes other views. Each tile is its own view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall copies it onto this pane and leaves the others. The header Global menu leaves the wall for one full-screen view. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
     const mosaicBtns = document.createElement("div");
     mosaicBtns.className = "sec-links";
     mosaicBtns.append(resetBtn, equalBtn);

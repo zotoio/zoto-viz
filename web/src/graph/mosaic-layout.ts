@@ -228,21 +228,22 @@ export function placePaneTileView(ids: string[], fromSlot: string, viewId: strin
   return next;
 }
 
-/** @deprecated Use placePaneTileView / movePaneTileView via mosaic view pick helpers. */
+/** Set one pane. A view already on another pane is copied here; the other panes stay. */
 export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
   if (!viewId || fromSlot === viewId || mosaicTileViewId(fromSlot) === viewId) return ids;
-  const fromIdx = ids.indexOf(fromSlot);
-  const j = ids.findIndex((id, k) => k !== fromIdx && mosaicTileViewId(id) === viewId);
-  if (j >= 0) return movePaneTileView(ids, fromSlot, ids[j]!);
   return placePaneTileView(ids, fromSlot, viewId);
 }
 
-/** Settings drawer slot picker: duplicate a pack view already on the wall instead of swapping. */
+/** Slot id this pane will show after `nextPaneTiles` (catalog id, or `view!n` when duplicated). */
+export function placedPaneSlot(ids: string[], fromSlot: string, viewId: string): string {
+  const next = nextPaneTiles(ids, fromSlot, viewId);
+  const i = ids.indexOf(fromSlot);
+  if (i < 0) return viewId;
+  return next[i] ?? viewId;
+}
+
+/** Settings drawer slot picker. Same independent place as the tile menu. */
 export function nextPaneTilesForPicker(ids: string[], fromSlot: string, viewId: string): string[] {
-  if (!viewId || fromSlot === viewId) return ids;
-  const fromIdx = ids.indexOf(fromSlot);
-  const j = ids.findIndex((id, k) => k !== fromIdx && mosaicTileViewId(id) === viewId);
-  if (j >= 0 && viewId.startsWith("plugin:")) return placePaneTileView(ids, fromSlot, viewId);
   return nextPaneTiles(ids, fromSlot, viewId);
 }
 

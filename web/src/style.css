@@ -589,8 +589,7 @@ body[data-chrome="right"] .sense-pair .toggle { flex: 1; min-width: 0; }
 #modeBox .plugin-cog { width: 30px; height: 30px; flex: none; }
 #modeBox .plugin-cog[hidden] { display: none; }
 #modeBox .plugin-cog[aria-expanded="true"] svg { transform: rotate(90deg); }
-/* Wall panes each have a view menu; the header picker is solo-only. */
-body.mosaic #modeBox,
+/* Pane menus own each tile. Header Global stays visible so one view can replace the wall. */
 body.mosaic #modeOpts,
 #modeBox[hidden],
 #modeOpts[hidden] { display: none !important; }

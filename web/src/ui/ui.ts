@@ -65,6 +65,7 @@ export function unpinFlyout(el: HTMLElement, home: HTMLElement): void {
 export class Select {
   readonly el: HTMLDivElement;
   private readonly btn: HTMLButtonElement;
+  private readonly capEl: HTMLSpanElement;
   private readonly valEl: HTMLSpanElement;
   private readonly menu: HTMLUListElement;
   private options: SelectOption[] = [];
@@ -91,12 +92,12 @@ export class Select {
     this.btn.setAttribute("aria-expanded", "false");
     this.btn.setAttribute("aria-controls", this.menuId);
     if (cfg.title) this.btn.title = cfg.title;
-    const cap = document.createElement("span");
-    cap.className = "cap";
-    cap.textContent = cfg.caption;
+    this.capEl = document.createElement("span");
+    this.capEl.className = "cap";
+    this.capEl.textContent = cfg.caption;
     this.valEl = document.createElement("span");
     this.valEl.className = "val";
-    this.btn.append(cap, this.valEl);
+    this.btn.append(this.capEl, this.valEl);
 
     this.menu = document.createElement("ul");
     this.menu.className = "menu";
@@ -125,6 +126,12 @@ export class Select {
   }
 
   get value(): string { return this.current; }
+  setCaption(text: string): void {
+    this.capEl.textContent = text;
+  }
+  setTitle(text: string): void {
+    this.btn.title = text;
+  }
   /** Move focus to the view picker control (after a rolled-back switch). */
   focus(): void {
     this.btn.focus();

@@ -93,9 +93,10 @@ import { bindTetrisStandaloneHost, unbindTetrisStandaloneHost } from "../arcade/
 import { PortalView } from "../arcade/portal";
 import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
-import { Mosaic } from "../graph/mosaic";
+import { Mosaic, mosaicPaneMode } from "../graph/mosaic";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { hostModeById } from "./host-mode";
+import { globalViewLeavesMosaic } from "./global-view";
 import { RenderHost } from "../graph/render-host";
 import {
   applyPluginConfigs,
@@ -1285,7 +1286,7 @@ function teardownMosaicPanelView(viewId: string): void {
 
 async function mountMosaicPanelView(viewId: string): Promise<void> {
   if (!mosaic?.on) return;
-  const pm = modeById(viewId);
+  const pm = mosaicPaneMode(viewId);
   const spec = pm.pluginId ? pluginSpecForMode(pm.id) : null;
   const o = optsFor(pm);
   const target = mosaic.graphScene(viewId);
@@ -2059,6 +2060,7 @@ settings.addAnimation((a) => {
     onAfterSetSize: () => {
       applyMode(modeSel.value, { keepLayout: true });
       syncFeedShift();
+      syncHeaderViewChrome();
     },
   });
 }, dreamCog);
@@ -2079,8 +2081,32 @@ modeSel.onChange = (id) => {
     modeSel.value = liveMode || modeSel.value;
     return;
   }
-  applyMode(id);
+  selectHeaderView(id);
 };
+
+function syncHeaderViewChrome(): void {
+  const wall = !!mosaic?.on;
+  modeSel.setCaption(wall ? "global" : "view");
+  modeSel.setTitle(wall
+    ? "leave the wall and show this one view full screen (keys 1–9). A wall pack such as Syscon opens its wall."
+    : "view mode (keys 1–9, 0 for the 10th). Type to filter.");
+}
+
+/** Header and digit picks. On a wall this is one global view, not another pane. */
+function selectHeaderView(id: string): void {
+  if (globalViewLeavesMosaic(!!mosaic?.on, lookForMode(id))) {
+    modeSel.value = id;
+    settings.applyAnim({
+      ...settings.animSettings,
+      mosaic: "off",
+      mosaicTree: null,
+      mosaicMaxId: "",
+      mosaicTiles: [],
+    });
+    return;
+  }
+  applyMode(id);
+}
 
 async function syncPluginCatalog(): Promise<void> {
   pluginSpecs = await installPlugins();
@@ -2456,6 +2482,7 @@ async function bootCatalogFromSession(): Promise<void> {
           tiles: settings.animSettings.mosaicTiles,
         });
         mosaic.hydrate();
+        syncHeaderViewChrome();
       }
     }
     const restored = profiles ? await profiles.boot(live) : false;
@@ -2941,6 +2968,6 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);
   const idx = e.key === "0" ? 9 : Number(e.key) - 1;
   const modes = viewSelectOptions();
-  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) applyMode(modes[idx]!.value, {}, { channel: "user" });
+  if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) selectHeaderView(modes[idx]!.value);
 });
 window.addEventListener("pagehide", () => persistLive(true));

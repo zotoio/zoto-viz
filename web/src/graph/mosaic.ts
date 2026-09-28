@@ -568,7 +568,7 @@ export class Mosaic {
     this.emitLayout();
   }
 
-  /** Change one pane. Picking a view already on the wall swaps those two tiles. */
+  /** Change one pane. A view already on the wall is copied onto this pane; the others stay. */
   setPaneView(fromId: string, toId: string): boolean {
     return this.applyPaneTileList(fromId, toId, nextPaneTiles(this.tileIds, fromId, toId));
   }
@@ -1014,7 +1014,7 @@ export class Mosaic {
     const pick = document.createElement("select");
     pick.className = "mosaic-pick";
     pick.setAttribute("aria-label", "pane view");
-    pick.title = "this pane's view — pick another to swap or replace";
+    pick.title = "this pane only — other panes stay as they are";
     fillViewSelect(pick, id);
     pick.addEventListener("pointerdown", (e) => e.stopPropagation());
     pick.addEventListener("click", (e) => e.stopPropagation());

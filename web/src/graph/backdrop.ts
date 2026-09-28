@@ -62,7 +62,7 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
 };
 
 /** Target length of a photo-sky video loop (seconds). Stills Ken-Burns on this period until a clip lands. */
-export const PHOTO_LOOP_S = 5;
+export const PHOTO_LOOP_S = 75;
 /** Crossfade from the last frames onto a second decoder at t=0 so the wrap has no hitch. */
 export const PHOTO_LOOP_FADE_S = 0.35;
 /** Crossfade between still photo plates when switching sky (seconds on the sky clock). */
@@ -637,7 +637,7 @@ void main() {
   float va = video.x / video.y;
   vec2 scale = ca > va ? vec2(1.0, va / ca) : vec2(ca / va, 1.0);
   float live = step(0.5, uAnimate);
-  float ang = live * fract(max(uTime, 0.0) / 5.0) * 6.28318530718;
+  float ang = live * fract(max(uTime, 0.0) / ${PHOTO_LOOP_S}.0) * 6.28318530718;
   float zoom = mix(1.0, 1.08 + 0.035 * sin(ang), live);
   vec2 pan = live * vec2(cos(ang), sin(ang * 2.0)) * 0.018;
   vec2 uv = (vUv - 0.5) * scale / zoom + 0.5 + pan;

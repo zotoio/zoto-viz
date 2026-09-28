@@ -43,7 +43,7 @@ describe("BACKDROP_OPTIONS", () => {
       "seastacks",
     ]));
     expect(isPhotoSky("fungi")).toBe(true);
-    expect(PHOTO_LOOP_S).toBe(5);
+    expect(PHOTO_LOOP_S).toBe(75);
     expect(photoLoopPhase(0)).toBe(0);
     expect(photoLoopPhase(PHOTO_LOOP_S)).toBe(0);
     expect(photoLoopPhase(PHOTO_LOOP_S / 2)).toBeCloseTo(0.5);

@@ -1,4 +1,4 @@
-/** Header VIEW is solo-only. A mosaic wall already picks a view on every pane. */
+/** Header view picker. On a wall it is the global view: one full-screen picture instead of the mosaic. */
 export function setHeaderViewVisible(visible: boolean): void {
   const box = document.getElementById("modeBox");
   const opts = document.getElementById("modeOpts");

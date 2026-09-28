@@ -122,14 +122,14 @@ describe("assignViews selective sky hold", () => {
     wall.remove();
   });
 
-  it("swap-on-wall touches only the two swapped plugin-sky tiles", () => {
+  it("copying a view already on the wall touches only the pane that changed", () => {
     const { mosaic, ids, skyHold, modeRefresh, auditBind, rebind, host, main, wall } = mosaic2x2();
     const [a, b, c, d] = ids;
     expect(mosaic.setPaneView(a, b)).toBe(true);
 
-    expectQuiet([c, d], [skyHold, modeRefresh, auditBind, rebind]);
-    expect((modeRefresh.get(a) ?? 0) + (modeRefresh.get(b) ?? 0)).toBeGreaterThan(0);
-    expect((rebind.get(a) ?? 0) + (rebind.get(b) ?? 0)).toBeGreaterThan(0);
+    expectQuiet([b, c, d], [skyHold, modeRefresh, auditBind, rebind]);
+    const copy = `${b}!1`;
+    expect((modeRefresh.get(copy) ?? 0) + (rebind.get(copy) ?? 0)).toBeGreaterThan(0);
     host.dispose();
     main.dispose();
     wall.remove();

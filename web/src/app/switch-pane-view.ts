@@ -1,4 +1,5 @@
 import type { Mosaic } from "../graph/mosaic";
+import { placedPaneSlot } from "../graph/mosaic-layout";
 import { consentBlockMessage, mosaicFocusSlot, mosaicSwapFrom } from "./apply-mode-mosaic";
 import { clearConsentPendingForPane, registerConsentPending } from "./consent-pending-panes";
 
@@ -119,9 +120,13 @@ export async function switchPaneView(
     return { ok: false, reason: "A newer view switch is already in progress." };
   }
 
+  const mounted = slot.swap
+    ? placedPaneSlot(mosaic.tileIds, slot.fromViewId, slot.toViewId)
+    : slot.toViewId;
+
   if (slot.swap) {
     if (!mosaic.setPaneView(slot.fromViewId, slot.toViewId)) {
-      const msg = "Could not swap that view on the wall.";
+      const msg = "Could not change that pane.";
       mosaic.setPaneNotice(slot.paneId, msg);
       return { ok: false, reason: msg };
     }
@@ -132,11 +137,11 @@ export async function switchPaneView(
     return { ok: false, reason: "A newer view switch is already in progress." };
   }
 
-  mosaic.setPaneNotice(slot.toViewId, null);
+  mosaic.setPaneNotice(mounted, null);
   clearConsentPendingForPane(slot.paneId);
-  mosaic.focus(slot.toViewId);
-  await opts.mountView(slot.toViewId);
+  mosaic.focus(mounted);
+  await opts.mountView(mounted);
   opts.persistLayout();
 
-  return { ok: true, paneId: slot.paneId, viewId: slot.toViewId };
+  return { ok: true, paneId: slot.paneId, viewId: mounted };
 }

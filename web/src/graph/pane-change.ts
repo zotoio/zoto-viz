@@ -119,10 +119,9 @@ export class PaneChangeProbe {
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, s.pbo);
       gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, view);
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-      if (gl.getError() !== gl.NO_ERROR) {
-        this.free.push(s);
-        continue;
-      }
+      // gl.getError() flushes every command queued this frame and waits for the
+      // draw to finish. The fence above is the completion check; an error query here
+      // turned the badge into a synchronous readback and dropped the wall to the GPU time.
       const prev = this.prev;
       if (prev && prev.length === s.bytes && bytesDiffer(prev, view)) onChange(s.ts);
       if (!prev || prev.length !== s.bytes) this.prev = new Uint8Array(s.bytes);
@@ -153,9 +152,7 @@ export class PaneChangeProbe {
     } finally {
       gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
     }
-    if (!slot.sync || gl.getError() !== gl.NO_ERROR) {
-      if (slot.sync) gl.deleteSync(slot.sync);
-      slot.sync = null;
+    if (!slot.sync) {
       this.free.push(slot);
       return;
     }

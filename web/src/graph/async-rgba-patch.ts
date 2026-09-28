@@ -38,7 +38,7 @@ export class AsyncRgbaPatchProbe {
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.pbo);
     gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.bytes);
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    if (gl.getError() !== gl.NO_ERROR) return false;
+    // Same as the pane probe: getError() would wait out the frame this read belongs to.
     this.harvestedAt = performance.now();
     return true;
   }
@@ -74,7 +74,7 @@ export class AsyncRgbaPatchProbe {
       return false;
     }
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
-    if (!this.sync || gl.getError() !== gl.NO_ERROR) {
+    if (!this.sync) {
       this.clearSync(gl);
       return false;
     }

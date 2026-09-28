@@ -25,10 +25,10 @@ describe("mosaic pane view assignment", () => {
     expect(leafIds(assigned)).toEqual(["plugin:topology", "plugin:topology!1"]);
   });
 
-  it("wall pick swaps tiles when the target view is already on the wall", () => {
+  it("wall pick copies a view already on the wall onto this pane only", () => {
     const prev = ["plugin:topology", "plugin:wifi"];
     const next = nextPaneTiles(prev, "plugin:wifi", "plugin:topology");
-    expect(next).toEqual(["plugin:wifi", "plugin:topology"]);
+    expect(next).toEqual(["plugin:topology", "plugin:topology!1"]);
   });
 
   it("a pane pick of a view not on the wall is a load, not only a swap", () => {
