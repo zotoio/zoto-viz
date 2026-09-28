@@ -638,6 +638,19 @@ describe("revert-proof runner (fixture repo)", () => {
     assertNoRevertProofWorktrees(root);
   });
 
+  it("(replay-no-record) --replay exits non-zero when proof folder was removed", () => {
+    const root = mkFixture();
+    seedTreeReplayFixture(root);
+    fs.rmSync(path.join(root, "revert-proofs", "99"), { recursive: true, force: true });
+    runGit(root, ["add", "-A", "revert-proofs"]);
+    runGit(root, ["commit", "-m", "remove proof tree"]);
+    setPullHeadRef(root, "99");
+    const replay = runRevertProof(root, "99", ["--replay"], scriptPath, fixtureReplayEnv());
+    expect(replay.status).not.toBe(0);
+    expect(`${replay.stderr}${replay.stdout}`).toMatch(/no record/i);
+    assertNoRevertProofWorktrees(root);
+  });
+
   it("(m) revert patch on test-only helper is rejected as unreachable", () => {
     const root = mkFixture();
     writeRow(root, "99", "test-only-target", testOnlyHelperPatch, {
@@ -1263,7 +1276,7 @@ def test_service_live_value():
       testName: "test_service_live_value",
       pythonModule: "service",
       description: "Revert service/live via monitor relative import",
-      red: { assert: "assert live.SERVICE_LIVE == 1" },
+      red: "assert live.SERVICE_LIVE == 1",
     });
     commitRevertProofs(root);
     const r = runRevertProof(root, "99", ["--row", "service-live"]);
@@ -1272,19 +1285,39 @@ def test_service_live_value():
     assertNoRevertProofWorktrees(root);
   });
 
+  function reachExemptLibPatch(root: string): string {
+    const rel = "scripts/revert-proof-lib.mjs";
+    const abs = path.join(root, rel);
+    const orig = fs.readFileSync(abs, "utf8");
+    const marker = "\nexport const MAX_TIMER_MS";
+    const idx = orig.indexOf(marker);
+    if (idx === -1) {
+      throw new Error("reach-exempt fixture: MAX_TIMER_MS anchor missing in revert-proof-lib.mjs");
+    }
+    const patched = `${orig.slice(0, idx)}\n// reach-exempt dogfood touch${orig.slice(idx)}`;
+    const a = path.join(root, ".reach-exempt-a.mjs");
+    const b = path.join(root, ".reach-exempt-b.mjs");
+    fs.writeFileSync(a, orig);
+    fs.writeFileSync(b, patched);
+    const diff = spawnSync("diff", ["-u", a, b], { encoding: "utf8" });
+    fs.unlinkSync(a);
+    fs.unlinkSync(b);
+    if (diff.status !== 1 || !diff.stdout) {
+      throw new Error(`reach-exempt fixture: diff failed (${diff.stderr || diff.stdout})`);
+    }
+    return diff.stdout
+      .split("\n")
+      .map((line) => {
+        if (line.startsWith("--- ")) return `--- a/${rel}`;
+        if (line.startsWith("+++ ")) return `+++ b/${rel}`;
+        return line;
+      })
+      .join("\n");
+  }
+
   it("(reach-exempt-first) reachExempt from config applies before first touched file", () => {
     const root = mkFixture();
-    const exemptPatch = `--- a/scripts/revert-proof-lib.mjs
-+++ b/scripts/revert-proof-lib.mjs
-@@ -1,6 +1,6 @@
- /** Shared helpers and guards for revert-proof (imported by the runner script and tests). */
- import { spawnSync } from "node:child_process";
- import fs from "node:fs";
- import path from "node:path";
--
-+// reach-exempt dogfood touch
- export const MAX_TIMER_MS = 2_147_483_647;
-`;
+    const exemptPatch = reachExemptLibPatch(root);
     writeRow(root, "99", "reach-exempt-touch", exemptPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",

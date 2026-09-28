@@ -39,6 +39,7 @@ ensure_python() {
 run_vitest() {
   local label="$1"
   cd "$ROOT/web"
+  export REVERT_PROOF_CI_SELFTEST=1
   set +e
   local out
   out="$(./node_modules/.bin/vitest "${VITEST_ARGS[@]}" 2>&1)"
@@ -48,7 +49,7 @@ run_vitest() {
   echo "$out"
   local passed failed
   passed="$(echo "$out" | grep -Eo '[0-9]+ passed' | tail -1 | awk '{print $1}')"
-  failed="$(echo "$out" | grep -Eo '[0-9]+ failed' | tail -1 | awk '{print $1}')"
+  failed="$(echo "$out" | grep -Eo '[0-9]+ failed' | tail -1 | awk '{print $1}' || true)"
   if [ -z "$passed" ]; then
     echo "revert-proof self-test (${label}): could not parse vitest pass count"
     return 1

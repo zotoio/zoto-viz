@@ -28,3 +28,13 @@ Every live first-party view is a src tree (`plugins/src/<id>/`). Host graph base
 `plugin pack` sha256 is byte-stable on the **pinned Python + zlib in CI**, not necessarily across machines. A different zlib can change DEFLATE bytes and therefore the zip digest even when members are identical. Pack reproducibility is gated **only** for `examples/plugins/sample.zip` (`tests/test_plugin_sample.py::test_pack_tree_bytes_equal_committed_zip`). Core plugins are src-canonical; zlib drift on first-party zips is not gated.
 
 Schema: `schema/plugin.schema.json`. Frontend sandbox: [TypeScript plugins](/plugins-ts).
+
+## Regression tests
+
+Each regression test must prove it catches its bug: the PR body shows the test red with the fix reverted and green with it applied.
+
+Land `revert-proofs/<PR>/` on `main` with your change (patch + JSON sidecars, `node scripts/revert-proof.mjs <PR> --prove` / `--replay` as needed). Pack PRs may only touch `revert-proofs/<their PR>/` (`scripts/check_pack_pr_boundary.py`).
+
+Catch-up PRs merged via [#128](https://github.com/zotoio/zoto-viz/pull/128) did **not** keep per-PR proof trees on `main` — see [revert-proofs archive](./revert-proofs-archive.md) for `refs/pull/<N>/head` and proven commit SHAs.
+
+CI runs `bash scripts/revert-proof-ci-selftest.sh` (vitest bundle under `scripts/`). Those tests build temp git fixtures and never read `revert-proofs/` from the checkout.

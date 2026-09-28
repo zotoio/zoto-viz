@@ -1,0 +1,7 @@
+{
+  "description": "Replay must fail closed when proof tree removed (fail-open #119 gap)",
+  "runner": "vitest",
+  "testFile": "scripts/revert-proof.test.ts",
+  "testName": "revert-proof runner (fixture repo) > (replay-no-record) --replay exits non-zero when proof folder was removed",
+  "red": "AssertionError: expected +0 not to be +0 // Object.is equality"
+}

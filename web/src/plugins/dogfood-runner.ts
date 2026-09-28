@@ -7,6 +7,7 @@ import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
 import { skipRatePerSec, vizHudMetric, type VizHudTick } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
+  FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
   VIZ_FRAME_BUDGET_MS,
   VizBufferWriter,
   VizFrameBudget,
@@ -18,6 +19,8 @@ import {
   type VizFrameBudgetStats,
   type VizPluginContract,
 } from "./viz-host";
+import { bumpFrameObject, takeVizBuildWorkSnapshot, type VizBuildWorkCounters } from "./viz-build-counters";
+import { assertVizBuildWorkGates, assertVizFrameOutputCaps } from "./viz-gate-assertions";
 import { runPackFrameHandler, type VizPackHandlers } from "./viz-pack-host";
 
 export { runPackFrameHandler };
@@ -140,6 +143,21 @@ export interface DogfoodSoakResult {
   framesPerPack: number;
   packs: DogfoodPackStats[];
   allWithinBudgetOrHonestSkips: boolean;
+}
+
+export interface DogfoodCountGatePackResult {
+  packId: VizDemoPackId;
+  frames: number;
+  delivered: number;
+  skipped: number;
+  maxWork: VizBuildWorkCounters;
+}
+
+export interface DogfoodCountGateResult {
+  fixture: { devices: number; flows: number };
+  framesPerPack: number;
+  packs: DogfoodCountGatePackResult[];
+  ok: boolean;
 }
 
 export function percentile(samples: number[], p: number): number {
@@ -305,6 +323,99 @@ function buildCostSample(
 ): number {
   const inject = resolveBuildCostInjector(buildCostMs);
   return inject ? inject(index) : measuredMs;
+}
+
+/**
+ * Deterministic dogfood gate for cloud CI (`dogfood` job): injected zero clock,
+ * strict delivered/skipped counts, per-build work budgets, output caps.
+ */
+export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCountGateResult {
+  const baseState = opts.state ?? fatLanFixture();
+  const framesPerPack = opts.framesPerPack ?? DOGFOOD_SOAK_FRAMES_PER_PACK;
+  const audio = opts.audio ?? 0.15;
+  const now = opts.now ?? (() => 0);
+
+  const packs: DogfoodCountGatePackResult[] = [];
+  let ok = true;
+
+  for (const packId of VIZ_DEMO_PACKS) {
+    vizTileBudgetRegistry.reset();
+    syncVizTileScope(["dogfood"]);
+    const contract = DEMO_PACK_CONTRACTS[packId];
+    const budget = new VizFrameBudget(now, "dogfood");
+    const writer = new VizBufferWriter(contract);
+    const maxWork: VizBuildWorkCounters = {
+      flowVisits: 0,
+      flowProtoVisits: 0,
+      rateCalls: 0,
+      talkerObjectsCreated: 0,
+      packetObjectsCreated: 0,
+      frameObjectsCreated: 0,
+    };
+    let prevVizClockMs = monoMs(0);
+    let delivered = 0;
+
+    const gatedBuild: typeof buildVizFrame = (s, pt = monoMs(0), a = 0, bind) => {
+      const frame = buildVizFrameForPlugin(s, pt, a, contract.idle, 1, bind);
+      bumpFrameObject();
+      const work = takeVizBuildWorkSnapshot();
+      maxWork.flowVisits = Math.max(maxWork.flowVisits, work.flowVisits);
+      maxWork.flowProtoVisits = Math.max(maxWork.flowProtoVisits, work.flowProtoVisits);
+      maxWork.rateCalls = Math.max(maxWork.rateCalls, work.rateCalls);
+      maxWork.talkerObjectsCreated = Math.max(maxWork.talkerObjectsCreated, work.talkerObjectsCreated);
+      maxWork.packetObjectsCreated = Math.max(maxWork.packetObjectsCreated, work.packetObjectsCreated);
+      maxWork.frameObjectsCreated = Math.max(maxWork.frameObjectsCreated, work.frameObjectsCreated);
+      try {
+        assertVizBuildWorkGates(s, work);
+        assertVizFrameOutputCaps(frame, {
+          checkDecimation: false,
+          encodedByteCeiling: FAT_LAN_SEEDED_VIZ_FRAME_BYTE_CEILING,
+        });
+      } catch {
+        ok = false;
+      }
+      return frame;
+    };
+
+    for (let i = 0; i < framesPerPack; i++) {
+      const tick = dogfoodTick(packId, baseState, prevVizClockMs, audio, budget, writer, undefined, gatedBuild);
+      if (tick.delivered && tick.frame) {
+        delivered++;
+        prevVizClockMs = monoMs(tick.frame.t);
+      }
+    }
+
+    const skipped = budget.stats.skipped;
+    if (delivered !== framesPerPack || skipped !== 0) ok = false;
+    try {
+      assertVizBuildWorkGates(baseState, maxWork);
+    } catch {
+      ok = false;
+    }
+
+    packs.push({ packId, frames: framesPerPack, delivered, skipped, maxWork });
+  }
+
+  return {
+    fixture: { devices: baseState.devices.length, flows: baseState.flows.length },
+    framesPerPack,
+    packs,
+    ok,
+  };
+}
+
+export function formatDogfoodCountGateReport(result: DogfoodCountGateResult): string {
+  const lines = [
+    `Fat-LAN dogfood count gate (${result.fixture.devices} devices, ${result.fixture.flows} flows, ${result.framesPerPack} frames/pack):`,
+  ];
+  for (const p of result.packs) {
+    const w = p.maxWork;
+    lines.push(
+      `  ${p.packId}: delivered ${p.delivered}/${p.frames} skips=${p.skipped} | rateCalls=${w.rateCalls} flowVisits=${w.flowVisits}`,
+    );
+  }
+  lines.push(`  gate: ${result.ok ? "PASS" : "FAIL"}`);
+  return lines.join("\n");
 }
 
 /**

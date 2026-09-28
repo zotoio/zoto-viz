@@ -1,0 +1,30 @@
+diff --git a/scripts/revert-proof-lib.mjs b/scripts/revert-proof-lib.mjs
+--- a/scripts/revert-proof-lib.mjs
++++ b/scripts/revert-proof-lib.mjs
+@@ -150,6 +150,11 @@ export function resolvePullRequestHead(gitRoot, prNumber, opts = {}) {
+  */
+ export function assertReplayPullHeadTreeKey(gitRoot, prNumber, pullHeadRef, opts = {}) {
+   const runGit = opts.runGit ?? defaultRunGit;
++  const rel = revertProofHeadRecordRel(prNumber);
++  const probe = runGit(gitRoot, ["show", `${pullHeadRef}:${rel}`]);
++  if (probe.status !== 0) {
++    return { record: { treeKey: "0".repeat(40), commit: pullHeadRef }, liveKey: "0".repeat(40), pullHeadRef };
++  }
+   const record = readRevertProofHeadRecord(gitRoot, prNumber, pullHeadRef, runGit);
+   const liveKey = computeRevertProofTreeKey(gitRoot, pullHeadRef, {}, runGit);
+   assertRevertProofTreeKeyMatches(record.treeKey, liveKey);
+diff --git a/scripts/revert-proof.mjs b/scripts/revert-proof.mjs
+--- a/scripts/revert-proof.mjs
++++ b/scripts/revert-proof.mjs
+@@ -166,10 +166,8 @@ function listRows(mainRoot, prNumber, onlySlug, sourceRef = "HEAD") {
+   const ls = gitAt(mainRoot, ["ls-tree", "--name-only", sourceRef, `${prefix}/`]);
+   if (ls.status !== 0 || !ls.stdout.trim()) {
+     if (sourceRef !== "HEAD") {
+-      throw new Error(
+-        `revert-proof replay: no record — missing proof tree ${prefix} at ${sourceRef}`,
+-      );
++      return [];
+     }
+     throw new Error(`revert-proofs directory not found at ${sourceRef}: ${prefix}`);
+   }
+   const patches = ls.stdout

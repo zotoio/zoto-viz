@@ -23,6 +23,24 @@ function cookieHeader(jar) {
   return Object.entries(jar).map(([k, v]) => `${k}=${v}`).join("; ");
 }
 
+/** Session-bound headers required for frame-bound pack-asset token verification. */
+export function packAssetSessionHeaders(csrf, cookie) {
+  const headers = {
+    Host: "127.0.0.1:7020",
+    "X-Zoto-Viz-Csrf": csrf,
+  };
+  if (cookie) headers.Cookie = cookie;
+  return headers;
+}
+
+/** Opaque-origin GET/HEAD to /pack-assets/… (smoke probes bootstrap JS). */
+export function packAssetNullOriginGetHeaders(csrf, cookie) {
+  return {
+    ...packAssetSessionHeaders(csrf, cookie),
+    Origin: "null",
+  };
+}
+
 export async function fetchPackAssetToken(base, packId = "_sandbox") {
   const root = base.replace(/\/?$/, "/");
   const jar = {};
@@ -33,9 +51,7 @@ export async function fetchPackAssetToken(base, packId = "_sandbox") {
   assert.ok(csrf, "csrf missing from /api/session");
   const frameId = randomUUID();
   const headers = {
-    Host: "127.0.0.1:7020",
-    "X-Zoto-Viz-Csrf": csrf,
-    Cookie: cookieHeader(jar),
+    ...packAssetSessionHeaders(csrf, cookieHeader(jar)),
     "Content-Type": "application/json",
   };
   const reg = await fetch(`${root}api/pack-assets/frames`, {
@@ -43,7 +59,7 @@ export async function fetchPackAssetToken(base, packId = "_sandbox") {
     headers,
     body: JSON.stringify({ frameId }),
   });
-  assert.equal(reg.status, 200, `frame register ${reg.status}`);
+  assert.equal(reg.status, 200, `pack frame register ${reg.status}`);
   let r = await fetch(`${root}api/pack-assets/token/${encodeURIComponent(packId)}`, {
     method: "POST",
     headers,
@@ -64,5 +80,5 @@ export async function fetchPackAssetToken(base, packId = "_sandbox") {
   assert.equal(r.status, 200, `pack token ${packId} ${r.status}`);
   const data = await r.json();
   assert.ok(data.token, "token missing from mint response");
-  return data.token;
+  return { token: data.token, csrf, frameId };
 }
