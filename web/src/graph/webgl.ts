@@ -25,8 +25,18 @@ export function disposeOwnedWebGLRenderer(renderer: {
   renderer.domElement.remove();
 }
 
+/** Memo of the first probe. A fresh context plus loseContext stalls the live canvas. */
+let probeWebGLMemo: boolean | null = null;
+
 /** True when this document can create a usable WebGL (2) context. */
 export function probeWebGL(): boolean {
+  if (probeWebGLMemo !== null && !import.meta.env.VITEST) return probeWebGLMemo;
+  const ok = probeWebGLOnce();
+  if (!import.meta.env.VITEST) probeWebGLMemo = ok;
+  return ok;
+}
+
+function probeWebGLOnce(): boolean {
   if (typeof document === "undefined") return false;
   let gl: WebGLRenderingContext | null = null;
   try {

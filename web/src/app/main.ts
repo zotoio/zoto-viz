@@ -1415,7 +1415,6 @@ function applyMosaicModeVisuals(m: ViewMode, opts: Record<string, string>, spec:
   }
   document.body.classList.remove("arcade");
   scene.setActive(true);
-  if (target !== scene) scene.setStageOnly(false);
   morphViewChrome(m, opts, spec, skyStage, false);
 }
 
@@ -1568,9 +1567,6 @@ async function applyMosaicModeAsync(m: ViewMode, flags: ApplyModeFlags, signal: 
   }
   document.body.classList.remove("arcade");
   scene.setActive(true);
-  const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaicFocusSlot(mosaic) || m.id;
-  const target = mosaic.graphScene(focusId);
-  if (target !== scene) scene.setStageOnly(false);
   morphViewChrome(m, opts, spec, skyStage);
   applyViewLook();
   if (m.standalone || arcadeSlotFor(m) !== "carousel") {

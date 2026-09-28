@@ -1104,7 +1104,8 @@ export class NetScene implements HostedView, RenderScalePane {
   private layoutTargets = new Map<string, LayoutXyz>();
   private layoutSig = "";
   /** the force layout, ticking in a Worker; positions arrive one frame later and are copied onto the nodes */
-  private readonly layout: LayoutClient;
+  /** Null while the graph is hidden (stage-only / pack mirror). Constructing it starts a wasm worker. */
+  private layout: LayoutClient | null = null;
   /** nodes in the layout, in wire order for the current `simGen` */
   private simNodes: GNode[] = [];
   private simGen = 0;
@@ -1483,15 +1484,9 @@ export class NetScene implements HostedView, RenderScalePane {
     this.scene.add(this.particles);
     this.applyBlending();
 
-    // layout. Accessors consult the active mode; d3 evaluates them when nodes/links are (re)assigned,
-    // which syncSimulation does on every structural change and on mode switch.
-    // Layout: the forces run in a Worker (see layout-core.ts). syncSimulation resolves every mode
-    // accessor (shell radius / strength, charge, link strength) into numbers on each structural change,
-    // and the active mode's own `force` runs here each frame as a velocity nudge on the reported positions.
-    this.layout = new LayoutClient((m) => this.onLayoutPositions(m));
-
+    // Layout forces run in a Worker (see layout-core.ts). The client is created on the first tick that
+    // actually draws the graph. Stage-only plugin tiles and pack mirrors never start that wasm worker.
     this.updateSpread();
-    this.pushLayoutParams(1 / 60);
 
     this.onWinResize = () => this.relayout();
     window.addEventListener("resize", this.onWinResize);
@@ -1665,8 +1660,10 @@ export class NetScene implements HostedView, RenderScalePane {
     mirrorsTile?: number;
     tileCount?: number;
   } | null): void {
+    const wasWanted = this.layoutWanted();
     this.packCoalesce = role;
     this.host?.markMirrorScopeDirty();
+    this.syncLayoutWanted(wasWanted);
   }
 
   get packCoalesceGroupKey(): string | undefined {
@@ -1831,6 +1828,9 @@ export class NetScene implements HostedView, RenderScalePane {
     const changed = mode !== this.mode;
     this.mode = mode;
     this.modeOpts = { ...opts };
+    // Plugin mosaic tiles are created with setMode only. Without this, every tile keeps the LAN
+    // graph and ticks the AssemblyScript layout under the plugin sky.
+    if (!!mode.stageOnly !== this.stageOnly) this.setStageOnly(!!mode.stageOnly);
     if (changed) {
       this.beginViewMorph();
       if (!this.satellite) notePerfChange();
@@ -1904,7 +1904,9 @@ export class NetScene implements HostedView, RenderScalePane {
 
   /** Keep the sky and floor, hide nodes / edges / labels. Used while an arcade view owns the screen. */
   setStageOnly(on: boolean): void {
+    const wasWanted = this.layoutWanted();
     this.stageOnly = on;
+    this.syncLayoutWanted(wasWanted);
     if (on) {
       // Keep horizon level so FPS plugin skies (Backrooms) are not floor-biased by the graph orbit cam.
       const t = this.controls.target;
@@ -2514,6 +2516,30 @@ export class NetScene implements HostedView, RenderScalePane {
    * slider (the camera look pass has always been the last writer of that value); magnets carry the audio
    * pulse themselves and the magnet / gravity / swirl forces scale by it again, as before.
    */
+  /** Graph spheres are on screen, so the AssemblyScript worker should tick. */
+  private layoutWanted(): boolean {
+    return !this.stageOnly && this.packCoalesce?.role !== "mirror";
+  }
+
+  private ensureLayout(): LayoutClient {
+    if (!this.layout) this.layout = new LayoutClient((m) => this.onLayoutPositions(m));
+    return this.layout;
+  }
+
+  private releaseLayout(): void {
+    this.layout?.dispose();
+    this.layout = null;
+  }
+
+  /** Drop the wasm worker when the graph is hidden; rebuild structure when it comes back. */
+  private syncLayoutWanted(wasWanted: boolean): void {
+    if (this.layoutWanted()) {
+      if (!wasWanted) this.syncSimulation(0);
+      return;
+    }
+    this.releaseLayout();
+  }
+
   private pushLayoutParams(dt: number): void {
     const a = this.anim;
     const p = this.physPulse();
@@ -2534,7 +2560,7 @@ export class NetScene implements HostedView, RenderScalePane {
     const last = this.lastLayoutParams;
     if (last && sameLayoutParams(last, params)) return;
     this.lastLayoutParams = params;
-    this.layout.setParams(params);
+    this.layout?.setParams(params);
   }
 
   /**
@@ -2542,8 +2568,10 @@ export class NetScene implements HostedView, RenderScalePane {
    * reported last frame; whatever it adds to `vx/vy/vz` is forwarded as a nudge and cleared.
    */
   private stepLayout(dt: number): void {
+    if (!this.layoutWanted()) return;
+    const layout = this.ensureLayout();
     this.pushLayoutParams(dt);
-    if (this.layout.busy) return; // the previous tick has not answered; positions hold, requests wait
+    if (layout.busy) return; // the previous tick has not answered; positions hold, requests wait
     const sim = this.simNodes;
     let nudge: Float32Array | null = null;
     const pinned = graphLayoutPlaces(this.anim.graphLayout);
@@ -2576,7 +2604,7 @@ export class NetScene implements HostedView, RenderScalePane {
       }
       if (any) nudge = b;
     }
-    const sent = this.layout.frame({
+    const sent = layout.frame({
       type: "frame", gen: this.simGen, alphaMin: this.pendingAlpha, nudge,
       pin: this.pendingPin, release: this.pendingRelease, recycle: this.posRecycle,
     });
@@ -3419,6 +3447,7 @@ export class NetScene implements HostedView, RenderScalePane {
 
   /** Only visible nodes and links take part in the layout, so hidden multicast hubs cannot bunch LAN devices. */
   private syncSimulation(minAlpha: number): void {
+    if (!this.layoutWanted()) return;
     const nodes = [...this.nodes.values()].filter((n) => n.visible);
     this.measureCrowds(nodes);
     const n = nodes.length;
@@ -3472,7 +3501,7 @@ export class NetScene implements HostedView, RenderScalePane {
     }
     this.simNodes = nodes;
     this.simGen++;
-    this.layout.setStructure({ type: "structure", gen: this.simGen, n, nodes: arr, pos, links: linkArr, minAlpha });
+    this.ensureLayout().setStructure({ type: "structure", gen: this.simGen, n, nodes: arr, pos, links: linkArr, minAlpha });
   }
 
   /**
@@ -3791,7 +3820,7 @@ export class NetScene implements HostedView, RenderScalePane {
           + (this.lastVis && !this.lastVis.ok
             ? ` · visibility: ${this.lastVis.issues.map((i) => i.code).join(", ")}`
             : ""))
-        + ` · layout: ${this.layout.backend}/${this.layout.kernel}`
+        + ` · layout: ${this.layout ? `${this.layout.backend}/${this.layout.kernel}` : "paused"}`
         + (this.software ? " · canvas 2D (this browser has no WebGL)" : ""));
     }
     this.tune = perfOverlay(this.anim, perfStress());
@@ -3817,7 +3846,7 @@ export class NetScene implements HostedView, RenderScalePane {
     if (!this.satellite && this.anim.backdrop === "dynamic") ensureSkyRecipe(this.anim.skyAiMin * 60_000);
     this.applyLook(dt);
     if (!this.satellite) this.afterLook?.();
-    if (this.pruneCpuIdle(wall)) {
+    if (!this.stageOnly && this.pruneCpuIdle(wall)) {
       this.rebuildLineBuffers();
       this.applyVisibility();
     }
@@ -4315,7 +4344,7 @@ export class NetScene implements HostedView, RenderScalePane {
     window.removeEventListener("pointerup", this.onCamPtrLost);
     window.removeEventListener("pointercancel", this.onCamPtrLost);
     this.pulse.disable();
-    this.layout.dispose();
+    this.layout?.dispose();
     this.fabric.dispose();
     this.arrows.geometry.dispose();
     (this.arrows.material as THREE.Material).dispose();
