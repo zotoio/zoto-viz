@@ -10,7 +10,7 @@ import {
   viewSelectOptions, fillViewSelect, writePluginConfig, type PluginView,
 } from "./plugin";
 import { pluginViewKnobs, toPluginView, VIEW_PROMPT_KEY } from "./plugin-visualisation";
-import { PluginSandbox } from "./host";
+import { PluginSandbox, setPluginModuleSandboxUrlForTests } from "./host";
 import { DEFAULT_DREAM } from "../graph/scene";
 import { setPackAssetTokenForTests } from "../core/http";
 import type { GNode } from "../graph/scene";
@@ -252,6 +252,7 @@ describe("compilePlugin", () => {
     const origFetch = globalThis.fetch;
     setPackAssetTokenForTests("_sandbox", "test-pack-token");
     setPackAssetTokenForTests("pulse", "test-pack-token");
+    setPluginModuleSandboxUrlForTests(async () => "data:text/javascript,export {}");
     const box = new PluginSandbox();
     await attachPluginFrontend(box, pulse, { g: "1" });
     expect(document.querySelector("iframe")?.getAttribute("sandbox")).toBe("allow-scripts");
@@ -259,6 +260,7 @@ describe("compilePlugin", () => {
     box.unload();
     await attachPluginFrontend(box, list.find((p) => p.id === "topology")!, {});
     expect(document.querySelector("iframe")).toBeNull();
+    setPluginModuleSandboxUrlForTests(null);
     setPackAssetTokenForTests("_sandbox", "");
     globalThis.fetch = (async () => ({ ok: false, status: 500, json: async () => ({}) })) as never;
     await expect(fetchPlugins()).rejects.toThrow(/plugins/);

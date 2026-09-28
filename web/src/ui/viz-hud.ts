@@ -329,6 +329,7 @@ export class VizHud {
     this.budgetSepBefore = sep();
     this.budgetSepBefore.hidden = true;
     this.degradedSepBefore = sep();
+    this.degradedSepBefore.hidden = true;
     this.degradedSepAfter = sep();
     this.degradedSepAfter.hidden = true;
     line.append(

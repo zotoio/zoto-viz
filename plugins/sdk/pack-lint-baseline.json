@@ -41,6 +41,31 @@
       "target": "declare-const-zoto"
     },
     {
+      "file": "plugins/src/marble-run/frontend/marble-run.test.ts",
+      "rule": "host-import",
+      "target": "../../../../service/policy/work-budget-ceilings.json"
+    },
+    {
+      "file": "plugins/src/marble-run/frontend/marble-run.test.ts",
+      "rule": "host-import",
+      "target": "node:fs"
+    },
+    {
+      "file": "plugins/src/marble-run/frontend/marble-run.test.ts",
+      "rule": "host-import",
+      "target": "node:path"
+    },
+    {
+      "file": "plugins/src/marble-run/frontend/marble-run.test.ts",
+      "rule": "host-import",
+      "target": "node:url"
+    },
+    {
+      "file": "plugins/src/marble-run/frontend/marble-run.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
       "file": "plugins/src/metro-lines/frontend/index.test.ts",
       "rule": "host-import",
       "target": "node:fs"

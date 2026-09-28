@@ -71,6 +71,7 @@ describe("pack navigation stopped UX", () => {
   });
 
   it("shows fail copy with only Remove from wall (no Retry)", () => {
+    vi.useFakeTimers();
     const tileId = "plugin:wifi";
     markPackNavigationStopped(tileId);
     const notice = packFeedPaneNotice(tileId, "Wi-Fi");
@@ -78,6 +79,7 @@ describe("pack navigation stopped UX", () => {
     expect(notice?.recipe).toBe("fail");
     const mosaic = { setPaneNotice: vi.fn() };
     applyPackNavigationStoppedNotice(mosaic, tileId, "Wi-Fi");
+    vi.runAllTimers();
     const opts = mosaic.setPaneNotice.mock.calls[0]?.[3];
     expect(opts?.showRemoveFromWall).toBe(true);
     expect(opts?.showRetry).toBeFalsy();
