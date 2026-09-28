@@ -1,0 +1,15 @@
+{
+  "demo": true,
+  "label": "DEMO SNAPSHOT — not live NASA APOD",
+  "vizFrame": {
+    "headlines": [
+      {
+        "id": "apod:demo",
+        "label": "APOD",
+        "text": "DEMO: Pillars of Creation (sample title)",
+        "kind": "demo",
+        "summary": "2024-06-01 — DEMO metadata only"
+      }
+    ]
+  }
+}

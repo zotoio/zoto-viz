@@ -73,7 +73,7 @@ async function runQuadrantCase(
 
 beforeAll(async () => {
   vite = await createServer({
-    configFile: path.join(webRoot, "vite.config.ts"),
+    configFile: path.join(webRoot, "vite.config.mjs"),
     server: { middlewareMode: true, hmr: false },
   });
   httpServer = http.createServer((req, res) => vite!.middlewares(req, res));

@@ -63,7 +63,7 @@ async function runCase(page: Page, c: Case): Promise<unknown> {
 
 beforeAll(async () => {
   vite = await createServer({
-    configFile: path.join(webRoot, "vite.config.ts"),
+    configFile: path.join(webRoot, "vite.config.mjs"),
     server: { middlewareMode: true },
   });
   httpServer = http.createServer((req, res) => vite!.middlewares(req, res));

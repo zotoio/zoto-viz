@@ -76,7 +76,7 @@ describe("page CSP", () => {
 
 describe("vite monitor proxy", () => {
   it("rewrites Host so /api is not rejected as localhost:5173", () => {
-    const src = readFileSync(path.join(webRoot, "vite.config.ts"), "utf8");
+    const src = readFileSync(path.join(webRoot, "vite.config.mjs"), "utf8");
     expect(src).toMatch(/"\/api"[\s\S]*changeOrigin:\s*true/);
     expect(src).toMatch(/"\/ws"[\s\S]*changeOrigin:\s*true/);
   });

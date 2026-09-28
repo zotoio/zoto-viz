@@ -27,6 +27,7 @@ import { normalizeVizDemoPackId, type VizHud } from "../ui/viz-hud";
 import type { ViewMode } from "../core/modes";
 import { notePackSandboxFrame, packPerfEnabled } from "../core/pack-host-perf";
 import { presentFrameStats } from "../core/present-clock";
+import { remixDeliverFrame, remixPairingActive, remixVisualPackId } from "../remix/remix-runtime";
 
 export interface VizPresentDeliverHost {
   modeById: (viewId: string) => ViewMode;
@@ -54,10 +55,12 @@ export interface VizPresentDeliverHost {
 /** One viz budget deliver + sandbox frame (display cadence, not websocket cadence). */
 export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHost): void {
   const mode = host.modeById(host.modeSelValue());
-  const active = (mode.pluginId && host.pluginSpecs.find((p) => p.id === mode.pluginId))
+  const remixPackId = remixVisualPackId();
+  const active = (remixPackId && host.pluginSpecs.find((p) => p.id === remixPackId))
+    || (mode.pluginId && host.pluginSpecs.find((p) => p.id === mode.pluginId))
     || host.pluginSpecs.find((p) => p.id === host.tsWatchId())
     || null;
-  const packId = normalizeVizDemoPackId(active?.id ?? mode.pluginId);
+  const packId = normalizeVizDemoPackId(remixPackId ?? active?.id ?? mode.pluginId);
   const mosaicDemoPacks = host.mosaic?.on
     && host.mosaic.tileIds.some((id) => normalizeVizDemoPackId(host.modeById(id).pluginId));
   const packPanelId = host.mosaic?.on
@@ -87,7 +90,11 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
     prevClockMs,
     state: shown,
     audio,
-    buildFrame: (s, pt, a) => mainVizBuildFrame(s, pt, a, idle, bind, active?.viz?.contract ?? 2),
+    buildFrame: (s, pt, a) => {
+      const remixFrame = remixDeliverFrame(pt, a);
+      if (remixFrame) return remixFrame;
+      return mainVizBuildFrame(s, pt, a, idle, bind, active?.viz?.contract ?? 2);
+    },
     onFrame: (f) => {
       if (packId === "stereo-gram") f.spectrum = host.scene.heardSpectrum(STEREO_BINS).spectrum;
       const coalesceMosaic = !!(host.mosaic?.on && mosaicDemoPacks);

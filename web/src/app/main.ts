@@ -7,6 +7,13 @@ import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
 import { mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
 import { Settings, makeViewCogButton } from "../ui/settings";
+import {
+  activateRemixPairing,
+  deactivateRemix,
+  hydrateRemixFromStorage,
+  remixPairingActive,
+} from "../remix/remix-runtime";
+import { remixViewId } from "../remix/remix-store";
 import { illustratedSourceBind, parseSourceBind, sourceHeadlines } from "../core/sources";
 import { bindSourceOf, viewAuthBlock, type AuthCtx } from "../core/auth-setup";
 import { LiveFeed, feedViewShift } from "../ui/feed";
@@ -1744,6 +1751,13 @@ settings = new Settings({
   },
   onPersist: () => touch(),
 });
+settings.onRemixSave = async (pairing) => {
+  await activateRemixPairing(pairing);
+  applyMode(remixViewId(pairing.visualPackId), {}, { channel: "user" });
+};
+settings.onRemixClear = () => {
+  deactivateRemix();
+};
 bindServerRestartWallNotice();
 let pendingSandboxPush: { packId: string; config: Record<string, string> } | null = null;
 
@@ -1893,6 +1907,7 @@ modeSel.onChange = (id) => {
 
 async function syncPluginCatalog(): Promise<void> {
   pluginSpecs = await installPlugins();
+  settings.refreshRemixPicker(pluginSpecs);
   blockedInstallPanel.refresh();
   const blocked = takePackInstallBlockedNotice();
   if (blocked) liveFeed.showOperatorNotice(blocked);
@@ -2234,15 +2249,19 @@ async function bootCatalogFromSession(): Promise<void> {
     catalogReady = true;
     modeSel.setOptions(viewSelectOptions());
     settings.refreshMosaicSlots();
+    settings.refreshRemixPicker(pluginSpecs);
+    await hydrateRemixFromStorage();
     const live = readSessionLive();
     const bootMode = resolveRestoredViewMode({
       sessionMode: live?.settings?.mode,
       localMode: localStorage.getItem("zoto-viz.mode"),
       fallback: defaultCatalogMode()?.id ?? "topology",
     });
-    modeSel.value = bootMode;
-    localStorage.setItem("zoto-viz.mode", bootMode);
-    liveMode = bootMode;
+    const remixBoot = remixPairingActive();
+    const resolvedBoot = remixBoot ? remixViewId(remixBoot.visualPackId) : bootMode;
+    modeSel.value = resolvedBoot;
+    localStorage.setItem("zoto-viz.mode", resolvedBoot);
+    liveMode = resolvedBoot;
     if (settings.animSettings.mosaic !== "off" && mosaic) {
       const bootTiles = reconcileMosaicTilesWithMode(
         settings.animSettings.mosaicTiles,

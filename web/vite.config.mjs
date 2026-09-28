@@ -1,4 +1,3 @@
-/// <reference types="vitest/config" />
 import { execFileSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,7 +7,7 @@ const monitorPort = Number(process.env.ZOTO_VIZ_PORT || 7020);
 const webRoot = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(webRoot, "..");
 
-function gitShortRev(): string {
+function gitShortRev() {
   try {
     const sha = execFileSync("git", ["rev-parse", "--short", "HEAD"], {
       cwd: repoRoot,
@@ -34,10 +33,11 @@ export default defineConfig({
       "/pack-assets": { target: `http://127.0.0.1:${monitorPort}`, changeOrigin: true },
     },
   },
-  // `?init` is Vite's WebAssembly loader; listing .wasm as an asset also lets tests pull the same
-  // bytes in with `?inline` (no Node fs types in the browser tsconfig)
   assetsInclude: ["**/*.wasm", "**/*.glsl"],
-  build: { outDir: "dist", emptyOutDir: true, sourcemap: false,
+  build: {
+    outDir: "dist",
+    emptyOutDir: true,
+    sourcemap: false,
     rollupOptions: {
       input: {
         main: path.resolve(webRoot, "index.html"),

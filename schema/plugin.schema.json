@@ -25,6 +25,17 @@
       "type": "integer",
       "minimum": 1
     },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "data-source"
+      ],
+      "description": "When data-source, the tree ships public feed metadata and bundled demo snapshots only (no view menu row). Omit for normal view plugins."
+    },
+    "dataSource": {
+      "$ref": "#/$defs/dataSourcePlugin",
+      "description": "Required when kind is data-source: declared hosts, refresh policy, and bundled demo snapshots per source."
+    },
     "description": {
       "type": "string",
       "maxLength": 2000
@@ -866,6 +877,72 @@
             "maxLength": 64
           },
           "description": "Rename top-level monitor state keys before Sense (e.g. devices \u2192 nodes)."
+        }
+      }
+    },
+    "dataSourcePlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sources"
+      ],
+      "properties": {
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/dataSourceEntry"
+          }
+        }
+      }
+    },
+    "dataSourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "hosts",
+        "refreshSec",
+        "apiKeyRequired",
+        "outputShape",
+        "demoSnapshot"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "hosts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          }
+        },
+        "refreshSec": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "apiKeyRequired": {
+          "type": "boolean"
+        },
+        "outputShape": {
+          "type": "string",
+          "enum": [
+            "vizFrame",
+            "headlines",
+            "json"
+          ]
+        },
+        "demoSnapshot": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9._/-]+\\.json$",
+          "maxLength": 120
         }
       }
     },
