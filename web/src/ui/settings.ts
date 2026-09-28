@@ -546,6 +546,15 @@ export class Settings {
   }
 
   setMicPolicy(p: MicPolicy): void {
+    // Profile restore calls this with the policy that is already live. Re-entering "auto"
+    // used to clear the dismiss latch and arm watchword again, so the allow sheet returned
+    // on every settings apply.
+    if (p === liveMic.micPolicy) {
+      if (p === "auto") clearMediaDismiss("mic");
+      if (this.deviceUi) this.deviceUi.mic.checked = p === "auto";
+      document.body.classList.toggle("mic-off", p === "off");
+      return;
+    }
     if (p === "auto") clearMediaDismiss("mic");
     else dropMediaAsk("mic");
     liveMic.setPolicy(p);

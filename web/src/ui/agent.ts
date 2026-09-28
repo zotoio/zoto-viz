@@ -128,6 +128,10 @@ export class AgentPanel {
   /** Speech from a later recognition session after the watchword (Chrome restarts often). */
   private follow = "";
   private micBlocked = false;
+  /** In-page allow sheet already accepted this listen session. Recognition restarts must not ask again. */
+  private wakeAccepted = false;
+  /** askUserMedia is in flight. A second startWake would open another sheet. */
+  private wakePending = false;
   private silence = 0;
   private restart = 0;
   private controlToggle: Toggle;
@@ -194,9 +198,12 @@ export class AgentPanel {
     this.headerTxt = this.headerToggle.el.querySelector(".txt")!;
     this.headerToggle.el.prepend(this.led);
     this.headerEl = this.headerToggle.el;
-    document.addEventListener("pointerdown", () => {
+    document.addEventListener("pointerdown", (ev) => {
       if (!micCaptureAllowed()) return;
-      if (this.wakeOn && !this.micBlocked && !this.rec && !this.holdTalk) this.startWake();
+      const t = ev.target;
+      // pointerdown on Allow / Not now fires before the dialog closes and would queue another ask.
+      if (t instanceof Element && t.closest("[data-media-ask]")) return;
+      if (this.wakeOn && !this.micBlocked && !this.rec && !this.holdTalk && !this.wakePending) this.startWake();
     });
 
     this.statusEl = document.createElement("div");
@@ -788,12 +795,16 @@ export class AgentPanel {
   }
 
   private startWake(restart = false): void {
+    if (this.wakePending) return;
+    if (this.micBlocked && !restart) return;
     void this.armListen(restart);
   }
 
   /** Hold one MediaStream for the whole listen session; SpeechRecognition may restart on it. */
   private async armListen(restart = false): Promise<void> {
     if (!micCaptureAllowed() || !this.wakeOn || this.holdTalk) return;
+    if (this.micBlocked && !restart) return;
+    if (this.wakePending) return;
     if (this.rec && !restart) return;
     const SR = this.speechEngine();
     if (!SR) {
@@ -801,34 +812,49 @@ export class AgentPanel {
       if (restart) this.append("agent", "this browser has no speech recognition — Chromium on localhost is required");
       return;
     }
-    const stream = await askUserMedia({ audio: true, video: false }, "watchword listening");
-    if (!stream || !micCaptureAllowed() || !this.wakeOn) {
-      if (stream) for (const t of stream.getTracks()) t.stop();
-      this.wakeStream.disable();
-      if (!stream && this.wakeOn && micCaptureAllowed()) this.micBlocked = true;
+    // SpeechRecognition ends and restarts often. The stream is already held, or the operator
+    // already accepted the sheet; asking again reopens the allow dialog and stalls the canvas.
+    if (this.wakeStream.live || this.wakeAccepted) {
+      this.attachWakeRec(SR);
       return;
     }
-    if (this.holdTalk) {
-      for (const t of stream.getTracks()) t.stop();
-      return;
+    this.wakePending = true;
+    try {
+      const stream = await askUserMedia({ audio: true, video: false }, "watchword listening");
+      if (!stream || !micCaptureAllowed() || !this.wakeOn) {
+        if (stream) for (const t of stream.getTracks()) t.stop();
+        this.wakeStream.disable();
+        if (!stream && this.wakeOn && micCaptureAllowed()) this.micBlocked = true;
+        return;
+      }
+      if (this.holdTalk) {
+        for (const t of stream.getTracks()) t.stop();
+        return;
+      }
+      if (this.rec && !restart) {
+        for (const t of stream.getTracks()) t.stop();
+        return;
+      }
+      const open = await this.wakeStream.enable(stream);
+      if (!this.wakeOn || !micCaptureAllowed()) {
+        this.wakeStream.disable();
+        return;
+      }
+      if (this.holdTalk) return;
+      if (this.rec && !restart) return;
+      if (!open) {
+        this.micBlocked = true;
+        this.headerEl.title = "allow the microphone on the in-page prompt (this window has no browser listening dialog)";
+        return;
+      }
+      this.wakeAccepted = true;
+      this.attachWakeRec(SR);
+    } finally {
+      this.wakePending = false;
     }
-    if (this.rec && !restart) {
-      for (const t of stream.getTracks()) t.stop();
-      return;
-    }
-    const open = await this.wakeStream.enable(stream);
-    if (!this.wakeOn || !micCaptureAllowed()) {
-      this.wakeStream.disable();
-      return;
-    }
-    if (this.holdTalk) return;
-    if (this.rec && !restart) return;
-    if (!open) {
-      this.micBlocked = true;
-      this.headerEl.title = "allow the microphone on the in-page prompt (this window has no browser listening dialog)";
-      return;
-    }
-    this.micBlocked = false;
+  }
+
+  private attachWakeRec(SR: new () => SpeechRec): void {
     window.clearTimeout(this.restart);
     this.stopRec();
     unlockSpeech();
@@ -849,13 +875,14 @@ export class AgentPanel {
       if (this.rec !== rec) return;
       this.rec = null;
       this.paintHeader();
-      if (this.wakeOn && micCaptureAllowed() && !this.holdTalk && !this.micBlocked) {
+      if (this.wakeOn && micCaptureAllowed() && !this.holdTalk && !this.micBlocked && (this.wakeStream.live || this.wakeAccepted)) {
         this.restart = window.setTimeout(() => this.startWake(), 250);
       }
     };
     try {
       rec.start();
       this.rec = rec;
+      this.micBlocked = false;
       this.paintHeader();
     } catch {
       this.headerEl.title = "allow the microphone on the in-page prompt (browser blocked the mic)";
