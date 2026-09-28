@@ -86,6 +86,8 @@ export interface VizHudTick {
   renderScale?: number | null;
   /** rAF present-to-present interval (last + rolling p95), from {@link presentFrameStats}. */
   present?: { last: number; p95: number };
+  /** Host adaptive render-scale governor (off unless enabled in settings or `?vizGovernor=1`). */
+  governorEnabled?: boolean;
 }
 
 /** v2 contract exposes talker TCP failure ratios and systemd unit pressure — host maps them to a strip badge. */
@@ -513,7 +515,11 @@ export class VizHud {
     }
 
     if (this.budgetVisible) {
-      const model = vizBudgetOverlayFromStats(stats, input.renderScale ?? null);
+      const model = vizBudgetOverlayFromStats(
+        stats,
+        input.renderScale ?? null,
+        input.governorEnabled ?? false,
+      );
       this.budgetEl.textContent = formatVizBudgetOverlay(model);
     }
 

@@ -769,6 +769,15 @@ export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
 
 let pluginSkyMaterialsCreated = 0;
 let pluginSkyMaterialsDisposed = 0;
+let pluginRenderScaleCommitCount = 0;
+
+export function pluginRenderScaleCommitCountForTests(): number {
+  return pluginRenderScaleCommitCount;
+}
+
+export function resetPluginRenderScaleCommitCountForTests(): void {
+  pluginRenderScaleCommitCount = 0;
+}
 
 export function pluginSkyMaterialStats(): { created: number; disposed: number } {
   return { created: pluginSkyMaterialsCreated, disposed: pluginSkyMaterialsDisposed };
@@ -777,6 +786,7 @@ export function pluginSkyMaterialStats(): { created: number; disposed: number } 
 export function resetPluginSkyMaterialStatsForTests(): void {
   pluginSkyMaterialsCreated = 0;
   pluginSkyMaterialsDisposed = 0;
+  pluginRenderScaleCommitCount = 0;
 }
 
 export class Backdrop {
@@ -1291,6 +1301,7 @@ export class Backdrop {
     const s = Number.isFinite(scale) && scale > 0 ? Math.min(1, scale) : 1;
     if (Math.abs(s - this.pluginRenderScale) < 0.0005) return;
     this.pluginRenderScale = s;
+    pluginRenderScaleCommitCount++;
     this.syncPluginHostUniforms();
   }
 
