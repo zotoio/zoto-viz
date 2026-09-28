@@ -1,12 +1,20 @@
-import type { Packet } from "../../core/types";
+import type { Packet, StateMsg } from "../../core/types";
 import { goldenLanFixture } from "./golden-lan-state";
 
 /** Same host idle declaration as `visualisation.yml` → `idle: fixture: host`. */
 export const HOST_IDLE_FIXTURE = { fixture: "host" as const };
 
+let cachedIdleGolden: StateMsg | null = null;
+
+/** One built fixture. Tetris asks for a packet per due slot; rebuilding the LAN each time stalls a clock jump. */
+function idleGolden(): StateMsg {
+  if (!cachedIdleGolden) cachedIdleGolden = goldenLanFixture();
+  return cachedIdleGolden;
+}
+
 /** Header pkt/s on the golden host idle LAN (`goldenLanFixture().stats.pps`). */
 export function hostIdleFixturePps(): number {
-  return goldenLanFixture().stats.pps;
+  return idleGolden().stats.pps;
 }
 
 /** Cumulative host-idle packets due by `clockMs` on the fixture schedule (420 pkt/s). */
@@ -24,7 +32,7 @@ function mixU32(seed: number, seq: number): number {
 
 /** One deterministic packet from the golden LAN flows (same demo source as the header fixture). */
 export function hostIdleFixturePacket(seq: number, seed: number): Packet {
-  const golden = goldenLanFixture();
+  const golden = idleGolden();
   const flows = golden.flows;
   const f = flows[seq % flows.length]!;
   const h = mixU32(seed, seq);

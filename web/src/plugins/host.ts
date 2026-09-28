@@ -197,6 +197,8 @@ export class PluginSandbox {
   private bootNonce = "";
   private hostPort: MessagePort | null = null;
   private iframeLoadCount = 0;
+  /** Bumped on every {@link unload} so an in-flight boot cannot append a second iframe. */
+  private bootEpoch = 0;
   private onIframeLoad: (() => void) | null = null;
   private activePackLabel = "";
   private activePackId = "";
@@ -231,6 +233,7 @@ export class PluginSandbox {
   }
 
   unload(): void {
+    this.bootEpoch += 1;
     window.removeEventListener("message", this.onWindowMessage);
     setSandboxReady(false);
     this.cancelBootWait();
@@ -304,7 +307,7 @@ export class PluginSandbox {
     const plugin = js.replace(/<\/script/gi, "<\\/script");
     const src = `const zoto = globalThis.zoto;\n${plugin}\n`;
     this.moduleBlobUrl = `data:text/javascript,${encodeURIComponent(src)}`;
-    await this.bootFrame(this.moduleBlobUrl, config, viz);
+    await this.bootFrame(this.moduleBlobUrl, config, viz, this.bootEpoch);
   }
 
   async loadModule(
@@ -318,11 +321,15 @@ export class PluginSandbox {
     this.activePackId = "";
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
+    const epoch = this.bootEpoch;
     // Production has no test fallback frame: module.js mint needs a live frame id.
-    this.frameId = await openPackAssetFrame(this.activeTileId);
+    const frameId = await openPackAssetFrame(this.activeTileId);
+    if (epoch !== this.bootEpoch) return;
+    this.frameId = frameId;
     activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
     const moduleSrc = await pluginModuleSandboxUrl(id, hash);
-    await this.bootFrame(moduleSrc, config, viz);
+    if (epoch !== this.bootEpoch) return;
+    await this.bootFrame(moduleSrc, config, viz, epoch);
   }
 
   async loadModuleUrl(
@@ -335,17 +342,26 @@ export class PluginSandbox {
     this.activePackId = "";
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
-    await this.bootFrame(moduleSrc, config, viz);
+    await this.bootFrame(moduleSrc, config, viz, this.bootEpoch);
+  }
+
+  private dropStaleIframe(iframe: HTMLIFrameElement): void {
+    iframe.remove();
+    if (this.iframe === iframe) this.iframe = null;
   }
 
   private async bootFrame(
     moduleSrc: string,
     config: Record<string, string>,
-    viz?: VizPluginContract,
+    viz: VizPluginContract | undefined,
+    epoch: number,
   ): Promise<void> {
+    if (epoch !== this.bootEpoch) return;
     this.ensureWindowMessageListener();
     if (!this.frameId) {
-      this.frameId = await openPackAssetFrame(this.activeTileId);
+      const frameId = await openPackAssetFrame(this.activeTileId);
+      if (epoch !== this.bootEpoch) return;
+      this.frameId = frameId;
       activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
     }
     const bootOut = { nonce: "" };
@@ -354,8 +370,13 @@ export class PluginSandbox {
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     iframe.src = await pluginSandboxFrameUrl(this.frameId, bootOut);
+    if (epoch !== this.bootEpoch) return;
     this.bootNonce = bootOut.nonce;
     document.body.appendChild(iframe);
+    if (epoch !== this.bootEpoch) {
+      this.dropStaleIframe(iframe);
+      return;
+    }
     this.iframe = iframe;
     this.iframeLoadCount = 0;
     this.onIframeLoad = () => {
@@ -367,7 +388,7 @@ export class PluginSandbox {
       throw new Error("plugin sandbox must not use srcdoc under page CSP");
     }
     await waitPluginMsg(this, iframe, "frame-ready", this.bootNonce, (fail) => { this.bootReject = fail; });
-    if (!this.iframe) return;
+    if (epoch !== this.bootEpoch || this.iframe !== iframe) return;
     const channel = new MessageChannel();
     this.hostPort = channel.port1;
     this.hostPort.start();
@@ -390,6 +411,7 @@ export class PluginSandbox {
       parentOrigin: location.origin,
     });
     await waitPluginPortMsg(this, this.hostPort, "ready", this.bootNonce, (fail) => { this.bootReject = fail; });
+    if (epoch !== this.bootEpoch || this.iframe !== iframe) return;
     this.bootReject = null;
     if (!this.iframe) {
       this.teardownPort();
