@@ -8,6 +8,8 @@ import {
   particlesOnLink,
   PHYS_EASE_KEYS,
   pickPhys,
+  edgeDrawSegs,
+  organicEdgePoint,
   stringPoint,
   stringSegs,
 } from "./physics";
@@ -44,6 +46,25 @@ describe("string path", () => {
     const sag = stringPoint(0, 0, 0, 10, 0, 0, 0.5, 1);
     expect(sag[0]).toBeCloseTo(5, 5);
     expect(sag[1]).toBeLessThan(-1);
+  });
+
+  it("pins a flexible edge to both nodes and bows with their pull", () => {
+    expect(edgeDrawSegs(0)).toBe(4);
+    expect(edgeDrawSegs(1)).toBe(8);
+    const ends = organicEdgePoint(0, 0, 0, 10, 0, 0, 0, 0, 4, 0);
+    const tail = organicEdgePoint(0, 0, 0, 10, 0, 0, 1, 0, 4, 0);
+    expect(ends).toEqual([0, 0, 0]);
+    expect(tail).toEqual([10, 0, 0]);
+    const still = organicEdgePoint(0, 0, 0, 10, 0, 0, 0.5, 0, 0, 0);
+    expect(still[0]).toBeCloseTo(5, 4);
+    expect(still[1]).toBeCloseTo(0, 4);
+    expect(still[2]).toBeCloseTo(0, 4);
+    const pulled = organicEdgePoint(0, 0, 0, 10, 0, 0, 0.5, 0, 3, 0);
+    expect(pulled[1]).toBeGreaterThan(still[1] + 1);
+    const away = organicEdgePoint(10, 0, 0, 20, 0, 0, 0.5, 8, 0, 0);
+    expect(away[0]).toBeLessThan(14);
+    expect(organicEdgePoint(10, 0, 0, 20, 0, 0, 0, 8, 0, 0)).toEqual([10, 0, 0]);
+    expect(organicEdgePoint(10, 0, 0, 20, 0, 0, 1, 8, 0, 0)).toEqual([20, 0, 0]);
   });
 
   it("pulls the midpoint toward a hub when bundling", () => {

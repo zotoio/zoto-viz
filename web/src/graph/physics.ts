@@ -190,6 +190,19 @@ export function stringSegs(stringAmt: number, bundle = 0): number {
   return Math.min(8, 2 + Math.round(a * 6));
 }
 
+/** Drawn edges always have enough samples to bend between their nodes. */
+export function edgeDrawSegs(stringAmt: number, bundle = 0): number {
+  return Math.max(4, stringSegs(stringAmt, bundle));
+}
+
+/** Stable −1..1 so neighbouring edges can bow on different sides. */
+export function edgeBend(aId: string, bId: string): number {
+  const s = aId < bId ? aId + "\0" + bId : bId + "\0" + aId;
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) h = Math.imul(h ^ s.charCodeAt(i), 16777619);
+  return ((h >>> 0) / 4294967295) * 2 - 1;
+}
+
 /**
  * Point along a catenary-ish quadratic from A to B.
  * `sag` 0–1 droops the middle; `wave` 0–1 adds a sideways ripple.
@@ -228,6 +241,64 @@ export function stringPoint(
     u * u * ax + 2 * u * t * cx + t * t * bx,
     u * u * ay + 2 * u * t * cy + t * t * by,
     u * u * az + 2 * u * t * cz + t * t * bz,
+  ];
+}
+
+/**
+ * Flexible edge pinned to both nodes. `pull` is the spring slack of the
+ * middle (and any difference between the two nodes). The part across the
+ * chord bows the edge. Slack that lies along the chord is folded toward the
+ * graph center, so when the core moves away the middle draws inward. A still
+ * edge, with no slack, is the string between its nodes. The ends stay put.
+ * `bend` is unused; the bow comes from the slack, not a fixed kink.
+ */
+export function organicEdgePoint(
+  ax: number, ay: number, az: number,
+  bx: number, by: number, bz: number,
+  t: number,
+  pullX = 0, pullY = 0, pullZ = 0,
+  sag = 0,
+  wave = 0,
+  hx = 0, hy = 0, hz = 0,
+  bundle = 0,
+  bend = 1,
+): [number, number, number] {
+  void bend;
+  const u = Math.max(0, Math.min(1, t));
+  const base = stringPoint(ax, ay, az, bx, by, bz, u, sag, wave, hx, hy, hz, bundle);
+  const bow = Math.sin(u * Math.PI);
+  if (bow < 1e-4) return base;
+  const dx = bx - ax, dy = by - ay, dz = bz - az;
+  const len2 = dx * dx + dy * dy + dz * dz;
+  const len = Math.sqrt(len2) || 1;
+  let px = pullX, py = pullY, pz = pullZ;
+  if (len2 > 1e-8) {
+    const along = (px * dx + py * dy + pz * dz) / len2;
+    px -= dx * along;
+    py -= dy * along;
+    pz -= dz * along;
+  }
+  const slack = Math.hypot(pullX, pullY, pullZ);
+  const mx = (ax + bx) * 0.5;
+  const my = (ay + by) * 0.5;
+  const mz = (az + bz) * 0.5;
+  const ml = Math.hypot(mx, my, mz);
+  if (ml > 1e-4 && slack > 1e-4) {
+    const kin = len * 0.35 * Math.tanh(slack / 18);
+    px += (-mx / ml) * kin;
+    py += (-my / ml) * kin;
+    pz += (-mz / ml) * kin;
+  }
+  const plen = Math.hypot(px, py, pz);
+  const cap = len * 0.55;
+  if (plen > 1e-6) {
+    const s = (cap * Math.tanh(plen / cap)) / plen;
+    px *= s; py *= s; pz *= s;
+  }
+  return [
+    base[0] + px * bow,
+    base[1] + py * bow,
+    base[2] + pz * bow,
   ];
 }
 

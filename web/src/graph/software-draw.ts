@@ -29,6 +29,15 @@ export interface SoftMark {
   r: number; g: number; b: number;
 }
 
+export interface SoftMesh {
+  /** World-space positions, 3 floats per vertex. */
+  pos: Float32Array;
+  col: Float32Array;
+  idx: Uint32Array;
+  verts: number;
+  indices: number;
+}
+
 export interface SoftGraph {
   clearHex: number;
   rimHex: number;
@@ -40,6 +49,8 @@ export interface SoftGraph {
   nodes: SoftNode[];
   segs: SoftSeg[];
   particles: SoftMark[];
+  /** Projected fabric mesh. When set, discs and straight segments are skipped. */
+  mesh?: SoftMesh;
 }
 
 const _p = new THREE.Vector3();
@@ -107,11 +118,14 @@ export function paintSoftwareGraph(
   ctx.globalCompositeOperation = "source-over";
 
   paintFloor(ctx, camera, rect, graph);
+  if (graph.mesh && graph.mesh.indices >= 3) paintSoftwareMesh(ctx, camera, rect, graph.mesh);
 
   const a = { x: 0, y: 0, z: 0 };
   const b = { x: 0, y: 0, z: 0 };
+  const meshOn = !!graph.mesh && graph.mesh.indices >= 3;
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
+  if (!meshOn) {
   for (const s of graph.segs) {
     const okA = projectPane(s.ax, s.ay, s.az, camera, rect, a);
     const okB = projectPane(s.bx, s.by, s.bz, camera, rect, b);
@@ -124,6 +138,7 @@ export function paintSoftwareGraph(
     ctx.lineTo(b.x, b.y);
     ctx.stroke();
   }
+  }
 
   for (const p of graph.particles) {
     if (!projectPane(p.x, p.y, p.z, camera, rect, a)) continue;
@@ -134,9 +149,11 @@ export function paintSoftwareGraph(
   }
 
   const drawn: { n: SoftNode; x: number; y: number; z: number; rad: number }[] = [];
+  if (!meshOn) {
   for (const n of graph.nodes) {
     if (!projectPane(n.x, n.y, n.z, camera, rect, a)) continue;
     drawn.push({ n, x: a.x, y: a.y, z: a.z, rad: worldPx(n.scale, n.x, n.y, n.z, camera, rect) });
+  }
   }
   drawn.sort((p, q) => q.z - p.z);
   for (const d of drawn) {
@@ -179,6 +196,102 @@ function paintSoftDrone(ctx: CanvasRenderingContext2D, x: number, y: number, rad
     ctx.arc(x + dx * arm * 0.78, y + dy * arm * 0.78, rad * 0.28, 0, Math.PI * 2);
     ctx.fill();
   }
+}
+
+let rastW = 0;
+let rastH = 0;
+let rastColor = new Uint8ClampedArray(0);
+let rastDepth = new Float32Array(0);
+let rastProj = new Float32Array(0);
+let rastCanvas: HTMLCanvasElement | null = null;
+
+/** Perspective fill of a fabric mesh. Used when the embedded browser has no WebGL. */
+export function paintSoftwareMesh(
+  ctx: CanvasRenderingContext2D,
+  camera: THREE.Camera,
+  rect: SoftRect,
+  mesh: SoftMesh,
+): void {
+  const bw = Math.max(2, Math.min(480, Math.floor(rect.w)));
+  const bh = Math.max(2, Math.floor(rect.h * bw / Math.max(1, rect.w)));
+  if (bw !== rastW || bh !== rastH) {
+    rastW = bw;
+    rastH = bh;
+    rastColor = new Uint8ClampedArray(bw * bh * 4);
+    rastDepth = new Float32Array(bw * bh);
+    rastCanvas = null;
+  }
+  rastColor.fill(0);
+  rastDepth.fill(2);
+  const verts = mesh.verts;
+  if (rastProj.length < verts * 3) rastProj = new Float32Array(verts * 3);
+  const pos = mesh.pos;
+  for (let i = 0; i < verts; i++) {
+    _p.set(pos[i * 3] ?? 0, pos[i * 3 + 1] ?? 0, pos[i * 3 + 2] ?? 0).project(camera);
+    rastProj[i * 3] = ( _p.x * 0.5 + 0.5) * bw;
+    rastProj[i * 3 + 1] = (-_p.y * 0.5 + 0.5) * bh;
+    rastProj[i * 3 + 2] = _p.z;
+  }
+  const idx = mesh.idx;
+  const col = mesh.col;
+  const tris = Math.floor(mesh.indices / 3);
+  const stride = Math.max(1, Math.ceil(tris / 4500));
+  const lx = 0.28, ly = 0.86, lz = 0.32;
+  for (let t = 0; t < tris; t += stride) {
+    const ia = idx[t * 3] ?? 0, ib = idx[t * 3 + 1] ?? 0, ic = idx[t * 3 + 2] ?? 0;
+    if (ia >= verts || ib >= verts || ic >= verts) continue;
+    const ax = rastProj[ia * 3] ?? 0, ay = rastProj[ia * 3 + 1] ?? 0, az = rastProj[ia * 3 + 2] ?? 0;
+    const bx = rastProj[ib * 3] ?? 0, by = rastProj[ib * 3 + 1] ?? 0, bz = rastProj[ib * 3 + 2] ?? 0;
+    const cx = rastProj[ic * 3] ?? 0, cy = rastProj[ic * 3 + 1] ?? 0, cz = rastProj[ic * 3 + 2] ?? 0;
+    if (az < -1 || az > 1 || bz < -1 || bz > 1 || cz < -1 || cz > 1) continue;
+    const area = (bx - ax) * (cy - ay) - (by - ay) * (cx - ax);
+    if (Math.abs(area) < 0.4) continue;
+    const wx0 = pos[ia * 3] ?? 0, wy0 = pos[ia * 3 + 1] ?? 0, wz0 = pos[ia * 3 + 2] ?? 0;
+    const wx1 = pos[ib * 3] ?? 0, wy1 = pos[ib * 3 + 1] ?? 0, wz1 = pos[ib * 3 + 2] ?? 0;
+    const wx2 = pos[ic * 3] ?? 0, wy2 = pos[ic * 3 + 1] ?? 0, wz2 = pos[ic * 3 + 2] ?? 0;
+    let nx = (wy1 - wy0) * (wz2 - wz0) - (wz1 - wz0) * (wy2 - wy0);
+    let ny = (wz1 - wz0) * (wx2 - wx0) - (wx1 - wx0) * (wz2 - wz0);
+    let nz = (wx1 - wx0) * (wy2 - wy0) - (wy1 - wy0) * (wx2 - wx0);
+    const nl = Math.hypot(nx, ny, nz) || 1;
+    nx /= nl; ny /= nl; nz /= nl;
+    const shade = 0.32 + 0.68 * Math.abs(nx * lx + ny * ly + nz * lz);
+    const r = Math.min(255, ((col[ia * 3] ?? 0) + (col[ib * 3] ?? 0) + (col[ic * 3] ?? 0)) / 3 * shade * 255);
+    const g = Math.min(255, ((col[ia * 3 + 1] ?? 0) + (col[ib * 3 + 1] ?? 0) + (col[ic * 3 + 1] ?? 0)) / 3 * shade * 255);
+    const bch = Math.min(255, ((col[ia * 3 + 2] ?? 0) + (col[ib * 3 + 2] ?? 0) + (col[ic * 3 + 2] ?? 0)) / 3 * shade * 255);
+    let minX = Math.max(0, Math.floor(Math.min(ax, bx, cx)));
+    let maxX = Math.min(bw - 1, Math.ceil(Math.max(ax, bx, cx)));
+    let minY = Math.max(0, Math.floor(Math.min(ay, by, cy)));
+    let maxY = Math.min(bh - 1, Math.ceil(Math.max(ay, by, cy)));
+    if (maxX < minX || maxY < minY) continue;
+    const inv = 1 / area;
+    for (let y = minY; y <= maxY; y++) {
+      for (let x = minX; x <= maxX; x++) {
+        const px = x + 0.5, py = y + 0.5;
+        const w0 = ((bx - px) * (cy - py) - (by - py) * (cx - px)) * inv;
+        const w1 = ((cx - px) * (ay - py) - (cy - py) * (ax - px)) * inv;
+        const w2 = 1 - w0 - w1;
+        if (w0 < 0 || w1 < 0 || w2 < 0) continue;
+        const z = az * w0 + bz * w1 + cz * w2;
+        const pi = y * bw + x;
+        if (z >= (rastDepth[pi] ?? 2)) continue;
+        rastDepth[pi] = z;
+        const o = pi * 4;
+        rastColor[o] = r;
+        rastColor[o + 1] = g;
+        rastColor[o + 2] = bch;
+        rastColor[o + 3] = 235;
+      }
+    }
+  }
+  if (!rastCanvas) rastCanvas = document.createElement("canvas");
+  if (rastCanvas.width !== bw || rastCanvas.height !== bh) {
+    rastCanvas.width = bw;
+    rastCanvas.height = bh;
+  }
+  const ictx = rastCanvas.getContext("2d");
+  if (!ictx) return;
+  ictx.putImageData(new ImageData(rastColor, bw, bh), 0, 0);
+  ctx.drawImage(rastCanvas, rect.x, rect.y, rect.w, rect.h);
 }
 
 function paintFloor(

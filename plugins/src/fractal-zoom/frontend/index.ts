@@ -31,6 +31,7 @@ vizHost().onFrame = (frame) => {
   const drive = packFractalDrive(simT, dt, frame.audio, aspect, cfg, IDLE_POINTER);
   const host = vizHost();
   host.writeBuffer(0, drive.slot0);
+  for (let i = 0; i < drive.orbit.length; i++) host.writeBuffer(i + 1, drive.orbit[i]!);
   host.writeUniform("uAccent", drive.accent);
   host.writeUniform("uBg", drive.bg);
   host.writeUniform("uOpacity", 1);

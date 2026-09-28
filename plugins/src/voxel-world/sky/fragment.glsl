@@ -88,18 +88,33 @@ int villageBlock(ivec3 p) {
   vec2 village = vec2(slot(28), slot(29));
   ivec3 base = ivec3(int(floor(village.x)), int(floor(terrainH(village))), int(floor(village.y)));
   ivec3 q = p - base;
-  if (q.x >= 0 && q.x < 7 && q.z >= -3 && q.z < 4 && q.y >= 0 && q.y < 5) {
-    if (q.y == 0) return 4;
-    if (q.y < 4 && (q.x == 0 || q.x == 6 || q.z == -3 || q.z == 3)) return 3;
-    if (q.y == 4 && q.x > 1 && q.x < 5 && q.z > -2 && q.z < 2) return 7;
-    if (q.y > 0 && q.y < 4) return 0;
+  // Open yard at eye height: floor, walls, a door, a window, and a stack being placed.
+  if (q.y == 0 && q.x >= 0 && q.x <= 6 && q.z >= -3 && q.z <= 3) return 4;
+  if (q.y > 0 && q.y < 4 && (q.x == 0 || q.x == 6 || q.z == -3 || q.z == 3)) {
+    if (q.x == 6 && q.z >= -1 && q.z <= 1) return 0;
+    if (q.z == 3 && q.x >= 2 && q.x <= 4 && q.y == 2) return 0;
+    return 3;
   }
+  if (q.y == 4 && q.x >= 1 && q.x <= 5 && q.z >= -2 && q.z <= 2) return 7;
+  int built = 2 + int(mod(floor(uTime * 0.35), 3.0));
+  if (q.x == 1 && q.z == 0 && q.y > 0 && q.y <= built) return 1;
+  if (q.x == 1 && q.z == 1 && q.y == 1) return 2;
+  if (q.x == 2 && q.z == 0 && q.y == 1) return 7;
+  return 0;
+}
+
+int yardAir(ivec3 p) {
+  vec2 village = vec2(slot(28), slot(29));
+  ivec3 base = ivec3(int(floor(village.x)), int(floor(terrainH(village))), int(floor(village.y)));
+  ivec3 q = p - base;
+  if (q.y > 0 && q.y < 4 && q.x >= 0 && q.x <= 6 && q.z >= -3 && q.z <= 3) return 1;
   return 0;
 }
 
 int voxel(ivec3 p) {
   int v = villageBlock(p);
   if (v != 0) return v;
+  if (yardAir(p) != 0) return 0;
   float seed = slot(8);
   int b = blockAt(p, seed);
   if (b != 0) return b;
@@ -275,8 +290,10 @@ void main() {
   vec3 fwd = normalize(vec3(cos(pitch) * sin(yaw), sin(pitch), cos(pitch) * cos(yaw)));
   vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
   vec3 up = cross(fwd, right);
-  vec2 uv = vec2(atan(vDir.x, vDir.z), vDir.y);
-  vec3 rd = normalize(fwd + right * uv.x * 0.85 + up * uv.y * 0.65);
+  // Same camera-local ray as the room skies. vDir is already the view; a panorama atan
+  // or a perspective divide on the sky sphere turns the yard into needles.
+  vec3 vd = normalize(vDir);
+  vec3 rd = normalize(right * vd.x + up * vd.y - fwd * vd.z);
   float day = slot(7);
   vec3 sun = vec3(slot(16), slot(17), slot(18));
   vec3 col = skyCol(rd, day, sun);
@@ -290,8 +307,9 @@ void main() {
     vec3 al = blockCol(id, n, wp);
     vec3 l = normalize(sun);
     float diff = max(dot(n, l), 0.0) * slot(19);
-    vec3 amb = vec3(0.18, 0.22, 0.28) * (0.35 + day * 0.65);
-    col = al * (amb + diff) * ao;
+    vec3 amb = vec3(0.78, 0.8, 0.84) * (0.62 + day * 0.38);
+    float shadeN = 0.88 + 0.12 * max(n.y, 0.0);
+    col = al * (amb * shadeN + diff) * ao;
     if (id == 5) {
       float wave = sin(wp.x * 0.8 + uTime * 1.5) * 0.5 + 0.5;
       col = mix(col, vec3(0.1, 0.4, 0.55), 0.35 + wave * 0.2);
@@ -314,8 +332,8 @@ void main() {
   col = mix(col, uAccent * 0.15, uAudio * 0.15 * (1.0 - fail));
   col *= uBright;
   // Bottom-edge OSD strip only (screen uv); vDir.y + 0.93 was >0 on all visible pixels at ~55° FOV.
-  vec2 uv = vDir.xy / max(-vDir.z, 1e-4);
-  float osdY = -0.49 - uv.y;
+  vec2 hud = vd.xy / max(-vd.z, 1e-4);
+  float osdY = -0.49 - hud.y;
   if (osdY > 0.0) {
     vec3 bar = vec3(0.04, 0.07, 0.11);
     col = mix(col, bar, smoothstep(0.0, 0.04, osdY));
@@ -324,6 +342,6 @@ void main() {
     col += vec3(0.2, 0.85, 0.45) * demo * pulse * smoothstep(0.0, 0.03, osdY);
     col += vec3(0.85, 0.55, 0.2) * smoothstep(0.0, 0.03, osdY) * (slot(26) / 100.0);
   }
-  col = max(col, vec3(0.06, 0.08, 0.12));
+  col = max(col, vec3(0.03, 0.035, 0.04));
   fragColor = vec4(col, uOpacity);
 }

@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { mixFade } from "./morph";
+import { organicEdgePoint } from "./physics";
 import { graphLayoutIsFlat, graphLayoutPinned, type GraphLayout } from "./graph-layouts";
 
 /** How the graph is drawn as a living surface. `auto` follows the plugin; `off` keeps spheres + lines. */
@@ -7,6 +8,7 @@ export const FABRIC_KINDS = [
   "auto", "off",
   "tubes", "cloth", "crystals", "voxels", "neon", "beads", "pillars", "orbit", "wire", "lattice",
   "ribbon", "dots", "constellation", "hex", "circuit", "ink", "map", "tiles", "mosaic",
+  "octopus", "jelly", "hole", "tornado", "burst",
 ] as const;
 export type FabricKind = (typeof FABRIC_KINDS)[number];
 
@@ -32,6 +34,11 @@ export const FABRIC_OPTIONS: { value: FabricKind; label: string; hint: string }[
   { value: "map", label: "map", hint: "2D wide discs with thin roads" },
   { value: "tiles", label: "tiles", hint: "2D hexes with filled cycles, no rods" },
   { value: "mosaic", label: "mosaic", hint: "2D hexes, ribbons, and cycle panels" },
+  { value: "octopus", label: "octopus", hint: "3D mantle with curling, tapering tentacles" },
+  { value: "jelly", label: "jellyfish", hint: "3D bell with trailing wavy strands" },
+  { value: "hole", label: "black hole", hint: "3D dark core, accretion disc, and a spiral stream" },
+  { value: "tornado", label: "tornado", hint: "3D funnel mouth and a widening helix" },
+  { value: "burst", label: "burst", hint: "3D spiked blast with shards along each link" },
 ];
 
 /** Concrete styles dice / shuffle may pick (not `auto`). */
@@ -184,6 +191,10 @@ export interface FabricEdgePose {
   gba: number;
   wave: number;
   visible: boolean;
+  /** Spring slack of the edge middle, in layout space. Bows the wire inward. */
+  sx?: number;
+  sy?: number;
+  sz?: number;
 }
 
 export interface FabricSyncOpts {
@@ -254,8 +265,8 @@ function discIndexCount(): number {
   return NODE_LON * 3;
 }
 
-type NodeDraw = "hub" | "disc" | "hex" | "cube" | "octa" | "ring" | "pillar";
-type EdgeDraw = "tube" | "thin" | "ribbon" | "fat" | "bead" | "elbow" | "none";
+type NodeDraw = "hub" | "disc" | "hex" | "cube" | "octa" | "ring" | "pillar" | "mantle" | "bell" | "hole" | "funnel" | "burst";
+type EdgeDraw = "tube" | "thin" | "ribbon" | "fat" | "bead" | "elbow" | "none" | "tentacle" | "strands" | "spiral" | "helix" | "shards";
 
 export type FabricProfile = { node: NodeDraw; edge: EdgeDraw; faces: boolean; glow?: number };
 
@@ -268,6 +279,18 @@ const CUBE_VERTS = 24;
 const CUBE_TRIS = 12;
 const PILLAR_VERTS = 24;
 const PILLAR_TRIS = 12;
+const CURL_ALONG = 8;
+const CURL_RADIAL = 5;
+const CONE_SEG = 5;
+const OCTO_ARMS = 6;
+const BELL_ROWS = 4;
+const HOLE_LAT = 3;
+const HOLE_LON = 6;
+const HOLE_DISC = 14;
+const FUNNEL_SEG = 8;
+const BURST_SPIKES = 12;
+const JELLY_STRANDS = 3;
+const SHARD_N = 5;
 
 const FABRIC_PROFILE: Record<string, FabricProfile> = {
   tubes: { node: "hub", edge: "tube", faces: false },
@@ -289,6 +312,11 @@ const FABRIC_PROFILE: Record<string, FabricProfile> = {
   map: { node: "disc", edge: "ribbon", faces: false },
   tiles: { node: "hex", edge: "none", faces: true },
   mosaic: { node: "hex", edge: "ribbon", faces: true },
+  octopus: { node: "mantle", edge: "tentacle", faces: false },
+  jelly: { node: "bell", edge: "strands", faces: false },
+  hole: { node: "hole", edge: "spiral", faces: false },
+  tornado: { node: "funnel", edge: "helix", faces: false },
+  burst: { node: "burst", edge: "shards", faces: false },
 };
 
 export function fabricProfile(kind: FabricKind): FabricProfile | undefined {
@@ -302,6 +330,26 @@ function nodeCapacity(draw: NodeDraw): { verts: number; indices: number } {
   if (draw === "octa") return { verts: OCTA_VERTS, indices: OCTA_TRIS * 3 };
   if (draw === "ring") return { verts: RING_SEG * 2, indices: RING_SEG * 6 };
   if (draw === "pillar") return { verts: PILLAR_VERTS, indices: PILLAR_TRIS * 3 };
+  if (draw === "mantle") {
+    return {
+      verts: nodeVertCount() + OCTO_ARMS * (1 + CONE_SEG),
+      indices: nodeIndexCount() + OCTO_ARMS * CONE_SEG * 3,
+    };
+  }
+  if (draw === "bell") {
+    return {
+      verts: BELL_ROWS * (NODE_LON + 1) + NODE_LON * 2,
+      indices: (BELL_ROWS - 1) * NODE_LON * 6 + NODE_LON * 6,
+    };
+  }
+  if (draw === "hole") {
+    return {
+      verts: (HOLE_LAT + 1) * (HOLE_LON + 1) + HOLE_DISC * 2,
+      indices: HOLE_LAT * HOLE_LON * 6 + HOLE_DISC * 6,
+    };
+  }
+  if (draw === "funnel") return { verts: FUNNEL_SEG * 2, indices: FUNNEL_SEG * 6 };
+  if (draw === "burst") return { verts: BURST_SPIKES * 4, indices: BURST_SPIKES * 9 };
   return { verts: nodeVertCount(), indices: nodeIndexCount() };
 }
 
@@ -310,6 +358,11 @@ function edgeCapacity(draw: EdgeDraw): { verts: number; indices: number } {
   if (draw === "ribbon" || draw === "fat") return { verts: ribbonVertCount(), indices: ribbonIndexCount() };
   if (draw === "elbow") return { verts: ribbonVertCount() * 2, indices: ribbonIndexCount() * 2 };
   if (draw === "bead") return { verts: OCTA_VERTS * BEAD_N, indices: OCTA_TRIS * 3 * BEAD_N };
+  if (draw === "tentacle" || draw === "spiral" || draw === "helix") {
+    return { verts: CURL_ALONG * CURL_RADIAL, indices: (CURL_ALONG - 1) * CURL_RADIAL * 6 };
+  }
+  if (draw === "strands") return { verts: ribbonVertCount() * JELLY_STRANDS, indices: ribbonIndexCount() * JELLY_STRANDS };
+  if (draw === "shards") return { verts: SHARD_N * 4, indices: SHARD_N * 12 };
   return { verts: tubeVertCount(), indices: tubeIndexCount() };
 }
 
@@ -580,13 +633,17 @@ function writeNodePillar(w: Writer, n: FabricNodePose): void {
   writeNodeBox(w, n, s, Math.max(0.7, n.scale * 1.35), s);
 }
 
-function writeTube(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose, radMul = 1): void {
+function writeTube(
+  w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose, radMul = 1,
+  pullX = 0, pullY = 0, pullZ = 0, bend = 1,
+): void {
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
   const { n, b: bin } = frame(dx, dy, dz);
   const base = w.vi;
   for (let s = 0; s < TUBE_ALONG; s++) {
     const t = s / (TUBE_ALONG - 1);
-    const cx = a.x + dx * t, cy = a.y + dy * t, cz = a.z + dz * t;
+    const at = organicEdgePoint(a.x, a.y, a.z, b.x, b.y, b.z, t, pullX, pullY, pullZ, 0, 0, 0, 0, 0, 0, bend);
+    const cx = at[0], cy = at[1], cz = at[2];
     const rad = Math.max(0.12, (a.scale * (1 - t) + b.scale * t) * 0.42 * radMul);
     const r = a.r + (b.r - a.r) * t;
     const g = a.g + (b.g - a.g) * t;
@@ -620,13 +677,17 @@ function writeTube(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdg
   }
 }
 
-function writeRibbon(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose, widthMul = 1): void {
+function writeRibbon(
+  w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose, widthMul = 1,
+  pullX = 0, pullY = 0, pullZ = 0, bend = 1,
+): void {
   const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
   const { b: bin } = frame(dx, dy, dz);
   const base = w.vi;
   for (let s = 0; s < RIBBON_ALONG; s++) {
     const t = s / (RIBBON_ALONG - 1);
-    const cx = a.x + dx * t, cy = a.y + dy * t, cz = a.z + dz * t;
+    const at = organicEdgePoint(a.x, a.y, a.z, b.x, b.y, b.z, t, pullX, pullY, pullZ, 0, 0, 0, 0, 0, 0, bend);
+    const cx = at[0], cy = at[1], cz = at[2];
     const half = Math.max(0.12, (a.scale * (1 - t) + b.scale * t) * 0.55 * widthMul);
     const r = a.r * 0.4 + e.r0 * 0.6 + (e.r1 - e.r0) * t * 0.6;
     const g = a.g * 0.4 + e.g0 * 0.6 + (e.g1 - e.g0) * t * 0.6;
@@ -643,14 +704,18 @@ function writeRibbon(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricE
   }
 }
 
-function writeBeads(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose): void {
+function writeBeads(
+  w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose,
+  pullX = 0, pullY = 0, pullZ = 0, bend = 1,
+): void {
   for (let i = 0; i < BEAD_N; i++) {
     const t = (i + 1) / (BEAD_N + 1);
+    const at = organicEdgePoint(a.x, a.y, a.z, b.x, b.y, b.z, t, pullX, pullY, pullZ, 0, 0, 0, 0, 0, 0, bend);
     const bead: FabricNodePose = {
       id: `${a.id}:${b.id}:${i}`,
-      x: a.x + (b.x - a.x) * t,
-      y: a.y + (b.y - a.y) * t,
-      z: a.z + (b.z - a.z) * t,
+      x: at[0],
+      y: at[1],
+      z: at[2],
       scale: Math.max(0.22, (a.scale * (1 - t) + b.scale * t) * 0.38),
       r: a.r * (1 - t) + e.r0 * t,
       g: a.g * (1 - t) + e.g0 * t,
@@ -661,6 +726,12 @@ function writeBeads(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEd
     };
     writeNodeOcta(w, bead, 1);
   }
+}
+
+function anchor(n: FabricNodePose): FabricNodePose {
+  const lx = n.lx ?? 0, ly = n.ly ?? 0, lz = n.lz ?? 0;
+  if (!lx && !ly && !lz) return n;
+  return { ...n, x: n.x + lx, y: n.y + ly, z: n.z + lz, lx: 0, ly: 0, lz: 0 };
 }
 
 function writeElbow(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose): void {
@@ -681,6 +752,308 @@ function writeElbow(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEd
   writeRibbon(w, mid, b, e, 0.55);
 }
 
+function writeEllipsoid(w: Writer, n: FabricNodePose, sx: number, sy: number, sz: number): void {
+  const base = w.vi;
+  for (let i = 0; i <= NODE_LAT; i++) {
+    const v = i / NODE_LAT;
+    const phi = v * Math.PI;
+    const cy = Math.cos(phi);
+    const xr = Math.sin(phi);
+    for (let j = 0; j <= NODE_LON; j++) {
+      const u = j / NODE_LON;
+      const th = u * Math.PI * 2;
+      const nx = xr * Math.cos(th);
+      const nz = xr * Math.sin(th);
+      writeVert(
+        w, n.x + nx * sx, n.y + cy * sy, n.z + nz * sz, nx, cy, nz,
+        n.r, n.g, n.b, u, 0, n.glow, 0, 0, 0, n.opacity,
+      );
+    }
+  }
+  const stride = NODE_LON + 1;
+  for (let i = 0; i < NODE_LAT; i++) {
+    for (let j = 0; j < NODE_LON; j++) {
+      const a = base + i * stride + j;
+      const c = a + stride;
+      writeTri(w, a, c, a + 1);
+      writeTri(w, a + 1, c, c + 1);
+    }
+  }
+}
+
+function writeCone(
+  w: Writer, n: FabricNodePose,
+  ax: number, ay: number, az: number,
+  dx: number, dy: number, dz: number,
+  rad: number,
+): void {
+  const { n: side, b } = frame(dx, dy, dz);
+  const apex = writeVert(w, ax, ay, az, dx, dy, dz, n.r, n.g, n.b, 0, 0, n.glow, 0, 0, 0, n.opacity);
+  const base = w.vi;
+  for (let j = 0; j < CONE_SEG; j++) {
+    const ang = (j / CONE_SEG) * Math.PI * 2;
+    const c = Math.cos(ang), s = Math.sin(ang);
+    const ox = side[0] * c + b[0] * s;
+    const oy = side[1] * c + b[1] * s;
+    const oz = side[2] * c + b[2] * s;
+    writeVert(w, ax + dx + ox * rad, ay + dy + oy * rad, az + dz + oz * rad, ox, oy, oz, n.r, n.g, n.b, j / CONE_SEG, 1, n.glow, 0, 0, 0, n.opacity);
+  }
+  for (let j = 0; j < CONE_SEG; j++) writeTri(w, apex, base + j, base + ((j + 1) % CONE_SEG));
+}
+
+function writeMantle(w: Writer, n: FabricNodePose): void {
+  const s = Math.max(0.45, n.scale);
+  writeEllipsoid(w, n, s * 1.25, s * 0.62, s * 1.25);
+  for (let j = 0; j < OCTO_ARMS; j++) {
+    const ang = (j / OCTO_ARMS) * Math.PI * 2;
+    const c = Math.cos(ang), sn = Math.sin(ang);
+    writeCone(
+      w, n,
+      n.x + c * s * 0.4, n.y - s * 0.2, n.z + sn * s * 0.4,
+      c * s * 0.55, -s * 0.85, sn * s * 0.55,
+      s * 0.16,
+    );
+  }
+}
+
+function writeBell(w: Writer, n: FabricNodePose): void {
+  const s = Math.max(0.45, n.scale);
+  const base = w.vi;
+  const stride = NODE_LON + 1;
+  for (let i = 0; i < BELL_ROWS; i++) {
+    const phi = (i / (BELL_ROWS - 1)) * (Math.PI * 0.62);
+    const cy = Math.cos(phi);
+    const xr = Math.sin(phi);
+    for (let j = 0; j <= NODE_LON; j++) {
+      const u = j / NODE_LON;
+      const th = u * Math.PI * 2;
+      const nx = xr * Math.cos(th);
+      const nz = xr * Math.sin(th);
+      writeVert(w, n.x + nx * s * 1.15, n.y + cy * s * 0.85, n.z + nz * s * 1.15, nx, cy, nz, n.r, n.g, n.b, u, 0, n.glow, 0, 0, 0, n.opacity);
+    }
+  }
+  for (let i = 0; i < BELL_ROWS - 1; i++) {
+    for (let j = 0; j < NODE_LON; j++) {
+      const a = base + i * stride + j;
+      const c = a + stride;
+      writeTri(w, a, c, a + 1);
+      writeTri(w, a + 1, c, c + 1);
+    }
+  }
+  const rim = base + (BELL_ROWS - 1) * stride;
+  const skirt = w.vi;
+  for (let j = 0; j < NODE_LON; j++) {
+    const th = (j / NODE_LON) * Math.PI * 2;
+    const wave = 0.75 + 0.25 * Math.sin(th * 3);
+    writeVert(
+      w, n.x + Math.cos(th) * s * 0.7, n.y - s * 0.55 * wave, n.z + Math.sin(th) * s * 0.7,
+      0, -1, 0, n.r, n.g, n.b, j / NODE_LON, 1, n.glow, 0, 0, 0, n.opacity,
+    );
+    writeVert(
+      w, n.x + Math.cos(th) * s * 1.05, n.y - s * 0.15, n.z + Math.sin(th) * s * 1.05,
+      0, -0.4, 0, n.r, n.g, n.b, j / NODE_LON, 1, n.glow, 0, 0, 0, n.opacity,
+    );
+  }
+  for (let j = 0; j < NODE_LON; j++) {
+    const j2 = (j + 1) % NODE_LON;
+    writeTri(w, rim + j, skirt + j * 2, skirt + j2 * 2);
+    writeTri(w, rim + j, skirt + j2 * 2, rim + j2);
+  }
+}
+
+function writeHoleNode(w: Writer, n: FabricNodePose): void {
+  const s = Math.max(0.4, n.scale);
+  const core: FabricNodePose = { ...n, r: n.r * 0.12, g: n.g * 0.12, b: n.b * 0.14, glow: n.glow * 0.2 };
+  const base = w.vi;
+  for (let i = 0; i <= HOLE_LAT; i++) {
+    const phi = (i / HOLE_LAT) * Math.PI;
+    const cy = Math.cos(phi);
+    const xr = Math.sin(phi);
+    for (let j = 0; j <= HOLE_LON; j++) {
+      const th = (j / HOLE_LON) * Math.PI * 2;
+      const nx = xr * Math.cos(th);
+      const nz = xr * Math.sin(th);
+      writeVert(w, n.x + nx * s * 0.42, n.y + cy * s * 0.42, n.z + nz * s * 0.42, nx, cy, nz, core.r, core.g, core.b, j / HOLE_LON, 0, core.glow, 0, 0, 0, n.opacity);
+    }
+  }
+  const stride = HOLE_LON + 1;
+  for (let i = 0; i < HOLE_LAT; i++) {
+    for (let j = 0; j < HOLE_LON; j++) {
+      const a = base + i * stride + j;
+      const c = a + stride;
+      writeTri(w, a, c, a + 1);
+      writeTri(w, a + 1, c, c + 1);
+    }
+  }
+  const disc = w.vi;
+  const inner = s * 0.7, outer = s * 1.85;
+  for (let j = 0; j < HOLE_DISC; j++) {
+    const th = (j / HOLE_DISC) * Math.PI * 2;
+    const c = Math.cos(th), sn = Math.sin(th);
+    writeVert(w, n.x + c * inner, n.y, n.z + sn * inner, 0, 1, 0, n.r, n.g, n.b, j / HOLE_DISC, 1, n.glow + 0.4, 0, 0, 0, n.opacity);
+    writeVert(w, n.x + c * outer, n.y, n.z + sn * outer, 0, 1, 0, n.r * 0.45, n.g * 0.35, n.b * 0.2, j / HOLE_DISC, 1, n.glow, 0, 0, 0, n.opacity);
+  }
+  for (let j = 0; j < HOLE_DISC; j++) {
+    const j2 = (j + 1) % HOLE_DISC;
+    writeTri(w, disc + j * 2, disc + j2 * 2, disc + j * 2 + 1);
+    writeTri(w, disc + j * 2 + 1, disc + j2 * 2, disc + j2 * 2 + 1);
+  }
+}
+
+function writeFunnelMouth(w: Writer, n: FabricNodePose): void {
+  const s = Math.max(0.4, n.scale);
+  const base = w.vi;
+  for (let j = 0; j < FUNNEL_SEG; j++) {
+    const th = (j / FUNNEL_SEG) * Math.PI * 2;
+    const c = Math.cos(th), sn = Math.sin(th);
+    writeVert(w, n.x + c * s * 1.15, n.y + s * 0.15, n.z + sn * s * 1.15, c, 0.2, sn, n.r, n.g, n.b, j / FUNNEL_SEG, 0, n.glow, 0, 0, 0, n.opacity);
+    writeVert(w, n.x + c * s * 0.28, n.y - s * 0.7, n.z + sn * s * 0.28, c, -0.3, sn, n.r, n.g, n.b, j / FUNNEL_SEG, 1, n.glow, 0, 0, 0, n.opacity);
+  }
+  for (let j = 0; j < FUNNEL_SEG; j++) {
+    const j2 = (j + 1) % FUNNEL_SEG;
+    writeTri(w, base + j * 2, base + j2 * 2, base + j * 2 + 1);
+    writeTri(w, base + j * 2 + 1, base + j2 * 2, base + j2 * 2 + 1);
+  }
+}
+
+const BURST_DIR: [number, number, number][] = [
+  [1, 1, 1], [1, 1, -1], [1, -1, 1], [1, -1, -1],
+  [-1, 1, 1], [-1, 1, -1], [-1, -1, 1], [-1, -1, -1],
+  [1.4, 0.2, 0], [-1.4, 0.2, 0], [0.2, 1.4, 0], [0, 0.2, 1.4],
+];
+
+function writeBurstNode(w: Writer, n: FabricNodePose): void {
+  const s = Math.max(0.35, n.scale);
+  for (let i = 0; i < BURST_SPIKES; i++) {
+    const d = BURST_DIR[i] ?? [0, 1, 0];
+    const len = Math.hypot(d[0], d[1], d[2]) || 1;
+    const dx = d[0] / len, dy = d[1] / len, dz = d[2] / len;
+    const { n: side, b } = frame(dx, dy, dz);
+    const reach = s * (i < 8 ? 1.85 : 1.45);
+    const rad = s * 0.22;
+    const tip = writeVert(w, n.x + dx * reach, n.y + dy * reach, n.z + dz * reach, dx, dy, dz, n.r, n.g, n.b, 1, 0, n.glow + 0.35, 0, 0, 0, n.opacity);
+    const base = w.vi;
+    for (let k = 0; k < 3; k++) {
+      const ang = (k / 3) * Math.PI * 2;
+      const c = Math.cos(ang), sn = Math.sin(ang);
+      const ox = side[0] * c + b[0] * sn;
+      const oy = side[1] * c + b[1] * sn;
+      const oz = side[2] * c + b[2] * sn;
+      writeVert(
+        w, n.x + dx * s * 0.25 + ox * rad, n.y + dy * s * 0.25 + oy * rad, n.z + dz * s * 0.25 + oz * rad,
+        ox, oy, oz, n.r * 0.7, n.g * 0.55, n.b * 0.4, 0, 0, n.glow, 0, 0, 0, n.opacity,
+      );
+    }
+    writeTri(w, tip, base, base + 1);
+    writeTri(w, tip, base + 1, base + 2);
+    writeTri(w, tip, base + 2, base);
+  }
+}
+
+function writeCurl(
+  w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose,
+  pullX: number, pullY: number, pullZ: number,
+  turns: number, rad0: number, rad1: number, tube0: number, tube1: number,
+): void {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const { n, b: bin } = frame(dx, dy, dz);
+  const base = w.vi;
+  for (let s = 0; s < CURL_ALONG; s++) {
+    const t = s / (CURL_ALONG - 1);
+    const at = organicEdgePoint(a.x, a.y, a.z, b.x, b.y, b.z, t, pullX, pullY, pullZ);
+    const ang = t * turns * Math.PI * 2;
+    const spr = rad0 + (rad1 - rad0) * t;
+    const cx = at[0] + (n[0] * Math.cos(ang) + bin[0] * Math.sin(ang)) * spr;
+    const cy = at[1] + (n[1] * Math.cos(ang) + bin[1] * Math.sin(ang)) * spr;
+    const cz = at[2] + (n[2] * Math.cos(ang) + bin[2] * Math.sin(ang)) * spr;
+    const tube = Math.max(0.08, tube0 + (tube1 - tube0) * t);
+    const r = a.r + (e.r0 - a.r) * t;
+    const g = a.g + (e.g0 - a.g) * t;
+    const bl = a.b + (e.b0 - a.b) * t;
+    for (let k = 0; k < CURL_RADIAL; k++) {
+      const q = (k / CURL_RADIAL) * Math.PI * 2;
+      const c = Math.cos(q), sn = Math.sin(q);
+      const ox = n[0] * c + bin[0] * sn;
+      const oy = n[1] * c + bin[1] * sn;
+      const oz = n[2] * c + bin[2] * sn;
+      writeVert(w, cx + ox * tube, cy + oy * tube, cz + oz * tube, ox, oy, oz, r, g, bl, t, 1, a.glow, e.wave, e.gab, e.gba, Math.min(a.opacity, b.opacity));
+    }
+  }
+  for (let s = 0; s < CURL_ALONG - 1; s++) {
+    for (let k = 0; k < CURL_RADIAL; k++) {
+      const i0 = base + s * CURL_RADIAL + k;
+      const i1 = base + s * CURL_RADIAL + (k + 1) % CURL_RADIAL;
+      const i2 = i0 + CURL_RADIAL;
+      const i3 = i1 + CURL_RADIAL;
+      writeTri(w, i0, i2, i1);
+      writeTri(w, i1, i2, i3);
+    }
+  }
+}
+
+function writeStrands(
+  w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose,
+  pullX: number, pullY: number, pullZ: number,
+): void {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const { n, b: bin } = frame(dx, dy, dz);
+  const amp = Math.max(a.scale, b.scale) * 0.9;
+  for (let strand = 0; strand < JELLY_STRANDS; strand++) {
+    const phase = strand * (Math.PI * 2 / JELLY_STRANDS);
+    const base = w.vi;
+    for (let s = 0; s < RIBBON_ALONG; s++) {
+      const t = s / (RIBBON_ALONG - 1);
+      const at = organicEdgePoint(a.x, a.y, a.z, b.x, b.y, b.z, t, pullX, pullY, pullZ);
+      const wave = Math.sin(t * Math.PI * 3 + phase) * amp * (0.35 + t);
+      const cx = at[0] + n[0] * wave;
+      const cy = at[1] + n[1] * wave - t * amp * 0.35;
+      const cz = at[2] + n[2] * wave;
+      const half = Math.max(0.06, (a.scale * (1 - t) + b.scale * t) * 0.16);
+      const r = a.r * (1 - t) + e.r0 * t;
+      const g = a.g * (1 - t) + e.g0 * t;
+      const bl = a.b * (1 - t) + e.b0 * t;
+      writeVert(w, cx + bin[0] * half, cy + bin[1] * half, cz + bin[2] * half, 0, 1, 0, r, g, bl, t, 1, a.glow, e.wave, e.gab, e.gba, Math.min(a.opacity, b.opacity));
+      writeVert(w, cx - bin[0] * half, cy - bin[1] * half, cz - bin[2] * half, 0, 1, 0, r, g, bl, t, 1, a.glow, e.wave, e.gab, e.gba, Math.min(a.opacity, b.opacity));
+    }
+    for (let s = 0; s < RIBBON_ALONG - 1; s++) {
+      const i0 = base + s * 2;
+      writeTri(w, i0, i0 + 2, i0 + 1);
+      writeTri(w, i0 + 1, i0 + 2, i0 + 3);
+    }
+  }
+}
+
+function writeShards(
+  w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose,
+  pullX: number, pullY: number, pullZ: number,
+): void {
+  const dx = b.x - a.x, dy = b.y - a.y, dz = b.z - a.z;
+  const { n, b: bin } = frame(dx, dy, dz);
+  for (let i = 0; i < SHARD_N; i++) {
+    const t = (i + 0.5) / SHARD_N;
+    const at = organicEdgePoint(a.x, a.y, a.z, b.x, b.y, b.z, t, pullX, pullY, pullZ);
+    const ang = i * 2.399 + t * 4;
+    const kick = Math.max(a.scale, b.scale) * (0.55 + t);
+    const cx = at[0] + (n[0] * Math.cos(ang) + bin[0] * Math.sin(ang)) * kick;
+    const cy = at[1] + (n[1] * Math.cos(ang) + bin[1] * Math.sin(ang)) * kick;
+    const cz = at[2] + (n[2] * Math.cos(ang) + bin[2] * Math.sin(ang)) * kick;
+    const s = Math.max(0.2, (a.scale * (1 - t) + b.scale * t) * 0.45);
+    const r = a.r * (1 - t) + e.r0 * t;
+    const g = a.g * (1 - t) + e.g0 * t;
+    const bl = a.b * (1 - t) + e.b0 * t;
+    const base = w.vi;
+    const pts: [number, number, number][] = [[1, 1, 1], [1, -1, -1], [-1, 1, -1], [-1, -1, 1]];
+    for (const p of pts) {
+      const pl = Math.hypot(p[0], p[1], p[2]);
+      writeVert(w, cx + p[0] / pl * s, cy + p[1] / pl * s, cz + p[2] / pl * s, p[0], p[1], p[2], r, g, bl, t, 1, a.glow + 0.2, e.wave, e.gab, e.gba, Math.min(a.opacity, b.opacity));
+    }
+    writeTri(w, base, base + 1, base + 2);
+    writeTri(w, base, base + 2, base + 3);
+    writeTri(w, base, base + 3, base + 1);
+    writeTri(w, base + 1, base + 3, base + 2);
+  }
+}
+
 function writeNodeKind(w: Writer, n: FabricNodePose, draw: NodeDraw, kind: FabricKind): void {
   if (n.lx || n.ly || n.lz) n = { ...n, x: n.x + (n.lx ?? 0), y: n.y + (n.ly ?? 0), z: n.z + (n.lz ?? 0) };
   const squat = kind === "circuit";
@@ -694,19 +1067,49 @@ function writeNodeKind(w: Writer, n: FabricNodePose, draw: NodeDraw, kind: Fabri
   if (draw === "octa") { writeNodeOcta(w, n); return; }
   if (draw === "ring") { writeNodeRing(w, n); return; }
   if (draw === "pillar") { writeNodePillar(w, n); return; }
+  if (draw === "mantle") { writeMantle(w, n); return; }
+  if (draw === "bell") { writeBell(w, n); return; }
+  if (draw === "hole") { writeHoleNode(w, n); return; }
+  if (draw === "funnel") { writeFunnelMouth(w, n); return; }
+  if (draw === "burst") { writeBurstNode(w, n); return; }
   writeNodeHub(w, n);
 }
 
 function writeEdgeKind(w: Writer, a: FabricNodePose, b: FabricNodePose, e: FabricEdgePose, draw: EdgeDraw, kind: FabricKind): void {
   if (draw === "none") return;
-  if (draw === "bead") { writeBeads(w, a, b, e); return; }
-  if (draw === "elbow") { writeElbow(w, a, b, e); return; }
+  const pullX = (b.lx ?? 0) - (a.lx ?? 0) + (e.sx ?? 0);
+  const pullY = (b.ly ?? 0) - (a.ly ?? 0) + (e.sy ?? 0);
+  const pullZ = (b.lz ?? 0) - (a.lz ?? 0) + (e.sz ?? 0);
+  const da = anchor(a), db = anchor(b);
+  if (draw === "bead") { writeBeads(w, da, db, e, pullX, pullY, pullZ); return; }
+  if (draw === "elbow") { writeElbow(w, da, db, e); return; }
   if (draw === "ribbon") {
-    writeRibbon(w, a, b, e, kind === "constellation" || kind === "map" ? 0.42 : 1);
+    writeRibbon(w, da, db, e, kind === "constellation" || kind === "map" ? 0.42 : 1, pullX, pullY, pullZ);
     return;
   }
-  if (draw === "fat") { writeRibbon(w, a, b, e, 1.7); return; }
-  writeTube(w, a, b, e, draw === "thin" ? 0.38 : 1);
+  if (draw === "fat") { writeRibbon(w, da, db, e, 1.7, pullX, pullY, pullZ); return; }
+  if (draw === "tentacle") {
+    const spr = Math.max(da.scale, db.scale, 1.2);
+    writeCurl(w, da, db, e, pullX, pullY, pullZ, 1.7, spr * 1.15, spr * 0.2, spr * 0.38, spr * 0.07);
+    return;
+  }
+  if (draw === "strands") { writeStrands(w, da, db, e, pullX, pullY, pullZ); return; }
+  if (draw === "spiral") {
+    const spr = Math.max(da.scale, db.scale, 1);
+    writeCurl(w, da, db, e, pullX, pullY, pullZ, 4.2, spr * 1.7, spr * 0.28, 0.28, 0.12);
+    return;
+  }
+  if (draw === "helix") {
+    const len = Math.hypot(db.x - da.x, db.y - da.y, db.z - da.z);
+    writeCurl(
+      w, da, db, e, pullX, pullY, pullZ, 3.1,
+      Math.max(da.scale * 1.5, 2.4), Math.max(len * 0.09, db.scale),
+      Math.max(0.2, da.scale * 0.2), Math.max(0.16, db.scale * 0.16),
+    );
+    return;
+  }
+  if (draw === "shards") { writeShards(w, da, db, e, pullX, pullY, pullZ); return; }
+  writeTube(w, da, db, e, draw === "thin" ? 0.38 : 1, pullX, pullY, pullZ);
 }
 
 function baryIndex(i: number, j: number): number {
@@ -716,6 +1119,7 @@ function baryIndex(i: number, j: number): number {
 }
 
 function writeFace(w: Writer, a: FabricNodePose, b: FabricNodePose, c: FabricNodePose): void {
+  a = anchor(a); b = anchor(b); c = anchor(c);
   const ux = b.x - a.x, uy = b.y - a.y, uz = b.z - a.z;
   const vx = c.x - a.x, vy = c.y - a.y, vz = c.z - a.z;
   let nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
@@ -803,6 +1207,15 @@ export class GraphFabric {
     this.kindN = Math.max(0, FABRIC_DICE.indexOf(kind));
     this.sig = "";
     this.mesh.visible = fabricActive(kind);
+  }
+
+  /** CPU mesh the software canvas projects when this browser has no WebGL. */
+  meshCpu(): { pos: Float32Array; col: Float32Array; idx: Uint32Array; verts: number; indices: number; scale: number } | null {
+    if (!fabricActive(this.kind) || this.verts < 3 || this.indices < 3) return null;
+    return {
+      pos: this.pos, col: this.col, idx: this.idx,
+      verts: this.verts, indices: this.indices, scale: this.mesh.scale.x,
+    };
   }
 
   sync(nodes: FabricNodePose[], edges: FabricEdgePose[], faces: [string, string, string][], opts: FabricSyncOpts): void {

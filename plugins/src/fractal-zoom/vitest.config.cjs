@@ -12,6 +12,6 @@ module.exports = defineConfig({
   test: {
     environment: "happy-dom",
     setupFiles: [path.join(__dirname, "../../../web/src/test/setup.ts")],
-    include: ["frontend/pack.test.ts"],
+    include: ["frontend/**/*.test.ts"],
   },
 });

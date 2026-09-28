@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as THREE from "three";
-import { cssHex, paintSoftwareGraph, paintSoftwarePluginRain, projectPane, rgba, worldPx } from "./software-draw";
+import { cssHex, paintSoftwareGraph, paintSoftwareMesh, paintSoftwarePluginRain, projectPane, rgba, worldPx } from "./software-draw";
 
 function cam(): THREE.PerspectiveCamera {
   const c = new THREE.PerspectiveCamera(55, 1, 1, 12000);
@@ -65,5 +65,19 @@ describe("software-draw", () => {
     paintSoftwarePluginRain(ctx, { x: 0, y: 0, w: 80, h: 80 }, 1.2, 0.4, "JEMALLOC");
     const pix = ctx.getImageData(40, 40, 1, 1).data;
     expect(pix[3]).toBeGreaterThan(0);
+  });
+
+  it("fills a triangle in perspective when WebGL is missing", () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 80;
+    canvas.height = 80;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const pos = new Float32Array([0, 8, 0, -12, -6, 0, 12, -6, 0]);
+    const col = new Float32Array([1, 0.2, 0.1, 1, 0.2, 0.1, 1, 0.2, 0.1]);
+    const idx = new Uint32Array([0, 1, 2]);
+    paintSoftwareMesh(ctx, cam(), { x: 0, y: 0, w: 80, h: 80 }, { pos, col, idx, verts: 3, indices: 3 });
+    const pix = ctx.getImageData(40, 40, 1, 1).data;
+    expect(pix[0] + pix[1] + pix[2]).toBeGreaterThan(20);
   });
 });

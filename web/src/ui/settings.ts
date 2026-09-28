@@ -1073,7 +1073,7 @@ export class Settings {
       { key: "skies", label: "skies", hint: "in dream, cycle authored skies independently of theme (cadence or beat). AI Dynamic is not in the pool", get: () => this.anim.skyCycle !== "off", set: (on) => { this.anim.skyCycle = on ? (this.anim.skyCycle === "off" ? "cadence" : this.anim.skyCycle) : "off"; } },
       { key: "floor", label: "floor", hint: "pulse the floor grid", get: () => this.anim.gridAudio, set: (on) => { this.anim.gridAudio = on; } },
       { key: "camera", label: "camera", hint: "FOV and dream orbit follow audio, how fast the graph/pulse is changing, and where you look (amounts under Camera)", get: () => this.anim.audioCamera, set: (on) => { this.anim.audioCamera = on; } },
-      { key: "nodes", label: "nodes", hint: "bounce and glow graph nodes; fling harder on release", get: () => this.anim.audioNodes, set: (on) => { this.anim.audioNodes = on; } },
+      { key: "nodes", label: "nodes", hint: "graph follows the mic beat: bounce, glow, and a sharper drift. Off keeps the cloud eased", get: () => this.anim.audioNodes, set: (on) => { this.anim.audioNodes = on; } },
       { key: "physics", label: "physics", hint: "pulse magnets, gravity, swirl, and string sag", get: () => this.anim.audioPhysics, set: (on) => { this.anim.audioPhysics = on; } },
       { key: "particles", label: "sparks", hint: "pulse traffic spark count and speed", get: () => this.anim.audioParts, set: (on) => { this.anim.audioParts = on; } },
     ];

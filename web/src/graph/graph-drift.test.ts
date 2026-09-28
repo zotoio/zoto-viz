@@ -2,14 +2,18 @@ import { describe, expect, it } from "vitest";
 import * as THREE from "three";
 import {
   applyDriftPoint,
+  BEAT_CORE_OMEGA,
+  CORE_OMEGA,
+  driftOmegas,
   driftRig,
   easeCycle,
   figureEight,
   graphDriftPose,
   lagIntoLayout,
+  edgeSpringTarget,
   nodeLagReach,
   nodeTravelScale,
-  stepNodeLag,
+  stepSpring,
   unapplyDriftPoint,
 } from "./graph-drift";
 
@@ -84,11 +88,59 @@ describe("sphere drift", () => {
 });
 
 describe("node lag", () => {
-  it("trails the cloud and covers less ground than the pose", () => {
-    const follow = stepNodeLag({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 20 }, 0.2);
-    expect(follow.z).toBeGreaterThan(0);
-    expect(follow.z).toBeLessThan(6);
-    expect(20 - follow.z).toBeGreaterThan(10);
+  it("accelerates from rest and stays behind the target", () => {
+    const rest = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+    const target = { x: 0, y: 0, z: 20 };
+    const first = stepSpring(rest, target, 0.2, 1.2);
+    expect(first.z).toBeGreaterThan(0);
+    expect(first.z).toBeLessThan(6);
+    expect(20 - first.z).toBeGreaterThan(10);
+    expect(first.vz).toBeGreaterThan(0);
+    const second = stepSpring(first, target, 0.2, 1.2);
+    expect(second.z).toBeGreaterThan(first.z);
+    expect(second.z).toBeLessThan(20);
+    let body = second;
+    let prev = second.z;
+    for (let i = 0; i < 90; i++) {
+      body = stepSpring(body, target, 1 / 30, 1.2);
+      expect(body.z).toBeGreaterThanOrEqual(prev - 1e-6);
+      expect(body.z).toBeLessThanOrEqual(20 + 1e-4);
+      prev = body.z;
+    }
+    expect(body.z).toBeGreaterThan(12);
+  });
+
+  it("leaves the edge middle behind a core that is moving away", () => {
+    let core = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+    let node = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+    let edge = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+    for (let i = 1; i <= 90; i++) {
+      const goal = { x: 0, y: 0, z: i * 0.45 };
+      core = stepSpring(core, goal, 1 / 30, 2.2);
+      node = stepSpring(node, core, 1 / 30, 0.85);
+      edge = stepSpring(edge, edgeSpringTarget(core, node), 1 / 30, 0.42);
+    }
+    expect(node.z).toBeLessThan(core.z - 0.5);
+    expect(edge.z).toBeLessThan(node.z - 0.5);
+  });
+
+  it("eases more gently than the mic-beat springs", () => {
+    const eased = driftOmegas(false);
+    const beat = driftOmegas(true);
+    expect(eased.core).toBe(CORE_OMEGA);
+    expect(beat.core).toBe(BEAT_CORE_OMEGA);
+    expect(eased.core).toBeLessThan(beat.core);
+    expect(eased.node).toBeLessThan(beat.node);
+    expect(eased.edge).toBeLessThan(beat.edge);
+    const goal = { x: 0, y: 0, z: 24 };
+    let soft = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+    let hard = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+    for (let i = 0; i < 20; i++) {
+      soft = stepSpring(soft, goal, 1 / 30, eased.core);
+      hard = stepSpring(hard, goal, 1 / 30, beat.core);
+    }
+    expect(soft.z).toBeGreaterThan(0);
+    expect(soft.z).toBeLessThan(hard.z);
   });
 
   it("puts the trail back onto the rig's layout axes", () => {

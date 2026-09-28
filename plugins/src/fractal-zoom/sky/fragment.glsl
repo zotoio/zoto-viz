@@ -1,4 +1,8 @@
-float fz0(float fi) {
+vec2 cmul(vec2 a, vec2 b) {
+  return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x);
+}
+
+float fzAt(float fi) {
   float i = floor(fi);
   float q = floor(i * 0.25);
   float r = i - q * 4.0;
@@ -7,6 +11,15 @@ float fz0(float fi) {
   if (r < 1.5) return v.y;
   if (r < 2.5) return v.z;
   return v.w;
+}
+
+float fz0(float fi) {
+  return fzAt(fi);
+}
+
+vec2 orbitAt(float i) {
+  float f = 64.0 + i * 2.0;
+  return vec2(fzAt(f), fzAt(f + 1.0));
 }
 
 vec3 palette(float t, float pal, float hue, float sat) {
@@ -124,32 +137,68 @@ float mapDE(vec3 p, float typ, float powr, float sc, float fold, vec4 jc, float 
 
 vec3 mapCol(vec3 p, float typ, float trapOn, float tpal, float pcyc, float hue, float sat) {
   float trap = length(p.xy) + abs(p.z) * 0.5;
-  float cyc = tpal + pcyc * uTime * 0.05;
+  float cyc = tpal + pcyc * uTime * 0.22;
   return palette(cyc + trap * 0.15 * trapOn, fz0(20.0), hue, sat);
 }
 
-vec2 mandel2d(vec2 uv, vec2 c, int maxIter) {
-  vec2 z = vec2(0.0);
+vec3 mandel2d(vec2 z0, vec2 c, int maxIter) {
+  vec2 z = z0;
+  float trap = 1e9;
   float m = 0.0;
-  for (int i = 0; i < 48; i++) {
+  float escaped = 0.0;
+  for (int i = 0; i < 96; i++) {
     if (i >= maxIter) break;
+    float mag = dot(z, z);
+    trap = min(trap, mag);
+    if (mag > 64.0) {
+      m = float(i) + 1.0 - log2(log2(max(mag, 1.0001)));
+      escaped = 1.0;
+      break;
+    }
     z = vec2(z.x * z.x - z.y * z.y, 2.0 * z.x * z.y) + c;
-    float d = dot(z, z);
-    if (d > 16.0) { m = float(i); break; }
   }
-  return vec2(m, dot(z, z));
+  return vec3(m, trap, escaped);
+}
+
+vec3 shadePerturb(vec2 uv, float julia, float scale, float iterCap, float spin, float hue, float sat) {
+  float len = fz0(48.0);
+  vec2 dc = uv * scale;
+  vec2 dn = julia > 0.5 ? dc : vec2(0.0);
+  float m = 0.0;
+  float trap = 1e9;
+  float escaped = 0.0;
+  for (int i = 0; i < 160; i++) {
+    if (float(i) >= len) break;
+    vec2 Z = orbitAt(float(i));
+    vec2 z = Z + dn;
+    float mag = dot(z, z);
+    trap = min(trap, mag);
+    if (mag > 64.0 && i > 0) {
+      m = float(i) + 1.0 - log2(log2(max(mag, 1.0001)));
+      escaped = 1.0;
+      break;
+    }
+    dn = 2.0 * cmul(Z, dn) + cmul(dn, dn);
+    if (julia < 0.5) dn += dc;
+  }
+  if (escaped < 0.5) return palette(spin + log(trap + 1.0) * 0.22, fz0(20.0), hue, sat) * 0.62;
+  float esc = m / max(8.0, iterCap);
+  return palette(spin + esc * 2.5, fz0(20.0), hue, sat) * (0.35 + esc * 1.4);
 }
 
 vec3 color2d(vec2 uv, float typ, vec2 center, float scale, float maxIterN, float tpal, float pcyc, float hue, float sat, vec4 jc) {
-  vec2 c = center + uv * scale;
-  vec2 m;
-  if (typ < 6.5) {
-    m = mandel2d(vec2(0.0), uv * scale + center, int(maxIterN * 48.0));
-  } else {
-    m = mandel2d(uv * scale, vec2(jc.x, jc.y), int(maxIterN * 48.0));
+  float spin = tpal + pcyc * uTime * 0.22;
+  float iterCap = max(8.0, maxIterN * 96.0);
+  if (fz0(48.0) > 8.0 && scale < 0.02) {
+    return shadePerturb(uv, typ < 6.5 ? 0.0 : 1.0, scale, iterCap, spin, hue, sat);
   }
-  float esc = m.x / max(1.0, maxIterN * 48.0);
-  return palette(tpal + pcyc * uTime * 0.05 + esc * 2.5, fz0(20.0), hue, sat) * (0.35 + esc * 1.4);
+  vec2 pix = center + uv * scale;
+  vec3 m = typ < 6.5
+    ? mandel2d(vec2(0.0), pix, int(iterCap))
+    : mandel2d(pix, vec2(jc.x, jc.y), int(iterCap));
+  if (m.z < 0.5) return palette(spin + log(m.y + 1.0) * 0.22, fz0(20.0), hue, sat) * 0.62;
+  float esc = m.x / iterCap;
+  return palette(spin + esc * 2.5, fz0(20.0), hue, sat) * (0.35 + esc * 1.4);
 }
 
 void main() {
@@ -185,8 +234,9 @@ void main() {
   vec2 uv = rdView.xy / max(-rdView.z, 0.18);
   float zlog = mark > 0.5 ? fz0(7.0) : abs(fract(uTime * 0.028) * 2.0 - 1.0) * 8.6;
   float dive = max(0.0, zlog + 0.35);
-  float zsc = exp(min(dive, 12.5) * 0.78);
-  vec3 focus = vec3(0.42, 0.58, 0.18);
+  float zsc = exp(min(dive, 28.0) * 0.78);
+  vec3 focusSlot = vec3(fz0(44.0), fz0(45.0), fz0(46.0));
+  vec3 focus = mark > 0.5 && dot(focusSlot, focusSlot) > 1e-4 ? focusSlot : vec3(0.42, 0.58, 0.18);
   vec3 cam = mark > 0.5
     ? vec3(fz0(0.0), fz0(1.0), fz0(2.0))
     : vec3(0.15 * sin(uTime * 0.06), 0.22, 2.4);
@@ -194,7 +244,10 @@ void main() {
   vec3 upW = abs(fwd.y) > 0.9 ? vec3(0.0, 0.0, 1.0) : vec3(0.0, 1.0, 0.0);
   vec3 rt = normalize(cross(fwd, upW));
   upW = normalize(cross(rt, fwd));
-  float stand = mix(max(length(focus - cam), 0.35), 0.045, clamp(1.0 - 1.0 / zsc, 0.0, 1.0));
+  float nearD = mark > 0.5 ? fz0(47.0) : 0.0;
+  float stand = nearD > 1e-4
+    ? nearD
+    : mix(max(length(focus - cam), 0.35), 0.045, clamp(1.0 - 1.0 / zsc, 0.0, 1.0));
   vec3 ro = focus - fwd * stand;
   vec3 rd = normalize(fwd + (rt * uv.x + upW * uv.y) * (0.95 / zsc));
   powr = mark > 0.5 ? powr : 8.0;
@@ -224,7 +277,7 @@ void main() {
       iterN = max(0.35, maxIterN);
       useTyp = typ;
     }
-    vec3 col = color2d(uv, useTyp, center, win, iterN, tpal, max(pcyc, 0.25), hue, max(sat, 0.85), jc);
+    vec3 col = color2d(uv, useTyp, center, win, iterN, tpal, pcyc, hue, max(sat, 0.85), jc);
     col = mix(bg, col, 0.94) + glow * 0.2;
     fragColor = vec4(col * uBright, uOpacity);
     return;
@@ -235,7 +288,7 @@ void main() {
   vec3 col = bg;
   float hit = 0.0;
   float closest = 1e9;
-  float eHit = max(1e-5, eps / zsc);
+  float eHit = max(1e-6, eps * max(stand, 0.02) / max(zsc, 1.0));
   for (int i = 0; i < 48; i++) {
     if (i >= steps) break;
     vec3 p = ro + rd * t;

@@ -1,4 +1,20 @@
 import {
+  CANYON_HOME,
+  ORBIT_MAX,
+  SEAHORSE_X,
+  SEAHORSE_Y,
+  type Canyon3,
+  type Cruise2,
+  itersForScale,
+  packOrbit,
+  referenceOrbit,
+  steerEdge,
+  stepCanyon,
+  tryRenormalize,
+  windowScale,
+  zoomLogForWindow,
+} from "./cruise";
+import {
   fractalPresetLabel,
   fractalTypeLabel,
 } from "./config-mutation";
@@ -20,9 +36,8 @@ export function fractalRenderScale(): number {
  * do not gate CI on cloud VM frame times.
  * TODO(VizFrameBudget): tie ceilings to host render-scale governor once it ships.
  */
-export const FRACTAL_ITER_CEIL = 32;
+export const FRACTAL_ITER_CEIL = 96;
 export const FRACTAL_STEPS_CEIL = 48;
-export const FRACTAL_ZOOM_LOG_LIMIT = 13.8;
 
 /** Slot 0 layout — must match `sky/fragment.glsl`. */
 export const FZ_SLOT = {
@@ -70,9 +85,15 @@ export const FZ_SLOT = {
   frameMs: 41,
   mark: 42,
   precisionClamp: 43,
+  focusX: 44,
+  focusY: 45,
+  focusZ: 46,
+  nearDist: 47,
+  orbitLen: 48,
+  generation: 49,
 } as const;
 
-export const FZ_SLOT0_FLOATS = 44;
+export const FZ_SLOT0_FLOATS = 50;
 
 export let fractalHudCaption = "Mandelbrot 2D · Seahorse Valley";
 
@@ -87,6 +108,8 @@ export interface FractalDriveInput {
 
 export interface FractalDriveOut {
   slot0: number[];
+  /** Reference orbit for deep 2D perturbation, slots 1..5. */
+  orbit: number[][];
   bright: number;
   accent: [number, number, number];
   bg: [number, number, number];
@@ -118,9 +141,31 @@ let pitch = -0.08;
 let roll = 0;
 let pingPhase = 0;
 let morphT = 0;
-let pilotSeed = 0.37;
 let lastFrameMs = 0;
 let resetCamLatched = false;
+let poseKey = "";
+let generation = 0;
+let lastRebaseT = -10;
+let cruise: Cruise2 = { x: SEAHORSE_X, y: SEAHORSE_Y, vx: 0, vy: 0, heading: 0.7 };
+let canyon: Canyon3 = { ...CANYON_HOME };
+
+function reseedPose(opts: FractalOptions): void {
+  const julia = opts.type === "julia2d";
+  cruise = {
+    x: julia ? 0 : opts.mandelCx,
+    y: julia ? 0 : opts.mandelCy,
+    vx: 0,
+    vy: 0,
+    heading: 0.7,
+  };
+  canyon = { ...CANYON_HOME };
+  camX = CANYON_HOME.cx;
+  camY = CANYON_HOME.cy;
+  camZ = CANYON_HOME.cz;
+  zoomLog = -0.35;
+  generation = 0;
+  lastRebaseT = -10;
+}
 
 export function resetFractalCamera(): void {
   camX = 0.12;
@@ -132,7 +177,11 @@ export function resetFractalCamera(): void {
   roll = 0;
   pingPhase = 0;
   morphT = 0;
-  pilotSeed = 0.37;
+  poseKey = "";
+  generation = 0;
+  lastRebaseT = -10;
+  cruise = { x: SEAHORSE_X, y: SEAHORSE_Y, vx: 0, vy: 0, heading: 0.7 };
+  canyon = { ...CANYON_HOME };
 }
 
 export function resetFractalDrive(): void {
@@ -175,12 +224,14 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
     resetCamLatched = false;
   }
 
-  let precisionClamp = 0;
-  if (zoomLog > FRACTAL_ZOOM_LOG_LIMIT) {
-    zoomLog = FRACTAL_ZOOM_LOG_LIMIT;
-    precisionClamp = 1;
+  const is2dEarly = opts.type === "mandel2d" || opts.type === "julia2d";
+  const pose = `${opts.type}|${opts.preset}|${opts.mandelCx}|${opts.mandelCy}|${opts.juliaCr}|${opts.juliaCi}`;
+  if (pose !== poseKey) {
+    poseKey = pose;
+    reseedPose(opts);
   }
 
+  const precisionClamp = 0;
   const audioDrv = opts.audioReactive ? audio : 0;
   const zoomSign = opts.zoomDir === "out" ? -1 : 1;
   pingPhase += dt * (opts.zoomDir === "pingpong" ? 0.45 : 0);
@@ -209,31 +260,59 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   pointer.yaw = 0;
   pointer.zoomWheel = 0;
 
-  const [dirX, dirY, dirZ] = dirFromAngles(yaw, pitch, roll);
-  const dive = Math.max(0, zoomLog + 0.35);
-  const is2d = opts.type === "mandel2d" || opts.type === "julia2d";
-  if (!holdStill && !driftOnly && opts.autoPilot && !is2d) {
-    const ang = t * 0.05 + pilotSeed;
-    camX = 0.12 + Math.sin(ang) * 0.35;
-    camY = 0.22 + Math.sin(ang * 0.7) * 0.08;
-    camZ = 2.42 + Math.cos(ang) * 0.25;
+  const is2d = is2dEarly;
+  const juliaC = opts.type === "julia2d" ? { x: opts.juliaCr, y: opts.juliaCi } : undefined;
+  const glide = opts.autoPilot && !opts.paused && !driftOnly;
+  if (is2d && glide) {
+    const probeIter = Math.min(64, Math.max(24, itersForScale(windowScale(zoomLog, aspect))));
+    cruise = steerEdge(cruise, windowScale(zoomLog, aspect), dt, probeIter, juliaC);
+    if (t - lastRebaseT > 2.2 && windowScale(zoomLog, aspect) < 2e-4) {
+      const chart = tryRenormalize(cruise.x, cruise.y, windowScale(zoomLog, aspect));
+      if (chart) {
+        cruise = { x: chart.x, y: chart.y, vx: 0, vy: 0, heading: cruise.heading };
+        zoomLog = zoomLogForWindow(chart.scale, aspect);
+        generation += 1;
+        lastRebaseT = t;
+      }
+    }
+  }
+  if (!is2d && glide) {
+    canyon = stepCanyon(canyon, dt, fractalTypeIndex(opts.type), {
+      power: opts.power,
+      scale: opts.scale,
+      fold: opts.fold,
+      sym: opts.kaleidoSym,
+      jx: opts.juliaCr,
+      jy: opts.juliaCi,
+      jz: opts.quatC2,
+      jw: opts.quatC3,
+    }, zoomLog);
+    camX = canyon.cx;
+    camY = canyon.cy;
+    camZ = canyon.cz;
   }
 
-  let cx = opts.mandelCx;
-  let cy = opts.mandelCy;
-  if (is2d && opts.autoPilot && !holdStill) {
-    const keep = Math.exp(-dive);
-    const ang = t * 0.018 + pilotSeed;
-    cx += Math.cos(ang) * 0.00004 * keep;
-    cy += Math.sin(ang) * 0.00004 * keep;
-  }
+  const [dirX, dirY, dirZ] = dirFromAngles(yaw, pitch, roll);
+  const cx = is2d ? cruise.x : opts.mandelCx;
+  const cy = is2d ? cruise.y : opts.mandelCy;
+  const viewScale = windowScale(zoomLog, aspect);
 
   const power = opts.morph
     ? opts.power + Math.sin(morphT) * opts.morphAmount * 2
     : opts.power;
 
-  const iter = Math.min(opts.maxIter, FRACTAL_ITER_CEIL);
+  const depthIter = Math.round(24 + Math.max(0, zoomLog) * 4.5);
+  const iter = Math.min(FRACTAL_ITER_CEIL, Math.max(opts.maxIter, depthIter));
   const steps = Math.min(opts.maxSteps, FRACTAL_STEPS_CEIL);
+
+  let orbit = packOrbit([]);
+  let orbitLen = 0;
+  if (is2d && viewScale < 5e-4) {
+    const need = Math.min(ORBIT_MAX, Math.max(32, itersForScale(viewScale)));
+    const zs = referenceOrbit(cx, cy, need, juliaC);
+    orbit = packOrbit(zs);
+    orbitLen = zs.length;
+  }
 
   const slot0 = new Array<number>(FZ_SLOT0_FLOATS).fill(0);
   slot0[FZ_SLOT.camX] = camX;
@@ -276,13 +355,19 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   slot0[FZ_SLOT.kaleidoSym] = opts.kaleidoSym;
   slot0[FZ_SLOT.mandelCx] = cx;
   slot0[FZ_SLOT.mandelCy] = cy;
-  slot0[FZ_SLOT.mandelScale] = 2.2 * Math.exp(-dive * 1.25) * Math.max(0.25, Math.min(aspect, 2.4) / 1.6);
+  slot0[FZ_SLOT.mandelScale] = viewScale;
   slot0[FZ_SLOT.frameMs] = lastFrameMs;
   slot0[FZ_SLOT.precisionClamp] = precisionClamp;
   slot0[FZ_SLOT.mark] = 1;
+  slot0[FZ_SLOT.focusX] = canyon.fx;
+  slot0[FZ_SLOT.focusY] = canyon.fy;
+  slot0[FZ_SLOT.focusZ] = canyon.fz;
+  slot0[FZ_SLOT.nearDist] = canyon.near;
+  slot0[FZ_SLOT.orbitLen] = orbitLen;
+  slot0[FZ_SLOT.generation] = generation;
 
   fractalHudCaption = `${fractalTypeLabel(opts.type)} · ${fractalPresetLabel(opts.preset)}`;
-  if (precisionClamp) fractalHudCaption += " · zoom limit";
+  if (generation > 0) fractalHudCaption += ` · gen ${generation}`;
 
   const bright = 1.05 + opts.glow * 0.45 + audioDrv * 0.3;
   const accent: [number, number, number] = [
@@ -291,7 +376,7 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
     0.95 - opts.hueShift * 0.15,
   ];
 
-  return { slot0, bright, accent, bg: opts.bg };
+  return { slot0, orbit, bright, accent, bg: opts.bg };
 }
 
 export function packFractalDrive(

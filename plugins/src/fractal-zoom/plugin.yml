@@ -3,8 +3,7 @@ name: Fractal Zoom
 version: 1
 hint: Infinite GPU raymarch into Mandelbulb, Mandelbox, Menger, Sierpinski, quaternion Julia, kaleidoscopic IFS, and 2D Mandelbrot/Julia
   deep zoom. Every knob is in This view.
-description: Stage-only procedural fractal flight with smooth infinite zoom, rich palettes, orbit-trap colour, soft shadows,
-  glow, fog, optional depth blur, named presets. Renders vivid demo imagery on empty boards (golden host idle). Uses only the real
+description: Stage-only procedural fractal flight. Zoom is exponential and does not stop at a precision wall — past float range the view renormalizes into the next minibrot and keeps full detail. Auto-pilot glides along the boundary (filaments and 3D canyons) with smoothed turns. Palette cycle speed is a colour slider (0 holds the colours). Renders vivid demo imagery on empty boards (golden host idle). Uses only the real
   viz.read frame (talkers, packets, sys.failed, headlines, demo) — does not map them to sky regions; no failure tint (honest stage-only look).
   Respects prefers-reduced-motion by defaulting to slow or paused zoom.
 capabilities:
@@ -13,7 +12,7 @@ capabilities:
 - config.read
 viz:
   graphWalk: false
-  maxBuffers: 1
+  maxBuffers: 8
   maxBufferFloats: 64
   maxParticles: 0
   uniforms:
@@ -133,7 +132,7 @@ config:
   label: auto-pilot
   type: boolean
   default: true
-  hint: Drift toward interesting boundary coordinates while zooming.
+  hint: Glide along the boundary while zooming. 2D stays in the filaments; 3D flies the canyons. Turns are smoothed.
   section: Camera and zoom
 - key: paused
   label: pause zoom
@@ -153,6 +152,7 @@ config:
   min: 4
   max: 32
   step: 4
+  hint: Minimum iterations. Deeper zoom adds more, up to the GPU ceiling, so edges stay sharp.
   section: Lighting and fog
 - key: maxSteps
   label: raymarch steps
@@ -235,8 +235,9 @@ config:
   type: number
   default: 0.25
   min: 0
-  max: 2
+  max: 4
   step: 0.05
+  hint: How fast the colours cycle. 0 holds the palette. 1 is about one full cycle every 4–5 seconds. 4 is quick.
   section: Colour
 - key: orbitTrap
   label: orbit-trap colour

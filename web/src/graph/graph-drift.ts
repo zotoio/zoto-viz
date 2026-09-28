@@ -20,10 +20,13 @@ export type DriftCenter = { x: number; y: number; z: number };
 const AMP_X = 14;
 const AMP_Z = 36;
 
-/** Smoothstep so the eight eases through the crossing instead of running at a constant rate. */
+/**
+ * Smootherstep. Position, speed, and acceleration all meet at each turn, so the
+ * figure-8 target does not kick when a lap restarts.
+ */
 export function easeCycle(turns: number): number {
   const u = turns - Math.floor(turns);
-  const s = u * u * (3 - 2 * u);
+  const s = u * u * u * (u * (u * 6 - 15) + 10);
   return Math.floor(turns) + s;
 }
 
@@ -113,39 +116,80 @@ export function unapplyDriftPoint(
 }
 
 /**
- * Nodes are heavier than the cloud. This is how slowly they catch the core
- * drift, and how far behind it they are allowed to sit.
+ * Critically damped springs. The core follows the figure-8, nodes follow the
+ * core, and edge middles follow the nodes. Lower frequency means more lag.
+ * The eased set is the default so the cloud glides. Beat frequencies are for
+ * when the graph's mic pulse is allowed to hit on transients.
  */
-const NODE_LAG_TAU = 3.1;
-const NODE_LAG_CAP = 64;
+export const CORE_OMEGA = 1.05;
+export const NODE_OMEGA = 0.48;
+export const EDGE_OMEGA = 0.26;
+export const BEAT_CORE_OMEGA = 2.2;
+export const BEAT_NODE_OMEGA = 0.85;
+export const BEAT_EDGE_OMEGA = 0.42;
+
+export function driftOmegas(beat: boolean): { core: number; node: number; edge: number } {
+  return beat
+    ? { core: BEAT_CORE_OMEGA, node: BEAT_NODE_OMEGA, edge: BEAT_EDGE_OMEGA }
+    : { core: CORE_OMEGA, node: NODE_OMEGA, edge: EDGE_OMEGA };
+}
+
+export type SpringBody = {
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+};
+
+function stepAxis(
+  pos: number,
+  vel: number,
+  target: number,
+  dt: number,
+  omega: number,
+): { p: number; v: number } {
+  const w = Math.max(0.05, omega);
+  const y0 = pos - target;
+  const e = Math.exp(-w * dt);
+  const b = vel + w * y0;
+  return {
+    p: target + (y0 + b * dt) * e,
+    v: (vel - w * b * dt) * e,
+  };
+}
 
 /**
- * Ease a follower toward the cloud pose. The follower covers less ground per
- * second than the pose, and the gap is capped so nodes stay near their wires.
+ * Where an edge middle wants to sit. It rests on the nodes, and when the core
+ * has moved away it eases further back along that same trail, so the wire
+ * draws inward instead of staying taut.
  */
-export function stepNodeLag(
-  follow: DriftCenter,
-  pose: { x: number; y: number; z: number },
+export function edgeSpringTarget(
+  core: { x: number; y: number; z: number },
+  node: { x: number; y: number; z: number },
+): { x: number; y: number; z: number } {
+  const k = 0.85;
+  return {
+    x: node.x + (node.x - core.x) * k,
+    y: node.y + (node.y - core.y) * k,
+    z: node.z + (node.z - core.z) * k,
+  };
+}
+
+/** Advance one mass toward `target`. Critical damping, so it does not overshoot or snap. */
+export function stepSpring(
+  body: SpringBody,
+  target: { x: number; y: number; z: number },
   dt: number,
-): DriftCenter {
-  const k = 1 - Math.exp(-Math.max(dt, 0) / NODE_LAG_TAU);
-  let x = follow.x + (pose.x - follow.x) * k;
-  let y = follow.y + (pose.y - follow.y) * k;
-  let z = follow.z + (pose.z - follow.z) * k;
-  let ox = x - pose.x;
-  let oy = y - pose.y;
-  let oz = z - pose.z;
-  const len = Math.hypot(ox, oy, oz);
-  if (len > NODE_LAG_CAP) {
-    const s = NODE_LAG_CAP / len;
-    ox *= s;
-    oy *= s;
-    oz *= s;
-    x = pose.x + ox;
-    y = pose.y + oy;
-    z = pose.z + oz;
-  }
-  return { x, y, z };
+  omega: number,
+): SpringBody {
+  const t = Math.max(0, dt);
+  if (t === 0) return body;
+  const x = stepAxis(body.x, body.vx, target.x, t, omega);
+  const y = stepAxis(body.y, body.vy, target.y, t, omega);
+  const z = stepAxis(body.z, body.vz, target.z, t, omega);
+  return { x: x.p, y: y.p, z: z.p, vx: x.v, vy: y.v, vz: z.v };
 }
 
 /** World-space trail (follower minus pose) turned into the rig's layout axes. */

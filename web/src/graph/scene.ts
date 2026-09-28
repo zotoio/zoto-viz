@@ -4,7 +4,7 @@ import type { SimNode, SimLink } from "d3-force-3d";
 import { LabelItem, LabelLayer, labelActivity } from "./labels";
 import {
   applyPhys, clampParticleCap, easePhysToward, hashAngle,
-  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, stringPoint, stringSegs,
+  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, edgeDrawSegs, organicEdgePoint,
   type PhysEase,
 } from "./physics";
 import { LayoutClient } from "./layout";
@@ -16,7 +16,8 @@ import type { RenderScaleConfig } from "../plugins/render-scale-governor";
 import { hostRenderScaleGovernorEnabled } from "../plugins/render-scale-governor-enable";
 import { getSurfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
-import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftRect } from "./software-draw";
+import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftMesh, type SoftRect } from "./software-draw";
+import { paintSoftwareFractal } from "../../../plugins/src/fractal-zoom/frontend/software-paint";
 import { disposeOwnedWebGLRenderer, probeWebGL } from "./webgl";
 import type { MosaicNode } from "./mosaic-layout";
 import {
@@ -38,7 +39,8 @@ import { cameraConsumers } from "../camera/want";
 import { Gaze } from "../camera/gaze";
 import { FloorGrid, easeFloorPose, floorPose, type FloorPose, type FloorShape } from "./floor";
 import {
-  applyDriftPoint, driftRig, graphDriftPose, lagIntoLayout, nodeLagReach, nodeTravelScale, stepNodeLag, unapplyDriftPoint,
+  applyDriftPoint, driftOmegas, driftRig, edgeSpringTarget, graphDriftPose, lagIntoLayout, nodeTravelScale, stepSpring, unapplyDriftPoint,
+  type SpringBody,
   type GraphDriftPose,
 } from "./graph-drift";
 import { guardReadableAnim } from "./readable";
@@ -731,7 +733,7 @@ export interface DreamAnim {
   moveEase: number;
   /** tint the theme's accent, edges and roles toward the main colour in the webcam */
   camTheme: boolean;
-  /** bounce and glow graph nodes from the pulse; drag a node to pin it, release to fling */
+  /** When on, the graph follows the mic beat (bounce, glow, sharper drift). Off keeps motion eased. */
   audioNodes: boolean;
   /** random theme: off, on the view cadence, or on audio beats */
   themeCycle: ThemeCycle;
@@ -1115,15 +1117,22 @@ export class NetScene implements HostedView, RenderScalePane {
   /** Graph meshes only. Floor, sky, and host-mesh models stay on the scene root. */
   private readonly graphRig = new THREE.Group();
   private driftPose: GraphDriftPose = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0 };
-  /** Slower follower of the cloud pose. Nodes trail this, wires do not. */
-  private nodeFollow = { x: 0, y: 0, z: 0 };
-  private nodeFollowLive = false;
+  /** Core, nodes, and edge middles. Each carries velocity and springs toward the one ahead of it. */
+  private coreBody: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+  private nodeBody: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+  private edgeBody: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+  private driftLive = false;
   private driftClock = 0;
+  /** Seconds until the next mic-beat kick on the graph drift springs. */
+  private graphBeatCool = 0;
   /** Layout-space trail shared by every node; per-node scale stretches it. */
   private nodeLagLocal = { x: 0, y: 0, z: 0 };
+  /** Extra lag of the edge middle behind the nodes. This is what bows a wire inward. */
+  private edgeLagLocal = { x: 0, y: 0, z: 0 };
   private readonly driftPhase = Math.random();
   private readonly sphereMat = sphereMaterial();
   private readonly fabric = new GraphFabric();
+  private softWorld = new Float32Array(0);
   private arrows: THREE.InstancedMesh;
   private layoutTargets = new Map<string, LayoutXyz>();
   private layoutSig = "";
@@ -1824,8 +1833,33 @@ export class NetScene implements HostedView, RenderScalePane {
       });
     }
     if (this.stageOnly || this.anim.backdrop === "plugin") {
+      const fractal = this.mode.id === "plugin:fractal-zoom" || this.mode.id.startsWith("plugin:fractal-zoom:");
+      if (fractal && this.stageOnly) {
+        paintSoftwareFractal(
+          ctx,
+          rect,
+          (buffer, index) => this.backdrop.pluginSlot(buffer, index),
+          this.backdrop.skyTime(),
+        );
+        return;
+      }
       paintSoftwarePluginRain(ctx, rect, this.now, this.pulseNow.bass, this.vizHeadlineText);
       if (this.stageOnly) return;
+    }
+    const cpu = this.fabric.meshCpu();
+    let mesh: SoftMesh | undefined;
+    if (cpu && this.fabric.mesh.visible) {
+      const n = cpu.verts;
+      if (this.softWorld.length < n * 3) this.softWorld = new Float32Array(n * 3);
+      const s = cpu.scale;
+      const src = cpu.pos;
+      for (let i = 0; i < n; i++) {
+        const p = this.viewOf((src[i * 3] ?? 0) * s, (src[i * 3 + 1] ?? 0) * s, (src[i * 3 + 2] ?? 0) * s);
+        this.softWorld[i * 3] = p.x;
+        this.softWorld[i * 3 + 1] = p.y;
+        this.softWorld[i * 3 + 2] = p.z;
+      }
+      mesh = { pos: this.softWorld, col: cpu.col, idx: cpu.idx, verts: n, indices: cpu.indices };
     }
     paintSoftwareGraph(ctx, this.camera, rect, {
       clearHex: this.clearHex,
@@ -1840,6 +1874,7 @@ export class NetScene implements HostedView, RenderScalePane {
       nodes,
       segs,
       particles,
+      mesh,
     });
   }
 
@@ -1983,7 +2018,31 @@ export class NetScene implements HostedView, RenderScalePane {
     this.inputEl.dataset.fabric = kind;
   }
 
-  private syncArrows(str: { sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number }): void {
+  /** Drawn end of a node: the same point the glyph uses, so the edge meets it. */
+  private linkDraw(
+    a: GNode, b: GNode,
+    byId: Map<string, FabricNodePose>,
+  ): { ax: number; ay: number; az: number; bx: number; by: number; bz: number; px: number; py: number; pz: number; bend: number } {
+    const end = (n: GNode) => {
+      const p = byId.get(n.id);
+      if (p) return { x: p.x + (p.lx ?? 0), y: p.y + (p.ly ?? 0), z: p.z + (p.lz ?? 0), lx: p.lx ?? 0, ly: p.ly ?? 0, lz: p.lz ?? 0 };
+      const s = this.nodeShift(n.id, n === this.dragging, n.scale * this.anim.nodeWeight);
+      return { x: (n.x ?? 0) + s.x, y: (n.y ?? 0) + s.y, z: (n.z ?? 0) + s.z, lx: s.x, ly: s.y, lz: s.z };
+    };
+    const A = end(a), B = end(b);
+    return {
+      ax: A.x, ay: A.y, az: A.z, bx: B.x, by: B.y, bz: B.z,
+      px: (B.lx - A.lx) + this.edgeLagLocal.x,
+      py: (B.ly - A.ly) + this.edgeLagLocal.y,
+      pz: (B.lz - A.lz) + this.edgeLagLocal.z,
+      bend: 0,
+    };
+  }
+
+  private syncArrows(
+    str: { sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number },
+    byId: Map<string, FabricNodePose>,
+  ): void {
     const on = !this.stageOnly && !fabricActive(this.fabricKind()) && graphLinksArrows(this.anim.graphLinks);
     if (!on) {
       this.arrows.count = 0;
@@ -2000,13 +2059,14 @@ export class NetScene implements HostedView, RenderScalePane {
       const fwd = ab >= ba;
       const a = fwd ? l.source : l.target;
       const b = fwd ? l.target : l.source;
-      const ax = a.x ?? 0, ay = a.y ?? 0, az = a.z ?? 0;
-      const bx = b.x ?? 0, by = b.y ?? 0, bz = b.z ?? 0;
+      const d = this.linkDraw(a, b, byId);
+      const ax = d.ax, ay = d.ay, az = d.az, bx = d.bx, by = d.by, bz = d.bz;
+      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend };
       const dist = Math.hypot(bx - ax, by - ay, bz - az);
       if (dist < 12) continue;
       const t = 0.72;
-      const p = this.edgePoint(ax, ay, az, bx, by, bz, t, str);
-      const q = this.edgePoint(ax, ay, az, bx, by, bz, Math.min(1, t + 0.1), str);
+      const p = this.edgePoint(ax, ay, az, bx, by, bz, t, str, pull);
+      const q = this.edgePoint(ax, ay, az, bx, by, bz, Math.min(1, t + 0.1), str, pull);
       _dir.set(q[0] - p[0], q[1] - p[1], q[2] - p[2]);
       if (_dir.lengthSq() < 1e-8) _dir.set(bx - ax, by - ay, bz - az);
       if (_dir.lengthSq() < 1e-8) continue;
@@ -2331,7 +2391,7 @@ export class NetScene implements HostedView, RenderScalePane {
     const bundle = this.bundleAmt();
     const hub = bundle > 0.01 ? this.bundleHub() : [0, 0, 0] as [number, number, number];
     return {
-      segs: stringSegs(a.stringAmt, bundle),
+      segs: edgeDrawSegs(a.stringAmt, bundle),
       sag: a.stringAmt * pulse,
       wave: a.audioPhysics ? this.pulseBass * a.audioSens * a.stringAmt : 0,
       hx: hub[0], hy: hub[1], hz: hub[2], bundle,
@@ -2343,8 +2403,13 @@ export class NetScene implements HostedView, RenderScalePane {
     bx: number, by: number, bz: number,
     t: number,
     str: { sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number },
+    pull: { x: number; y: number; z: number; bend: number },
   ): [number, number, number] {
-    return stringPoint(ax, ay, az, bx, by, bz, t, str.sag, str.wave, str.hx, str.hy, str.hz, str.bundle);
+    return organicEdgePoint(
+      ax, ay, az, bx, by, bz, t,
+      pull.x, pull.y, pull.z,
+      str.sag, str.wave, str.hx, str.hy, str.hz, str.bundle, pull.bend,
+    );
   }
 
   private gazeWanted(): boolean {
@@ -2492,6 +2557,17 @@ export class NetScene implements HostedView, RenderScalePane {
     return 1 - Math.exp(-dt / (0.06 + 2.2 * e * e));
   }
 
+  /**
+   * Layout velocity blend. With graph beat off, the blend stays slow even if
+   * the ease slider is at zero, so nodes cannot reverse in one tick.
+   */
+  private layoutMoveK(dt: number, beat: boolean): number {
+    const k = this.moveK(dt);
+    if (beat) return k;
+    const eased = 1 - Math.exp(-Math.max(0, dt) / 0.55);
+    return Math.min(k, eased);
+  }
+
   private zeroCamStep(): void {
     this.camStep.theta = 0;
     this.camStep.phi = 0;
@@ -2537,10 +2613,10 @@ export class NetScene implements HostedView, RenderScalePane {
   /** Chase magnets / gravity / swirl / strings so AI jumps do not teleport the cloud. */
   private easePhys(dt: number): void {
     if (!this.physWant) return;
-    const segs = stringSegs(this.anim.stringAmt, this.bundleAmt());
+    const segs = edgeDrawSegs(this.anim.stringAmt, this.bundleAmt());
     const moving = easePhysToward(this.anim, this.physWant, dt);
     if (!moving) return;
-    if (stringSegs(this.anim.stringAmt, this.bundleAmt()) !== segs) this.rebuildLineBuffers();
+    if (edgeDrawSegs(this.anim.stringAmt, this.bundleAmt()) !== segs) this.rebuildLineBuffers();
     this.bumpAlpha(0.08);
   }
 
@@ -2597,12 +2673,12 @@ export class NetScene implements HostedView, RenderScalePane {
     };
     const params: LayoutParams = {
       spring: a.spring, chargeAmt: a.chargeAmt, linkSpan: a.linkSpan,
-      drag: 0.35 - 0.22 * ease, centerPull: a.centerPull,
+      drag: a.audioNodes ? 0.35 - 0.22 * ease : Math.max(0.46, 0.35 - 0.22 * ease), centerPull: a.centerPull,
       magnets: ROLES.map((r) => (byRole[r] ?? 0) * p),
       magnetCross: a.magnetCross, magnetRange: a.magnetRange, gravity: a.gravity, swirl: a.swirl, pulse: p,
       spreadX: this.spreadX, spreadZ: this.spreadZ,
       flatten: resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace, this.anim.graphLayout),
-      moveK: Math.round(this.moveK(dt) * 1000) / 1000,
+      moveK: Math.round(this.layoutMoveK(dt, a.audioNodes) * 1000) / 1000,
     };
     const last = this.lastLayoutParams;
     if (last && sameLayoutParams(last, params)) return;
@@ -3802,7 +3878,7 @@ export class NetScene implements HostedView, RenderScalePane {
 
   private rebuildLineBuffers(): void {
     const n = this.links.size;
-    const segs = stringSegs(this.anim.stringAmt, this.bundleAmt());
+    const segs = edgeDrawSegs(this.anim.stringAmt, this.bundleAmt());
     const floats = n * segs * 6;
     if (this.linePos.length !== floats) {
       this.linePos = new Float32Array(floats);
@@ -4113,8 +4189,9 @@ export class NetScene implements HostedView, RenderScalePane {
     const fabricEdges: FabricEdgePose[] = [];
     for (const l of this.links.values()) {
       const a = l.source, b = l.target;
-      const ax = a.x ?? 0, ay = a.y ?? 0, az = a.z ?? 0;
-      const bx = b.x ?? 0, by = b.y ?? 0, bz = b.z ?? 0;
+      const d = this.linkDraw(a, b, fabricById);
+      const ax = d.ax, ay = d.ay, az = d.az, bx = d.bx, by = d.by, bz = d.bz;
+      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend };
       const tether = l.id.startsWith("~");
       let bright: number;
       if (tether) bright = this.additiveMarks() ? 0.08 : 0.22;
@@ -4148,16 +4225,13 @@ export class NetScene implements HostedView, RenderScalePane {
         fabricEdges.push({
           a: a.id, b: b.id, r0: lr, g0: lg, b0: lb, r1: rr, g1: rg, b1: rb,
           gab, gba, wave: 0.18 + 0.55 * glowStrength(l.flow.rate), visible: l.visible && bright > 0.01,
+          sx: this.edgeLagLocal.x, sy: this.edgeLagLocal.y, sz: this.edgeLagLocal.z,
         });
       }
       for (let s = 0; s < str.segs; s++) {
         const t0 = s / str.segs, t1 = (s + 1) / str.segs;
-        const u = str.segs === 1
-          ? [ax, ay, az] as [number, number, number]
-          : this.edgePoint(ax, ay, az, bx, by, bz, t0, str);
-        const v = str.segs === 1
-          ? [bx, by, bz] as [number, number, number]
-          : this.edgePoint(ax, ay, az, bx, by, bz, t1, str);
+        const u = this.edgePoint(ax, ay, az, bx, by, bz, t0, str, pull);
+        const v = this.edgePoint(ax, ay, az, bx, by, bz, t1, str, pull);
         this.linePos[i] = u[0]; this.linePos[i + 1] = u[1]; this.linePos[i + 2] = u[2];
         this.linePos[i + 3] = v[0]; this.linePos[i + 4] = v[1]; this.linePos[i + 5] = v[2];
         const mix0 = t0, mix1 = t1;
@@ -4206,7 +4280,7 @@ export class NetScene implements HostedView, RenderScalePane {
       });
     }
     this.applyGraphMarks();
-    this.syncArrows(str);
+    this.syncArrows(str, fabricById);
 
     // particles
     if (this.anim.audioParts) this.rebuildParticles();
@@ -4219,9 +4293,8 @@ export class NetScene implements HostedView, RenderScalePane {
       if (p.t > 1 || p.t < 0) { p.t = p.dir > 0 ? 0 : 1; }
       const a = p.link.source, b = p.link.target;
       const t = p.t;
-      const pt = str.segs === 1
-        ? [(a.x ?? 0) + ((b.x ?? 0) - (a.x ?? 0)) * t, (a.y ?? 0) + ((b.y ?? 0) - (a.y ?? 0)) * t, (a.z ?? 0) + ((b.z ?? 0) - (a.z ?? 0)) * t] as [number, number, number]
-        : this.edgePoint(a.x ?? 0, a.y ?? 0, a.z ?? 0, b.x ?? 0, b.y ?? 0, b.z ?? 0, t, str);
+      const d = this.linkDraw(a, b, fabricById);
+      const pt = this.edgePoint(d.ax, d.ay, d.az, d.bx, d.by, d.bz, t, str, { x: d.px, y: d.py, z: d.pz, bend: d.bend });
       this.partPos[k * 3] = pt[0];
       this.partPos[k * 3 + 1] = pt[1];
       this.partPos[k * 3 + 2] = pt[2];
@@ -4431,35 +4504,57 @@ export class NetScene implements HostedView, RenderScalePane {
   }
 
   /**
-   * Slide and nod the graph on its own eased figure-8. Floor, sky, and host
-   * meshes stay put, so the cloud does not lock to their pitch or speed.
+   * Slide and nod the graph on its own figure-8. The core, the nodes, and the
+   * edge middles are springs, so the cloud accelerates instead of hitching.
+   * Without graph beat detection the springs are slow and a stalled frame
+   * cannot fling them. Mic beat (Audio → nodes) uses the stiffer set and a kick.
+   * Floor, sky, and host meshes stay put.
    */
   private stepGraphDrift(timeSec: number): void {
     if (this.stageOnly || !this.nodes.size) {
       this.driftPose = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0 };
-      this.nodeFollow = { x: 0, y: 0, z: 0 };
-      this.nodeFollowLive = false;
+      const still: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+      this.coreBody = still;
+      this.nodeBody = { ...still };
+      this.edgeBody = { ...still };
+      this.driftLive = false;
+      this.graphBeatCool = 0;
       this.nodeLagLocal = { x: 0, y: 0, z: 0 };
+      this.edgeLagLocal = { x: 0, y: 0, z: 0 };
       this.driftClock = timeSec;
     } else {
       const sphere = !resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace, this.anim.graphLayout);
-      this.driftPose = graphDriftPose(timeSec, {
+      const target = graphDriftPose(timeSec, {
         pitchDeg: this.anim.pitchDeg,
         pitchPeriod: this.anim.pitchPeriod,
         yawPeriod: this.anim.yawPeriod,
       }, this.driftPhase, sphere);
-      const dt = this.nodeFollowLive ? Math.min(0.1, Math.max(0, timeSec - this.driftClock)) : 0;
-      this.driftClock = timeSec;
-      if (!this.nodeFollowLive) {
-        this.nodeFollow = { x: this.driftPose.x, y: this.driftPose.y, z: this.driftPose.z };
-        this.nodeFollowLive = true;
+      const beat = this.anim.audioNodes;
+      const omega = driftOmegas(beat);
+      if (!this.driftLive) {
+        this.driftLive = true;
+        this.driftClock = timeSec;
       } else {
-        this.nodeFollow = stepNodeLag(this.nodeFollow, this.driftPose, dt);
+        const raw = Math.max(0, timeSec - this.driftClock);
+        const dt = Math.min(beat ? 0.08 : 0.04, raw);
+        this.driftClock = timeSec;
+        if (dt > 0) {
+          if (beat) this.kickGraphBeat(dt, target);
+          this.coreBody = stepSpring(this.coreBody, target, dt, omega.core);
+          this.nodeBody = stepSpring(this.nodeBody, this.coreBody, dt, omega.node);
+          this.edgeBody = stepSpring(this.edgeBody, edgeSpringTarget(this.coreBody, this.nodeBody), dt, omega.edge);
+        }
       }
+      this.driftPose = { ...target, x: this.coreBody.x, y: this.coreBody.y, z: this.coreBody.z };
       this.nodeLagLocal = lagIntoLayout({
-        x: this.nodeFollow.x - this.driftPose.x,
-        y: this.nodeFollow.y - this.driftPose.y,
-        z: this.nodeFollow.z - this.driftPose.z,
+        x: this.nodeBody.x - this.coreBody.x,
+        y: this.nodeBody.y - this.coreBody.y,
+        z: this.nodeBody.z - this.coreBody.z,
+      }, this.driftPose);
+      this.edgeLagLocal = lagIntoLayout({
+        x: this.edgeBody.x - this.nodeBody.x,
+        y: this.edgeBody.y - this.nodeBody.y,
+        z: this.edgeBody.z - this.nodeBody.z,
       }, this.driftPose);
     }
     const rig = driftRig(this.driftPose, this.focus);
@@ -4470,21 +4565,38 @@ export class NetScene implements HostedView, RenderScalePane {
     this.graphRig.updateMatrix();
   }
 
+  /** A bass transient shoves the cloud along its travel. Only while Audio → nodes is on. */
+  private kickGraphBeat(dt: number, target: { x: number; y: number; z: number }): void {
+    this.graphBeatCool = Math.max(0, this.graphBeatCool - dt);
+    const bass = this.pulseBass;
+    if (this.graphBeatCool > 0 || bass < 0.28 || bass < this.bassSlow * 1.38) return;
+    this.graphBeatCool = 0.45;
+    const dx = target.x - this.coreBody.x;
+    const dy = target.y - this.coreBody.y;
+    const dz = target.z - this.coreBody.z;
+    const len = Math.hypot(dx, dy, dz) || 1;
+    const kick = 14 * bass * Math.max(0.35, this.anim.audioSens);
+    this.coreBody = {
+      ...this.coreBody,
+      vx: this.coreBody.vx + (dx / len) * kick,
+      vy: this.coreBody.vy + (dy / len) * kick,
+      vz: this.coreBody.vz + (dz / len) * kick,
+    };
+  }
+
   /**
-   * Inertia trail for one node. The shared lag follows the core drift slowly;
-   * each node is held to just behind its own connector, so the line end stays
-   * in front of the glyph.
+   * Spring trail for one node. Edges are drawn from this same offset, so the
+   * glyph and its connectors share an end. Neighbouring nodes trail by
+   * slightly different amounts. The edge middle lags further, on its own spring.
    */
-  private nodeShift(id: string, held: boolean, scale: number): { x: number; y: number; z: number } {
+  private nodeShift(id: string, held: boolean, _scale: number): { x: number; y: number; z: number } {
     if (held) return { x: 0, y: 0, z: 0 };
-    const lx = this.nodeLagLocal.x;
-    const ly = this.nodeLagLocal.y;
-    const lz = this.nodeLagLocal.z;
-    const len = Math.hypot(lx, ly, lz);
-    if (len < 0.05) return { x: 0, y: 0, z: 0 };
-    const dist = Math.min(len, nodeLagReach(scale)) * nodeTravelScale(id);
-    const k = dist / len;
-    return { x: lx * k, y: ly * k, z: lz * k };
+    const k = nodeTravelScale(id);
+    return {
+      x: this.nodeLagLocal.x * k,
+      y: this.nodeLagLocal.y * k,
+      z: this.nodeLagLocal.z * k,
+    };
   }
 
   /** Layout point as currently drawn (drifted). */
