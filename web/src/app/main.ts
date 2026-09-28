@@ -472,7 +472,7 @@ function syncVizBudgetTileScope(): void {
   applyDevVizWallFlagsOnBuild(location.search, scopeIds);
   vizHud.syncDevWallBadInputMessage(devVizWallTileCostBadInputMessage());
   syncVizTileScope(scopeIds);
-  vizBudget.setTileId(mosaic?.on ? (mosaic.mainMode || scopeIds[0] || "main") : "main");
+  vizBudget.setTileId(mosaic?.on ? (mosaic.mainTileId || scopeIds[0] || "main") : "main");
   if (mosaic?.on) vizHud.syncMosaicTileHudLines(scopeIds);
   else vizHud.syncMosaicTileHudLines([]);
 }
@@ -914,7 +914,7 @@ async function ensureReviewed(spec: PluginView | null, signal: AbortSignal): Pro
 
 async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   const vizTileId = mosaic?.on
-    ? (mosaic.tileIds.includes(modeSel.value) ? modeSel.value : mosaic.focusedId || mosaic.tileIds[0] || "main")
+    ? (mosaic.tileIds.includes(modeSel.value) ? modeSel.value : mosaicFocusSlot(mosaic) || "main")
     : "main";
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
@@ -1067,7 +1067,7 @@ function pluginSpecForMode(modeId: string): PluginView | null {
 function skySpecForMode(modeId: string, fallback: PluginView | null): PluginView | null {
   const selected = fallback ?? pluginSpecForMode(modeId);
   if (mosaic?.on) {
-    const pane = mosaic.mainMode || mosaic.focusedId;
+    const pane = mosaic.mainTileId || mosaic.focusedId;
     return pickPluginSkySpec(selected, pane ? pluginSpecForMode(pane) : null);
   }
   return selected;
@@ -1379,7 +1379,7 @@ function buildApplyModeHost(): ApplyModeHost {
     mosaicShouldResize: (modeId, keepLayout) =>
       !keepLayout && !!mosaic && mosaic.heroPos !== "off" && mosaic.heroMode !== modeId,
     mosaicSetPaneView: (from, to) => mosaic!.setPaneView(from, to),
-    mosaicFocusSlot: () => mosaic?.focusedId || mosaic?.tileIds[0],
+    mosaicFocusSlot: () => (mosaic ? mosaicFocusSlot(mosaic) ?? undefined : undefined),
     mosaicHasTile: (modeId) => !!mosaic?.tileIds.includes(modeId),
     applyMosaicModeVisuals,
     applySoloModeVisuals,
@@ -1451,7 +1451,7 @@ async function applyMosaicModeAsync(m: ViewMode, flags: ApplyModeFlags, signal: 
   }
   document.body.classList.remove("arcade");
   scene.setActive(true);
-  const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaic.focusedId || mosaic.tileIds[0] || m.id;
+  const focusId = mosaic.tileIds.includes(m.id) ? m.id : mosaicFocusSlot(mosaic) || m.id;
   const target = mosaic.graphScene(focusId);
   if (target !== scene) scene.setStageOnly(false);
   morphViewChrome(m, opts, spec, skyStage);

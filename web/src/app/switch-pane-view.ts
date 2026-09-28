@@ -8,7 +8,7 @@ export type SwitchPaneViewResult =
 
 export type SwitchPaneViewHost = Pick<
   Mosaic,
-  "tileIds" | "focusedId" | "setPaneView" | "setPaneNotice" | "focus"
+  "tileIds" | "focusedId" | "mainTileId" | "setPaneView" | "setPaneNotice" | "focus"
 >;
 
 export type SwitchPaneViewOpts = {
@@ -52,7 +52,7 @@ type ResolvedSlot =
 
 /** Resolve which tile slot will change and whether `setPaneView` is needed. */
 export function resolvePaneSwitchSlot(
-  mosaic: Pick<SwitchPaneViewHost, "tileIds" | "focusedId">,
+  mosaic: Pick<SwitchPaneViewHost, "tileIds" | "focusedId" | "mainTileId">,
   toViewId: string,
   fromViewId?: string,
 ): ResolvedSlot {
