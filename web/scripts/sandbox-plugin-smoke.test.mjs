@@ -11,7 +11,11 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import { fetchPackAssetToken, packAssetUrl } from "./pack-asset-smoke-util.mjs";
+import {
+  fetchPackAssetToken,
+  packAssetNullOriginGetHeaders,
+  packAssetUrl,
+} from "./pack-asset-smoke-util.mjs";
 
 const monitor = (process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/").replace(/\/?$/, "/");
 const WAIT_MS = 60_000;
@@ -29,7 +33,7 @@ function formatDiag(diag) {
 }
 
 async function main() {
-  const sat = await fetchPackAssetToken(monitor, "_sandbox");
+  const { token: sat, csrf } = await fetchPackAssetToken(monitor, "_sandbox");
   const jsName = sandboxJsName();
   const diag = {
     packAssetTokenPresent: !!sat,
@@ -43,7 +47,7 @@ async function main() {
 
   const bootstrapUrl = packAssetUrl(monitor, sat, "_sandbox", jsName);
   const mod = await fetch(bootstrapUrl, {
-    headers: { Origin: "null", Host: "127.0.0.1:7020" },
+    headers: packAssetNullOriginGetHeaders(csrf),
   });
   diag.bootstrapJsStatus = mod.status;
   diag.bootstrapJsCors = mod.headers.get("access-control-allow-origin");

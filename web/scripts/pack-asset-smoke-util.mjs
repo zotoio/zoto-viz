@@ -8,6 +8,22 @@ export function packAssetUrl(base, token, packId, ...parts) {
   return `${root}pack-assets/${segs.join("/")}`;
 }
 
+/** Session-bound headers required for frame-bound pack-asset token verification. */
+export function packAssetSessionHeaders(csrf) {
+  return {
+    Host: "127.0.0.1:7020",
+    "X-Zoto-Viz-Csrf": csrf,
+  };
+}
+
+/** Opaque-origin GET/HEAD to /pack-assets/… (smoke probes bootstrap JS). */
+export function packAssetNullOriginGetHeaders(csrf) {
+  return {
+    ...packAssetSessionHeaders(csrf),
+    Origin: "null",
+  };
+}
+
 export async function fetchPackAssetToken(base, packId = "_sandbox") {
   const root = base.replace(/\/?$/, "/");
   const sess = await fetch(`${root}api/session`, { headers: { Host: "127.0.0.1:7020" } });
@@ -15,8 +31,7 @@ export async function fetchPackAssetToken(base, packId = "_sandbox") {
   const { csrf } = await sess.json();
   assert.ok(csrf, "csrf missing from /api/session");
   const headers = {
-    Host: "127.0.0.1:7020",
-    "X-Zoto-Viz-Csrf": csrf,
+    ...packAssetSessionHeaders(csrf),
     "Content-Type": "application/json",
   };
   const frameId = randomUUID();
@@ -46,5 +61,5 @@ export async function fetchPackAssetToken(base, packId = "_sandbox") {
   assert.equal(r.status, 200, `pack token ${packId} ${r.status}`);
   const data = await r.json();
   assert.ok(data.token, "token missing from mint response");
-  return data.token;
+  return { token: data.token, csrf, frameId };
 }

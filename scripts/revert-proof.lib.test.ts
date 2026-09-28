@@ -753,11 +753,28 @@ describe("revert-proof self-test checkout isolation (#128 catch-up)", () => {
 });
 
 describe("revert-proof CI gate (item 9)", () => {
+  it("(ci-base) stale checkout-proof lib.test at base skips until fixtures land on main", async () => {
+    const { decideBaseSelftestStep, SELFTEST_MARKER } = await import("./revert-proof-ci-gate.mjs");
+    const baseSha = "aabbccdd";
+    const decision = decideBaseSelftestStep(
+      (p) =>
+        p === `${baseSha}:${SELFTEST_MARKER}` || p === `${baseSha}:scripts/revert-proof.lib.test.ts`,
+      baseSha,
+      () => true,
+      (p) =>
+        p.endsWith("revert-proof.lib.test.ts")
+          ? "revert-proofs/48/classify-rejects-plain-meta.patch"
+          : "",
+    );
+    expect(decision.action).toBe("skip");
+    expect(decision.case).toBe("base_stale_selftest_bundle");
+  });
+
   it("(ci-base) when base has the self-test marker, skip is refused (must run)", async () => {
     const { decideBaseSelftestStep, SELFTEST_MARKER } = await import("./revert-proof-ci-gate.mjs");
     const baseSha = "deadbeef";
     const gitPath = `${baseSha}:${SELFTEST_MARKER}`;
-    const decision = decideBaseSelftestStep((p) => p === gitPath, baseSha, () => true);
+    const decision = decideBaseSelftestStep((p) => p === gitPath, baseSha, () => true, () => "");
     expect(decision.action).toBe("run");
     expect(decision.case).toBe("base_has_marker");
     expect(decision.check).toBe(`git cat-file -e ${gitPath}`);
@@ -768,7 +785,12 @@ describe("revert-proof CI gate (item 9)", () => {
     const { decideBaseSelftestStep } = await import("./revert-proof-ci-gate.mjs");
     const head = spawnSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).stdout
       .trim();
-    const decision = decideBaseSelftestStep(() => false, head, (ref) => ref === `${head}^{commit}`);
+    const decision = decideBaseSelftestStep(
+      () => false,
+      head,
+      (ref) => ref === `${head}^{commit}`,
+      () => "",
+    );
     expect(decision.action).toBe("skip");
     expect(decision.case).toBe("base_missing_marker");
     expect(decision.result).toBe("absent");
@@ -780,7 +802,7 @@ describe("revert-proof CI gate (item 9)", () => {
       return spawnSync("git", ["cat-file", "-e", ref], { cwd: repoRoot, encoding: "utf8" }).status === 0;
     };
     for (const baseSha of ["deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", "no-such-ref"]) {
-      const decision = decideBaseSelftestStep(() => false, baseSha, commitExists);
+      const decision = decideBaseSelftestStep(() => false, baseSha, commitExists, () => "");
       expect(decision.action).toBe("fail");
       expect(decision.case).toBe("base_invalid_commit");
     }
@@ -792,6 +814,7 @@ describe("revert-proof CI gate (item 9)", () => {
       (p) => p === `${missing}:${SELFTEST_MARKER}`,
       missing,
       commitExists,
+      () => "",
     );
     expect(unfetched.action).toBe("fail");
     expect(unfetched.case).toBe("base_invalid_commit");

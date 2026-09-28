@@ -14,6 +14,12 @@ export const SELFTEST_BUNDLE = [
   "scripts/vitest.config.mjs",
 ];
 
+/** Main catch-up (#128): base lib.test referenced checkout proof trees; head uses temp fixtures. */
+export const LEGACY_CHECKOUT_PROOF_LIB_TEST_SNIPPET =
+  "revert-proofs/48/classify-rejects-plain-meta.patch";
+
+export const SELFTEST_FIXTURE_PATCH = "scripts/fixtures/strict-git-apply-sample.patch";
+
 /**
  * HEAD checkout must contain the marker (missing on head is always failure).
  * @param {string} repoRoot
@@ -42,7 +48,23 @@ export function assertHeadSelftestPresent(repoRoot) {
  * @param {string} baseSha
  * @param {(commitRef: string) => boolean} [commitExists] e.g. `sha^{commit}` → git cat-file -e
  */
-export function decideBaseSelftestStep(catFileExists, baseSha, commitExists) {
+/**
+ * @param {(gitPath: string) => string | null} [readTextAtRef] e.g. `sha:path` → git show stdout
+ */
+export function baseSelftestBundlePredatesHeadFixtures(catFileExists, baseSha, readTextAtRef) {
+  const fixturePath = `${baseSha}:${SELFTEST_FIXTURE_PATCH}`;
+  if (catFileExists(fixturePath)) {
+    return false;
+  }
+  const libPath = `${baseSha}:scripts/revert-proof.lib.test.ts`;
+  if (!catFileExists(libPath) || !readTextAtRef) {
+    return false;
+  }
+  const libTest = readTextAtRef(libPath);
+  return libTest.includes(LEGACY_CHECKOUT_PROOF_LIB_TEST_SNIPPET);
+}
+
+export function decideBaseSelftestStep(catFileExists, baseSha, commitExists, readTextAtRef) {
   const commitCheck = `git cat-file -e ${baseSha}^{commit}`;
   const commitResolvable = commitExists ? commitExists(`${baseSha}^{commit}`) : true;
   if (!commitResolvable) {
@@ -65,6 +87,16 @@ export function decideBaseSelftestStep(catFileExists, baseSha, commitExists) {
         `revert-proof CI gate: SKIP allowed — ${SELFTEST_MARKER} absent at base ${baseSha} (first landing only)`,
       check: checkCmd,
       result: "absent",
+    };
+  }
+  if (baseSelftestBundlePredatesHeadFixtures(catFileExists, baseSha, readTextAtRef)) {
+    return {
+      action: "skip",
+      case: "base_stale_selftest_bundle",
+      message:
+        `revert-proof CI gate: SKIP allowed — base ${baseSha} self-test still references checkout catch-up proofs; head uses temp fixtures (#128)`,
+      check: `git show ${baseSha}:scripts/revert-proof.lib.test.ts`,
+      result: "stale",
     };
   }
   return {
@@ -108,6 +140,11 @@ function gitCommitExists(commitRef) {
   return gitCatFileExists(commitRef);
 }
 
+function gitShowText(gitPath) {
+  const r = spawnSync("git", ["show", gitPath], { encoding: "utf8" });
+  return r.status === 0 ? r.stdout : null;
+}
+
 function repoRoot() {
   return path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 }
@@ -135,7 +172,12 @@ function main() {
       console.log(`case=${head.case} check=${head.check}`);
       process.exit(1);
     }
-    const decision = decideBaseSelftestStep(gitCatFileExists, baseSha, gitCommitExists);
+    const decision = decideBaseSelftestStep(
+      gitCatFileExists,
+      baseSha,
+      gitCommitExists,
+      gitShowText,
+    );
     console.log(decision.message);
     console.log(
       `case=${decision.case} action=${decision.action} check=${decision.check} result=${decision.result}`,
