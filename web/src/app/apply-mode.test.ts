@@ -23,6 +23,10 @@ import {
 import { Select } from "../ui/ui";
 import { VizHud } from "../ui/viz-hud";
 import { applyModeImpl, type ApplyModeHost } from "./apply-mode";
+import { bindThisView } from "./host-view-bind";
+import { settingsViewDrawerRoot } from "./test/duplicate-slot-scope-note-test-dom";
+import { Settings } from "../ui/settings";
+import * as viewDrawer from "../ui/view-drawer-module";
 import {
   isModeSwitchStatusVisible,
   clearModeSwitchStatus,
@@ -654,6 +658,81 @@ describe("applyModeImpl rollback", () => {
     resolveB("ok");
     await flushMicrotasks();
     expect(host.modeSel.value).toBe("plugin:stereo-gram");
+  });
+});
+
+describe("applyModeImpl same mode drawer (#73)", () => {
+  let rebuildDrawerSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    rebuildDrawerSpy = vi.spyOn(viewDrawer, "rebuildViewDrawerContent");
+    resetModeSwitchAttemptForTests();
+    resetModeSwitchCoordinatorForTests();
+    resetModeSwitchStateForTests();
+    resetPackConsentForTests();
+    setLastConsentedModeId("plugin:stereo-gram");
+  });
+
+  afterEach(() => {
+    rebuildDrawerSpy.mockRestore();
+    document.querySelectorAll(".settings-pop").forEach((el) => el.remove());
+    vi.advanceTimersByTime(6000);
+    clearModeSwitchStatus();
+    vi.useRealTimers();
+    resetModeSwitchStateForTests();
+    resetModeSwitchAttemptForTests();
+    resetModeSwitchCoordinatorForTests();
+    resetPackConsentForTests();
+  });
+
+  function viewLayer(settings: Settings): HTMLElement {
+    const el = settingsViewDrawerRoot(settings).querySelector<HTMLElement>('.plugin-layer[data-layer="view"]');
+    expect(el).toBeTruthy();
+    return el!;
+  }
+
+  it("reuses drawer DOM for ten same-mode applyModeImpl calls then rebuilds once on mode change", async () => {
+    const settings = new Settings({ storePrefix: "zoto-apply-same-mode", onChange: () => {} });
+    document.body.append(settings.el);
+    const host = buildHost({ ensureReviewed: async () => "ok" });
+    const origModeById = host.modeById.bind(host);
+    host.modeById = (id) => {
+      const m = origModeById(id);
+      const cfg = m.config;
+      return { ...m, config: Array.isArray(cfg) ? cfg : [] };
+    };
+    const pluginSpecWithConfig = (id: string) => {
+      const spec = host.pluginSpecForMode(id);
+      if (!spec) return null;
+      const cfg = spec.config;
+      return { ...spec, config: Array.isArray(cfg) ? cfg : [] };
+    };
+    host.bindThisView = (modeId) =>
+      bindThisView(
+        {
+          settings,
+          hostModeById: (id) => host.modeById(id),
+          pluginSpecForMode: pluginSpecWithConfig,
+          lookForMode: () => null,
+        },
+        modeId,
+      );
+    settings.openView("plugin:stereo-gram");
+    rebuildDrawerSpy.mockClear();
+    let layer0: HTMLElement | null = null;
+    for (let i = 0; i < 10; i++) {
+      runApply(host, "plugin:stereo-gram");
+      await flushMicrotasks();
+      const layer = viewLayer(settings);
+      if (!layer0) layer0 = layer;
+      expect(layer).toBe(layer0);
+    }
+    expect(rebuildDrawerSpy).toHaveBeenCalledTimes(1);
+    runApply(host, "plugin:packet-tunnel");
+    await flushMicrotasks();
+    expect(rebuildDrawerSpy).toHaveBeenCalledTimes(2);
+    settings.el.remove();
   });
 });
 
