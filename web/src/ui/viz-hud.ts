@@ -84,6 +84,8 @@ export interface VizHudTick {
   tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats }[];
   /** When set, show the frame-budget overlay (GPU/CPU ms, p95, scale). */
   renderScale?: number | null;
+  /** rAF present-to-present interval (last + rolling p95), from {@link presentFrameStats}. */
+  present?: { last: number; p95: number };
 }
 
 /** v2 contract exposes talker TCP failure ratios and systemd unit pressure — host maps them to a strip badge. */
@@ -222,6 +224,7 @@ export class VizHud {
   private readonly metricLabelEl: HTMLElement;
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly frameEl: HTMLElement;
   private readonly budgetEl: HTMLElement;
   private readonly budgetSepBefore: HTMLElement;
   private readonly degradedEl: HTMLElement;
@@ -280,6 +283,10 @@ export class VizHud {
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
+    this.frameEl = document.createElement("span");
+    this.frameEl.className = "viz-hud-frame";
+    this.frameEl.title = "Real present-to-present frame time (last and rolling p95)";
+
     this.budgetEl = document.createElement("span");
     this.budgetEl.className = "viz-hud-budget";
     this.budgetEl.hidden = true;
@@ -326,6 +333,8 @@ export class VizHud {
       this.packEl,
       sep(),
       metric,
+      sep(),
+      this.frameEl,
       sep(),
       this.skipEl,
       this.budgetSepBefore,
@@ -492,6 +501,13 @@ export class VizHud {
       this.skipEl.classList.remove("viz-hud-skip-limited", "viz-hud-skip-fail");
     }
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
+
+    const pt = input.present;
+    if (pt) {
+      this.frameEl.textContent = `${pt.last.toFixed(1)} ms · p95 ${pt.p95.toFixed(1)} ms`;
+      this.frameEl.dataset.frameMs = pt.last.toFixed(2);
+      this.frameEl.dataset.frameP95 = pt.p95.toFixed(2);
+    }
 
     if (this.budgetVisible) {
       const model = vizBudgetOverlayFromStats(stats, input.renderScale ?? null);
