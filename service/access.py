@@ -25,6 +25,7 @@ _HOST_INJECTION = re.compile(r'[;\s,"\']')
 _PACK_ASSETS = re.compile(
     r"^/pack-assets/([^/]+)/([^/]+)/(.+)$",
 )
+_CANONICAL_LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def parse_pack_assets_path(path: str) -> tuple[str, str, str] | None:
@@ -244,10 +245,35 @@ def is_loopback_name(name: str) -> bool:
         return False
 
 
-def origin_hostname(origin: str) -> str:
-    if not origin or origin == "null":
+def strict_origin_hostname(origin: str) -> str | None:
+    """Parse a browser Origin (scheme, host, optional port only). Reject userinfo, path, query, fragment, trailing dot."""
+    if not origin:
         return ""
-    return (urlparse(origin).hostname or "").lower()
+    if origin == "null":
+        return None
+    parsed = urlparse(origin)
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    if parsed.params or parsed.query or parsed.fragment:
+        return None
+    if parsed.path not in ("", "/"):
+        return None
+    netloc = parsed.netloc
+    if not netloc or "@" in netloc:
+        return None
+    host = (parsed.hostname or "").lower()
+    if not host or host.endswith("."):
+        return None
+    return host
+
+
+def origin_hostname(origin: str) -> str:
+    host = strict_origin_hostname(origin)
+    if host is None:
+        return ""
+    return host
 
 
 def host_ok(request: web.Request) -> bool:
@@ -275,8 +301,12 @@ def origin_ok(request: web.Request) -> bool:
     if raw == "null":
         if parse_pack_assets_path(request.path or ""):
             return request.method in {"GET", "HEAD"}
-        return sandbox_null_origin_allowed(request)
-    name = origin_hostname(raw)
+        return False
+    name = strict_origin_hostname(raw)
+    if not name:
+        return False
+    if not request.app.get("insecure_lan") and name not in _CANONICAL_LOOPBACK:
+        return False
     host = header_hostname(request.headers.get("Host", ""))
     # Vite proxies localhost:5173 → 127.0.0.1:7020 with changeOrigin, so Origin
     # and Host loopback names can differ. LAN still requires an exact match.
