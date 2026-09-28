@@ -1214,6 +1214,11 @@ def validate_plugin_home(home: Path) -> dict[str, Any]:
     rel = str(yml)
     if dsp.plugin_kind(doc) == "data-source":
         dsp.validate_data_source_tree(home, doc)
+    wall_layout = home / "wall-layout.yml"
+    if wall_layout.is_file():
+        from .pack_wall_layout import validate_wall_layout_file
+
+        validate_wall_layout_file(wall_layout)
     merged = _attach_visualisation({**doc}, home, errors, rel, blocked=None)
     if errors:
         raise ValueError(errors[0]["error"])
