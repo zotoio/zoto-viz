@@ -45,6 +45,7 @@ RELOAD_WAIT_S="${ZOTO_VIZ_RELOAD_WAIT_S:-10}"
 MCP="http://127.0.0.1:${PORT}/mcp"
 UNIT="zoto-viz-monitor"
 ONCE=0
+SELF_TEST=0
 
 log() { printf '%s %s\n' "$(date -Iseconds)" "$*"; }
 
@@ -56,6 +57,7 @@ usage() {
 for arg in "$@"; do
   case "$arg" in
     --once) ONCE=1 ;;
+    --self-test) SELF_TEST=1 ;;
     -h|--help) usage ;;
     *) usage ;;
   esac
@@ -89,8 +91,17 @@ PY
   return 1
 }
 
+# `${2:-{}}` is not `{}`: the first `}` ends the expansion, so a literal `}` is
+# glued on and jq --argjson rejects the payload. Build JSON with jq -n.
+dice_off_arguments() {
+  jq -n '{autoconsent:true,dice:{on:false},dream:false}'
+}
+
 mcp() {
-  local name="$1" args="${2:-{}}"
+  local name="$1" args="${2-}"
+  if [[ -z "$args" ]]; then
+    args="{}"
+  fi
   curl -sS --max-time 8 -X POST "$MCP" \
     -H 'Content-Type: application/json' \
     -H 'Host: 127.0.0.1' \
@@ -197,6 +208,8 @@ restart_services() {
   if systemctl --user list-unit-files "$UNIT.service" --no-legend 2>/dev/null | grep -q . \
     || systemctl --user is-active --quiet "$UNIT" 2>/dev/null; then
     log "restart $UNIT"
+    # Drop every listener on the port (the unit and any dev.sh orphan) before one start.
+    bash "$ROOT/scripts/dev.sh" stop backend
     systemctl --user restart "$UNIT"
     log "restart vite frontend"
     bash "$ROOT/scripts/dev.sh" restart frontend
@@ -227,7 +240,7 @@ load_plugin_views() {
   local ids mosaic tiles args
   mapfile -t ids < <(changed_plugin_ids <<<"$files" | sort)
   log "autoconsent + dice off"
-  mcp set_settings '{"autoconsent":true,"dice":{"on":false},"dream":false}' >/dev/null || true
+  mcp set_settings "$(dice_off_arguments)" >/dev/null || true
   sleep 1
   if [[ ${#ids[@]} -eq 0 ]]; then
     log "no plugin src changes — catalog refresh only"
@@ -304,6 +317,14 @@ need() {
 }
 
 need
+if [[ "$SELF_TEST" -eq 1 ]]; then
+  payload="$(dice_off_arguments)"
+  jq -e '.autoconsent == true and .dice.on == false and .dream == false' <<<"$payload" >/dev/null
+  jq -nc --arg n set_settings --argjson a "$payload" \
+    '{jsonrpc:"2.0",id:1,method:"tools/call",params:{name:$n,arguments:$a}}' \
+    | jq -e '.params.arguments.dice.on == false and .params.arguments.dream == false' >/dev/null
+  exit 0
+fi
 if [[ "$ONCE" -eq 1 ]]; then
   tick
   exit $?

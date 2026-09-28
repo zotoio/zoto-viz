@@ -23,7 +23,7 @@ Type=simple
 Environment=ZOTO_VIZ_ROOT=%h/zoto-viz
 WorkingDirectory=%h/zoto-viz
 ExecStart=%h/zoto-viz/.venv/bin/python -m service.monitor --bind 127.0.0.1 --port 7020
-Restart=always
+Restart=on-failure
 RestartSec=5
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-%h/zoto-viz/.env

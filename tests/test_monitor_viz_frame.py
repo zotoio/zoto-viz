@@ -1,6 +1,9 @@
 """Monitor state fields that feed viz frame v2 (TCP gauges, packet rates, IPv6 fold)."""
 from __future__ import annotations
 
+import json
+import socket
+
 import pytest
 
 from service import monitor as mon
@@ -131,3 +134,83 @@ def test_fold_v6_merges_devices_and_conn_buckets(monkeypatch: pytest.MonkeyPatch
     assert merged["bytes_in"] == 10
     assert merged["bytes_out"] == 20
     assert merged["packets"] == 3
+
+
+def _remember(state: mon.State, ip: str, last_seen: float, role: str) -> None:
+    state.devices[ip] = {
+        "ip": ip, "mac": "", "vendor": "", "hostnames": [], "aliases": [], "sources": [],
+        "ports": [], "ifaces": [], "first_seen": 1.0, "last_seen": last_seen,
+        "bytes_in": 1, "bytes_out": 1, "packets": 1, "role": role,
+    }
+
+
+def test_forget_stale_internet_keeps_lan(monkeypatch: pytest.MonkeyPatch) -> None:
+    state = _state(monkeypatch)
+    now = 1_000_000.0
+    _remember(state, "8.8.8.8", now - mon.DEVICE_FORGET_S - 1, "internet")
+    _remember(state, "1.1.1.1", now - 60, "internet")
+    _remember(state, "10.0.0.50", now - mon.DEVICE_FORGET_S - 1, "lan")
+    _remember(state, state.gateway, now - mon.DEVICE_FORGET_S - 1, "gateway")
+    assert state.forget_stale_devices(now) == 1
+    assert "8.8.8.8" not in state.devices
+    assert "1.1.1.1" in state.devices
+    assert "10.0.0.50" in state.devices
+    assert state.gateway in state.devices
+
+
+def test_load_drops_stale_internet(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
+    state = _state(monkeypatch)
+    old = time_now = 1_000_000.0
+    blob = {
+        "devices": {
+            "9.9.9.9": {
+                "ip": "9.9.9.9", "mac": "", "vendor": "", "hostnames": [], "aliases": [],
+                "sources": [], "ports": [], "ifaces": [], "first_seen": 1.0,
+                "last_seen": old - mon.DEVICE_FORGET_S - 5, "bytes_in": 1, "bytes_out": 0,
+                "packets": 1, "role": "internet",
+            },
+            "10.0.0.9": {
+                "ip": "10.0.0.9", "mac": "", "vendor": "", "hostnames": [], "aliases": [],
+                "sources": [], "ports": [], "ifaces": [], "first_seen": 1.0,
+                "last_seen": old - mon.DEVICE_FORGET_S - 5, "bytes_in": 1, "bytes_out": 0,
+                "packets": 1, "role": "lan",
+            },
+        },
+        "names": {},
+        "cert_tried": [],
+        "forensics": {},
+    }
+    path = tmp_path / "monitor-state.json"
+    path.write_text(json.dumps(blob))
+    monkeypatch.setattr(mon, "STATE_FILE", path)
+    monkeypatch.setattr(mon.time, "time", lambda: time_now)
+    state.load()
+    assert "9.9.9.9" not in state.devices
+    assert "10.0.0.9" in state.devices
+
+
+def test_claim_listen_leaves_an_existing_monitor(monkeypatch: pytest.MonkeyPatch) -> None:
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    monkeypatch.setattr(mon, "port_holder_cmd", lambda _port: "/usr/bin/python -m service.monitor --port 7020")
+    with pytest.raises(SystemExit) as exc:
+        mon.claim_listen("127.0.0.1", port)
+    assert exc.value.code == 0
+    sock.close()
+
+
+def test_claim_listen_fails_when_a_non_monitor_holds_the_port(monkeypatch: pytest.MonkeyPatch) -> None:
+    sock = socket.socket()
+    sock.bind(("127.0.0.1", 0))
+    port = sock.getsockname()[1]
+    monkeypatch.setattr(mon, "port_holder_cmd", lambda _port: "nginx")
+    with pytest.raises(SystemExit) as exc:
+        mon.claim_listen("127.0.0.1", port)
+    assert exc.value.code != 0
+    sock.close()
+
+
+def test_proc_rss_reads_this_process() -> None:
+    import os
+    assert mon.proc_rss(os.getpid()) > 0

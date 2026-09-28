@@ -18,12 +18,15 @@ from __future__ import annotations
 import argparse
 import asyncio
 import contextlib
+import errno
 import ipaddress
 import json
 import os
 import re
 import shutil
 import signal
+import socket
+import subprocess
 import sys
 import time
 from collections import Counter, defaultdict, deque
@@ -111,6 +114,8 @@ WIFI_KEYS_FILE = paths.config_dir() / "wifi-keys"   # `SSID = passphrase` per li
 WIRESHARK_PROFILE = "zoto-viz"                                        # tshark -C profile carrying the 802.11 keys
 FLOW_IDLE_S = 300          # flows silent this long drop out of the live set
 DEVICE_OFFLINE_S = 600     # devices silent this long are shown as offline
+DEVICE_FORGET_S = 6 * 3600  # drop non-local hosts silent this long; LAN / gateway / self stay
+TSHARK_RSS_LIMIT = 1 << 30  # recycle capture when tshark RSS passes 1 GiB
 RATE_WINDOW_S = 5          # bytes/s smoothing window
 DISCOVERY_EVERY_S = 60
 PERSIST_EVERY_S = 30
@@ -982,8 +987,54 @@ class State:
             },
         }
 
+    def forget_stale_devices(self, now: float) -> int:
+        """Drop internet and other non-local hosts that have been silent for hours.
+
+        LAN, gateway, and this host stay. The device table is persisted, so without
+        this a day of public addresses is force-simulated on every graph pane.
+        """
+        drop: list[str] = []
+        for ip, d in self.devices.items():
+            if ip == self.local_ip or ip == self.gateway:
+                continue
+            if self.is_local(ip):
+                continue
+            role = d.get("role") or self.role(ip)
+            if role in ("self", "gateway", "lan", "local"):
+                continue
+            last = float(d.get("last_seen") or 0)
+            if last <= 0:
+                last = float(d.get("first_seen") or 0)
+            if last and now - last < DEVICE_FORGET_S:
+                continue
+            drop.append(ip)
+        for ip in drop:
+            self._drop_device(ip)
+        return len(drop)
+
+    def _drop_device(self, ip: str) -> None:
+        self.devices.pop(ip, None)
+        self.names.pop(ip, None)
+        self.recent.pop(ip, None)
+        self.ttl.pop(ip, None)
+        self.forensics.pop(ip, None)
+        self.traffic.pop(ip, None)
+        self._fail_buckets.pop(ip, None)
+        self._conn_attempt_buckets.pop(ip, None)
+        self.cert_tried.discard(ip)
+        self.alias_to_ip.pop(ip, None)
+        for key in [k for k in self.flows if ip in k.split("|")]:
+            self.flows.pop(key, None)
+            self._flow_buckets.pop(key, None)
+            self._flow_ab.pop(key, None)
+            self._flow_ba.pop(key, None)
+            self._flow_pkt_ab.pop(key, None)
+            self._flow_pkt_ba.pop(key, None)
+            self.recent_flow.pop(key, None)
+
     # ---- periodic
     def tick(self, now: float) -> None:
+        self.forget_stale_devices(now)
         if len(self._seen) > 20000:
             self._seen = {k: v for k, v in self._seen.items() if now - v[0] < DEDUPE_S * 2}
         for name, c in self.link_count.items():  # frames since the last tick (~1 s): the header tooltip's rate
@@ -1209,7 +1260,9 @@ class State:
         for d in self.devices.values():
             self.scrub_device(d)
             d["aliases"] = list(dict.fromkeys(d["aliases"]))
-        log(f"restored {len(self.devices)} devices from {STATE_FILE.name}")
+        forgotten = self.forget_stale_devices(time.time())
+        log(f"restored {len(self.devices)} devices from {STATE_FILE.name}"
+            + (f" (forgot {forgotten} stale non-local)" if forgotten else ""))
 
 
 # --------------------------------------------------------------------------- capture
@@ -1272,6 +1325,86 @@ async def _close_proc(proc: asyncio.subprocess.Process) -> None:
         await asyncio.wait_for(proc.wait(), 1)
 
 
+def proc_rss(pid: int) -> int:
+    """VmRSS of one process, in bytes. 0 when the process is already gone."""
+    try:
+        text = Path(f"/proc/{pid}/status").read_text()
+    except OSError:
+        return 0
+    for line in text.splitlines():
+        if line.startswith("VmRSS:"):
+            parts = line.split()
+            if len(parts) >= 2 and parts[1].isdigit():
+                return int(parts[1]) * 1024
+    return 0
+
+
+def proc_tree_rss(pid: int) -> int:
+    """RSS of a process and the children it has spawned (sudo → tshark → dumpcap)."""
+    seen: set[int] = set()
+
+    def walk(cur: int) -> int:
+        if cur in seen or cur <= 0:
+            return 0
+        seen.add(cur)
+        total = proc_rss(cur)
+        try:
+            kids = Path(f"/proc/{cur}/task/{cur}/children").read_text().split()
+        except OSError:
+            kids = []
+        for kid in kids:
+            if kid.isdigit():
+                total += walk(int(kid))
+        return total
+
+    return walk(pid)
+
+
+def port_holder_cmd(port: int) -> str:
+    """Command line of whoever is listening on `port`, or empty."""
+    try:
+        out = subprocess.check_output(
+            ["ss", "-lptn", f"sport = :{port}"], text=True, stderr=subprocess.DEVNULL,
+        )
+    except (OSError, subprocess.CalledProcessError):
+        return ""
+    match = re.search(r"pid=(\d+)", out)
+    if not match:
+        return ""
+    try:
+        raw = Path(f"/proc/{match.group(1)}/cmdline").read_bytes()
+    except OSError:
+        return ""
+    return raw.replace(b"\0", b" ").decode(errors="replace").strip()
+
+
+def holder_is_monitor(cmd: str) -> bool:
+    return "service.monitor" in cmd
+
+
+def claim_listen(host: str, port: int) -> None:
+    """Bind the HTTP port before scans and catalog work.
+
+    A taken port must exit here. When the holder is already this monitor, exit 0
+    so Restart=on-failure does not flap and does not run a Wi-Fi rescan.
+    """
+    family = socket.AF_INET6 if ":" in host and host != "0.0.0.0" else socket.AF_INET
+    sock = socket.socket(family, socket.SOCK_STREAM)
+    try:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind((host, port))
+    except OSError as e:
+        if e.errno != errno.EADDRINUSE:
+            raise
+        holder = port_holder_cmd(port)
+        if holder_is_monitor(holder):
+            log(f"monitor already listening on {host}:{port} ({holder}); leaving it")
+            sys.exit(0)
+        sys.exit(f"[monitor] {host}:{port} is in use" + (f" by {holder}" if holder else ""))
+    finally:
+        sock.close()
+
+
 async def _kill_group(proc: asyncio.subprocess.Process) -> None:
     with contextlib.suppress(ProcessLookupError):
         os.killpg(proc.pid, signal.SIGTERM)
@@ -1321,9 +1454,20 @@ async def capture_loop(state: State, bpf: str, wifi_keys: Path) -> None:
         watcher = asyncio.create_task(watch_interfaces())
         n = 0
         t0 = time.time()
+        rss_at = t0
         oversize = bad = 0
+        recycled = False
         try:
             while True:
+                now = time.time()
+                if now - rss_at >= 60:
+                    rss_at = now
+                    rss = proc_tree_rss(proc.pid)
+                    if rss >= TSHARK_RSS_LIMIT:
+                        log(f"capture: tshark rss {rss // (1 << 20)} MiB; recycling")
+                        recycled = True
+                        await _kill_group(proc)
+                        break
                 try:
                     raw = await proc.stdout.readline()
                 except ValueError:
@@ -1354,7 +1498,7 @@ async def capture_loop(state: State, bpf: str, wifi_keys: Path) -> None:
             # anything else escaping the reader would end this task silently while tshark blocks on a full pipe
             log(f"capture: reader failed after {n} packets ({e!r}); restarting tshark")
             await _kill_group(proc)
-        restarted_by_watcher = watcher.done() and not watcher.cancelled()
+        restarted_by_watcher = recycled or (watcher.done() and not watcher.cancelled())
         watcher.cancel()
         err = (await proc.stderr.read()).decode(errors="replace").strip() if proc.stderr else ""
         rc = await proc.wait()
@@ -2146,6 +2290,9 @@ def main() -> None:
         insecure_lan=args.insecure_lan,
         inhibit_screensaver=args.inhibit_screensaver,
     )
+    # Before interface discovery, plugin seed, and the wifi scan that on_startup
+    # starts. A taken port must not rescan on the way to EADDRINUSE.
+    claim_listen(str(listen["bind"]), int(listen["port"]))
     if args.bind is not None and not access.bind_is_loopback(args.bind) and not args.insecure_lan:
         sys.exit("[monitor] refusing non-loopback --bind (pass --insecure-lan or set bind in ~/.zoto-viz/sys-config.yml)")
 

@@ -458,7 +458,10 @@ export function shuffleLook(s: ProfileSettings, ctx: ShuffleCtx, rnd: Rng = Math
   const show = { ...s.show };
   let merge = s.merge;
   if (on.show) {
-    for (const key of SHOW_KEYS) show[key] = rnd() < 0.5;
+    for (const key of SHOW_KEYS) {
+      // Offline hosts stay out of the force layout. Turning them on is a manual Show toggle.
+      show[key] = key === "offline" ? false : rnd() < 0.5;
+    }
     merge = rnd() < 0.5;
   }
   const animOn = on.motion || on.physics || on.mosaic || on.style;

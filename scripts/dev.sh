@@ -130,8 +130,24 @@ stop_frontend() {
   echo "frontend stopped (:${FRONTEND_PORT})"
 }
 
+monitor_unit_installed() {
+  systemctl --user list-unit-files zoto-viz-monitor.service --no-legend 2>/dev/null | grep -q .
+}
+
 start_backend() {
   need
+  # The user unit is the one listener. A second `python -m service.monitor`
+  # from this script holds 127.0.0.1 and the unit then crash-loops on 0.0.0.0.
+  if monitor_unit_installed; then
+    stop_backend
+    systemctl --user restart zoto-viz-monitor
+    if wait_port "$BACKEND_PORT"; then
+      echo "backend via zoto-viz-monitor :${BACKEND_PORT}/"
+      return 0
+    fi
+    echo "backend failed to bind :${BACKEND_PORT} — see journalctl --user -u zoto-viz-monitor" >&2
+    return 1
+  fi
   if port_up "$BACKEND_PORT"; then
     echo "backend already running http://${BACKEND_BIND}:${BACKEND_PORT}/"
     return 0

@@ -8,6 +8,7 @@ import {
   type PhysEase,
 } from "./physics";
 import { LayoutClient } from "./layout";
+import { layoutBodyBudget, selectLayoutBodyIds, usesFullDeviceTable } from "./layout-budget";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
 import type { RenderScalePane } from "../plugins/render-scale-host";
 import { RenderScaleViewState } from "../plugins/render-scale-host";
@@ -1906,6 +1907,7 @@ export class NetScene implements HostedView, RenderScalePane {
   setStageOnly(on: boolean): void {
     const wasWanted = this.layoutWanted();
     this.stageOnly = on;
+    if (on) this.clearGraphNodes();
     this.syncLayoutWanted(wasWanted);
     if (on) {
       // Keep horizon level so FPS plugin skies (Backrooms) are not floor-biased by the graph orbit cam.
@@ -2537,7 +2539,16 @@ export class NetScene implements HostedView, RenderScalePane {
       if (!wasWanted) this.syncSimulation(0);
       return;
     }
+    this.simNodes = [];
     this.releaseLayout();
+  }
+
+  /** Stage-only panes keep the sky. They do not hold the device graph or a layout worker. */
+  private clearGraphNodes(): void {
+    if (!this.nodes.size && !this.links.size && !this.simNodes.length) return;
+    for (const n of [...this.nodes.values()]) this.removeNode(n);
+    this.links.clear();
+    this.simNodes = [];
   }
 
   private pushLayoutParams(dt: number): void {
@@ -3261,6 +3272,11 @@ export class NetScene implements HostedView, RenderScalePane {
   update(msg: StateMsg): void {
     this.now = msg.ts;
     this.lastMsg = msg;
+    if (this.stageOnly) {
+      this.clearGraphNodes();
+      this.stampPane();
+      return;
+    }
     const slice = rfSlice(msg, this.mode, this.modeOpts);
     const view: StateMsg = { ...msg, devices: slice.devices, flows: slice.flows, gateway: slice.gateway || msg.gateway, local_ip: slice.localIp || msg.local_ip };
     let added = false;      // structural change: links appeared/disappeared
@@ -3445,10 +3461,44 @@ export class NetScene implements HostedView, RenderScalePane {
     }
   }
 
+  /**
+   * Full-device views (topology, watch, talkers) only simulate a budget of bodies.
+   * Gateway, self, the selection, and their link endpoints come first; the rest are
+   * ranked by bytes and rate. SYS / CPU / radio slices are already small and stay whole.
+   */
+  private layoutNodes(visible: GNode[]): GNode[] {
+    if (!usesFullDeviceTable(this.mode) || visible.length <= layoutBodyBudget(this.satellite)) return visible;
+    const ids = selectLayoutBodyIds(
+      visible.map((n) => ({
+        id: n.id,
+        role: n.device.role,
+        bytes: n.device.bytes_in + n.device.bytes_out,
+        rate: n.rate,
+        selected: n === this.selected,
+      })),
+      [...this.links.values()].filter((l) => l.visible).map((l) => ({ a: l.source.id, b: l.target.id })),
+      layoutBodyBudget(this.satellite),
+    );
+    for (const n of visible) {
+      if (ids.has(n.id)) continue;
+      n.visible = false;
+      n.scale = 0;
+      n.targetScale = 0;
+      n.label.visible = false;
+      n.labelEl.classList.add("off");
+    }
+    for (const l of this.links.values()) l.visible = l.source.visible && l.target.visible;
+    return visible.filter((n) => ids.has(n.id));
+  }
+
   /** Only visible nodes and links take part in the layout, so hidden multicast hubs cannot bunch LAN devices. */
   private syncSimulation(minAlpha: number): void {
-    if (!this.layoutWanted()) return;
-    const nodes = [...this.nodes.values()].filter((n) => n.visible);
+    if (!this.layoutWanted()) {
+      this.simNodes = [];
+      return;
+    }
+    const visible = [...this.nodes.values()].filter((n) => n.visible);
+    const nodes = this.layoutNodes(visible);
     this.measureCrowds(nodes);
     const n = nodes.length;
     const arr = new Float32Array(n * NODE_STRIDE);

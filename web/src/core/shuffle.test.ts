@@ -113,6 +113,7 @@ describe("shuffleLook", () => {
     expect(next.sound).toBe(true);
     expect(next.merge).toBe(false);
     expect(next.show.lan).toBe(false);
+    expect(next.show.offline).toBe(false);
     expect(next.feed.on).toBe(false);
     expect(next.feed.density).toBeLessThanOrEqual(DICE_FEED_DENSITY.max);
     expect(next.plugins.topology?.rank).toBe("bytes");

@@ -30,24 +30,37 @@ describe("mosaicIds", () => {
     expect(mosaicIds("6", "plugin:topology")).toEqual([]);
   });
 
-  it("takes the first n catalog rows", () => {
+  it("takes the first n catalog rows when they are not full-device graphs", () => {
     setPluginModes(["a", "b", "c", "d"].map((id) => ({
       ...topology,
       id: `plugin:${id}`,
       pluginId: id,
       label: id,
+      graphBase: "memory",
     })));
     expect(mosaicIds("4")).toEqual(["plugin:a", "plugin:b", "plugin:c", "plugin:d"]);
+  });
+
+  it("keeps one full-device graph and fills the rest from sliced views", () => {
+    setPluginModes([
+      { ...topology, id: "plugin:topo", pluginId: "topo", label: "topo" },
+      { ...topology, id: "plugin:watch", pluginId: "watch", label: "watch", graphBase: "watch" },
+      { ...topology, id: "plugin:mem", pluginId: "mem", label: "mem", graphBase: "memory" },
+      { ...topology, id: "plugin:cores", pluginId: "cores", label: "cores", graphBase: "cpu" },
+      { ...topology, id: "plugin:sock", pluginId: "sock", label: "sock", graphBase: "sockets" },
+    ]);
+    expect(mosaicIds("4")).toEqual(["plugin:topo", "plugin:mem", "plugin:cores", "plugin:sock"]);
   });
 });
 
 describe("mosaic boot primary pack tile", () => {
-  const packMode = (pluginId: string) => ({
+  const packMode = (pluginId: string, full = false) => ({
     ...topology,
     id: `plugin:${pluginId}`,
     pluginId,
     label: pluginId,
     family: "viz-pack" as const,
+    graphBase: full ? undefined : "memory",
   });
 
   it("boot with 4 packs: primary tile shows the primary pack id exactly", () => {

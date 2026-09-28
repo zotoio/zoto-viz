@@ -5,6 +5,7 @@ export function mosaicSceneOpts(id: string, host: RenderHost): SceneOpts {
   return { satellite: true, host, tileId: id };
 }
 import { allModes, arcadeSlotFor, hostEngine, modeById, viewCaption, type ViewMode } from "../core/modes";
+import { usesFullDeviceTable } from "./layout-budget";
 import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
 import { cycleSkyPool, type BackdropKind } from "./backdrop";
@@ -117,19 +118,44 @@ export function mosaicAnimForTile(
   return merged;
 }
 
+/** A wall may run one full-device force layout. Further slots are stage-only or sliced graphs. */
+export function limitFullDeviceTiles(ids: readonly string[], pool: readonly string[]): string[] {
+  const want = ids.length;
+  const out: string[] = [];
+  const used = new Set<string>();
+  let full = 0;
+  const consider = (id: string) => {
+    if (!id || out.length >= want || used.has(id)) return;
+    const heavy = usesFullDeviceTable(mosaicPaneMode(id));
+    if (heavy && full >= 1) return;
+    if (heavy) full += 1;
+    used.add(id);
+    out.push(id);
+  };
+  for (const id of ids) consider(id);
+  for (const id of pool) consider(id);
+  return out;
+}
+
 export function mosaicIds(size: MosaicSize, prefer?: string, hero: HeroPos = "off"): string[] {
   if (size === "off") return [];
   const n = Number(size);
   const pool = panePool();
+  let ids: string[];
   if (hero === "off") {
-    const ids = pool.slice(0, n);
-    if (!prefer || !pool.includes(prefer)) return ids;
-    if (ids[0] === prefer) return ids;
-    if (ids.includes(prefer)) return [prefer, ...ids.filter((id) => id !== prefer)];
-    return [prefer, ...ids.slice(0, n - 1)];
+    ids = pool.slice(0, n);
+    if (prefer && pool.includes(prefer)) {
+      if (ids[0] !== prefer) {
+        ids = ids.includes(prefer)
+          ? [prefer, ...ids.filter((id) => id !== prefer)]
+          : [prefer, ...ids.slice(0, n - 1)];
+      }
+    }
+  } else {
+    const heroId = prefer && pool.includes(prefer) ? prefer : pool[0]!;
+    ids = heroId ? [heroId, ...pool.filter((id) => id !== heroId).slice(0, n)] : [];
   }
-  const heroId = prefer && pool.includes(prefer) ? prefer : pool[0]!;
-  return [heroId, ...pool.filter((id) => id !== heroId).slice(0, n)];
+  return limitFullDeviceTiles(ids, pool);
 }
 
 /**
