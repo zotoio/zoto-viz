@@ -196,6 +196,7 @@ def test_seed_content_sources_on_old_registry() -> None:
     assert "mastodon" in ids
     apod = next(r for r in sources.ensure() if r["id"] == "apod")
     assert apod["fields"]["image"] == "hdurl"
+    assert "api_key=" not in apod["url"].lower()
     assert "count=" not in apod["url"]
     guardian = next(r for r in sources.ensure() if r["id"] == "guardian")
     assert guardian["type"] == "rss"

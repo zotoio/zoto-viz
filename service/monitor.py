@@ -1800,6 +1800,7 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
 
 
 async def api_session(request: web.Request) -> web.Response:
+    from . import nasa_api
     from . import typesafe_proxy
     return web.json_response({
         "csrf": request.app.get("csrf") or "",
@@ -2079,6 +2080,11 @@ def make_app(
     app.router.add_get("/api/sdm/devices", sdm.api_devices)
     app.router.add_post("/api/sdm/devices/{id}/webrtc", sdm.api_webrtc)
     app.router.add_get("/api/sdm/still", sdm.api_still)
+    from . import nasa_api
+
+    app.router.add_get("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
+    app.router.add_put("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
+    app.router.add_delete("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
     app.router.add_get("/api/sources/image", sources.api_image)
     app.router.add_get("/api/sources", sources.api_sources)
     app.router.add_put("/api/sources", sources.api_sources)
@@ -2108,9 +2114,11 @@ def run_app_kwargs() -> dict:
 
 
 def main() -> None:
+    from . import nasa_api
     from . import typesafe_proxy
 
     typesafe_proxy.load_dotenv()
+    nasa_api.load_dotenv()
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--iface", action="append", metavar="IFACE",
                    help="capture only these interfaces (repeatable; default: every up interface except lo and veth*)")

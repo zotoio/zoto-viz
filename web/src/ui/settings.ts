@@ -2,7 +2,7 @@ import { apiFetch } from "../core/http";
 import type { SourceKind, SourceLive, SourceRow } from "../core/sources";
 import { displayName, type Device, usefulName } from "../core/types";
 import { applyFloatRect, bindFloatPanel, readFloatRect } from "./float-drag";
-import { ColorField, GroupedChips, pinFlyout, Slider, Toggle, unpinFlyout } from "./ui";
+import { ColorField, GroupedChips, pinFlyout, Slider, TextField, Toggle, unpinFlyout } from "./ui";
 import { MAGNET_FIELDS } from "../graph/physics";
 import type { PluginField } from "../core/modes";
 import type { RemixPairing } from "../remix/remix-types";
@@ -183,6 +183,7 @@ export class Settings {
   private sourcesUi: { list: HTMLDivElement; include: Toggle; instances: HTMLDivElement; auth: HTMLDivElement } | null = null;
   private remixPickerHost: HTMLDivElement | null = null;
   private remixPicker: RemixPickerControls | null = null;
+  private nasaApiKeyConfigured = false;
   private readonly nav = document.createElement("nav");
   private readonly paneEls = new Map<string, HTMLDivElement>();
   private readonly navBtns = new Map<string, HTMLButtonElement>();
@@ -1695,9 +1696,14 @@ export class Settings {
     try {
       const r = await apiFetch("/api/sources");
       if (!r.ok) throw new Error(r.statusText);
-      const data = await r.json() as { sources?: SourceRow[]; live?: Record<string, SourceLive> };
+      const data = await r.json() as {
+        sources?: SourceRow[];
+        live?: Record<string, SourceLive>;
+        nasaApiKeyConfigured?: boolean;
+      };
       const rows = data.sources ?? [];
       const live = data.live ?? {};
+      this.nasaApiKeyConfigured = !!data.nasaApiKeyConfigured;
       host.replaceChildren();
       if (!rows.length) {
         const empty = document.createElement("div");
@@ -1744,7 +1750,9 @@ export class Settings {
         block.appendChild(el);
         const kind = sourceAuthKind(row.id, row.url || "");
         if (kind) {
-          const ready = sourceAuthReady(kind, row.url || "", status);
+          const ready = sourceAuthReady(kind, row.url || "", status, {
+            nasaApiKeyConfigured: this.nasaApiKeyConfigured,
+          });
           if (!ready || !AUTH_SETUPS[kind].blocksDice) {
             const card = renderAuthSetup(AUTH_SETUPS[kind]);
             if (ready && !AUTH_SETUPS[kind].blocksDice) card.classList.add("auth-setup-optional");
@@ -1762,6 +1770,33 @@ export class Settings {
     const host = this.sourcesUi?.auth;
     if (!host) return;
     host.replaceChildren();
+    const apodCard = renderAuthSetup(AUTH_SETUPS.apod);
+    const nasaField = new TextField({
+      caption: "NASA API key",
+      title: "NASA_API_KEY or paste a personal api.nasa.gov key (stored in ~/.zoto-viz/host.env)",
+      value: "",
+      placeholder: this.nasaApiKeyConfigured ? "key saved on the monitor" : "paste api key",
+      onInput: () => { /* saved on change */ },
+    });
+    nasaField.input.type = "password";
+    nasaField.input.autocomplete = "off";
+    nasaField.input.addEventListener("change", () => {
+      const key = nasaField.input.value.trim();
+      if (!key) return;
+      void apiFetch("/api/sources/nasa-api-key", {
+        method: "PUT",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ nasaApiKey: key }),
+      }).then(async (res) => {
+        if (!res.ok) return;
+        nasaField.input.value = "";
+        this.nasaApiKeyConfigured = true;
+        void this.refreshSources();
+        void this.refreshAuthIntegrations();
+      });
+    });
+    apodCard.appendChild(nasaField.el);
+    host.appendChild(apodCard);
     try {
       const r = await apiFetch("/api/sdm");
       const sdm = r.ok ? await r.json() as { linked?: boolean; pcm_url?: string | null; error?: string } : {};
