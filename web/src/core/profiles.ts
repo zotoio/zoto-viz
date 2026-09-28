@@ -7,6 +7,7 @@ import { DEFAULT_THEME } from "./themes";
 import { EMPTY_LOOK, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { DEFAULT_DICE, normalizeDice, type DiceConfig } from "./shuffle";
 import { apiFetch } from "./http";
+import { remapSavedViewId } from "./saved-view-id";
 
 /** Shipped profile id. Always present, never overwritten from the UI. */
 export const SHIPPED_ID = "zoto-viz";
@@ -176,7 +177,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
   return {
     theme: typeof s.theme === "string" ? s.theme : d.theme,
     dream: bool(s.dream, d.dream),
-    mode: typeof s.mode === "string" ? s.mode : d.mode,
+    mode: typeof s.mode === "string" ? remapSavedViewId(s.mode) : d.mode,
     modeOptions: { ...d.modeOptions, ...modeOptions },
     show: {
       lan: bool(show.lan, d.show.lan),

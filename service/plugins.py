@@ -27,6 +27,7 @@ from typing import Any
 
 from . import hooks
 from . import paths
+from .shipped_pack_slug import COLLISION_MSG, find_shipped_pack_slug_collisions
 from . import plugin_backend as pb
 from . import plugin_sky as psky
 from . import plugin_instances as pins
@@ -1509,6 +1510,17 @@ def _scan_uncached(root: Path | None = None) -> dict[str, Any]:
     """Build the catalog from src trees plus non-colliding zips, or a YAML tree."""
     global _scan_builds
     _scan_builds += 1
+    src_probe = paths.plugin_src_dir()
+    if root is None and src_probe.is_dir():
+        pairs = find_shipped_pack_slug_collisions(src_probe)
+        if pairs:
+            a, b = pairs[0]
+            return _scan_payload(
+                src_probe,
+                [],
+                [{"file": str(src_probe), "error": COLLISION_MSG.format(a=a, b=b)}],
+                [],
+            )
     layout = _catalog_layout(root)
     if layout is not None:
         src_dir, zips_dir, runtime_dir = layout
