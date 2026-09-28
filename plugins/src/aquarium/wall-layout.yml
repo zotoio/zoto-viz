@@ -13,7 +13,7 @@ tile_2x2:
 
 tile_4x4:
   look:
-    mosaic: "16"
+    mosaic: "8"
     hero: center
     mosaicSharedTheme: true
     mosaicTiles:
@@ -25,11 +25,3 @@ tile_4x4:
       - plugin:aquarium
       - plugin:protocols
       - plugin:talkers
-      - plugin:lan-heat
-      - plugin:units
-      - plugin:disk
-      - plugin:cgroups
-      - plugin:udev
-      - plugin:rf-constellation
-      - plugin:packet-tunnel
-      - plugin:topology

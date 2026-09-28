@@ -57,7 +57,7 @@ type AquariumFrame = Pick<
 export const FAIL_MURK_THRESHOLD = 0.35;
 export const PACKET_FRAME_CAP = 8;
 export const MAX_FISH = 16;
-export const MAX_PARTICLES = 16;
+export const MAX_PARTICLES = 24;
 export const PARTICLE_STRIDE = 4;
 export const FIXED_SIM_DT = 1 / 60;
 export const MAX_SIM_CATCHUP_STEPS = 3;
@@ -81,6 +81,9 @@ export const AQUARIUM_WORK_BUDGET = {
   glContextsOn4x4Wall: 0,
 } as const;
 
+/** Set when plugin.yml lists `assets:` for host mesh lane (see sdk/pack-host-mesh.ts). */
+export const PACK_HOST_MESH_ASSET: { id: string; path: string } | undefined = undefined;
+
 /** Every visualisation.yml config key (config.read). */
 export const CONFIG_KEYS = [
   "preset", "randomise", "undoRandom", "resetSettings",
@@ -89,6 +92,7 @@ export const CONFIG_KEYS = [
   "reducedMotion",
   "sp_neon", "sp_angel", "sp_guppy", "sp_cory", "sp_discus", "sp_cichlid",
   "sp_clown", "sp_tang", "sp_damsel", "sp_goby", "sp_wrasse", "sp_anemone",
+  "modelGlb",
 ] as const;
 
 export const TRADEMARK_DENY = [
@@ -111,11 +115,11 @@ const FRESH_SPECIES = ["neon", "angel", "guppy", "cory", "discus", "cichlid"] as
 const REEF_SPECIES = ["clown", "tang", "damsel", "goby", "wrasse", "anemone"] as const;
 
 export const PRESET_CAPS: Record<PresetId, { maxFish: number; maxParticles: number }> = {
-  planted: { maxFish: 14, maxParticles: 12 },
-  reef_lagoon: { maxFish: 12, maxParticles: 14 },
-  cichlid_rock: { maxFish: 10, maxParticles: 10 },
-  calm_zen: { maxFish: 8, maxParticles: 8 },
-  night_reef: { maxFish: 12, maxParticles: 16 },
+  planted: { maxFish: 18, maxParticles: 16 },
+  reef_lagoon: { maxFish: 16, maxParticles: 18 },
+  cichlid_rock: { maxFish: 14, maxParticles: 14 },
+  calm_zen: { maxFish: 12, maxParticles: 12 },
+  night_reef: { maxFish: 16, maxParticles: 20 },
 };
 
 export const AQU_SLOT = {
@@ -149,6 +153,7 @@ export const AQU_SLOT = {
   fishVigor0: 42,
   feedMode: 58,
   speciesLegend: 59,
+  modelFlags: 60,
 } as const;
 
 const FISH_ATTR_SLOTS = 16;
@@ -507,6 +512,11 @@ export class AquariumSim {
   private warmed = false;
   private subscriptions = 0;
   private rafHooks = 0;
+  private modelSlotFloat = 1;
+
+  setModelSlotFloat(v: number): void {
+    this.modelSlotFloat = v;
+  }
 
   constructor(opts: AquariumOptions = DEFAULT_OPTIONS) {
     this.opts = opts;
@@ -919,6 +929,7 @@ export class AquariumSim {
     let legendMask = 0;
     for (let i = 0; i < Math.min(6, spFlags.length); i++) if (spFlags[i]) legendMask |= 1 << i;
     s0[AQU_SLOT.speciesLegend] = legendMask;
+    s0[AQU_SLOT.modelFlags] = this.modelSlotFloat;
     for (let i = 0; i < FISH_ATTR_SLOTS; i++) {
       s0[AQU_SLOT.fishSpecies0 + i] = 0;
       s0[AQU_SLOT.fishVigor0 + i] = 0;

@@ -34,7 +34,7 @@ describe("deliverPluginPresentTick", () => {
       {},
       defaultVizContract({ presentTick: true }),
     );
-    const port = (sandbox as unknown as { hostPort: MessagePort }).hostPort;
+    const port = sandbox.sandboxHostPort()!;
     const spy = vi.spyOn(port, "postMessage");
     const binding = {
       sandbox,

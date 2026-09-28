@@ -6,9 +6,13 @@ import {
   configActionEdges,
   hostTileSizeFromConfig,
   KoiPondSim,
+  KOI_SLOT,
   parseKoiPondOptions,
   type KoiPondOptions,
 } from "./koi-pond";
+import { PackModelSlotController } from "../../../sdk/pack-model-slot";
+import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
+import { writeKoiHostMeshSlots } from "./host-mesh-drive";
 
 declare const zoto: {
   getConfig?: () => Record<string, string>;
@@ -22,6 +26,7 @@ declare const zoto: {
 let options: KoiPondOptions = parseKoiPondOptions(zoto.getConfig?.());
 let tileSize = hostTileSizeFromConfig(zoto.getConfig?.());
 const sim = new KoiPondSim(options);
+const modelSlot = new PackModelSlotController(zoto.getConfig?.());
 sim.mountTile();
 
 const buf0 = new Float32Array(64);
@@ -38,6 +43,8 @@ function applyLiveConfig(cfg: Record<string, string>): void {
   tileSize = hostTileSizeFromConfig(cfg);
   const parsed = parseKoiPondOptions(cfg);
   options = applyConfigActions(sim, cfg, parsed, edges);
+  syncPackModelHostMeshAssets(modelSlot, cfg);
+  sim.setModelSlotFloat(modelSlot.slotFloat());
 }
 
 zoto.onConfig = (cfg) => {
@@ -53,6 +60,9 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(0, buf0);
   zoto.writeBuffer(1, buf1);
   zoto.writeBuffer(2, buf2);
+  if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
+    writeKoiHostMeshSlots(zoto.writeBuffer, buf0, buf1, frame.t);
+  }
   zoto.writeUniform("uBright", packed.bright);
   zoto.writeUniform("uAudio", frame.audio);
   zoto.writeUniform("uAccent", packed.accent);

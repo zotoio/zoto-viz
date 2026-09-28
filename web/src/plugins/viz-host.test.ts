@@ -41,10 +41,12 @@ describe("viz contract", () => {
       maxBuffers: 99,
       maxBufferFloats: 4,
       maxParticles: 99999,
+      hostMeshSlot: 3,
     });
     expect(c?.maxBuffers).toBe(8);
     expect(c?.maxBufferFloats).toBe(4);
     expect(c?.maxParticles).toBe(8192);
+    expect(c?.hostMeshSlot).toBe(3);
   });
 
   it("attaches the fixed UBO layout and defaults pack contract to v1 when omitted", () => {

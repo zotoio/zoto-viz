@@ -81,9 +81,13 @@ export interface VizHudTick {
   /** Active mosaic / viz tiles (for LIMITED label mate count). */
   activeTiles?: number;
   /** Per-tile budget lines when mosaic shares the wall budget. */
-  tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats }[];
+  tileBudgetLines?: { tileId: string; tile: VizTileBudgetStats | null }[];
   /** When set, show the frame-budget overlay (GPU/CPU ms, p95, scale). */
   renderScale?: number | null;
+  /** rAF present-to-present interval (last + rolling p95), from {@link presentFrameStats}. */
+  present?: { last: number; p95: number };
+  /** Host adaptive render-scale governor (off unless enabled in settings or `?vizGovernor=1`). */
+  governorEnabled?: boolean;
 }
 
 /** v2 contract exposes talker TCP failure ratios and systemd unit pressure — host maps them to a strip badge. */
@@ -222,6 +226,7 @@ export class VizHud {
   private readonly metricLabelEl: HTMLElement;
   private readonly metricValueEl: HTMLElement;
   private readonly skipEl: HTMLElement;
+  private readonly frameEl: HTMLElement;
   private readonly budgetEl: HTMLElement;
   private readonly budgetSepBefore: HTMLElement;
   private readonly degradedEl: HTMLElement;
@@ -280,6 +285,10 @@ export class VizHud {
     this.skipEl.className = "viz-hud-skip";
     this.skipEl.title = "Frame skips when build or present-to-present exceeds 16.7 ms, rolling 1 s";
 
+    this.frameEl = document.createElement("span");
+    this.frameEl.className = "viz-hud-frame";
+    this.frameEl.title = "Real present-to-present frame time (last and rolling p95)";
+
     this.budgetEl = document.createElement("span");
     this.budgetEl.className = "viz-hud-budget";
     this.budgetEl.hidden = true;
@@ -326,6 +335,8 @@ export class VizHud {
       this.packEl,
       sep(),
       metric,
+      sep(),
+      this.frameEl,
       sep(),
       this.skipEl,
       this.budgetSepBefore,
@@ -470,13 +481,16 @@ export class VizHud {
     const rate = skipRatePerSec(this.skipSamples, now);
     if (tileBudget) {
       const nowTick = Math.round(now * 300);
-      const wallTiles = (tileBudgetLines ?? []).map((l) => l.tile);
+      const wallTiles = (tileBudgetLines ?? [])
+        .map((l) => l.tile)
+        .filter((t): t is VizTileBudgetStats => t !== null);
+      const mateTileCount = wallTiles.length > 0 ? wallTiles.length : activeTiles;
       const chrome = wallTiles.length
-        ? wallHudChrome(tileBudget, wallTiles, nowTick, activeTiles)
+        ? wallHudChrome(tileBudget, wallTiles, nowTick, mateTileCount)
         : wallHudChrome(tileBudget, [tileBudget], nowTick, activeTiles);
       const limited =
         chrome.state === "limited" && chrome.limitedLabel
-          ? this.skipLabelLine.limitedLabel(activeTiles, chrome.cadenceK)
+          ? this.skipLabelLine.limitedLabel(mateTileCount, chrome.cadenceK)
           : null;
       const skipText = limited ?? formatSkipRate(rate);
       this.skipLabelLine.writeText(this.skipEl, skipText);
@@ -493,8 +507,19 @@ export class VizHud {
     }
     this.skipEl.classList.toggle("pulse", isSkipPulsing(now, this.pulseUntil));
 
+    const pt = input.present;
+    if (pt) {
+      this.frameEl.textContent = `${pt.last.toFixed(1)} ms · p95 ${pt.p95.toFixed(1)} ms`;
+      this.frameEl.dataset.frameMs = pt.last.toFixed(2);
+      this.frameEl.dataset.frameP95 = pt.p95.toFixed(2);
+    }
+
     if (this.budgetVisible) {
-      const model = vizBudgetOverlayFromStats(stats, input.renderScale ?? null);
+      const model = vizBudgetOverlayFromStats(
+        stats,
+        input.renderScale ?? null,
+        input.governorEnabled ?? false,
+      );
       this.budgetEl.textContent = formatVizBudgetOverlay(model);
     }
 
@@ -514,6 +539,7 @@ export class VizHud {
 
     const lines = tileBudgetLines ?? [];
     for (const { tileId, tile } of lines) {
+      if (!tile) continue;
       const row = this.mosaicTileLines.get(tileId);
       if (!row) continue;
       const nowTick = Math.round(now * 300);

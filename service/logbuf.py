@@ -22,8 +22,10 @@ def reset_for_tests() -> None:
 
 def record(text: str) -> dict[str, Any]:
     global _seq
+    from . import nasa_api
+
     _seq += 1
-    row = {"seq": _seq, "t": time.time(), "text": str(text)[:MAX_TEXT]}
+    row = {"seq": _seq, "t": time.time(), "text": nasa_api.redact_string(str(text))[:MAX_TEXT]}
     _lines.append(row)
     return row
 

@@ -298,6 +298,7 @@ export class Mosaic {
   get heroMode(): string { return this.heroId; }
   get focusedId(): string { return this.focused; }
   get mainMode(): string { return this.mainId; }
+  get mainTileId(): string { return this.mainId; }
   get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
   get layout(): MosaicLayoutPatch {
     return {
@@ -1150,8 +1151,13 @@ export class Mosaic {
     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
     if (a.mosaicUniqueSkies === true || planned) {
       const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
-      const next = planned ?? assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
-      this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
+      const rolled = assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
+      const next = pinPluginTileSkies(
+        planned ?? rolled,
+        ids,
+        Object.fromEntries(this.tileSkies),
+      );
+      this.tileSkies = new Map(Object.entries(next));
       this.applyRecoveredSkies();
       return;
     }
@@ -1161,14 +1167,22 @@ export class Mosaic {
     }
     const stale = this.tileSkies.size > 0 && this.tileIds.some((id) => !this.tileSkies.has(id));
     if (this.tileSkies.size && stale) {
-      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
-      this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
+      const next = pinPluginTileSkies(
+        assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
+        this.tileIds,
+        Object.fromEntries(this.tileSkies),
+      );
+      this.tileSkies = new Map(Object.entries(next));
       this.applyRecoveredSkies();
       return;
     }
     if (!this.tileSkies.size && shouldUniqueMosaicSkies()) {
-      const next = assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
-      this.tileSkies = new Map(Object.entries(next) as [string, BackdropKind][]);
+      const next = pinPluginTileSkies(
+        assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
+        this.tileIds,
+        Object.fromEntries(this.tileSkies),
+      );
+      this.tileSkies = new Map(Object.entries(next));
     }
     this.applyRecoveredSkies();
   }

@@ -13,6 +13,16 @@ const testName = perf ? "fat-LAN live soak" : "fat-LAN count gate";
 const result = spawnSync(
   "pnpm",
   ["exec", "vitest", "run", "src/plugins/dogfood.test.ts", "-t", testName],
-  { cwd: webRoot, stdio: "inherit", env: { ...process.env, FORCE_COLOR: "1" } },
+  { cwd: webRoot, encoding: "utf8", env: { ...process.env, FORCE_COLOR: "1" } },
 );
+const combined = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+if (combined) {
+  process.stdout.write(combined);
+}
+const passedMatch = combined.match(/(\d+) passed/);
+const passed = passedMatch ? Number(passedMatch[1]) : 0;
+if (!passedMatch || passed === 0) {
+  console.error(`dogfood: expected at least one passing test matching "${testName}", saw ${passed}`);
+  process.exit(1);
+}
 process.exit(result.status ?? 1);

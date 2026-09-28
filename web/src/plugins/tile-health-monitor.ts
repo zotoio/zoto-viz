@@ -216,10 +216,7 @@ export class TileHealthMonitor {
 
     const sc = this.deps.sceneFor(tileId);
     if (!sc) return;
-    if (sc.gpuContextLost) {
-      this.runTileCheck(tileId, now, sc, this.sampler.scratchBuffer);
-      return;
-    }
+    if (sc.gpuContextLost) return;
     const patch = this.sampleScene(sc, now);
     if (!patch) return; // async GL read pending — not empty
     this.runTileCheck(tileId, now, sc, patch);

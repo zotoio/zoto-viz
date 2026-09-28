@@ -55,6 +55,7 @@ import {
 } from "./plugin-manifest-blocked";
 import { PluginSandbox, pluginModuleUrl } from "./host";
 import type { PluginIdleConfig } from "./fixtures/golden-state";
+import type { RenderScaleConfig } from "./render-scale-governor";
 import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
@@ -219,6 +220,8 @@ export interface PluginView {
   /** visualisation.yml idle golden mock — graph / arcade when capture is quiet. */
   idle?: PluginIdleConfig;
   viz?: VizPluginContract;
+  /** Host adaptive render-scale governor steps (from plugin.yml render.scale). */
+  renderScale?: RenderScaleConfig;
   /** Host-clamped visualisation.yml workBudget (#45). */
   workBudget?: import("../../../plugins/sdk/manifest-work-budget").ManifestWorkBudget;
   /** Set when the host clamped workBudget below what the pack asked for. */
@@ -243,6 +246,9 @@ export interface PluginView {
   /** Declared binary assets (meshes/textures) hashed into consent (`assets_sha256`). */
   assets?: { id: string; path: string; sha256?: string; bytes?: number; triangles?: number }[];
   assets_sha256?: string;
+  /** Catalog manifest kind; data-source trees are remix feeds, not view menu rows. */
+  pluginKind?: "data-source";
+  dataSource?: import("../remix/remix-types").DataSourceBlock;
 }
 
 const LOOK_ANIM_KEYS = [

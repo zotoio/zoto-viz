@@ -1,0 +1,26 @@
+{
+  "demo": true,
+  "label": "DEMO SNAPSHOT — not live Hacker News",
+  "vizFrame": {
+    "headlines": [
+      {
+        "id": "hn:demo:1",
+        "label": "HN",
+        "text": "DEMO: Show HN: Example visualization pack",
+        "kind": "demo"
+      },
+      {
+        "id": "hn:demo:2",
+        "label": "HN",
+        "text": "DEMO: Ask HN: What are you building this week?",
+        "kind": "demo"
+      },
+      {
+        "id": "hn:demo:3",
+        "label": "HN",
+        "text": "DEMO: Launch HN: Zoto viz monitor",
+        "kind": "demo"
+      }
+    ]
+  }
+}

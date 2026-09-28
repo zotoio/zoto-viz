@@ -36,6 +36,7 @@ import {
   tileInternalResScale,
   unpackFishMeta,
 } from "./aquarium";
+import { AQU_HOST_MESH_ASSETS, AQU_SPECIES_TO_ASSET } from "./host-mesh-drive";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { probePluginSkyCompile, wrapPluginSky } from "./sky-test-harness";
 
@@ -144,7 +145,7 @@ describe("aquarium shipped pack", () => {
     const keys = [...VIS.matchAll(/- key: (\w+)/g)].map((m) => m[1]!);
     const a = JSON.stringify(parseAquariumOptions({}));
     for (const key of keys) {
-      if (key === "preset" || key.startsWith("sp_") || key === "randomise" || key === "undoRandom" || key === "resetSettings") continue;
+      if (key === "preset" || key.startsWith("sp_") || key === "randomise" || key === "undoRandom" || key === "resetSettings" || key === "modelGlb") continue;
       const block = VIS.split(`key: ${key}`)[1]!.split("- key:")[0]!;
       const def = block.match(/default: (\S+)/)?.[1] ?? "";
       const flip = /true|false/.test(def)
@@ -427,5 +428,13 @@ describe("aquarium shipped pack", () => {
     expect(sim.slot1).toBe(s1);
     expect(sim.slot2).toBe(s2);
     expect(sim.particleScratch).toBe(scratch);
+  });
+
+  it("host mesh maps cory and cichlid to appended GLB indices 8 and 9", () => {
+    expect(AQU_HOST_MESH_ASSETS[8]).toBe("fish-cory");
+    expect(AQU_HOST_MESH_ASSETS[9]).toBe("fish-cichlid");
+    expect(AQU_SPECIES_TO_ASSET).toEqual([7, 2, 6, 8, 5, 9]);
+    expect(PLUGIN).toContain("fish-cory.glb");
+    expect(PLUGIN).toContain("fish-cichlid.glb");
   });
 });

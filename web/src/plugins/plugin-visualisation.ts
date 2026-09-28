@@ -4,10 +4,12 @@ import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, parseGraphSpace } from "../graph/fabric";
 import { parseGraphLayout, parseGraphLinks } from "../graph/graph-layouts";
 import { parsePluginIdle } from "./fixtures/golden-state";
+import { parseRenderScaleConfig } from "./render-scale-governor";
 import { parseVizContract } from "./viz-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { parseInstances } from "./instances";
 import { ingestCatalogWorkBudget } from "./work-budget-policy";
+import { parseDataSourceBlock } from "../remix/data-source-catalog";
 import type {
   PluginEngine,
   PluginLayout,
@@ -41,6 +43,7 @@ const LOOK_KEYS = [
 export type CatalogRow = {
   id?: unknown;
   name?: unknown;
+  kind?: unknown;
   version?: unknown;
   hint?: unknown;
   engine?: unknown;
@@ -71,11 +74,14 @@ export type CatalogRow = {
   hud?: unknown;
   sections?: unknown;
   workBudget?: unknown;
+  render?: unknown;
   has_frontend?: unknown;
   has_sky?: unknown;
   has_sky_shader?: unknown;
   has_backend?: unknown;
   has_datasource?: unknown;
+  pluginKind?: unknown;
+  dataSource?: unknown;
   shader_sha256?: unknown;
   sky_available?: unknown;
   sky_error?: unknown;
@@ -455,6 +461,9 @@ export function toPluginView(raw: unknown): PluginView {
   }
   const vizContract = parseVizContract(row.viz);
   if (vizContract) spec.viz = vizContract;
+  const render = asRecord(row.render);
+  const renderScale = parseRenderScaleConfig(render?.scale);
+  if (renderScale) spec.renderScale = renderScale;
   const typesafeContract = parseTypeSafeContract(row.typesafe);
   if (typesafeContract) spec.typesafe = typesafeContract;
   if (asString(row.hash)) spec.hash = asString(row.hash);
@@ -470,6 +479,11 @@ export function toPluginView(raw: unknown): PluginView {
   if (asString(row.sha256)) spec.sha256 = asString(row.sha256);
   if (typeof row.sky_available === "boolean") spec.sky_available = row.sky_available;
   if (asString(row.sky_error)) spec.sky_error = asString(row.sky_error);
+  if (row.pluginKind === "data-source" || row.kind === "data-source") {
+    spec.pluginKind = "data-source";
+    const ds = parseDataSourceBlock(row.dataSource);
+    if (ds) spec.dataSource = ds;
+  }
   return spec;
 }
 
@@ -506,6 +520,7 @@ export function partitionCatalog(specs: PluginView[]): {
   const overlays = new Map<string, PluginView>();
   const index = new Map<string, number>();
   for (const spec of specs) {
+    if (spec.pluginKind === "data-source") continue;
     const i = index.get(spec.id);
     if (i === undefined) {
       index.set(spec.id, rows.length);

@@ -12,7 +12,7 @@ describe("plugin SDK present dispatch", () => {
       {},
       defaultVizContract({ presentTick: true }),
     );
-    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const port = box.sandboxHostPort()!;
     const spy = vi.spyOn(port, "postMessage");
     box.deliverPresentTick(55, "plugin:demo", 2.5);
     const present = spy.mock.calls.find((c) => (c[0] as { type?: string }).type === "present")?.[0] as {

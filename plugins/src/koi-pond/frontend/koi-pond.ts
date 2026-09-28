@@ -70,8 +70,8 @@ export interface KoiPondOptions {
 export const FAIL_MURK_THRESHOLD = 0.35;
 export const PACKET_FRAME_CAP = 8;
 export const MAX_KOI = 16;
-export const MAX_PADS = 12;
-export const MAX_PARTICLES = 24;
+export const MAX_PADS = 14;
+export const MAX_PARTICLES = 36;
 export const PARTICLE_STRIDE = 4;
 export const FIXED_SIM_DT = 1 / 60;
 export const MAX_SIM_CATCHUP_STEPS = 3;
@@ -90,13 +90,16 @@ export const KOI_PATTERNS: KoiPatternId[] = [
 ];
 
 export const KOI_WORK_BUDGET = {
-  raymarchSteps: 64,
+  raymarchSteps: 68,
   koiInstances: MAX_KOI,
   pads: MAX_PADS,
   particles: MAX_PARTICLES,
   drawCalls: 1,
   glContextsOn4x4Wall: 0,
 } as const;
+
+/** Set when plugin.yml lists `assets:` for host mesh lane (see sdk/pack-host-mesh.ts). */
+export const PACK_HOST_MESH_ASSET: { id: string; path: string } | undefined = undefined;
 
 export const PRESET_IDS: KoiPresetId[] = [
   "zen_garden",
@@ -107,11 +110,11 @@ export const PRESET_IDS: KoiPresetId[] = [
 ];
 
 export const PRESET_CAPS: Record<KoiPresetId, { maxKoi: number; maxParticles: number }> = {
-  zen_garden: { maxKoi: 10, maxParticles: 14 },
-  moonlit_lotus: { maxKoi: 14, maxParticles: 18 },
-  sunrise_feed: { maxKoi: 16, maxParticles: 20 },
-  storm_ripples: { maxKoi: 12, maxParticles: 16 },
-  festival_lanterns: { maxKoi: 14, maxParticles: 22 },
+  zen_garden: { maxKoi: 12, maxParticles: 20 },
+  moonlit_lotus: { maxKoi: 14, maxParticles: 24 },
+  sunrise_feed: { maxKoi: 16, maxParticles: 28 },
+  storm_ripples: { maxKoi: 14, maxParticles: 22 },
+  festival_lanterns: { maxKoi: 16, maxParticles: 32 },
 };
 
 export const CONFIG_KEYS = [
@@ -150,12 +153,13 @@ export const CONFIG_KEYS = [
   "pat_ogon",
   "pat_tancho",
   "pat_asagi",
+  "modelGlb",
 ] as const;
 
 export const QUALITY_CAPS: Record<QualityLevel, { maxKoi: number; maxParticles: number; steps: number }> = {
-  low: { maxKoi: 8, maxParticles: 10, steps: 40 },
-  medium: { maxKoi: 12, maxParticles: 16, steps: 56 },
-  high: { maxKoi: 16, maxParticles: 24, steps: 64 },
+  low: { maxKoi: 10, maxParticles: 16, steps: 44 },
+  medium: { maxKoi: 14, maxParticles: 26, steps: 58 },
+  high: { maxKoi: 16, maxParticles: 36, steps: 68 },
 };
 
 export const KOI_SLOT = {
@@ -197,6 +201,7 @@ export const KOI_SLOT = {
   koiMeta0: 35,
   /** After 16 koi meta floats (35..50); must not overlap koiMeta14+ */
   pondTraffic: 51,
+  modelFlags: 52,
 } as const;
 
 const KOI_META_SLOTS = 16;
@@ -630,6 +635,11 @@ export class KoiPondSim {
   private readonly slotOccupied = new Set<string>();
   private readonly activeParticleScratch: ParticleBody[] = [];
   private readonly particlePickScratch: boolean[] = [];
+  private modelSlotFloat = 1;
+
+  setModelSlotFloat(v: number): void {
+    this.modelSlotFloat = v;
+  }
 
   constructor(opts: KoiPondOptions = DEFAULT_OPTIONS) {
     this.opts = opts;
@@ -1104,6 +1114,7 @@ export class KoiPondSim {
     const traffic = clamp01(totalRate / POND_TRAFFIC_SCALE);
     s0[KOI_SLOT.metricPeak] = traffic;
     s0[KOI_SLOT.pondTraffic] = traffic;
+    s0[KOI_SLOT.modelFlags] = this.modelSlotFloat;
     const q = QUALITY_CAPS[o.quality];
     s0[KOI_SLOT.raymarchSteps] = q.steps;
     s0[KOI_SLOT.tileResScale] = tileInternalResScale(canvasW, canvasH);
@@ -1145,7 +1156,7 @@ export class KoiPondSim {
       const k = this.koi.get(slot.id);
       if (!k) continue;
       s1[fi++] = k.x;
-      s1[fi++] = 0;
+      s1[fi++] = Math.sin(this.camPhase * 5.5 + k.hash * 9) * (0.12 + k.vigor * 0.08);
       s1[fi++] = k.z;
       s1[fi++] = k.yaw;
     }

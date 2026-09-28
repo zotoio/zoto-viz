@@ -180,3 +180,8 @@ config:
     label: anemone/coral
     type: boolean
     default: true
+  - key: modelGlb
+    label: designer model (GLB)
+    type: text
+    default: "host"
+    hint: host = ZotoDesigner GLB lane; procedural = shader-only; or assets/foo.glb path.

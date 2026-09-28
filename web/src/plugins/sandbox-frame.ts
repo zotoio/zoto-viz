@@ -3,26 +3,26 @@
  * External module only — no inline script, so the app CSP never needs 'unsafe-inline'.
  */
 
-/** Matches contract v2 `VizPresentTick` (plugins/sdk/viz-contract.ts on host-change). */
-export type VizPresentTick = {
-  frameMs: number;
-  tileId: string;
-  pluginClock?: number;
-};
-
-type HostBoot = {
-  source: "zoto-viz-host";
-  type: "boot";
-  caps: string[];
-  config: Record<string, string>;
-  viz?: unknown;
-  moduleSrc: string;
-  bootNonce: string;
-  parentOrigin: string;
-};
+import {
+  HOST_SOURCE,
+  PLUGIN_SOURCE,
+  type HostBootPayload,
+  type HostSandboxPortMsg,
+  type VizPresentTick,
+  isHostBootChannel,
+} from "./sandbox-channel";
+import type { VizUniformValue } from "./viz-host";
+import {
+  emptyVizWriteBatch,
+  splitVizWriteBatch,
+  validateVizWriteBatch,
+  type VizWriteBatchPayload,
+} from "./viz-write-batch";
 
 const PACK_ASSETS = "/pack-assets/";
 const TOKEN_REDACT = "<sandbox-token>";
+
+export type { VizPresentTick };
 
 export function packAssetTokenFromLocation(href = location.href): string {
   try {
@@ -48,7 +48,7 @@ export function bootNonceFromLocation(href = location.href): string {
 }
 
 function moduleSrcForSandbox(src: string, token: string): string {
-  if (src.startsWith("blob:")) return src;
+  if (src.startsWith("blob:") || src.startsWith("data:")) return src;
   try {
     const u = new URL(src, location.href);
     if (u.protocol !== "http:" && u.protocol !== "https:") return src;
@@ -78,13 +78,6 @@ export function redactSandboxAssetPath(text: string, token?: string): string {
     .join(`/pack-assets/${TOKEN_REDACT}/`);
 }
 
-type HostMsg =
-  | { source: "zoto-viz-host"; type: "init"; caps: string[]; config: Record<string, string>; viz?: unknown }
-  | { source: "zoto-viz-host"; type: "tick"; nodes: { id: string; rate: number; role: string }[] }
-  | { source: "zoto-viz-host"; type: "frame"; frame: unknown }
-  | { source: "zoto-viz-host"; type: "present"; tick: VizPresentTick }
-  | { source: "zoto-viz-host"; type: "config"; config: Record<string, string> };
-
 export type SandboxZoto = {
   onTick: ((nodes: { id: string; rate: number; role: string }[]) => void) | null;
   onConfig: ((config: Record<string, string>) => void) | null;
@@ -98,65 +91,210 @@ export type SandboxZoto = {
   getConfig(): Record<string, string>;
 };
 
-let allowed = new Set<string>();
-let bootDone = false;
-let postTargetOrigin = "";
-
-function send(type: string, payload?: unknown): void {
-  const origin = postTargetOrigin || location.origin;
-  parent.postMessage({ source: "zoto-viz-plugin", type, payload }, origin);
+declare global {
+  interface Window {
+    __zotoConfig?: Record<string, string>;
+    __zotoViz?: unknown;
+    __zotoContractVersion?: number;
+  }
+  var zoto: SandboxZoto;
 }
 
-const zoto: SandboxZoto = {
+export type SandboxFrameRuntime = {
+  allowed: Set<string>;
+  bootDone: boolean;
+  pluginPort: MessagePort | null;
+  postTargetOrigin: string;
+  /** Sandbox document URL (iframe `src`); used for `#zoto-boot` when not on `location`. */
+  locationHref: string;
+};
+
+export function createSandboxFrameRuntime(): SandboxFrameRuntime {
+  return {
+    allowed: new Set(),
+    bootDone: false,
+    pluginPort: null,
+    postTargetOrigin: "",
+    locationHref: typeof location !== "undefined" ? location.href : "",
+  };
+}
+
+let sandboxPortPostCount = 0;
+const sandboxPortPostsLog: unknown[] = [];
+
+export function sandboxPortPostCountForTests(): number {
+  return sandboxPortPostCount;
+}
+
+export function sandboxPortPostsLogForTests(): readonly unknown[] {
+  return sandboxPortPostsLog;
+}
+
+export function resetSandboxPortPostCountForTests(): void {
+  sandboxPortPostCount = 0;
+  sandboxPortPostsLog.length = 0;
+}
+
+function postPluginPort(
+  runtime: SandboxFrameRuntime,
+  msg: { source: typeof PLUGIN_SOURCE; type: string; bootNonce?: string; payload?: unknown },
+): void {
+  if (!runtime.pluginPort) return;
+  sandboxPortPostCount += 1;
+  sandboxPortPostsLog.push(msg);
+  runtime.pluginPort.postMessage(msg);
+}
+
+let sandboxWindowPostCount = 0;
+
+export function sandboxWindowPostCountForTests(): number {
+  return sandboxWindowPostCount;
+}
+
+export function resetSandboxWindowPostCountForTests(): void {
+  sandboxWindowPostCount = 0;
+}
+
+function postPluginWindow(
+  runtime: SandboxFrameRuntime,
+  msg: { source: typeof PLUGIN_SOURCE; type: string; payload?: unknown },
+  transfer?: Transferable[],
+): void {
+  sandboxWindowPostCount += 1;
+  const origin = runtime.postTargetOrigin || "*";
+  parent.postMessage(msg, origin, transfer);
+}
+
+function send(runtime: SandboxFrameRuntime, type: string, payload?: unknown): void {
+  if (runtime.pluginPort) {
+    postPluginPort(runtime, { source: PLUGIN_SOURCE, type, payload });
+    return;
+  }
+  postPluginWindow(runtime, { source: PLUGIN_SOURCE, type, payload });
+}
+
+/** Opaque-origin sandbox iframes report `location.origin` as the string "null"; never use that as targetOrigin. */
+export function postFrameReadyToParent(): void {
+  parent.postMessage({ source: PLUGIN_SOURCE, type: "frame-ready" }, "*");
+}
+
+let runtime = createSandboxFrameRuntime();
+let allowed = runtime.allowed;
+
+/** @internal test hook — same zoto object assigned to the sandbox iframe global. */
+export const sandboxZotoApi: SandboxZoto = {
   onTick: null,
   onConfig: null,
   onFrame: null,
   onPresent: null,
-  setStyle(s) { if (allowed.has("graph.style")) send("setStyle", s); },
-  setNodeColor(id, hex) { if (allowed.has("graph.style")) send("setNodeColor", { id, hex }); },
+  setStyle(s) { if (allowed.has("graph.style")) send(runtime, "setStyle", s); },
+  setNodeColor(id, hex) { if (allowed.has("graph.style")) send(runtime, "setNodeColor", { id, hex }); },
   writeBuffer(_slot, _data) { /* viz.write patched after boot */ },
   writeUniform(_name, _value) { /* viz.write patched after boot */ },
   writeParticles(_data, _stride) { /* viz.write patched after boot */ },
-  getConfig() { return (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig || {}; },
+  getConfig() { return window.__zotoConfig || {}; },
 };
 
-(globalThis as unknown as { zoto: SandboxZoto }).zoto = zoto;
+const zoto = sandboxZotoApi;
+globalThis.zoto = zoto;
+
+export function setSandboxFrameLocationHref(href: string): void {
+  runtime.locationHref = href;
+}
+
+/** @internal e2e tests — shared runtime used by the sandbox-frame bundle. */
+export function sandboxFrameRuntimeForTests(): SandboxFrameRuntime {
+  return runtime;
+}
+
+export function resetSandboxFrameRuntimeForTests(): void {
+  runtime = createSandboxFrameRuntime();
+  allowed = runtime.allowed;
+  vizBatch = null;
+  vizBatchDepth = 0;
+  vizBatchAllocateFreshForTests = false;
+  vizBatchBeginIdentity = null;
+  resetSandboxPortPostCountForTests();
+  resetSandboxWindowPostCountForTests();
+  clearVizBatchInPlace(vizBatchShell);
+  zoto.onTick = null;
+  zoto.onConfig = null;
+  zoto.onFrame = null;
+  zoto.onPresent = null;
+}
 
 function vizAllowed(cap: string): boolean {
   return allowed.has(cap);
 }
 
-type VizWriteBatchPayload = {
-  buffers: { slot: number; data: number[] }[];
-  uniforms: { name: string; value: unknown }[];
-  particles?: { data: number[]; stride?: number };
-};
-
+const vizBatchShell: VizWriteBatchPayload = { buffers: [], uniforms: [] };
 let vizBatch: VizWriteBatchPayload | null = null;
 let vizBatchDepth = 0;
 
-function flushVizBatch(): void {
-  if (!vizBatch) return;
-  const batch = vizBatch;
-  vizBatch = null;
+function clearVizBatchInPlace(batch: VizWriteBatchPayload): void {
+  batch.buffers.length = 0;
+  batch.uniforms.length = 0;
+  delete batch.particles;
+}
+
+/** @internal count tests — backing object reused across display frames. */
+export function vizWriteBatchBackingForTests(): VizWriteBatchPayload {
+  return vizBatchShell;
+}
+
+let vizBatchAllocateFreshForTests = false;
+let vizBatchBeginIdentity: VizWriteBatchPayload | null = null;
+
+/** @internal revert-proof — allocate a new batch object each display frame. */
+export function setVizBatchAllocateFreshForTests(on: boolean): void {
+  vizBatchAllocateFreshForTests = on;
+}
+
+/** @internal count tests — batch object at the start of each display frame. */
+export function vizBatchBeginIdentityForTests(): VizWriteBatchPayload | null {
+  return vizBatchBeginIdentity;
+}
+
+function emitVizWriteChunk(batch: VizWriteBatchPayload): void {
   const messages = batch.buffers.length + batch.uniforms.length + (batch.particles ? 1 : 0);
   if (messages === 0) return;
   if (messages === 1 && batch.buffers.length === 1 && !batch.uniforms.length && !batch.particles) {
     const b = batch.buffers[0]!;
-    send("writeBuffer", { slot: b.slot, data: b.data });
+    send(runtime, "writeBuffer", { slot: b.slot, data: b.data });
     return;
   }
   if (messages === 1 && batch.uniforms.length === 1 && !batch.buffers.length && !batch.particles) {
     const u = batch.uniforms[0]!;
-    send("writeUniform", { name: u.name, value: u.value });
+    send(runtime, "writeUniform", { name: u.name, value: u.value });
     return;
   }
-  send("writeBatch", batch);
+  if (messages === 1 && batch.particles && !batch.buffers.length && !batch.uniforms.length) {
+    const p = batch.particles;
+    send(runtime, "writeParticles", { data: p.data, stride: p.stride });
+    return;
+  }
+  send(runtime, "writeBatch", batch);
+}
+
+function flushVizBatchContents(): void {
+  if (!vizBatch) return;
+  const chunks = splitVizWriteBatch(vizBatch);
+  if (vizBatchDepth > 0) clearVizBatchInPlace(vizBatch);
+  else vizBatch = null;
+  for (const chunk of chunks) emitVizWriteChunk(chunk);
+}
+
+function flushVizBatch(): void {
+  flushVizBatchContents();
 }
 
 function beginVizBatch(): void {
   vizBatchDepth++;
-  if (vizBatchDepth === 1) vizBatch = { buffers: [], uniforms: [] };
+  if (vizBatchDepth === 1) {
+    vizBatch = vizBatchAllocateFreshForTests ? emptyVizWriteBatch() : vizBatchShell;
+    clearVizBatchInPlace(vizBatch);
+    vizBatchBeginIdentity = vizBatch;
+  }
 }
 
 function endVizBatch(): void {
@@ -172,34 +310,58 @@ function patchVizWriters(): void {
     if (!vizAllowed("viz.write")) return;
     const arr = Array.isArray(data) ? data : Array.from(data);
     if (vizBatchDepth > 0 && vizBatch) {
-      vizBatch.buffers.push({ slot, data: arr });
+      const entry = { slot, data: arr };
+      vizBatch.buffers.push(entry);
+      if (validateVizWriteBatch(vizBatch) !== null) {
+        vizBatch.buffers.pop();
+        flushVizBatchContents();
+        vizBatch.buffers.push(entry);
+      }
       return;
     }
-    send("writeBuffer", { slot, data: arr });
+    send(runtime, "writeBuffer", { slot, data: arr });
   };
   zoto.writeUniform = (name, value) => {
     if (!vizAllowed("viz.write")) return;
     if (vizBatchDepth > 0 && vizBatch) {
-      vizBatch.uniforms.push({ name, value });
+      const entry = { name, value: value as VizUniformValue };
+      vizBatch.uniforms.push(entry);
+      if (validateVizWriteBatch(vizBatch) !== null) {
+        vizBatch.uniforms.pop();
+        flushVizBatchContents();
+        vizBatch.uniforms.push(entry);
+      }
       return;
     }
-    send("writeUniform", { name, value });
+    send(runtime, "writeUniform", { name, value });
   };
   zoto.writeParticles = (data, stride) => {
     if (!vizAllowed("viz.write")) return;
     const arr = Array.isArray(data) ? data : Array.from(data);
     if (vizBatchDepth > 0 && vizBatch) {
-      vizBatch.particles = { data: arr, stride: stride || 4 };
+      const entry = { data: arr, stride: stride || 4 };
+      vizBatch.particles = entry;
+      if (validateVizWriteBatch(vizBatch) !== null) {
+        delete vizBatch.particles;
+        flushVizBatchContents();
+        vizBatch.particles = entry;
+      }
       return;
     }
-    send("writeParticles", { data: arr, stride: stride || 4 });
+    send(runtime, "writeParticles", { data: arr, stride: stride || 4 });
   };
+}
+
+/** @internal tests — wire viz.write batching without a full port boot. */
+export function applySandboxCapsForTests(caps: string[]): void {
+  applyInit({ caps });
 }
 
 function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: unknown; contractVersion?: number }): void {
   allowed = new Set(d.caps ?? []);
-  (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
-  (window as unknown as { __zotoViz?: unknown }).__zotoViz = d.viz || null;
+  runtime.allowed = allowed;
+  window.__zotoConfig = d.config || {};
+  window.__zotoViz = d.viz || null;
   const viz = d.viz as { contract?: number } | null | undefined;
   const version = typeof d.contractVersion === "number"
     ? d.contractVersion
@@ -207,23 +369,20 @@ function applyInit(d: { caps?: string[]; config?: Record<string, string>; viz?: 
       ? viz.contract
       : undefined;
   if (typeof version === "number") {
-    (window as unknown as { __zotoContractVersion?: number }).__zotoContractVersion = version;
+    window.__zotoContractVersion = version;
   }
   patchVizWriters();
 }
 
-/** Host → sandbox dispatch (unit-tested; hot path passes message tick by reference). */
+/** Host → sandbox dispatch on the MessageChannel (unit-tested; hot path passes tick by reference). */
 export function handleSandboxHostMessage(
-  d: HostMsg | HostBoot | undefined,
+  d: HostSandboxPortMsg | undefined,
   caps: Set<string>,
   api: SandboxZoto,
-  opts?: { source?: MessageEventSource | null; bootNonce?: string; bootDone?: boolean },
 ): void {
-  if (!d || d.source !== "zoto-viz-host") return;
-  if (d.type === "boot") return;
-  if (opts?.source && opts.source !== window.parent) return;
+  if (!d || d.source !== HOST_SOURCE) return;
   if (d.type === "config") {
-    (window as unknown as { __zotoConfig?: Record<string, string> }).__zotoConfig = d.config || {};
+    window.__zotoConfig = d.config || {};
     api.onConfig?.(d.config || {});
     return;
   }
@@ -248,48 +407,81 @@ export function handleSandboxHostMessage(
   }
 }
 
-export function handleSandboxBootMessage(
-  ev: MessageEvent,
-  opts: { bootDone: boolean; bootNonce: string },
-): { bootDone: boolean; postTargetOrigin: string } {
-  const d = ev.data as HostBoot | undefined;
-  if (opts.bootDone) return { bootDone: true, postTargetOrigin: postTargetOrigin };
-  if (!d || d.source !== "zoto-viz-host" || d.type !== "boot") {
-    return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
-  }
-  if (ev.source !== window.parent) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
-  if (!d.bootNonce || d.bootNonce !== opts.bootNonce) {
-    return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
-  }
-  if (!d.parentOrigin) return { bootDone: opts.bootDone, postTargetOrigin: postTargetOrigin };
+async function handleBootOnPort(d: HostBootPayload, rt: SandboxFrameRuntime): Promise<void> {
   applyInit(d);
-  return { bootDone: true, postTargetOrigin: d.parentOrigin };
-}
-
-window.addEventListener("message", (ev) => {
-  handleSandboxHostMessage(ev.data as HostMsg | HostBoot | undefined, allowed, zoto, {
-    source: ev.source,
-    bootDone,
-    bootNonce: bootNonceFromLocation(),
-  });
-});
-
-window.addEventListener("message", async (ev) => {
-  const nonce = bootNonceFromLocation();
-  const out = handleSandboxBootMessage(ev, { bootDone, bootNonce: nonce });
-  bootDone = out.bootDone;
-  postTargetOrigin = out.postTargetOrigin;
-  if (!bootDone) return;
-  const d = ev.data as HostBoot;
-  if (d.type !== "boot") return;
+  rt.postTargetOrigin = d.parentOrigin;
   const token = packAssetTokenFromLocation();
   try {
     await import(/* @vite-ignore */ moduleSrcForSandbox(d.moduleSrc, token));
-    send("ready");
+    postPluginPort(rt, { source: PLUGIN_SOURCE, type: "ready", bootNonce: d.bootNonce });
   } catch (e) {
     const raw = String(e);
-    send("log", redactSandboxAssetPath(raw, token));
+    postPluginPort(rt, {
+      source: PLUGIN_SOURCE,
+      type: "log",
+      payload: redactSandboxAssetPath(raw, token),
+    });
   }
-});
+}
 
-send("frame-ready");
+export function attachSandboxHostPort(port: MessagePort, rt: SandboxFrameRuntime, api: SandboxZoto = zoto): void {
+  rt.pluginPort = port;
+  rt.bootDone = false;
+  port.start();
+  port.onmessage = (ev) => {
+    const d = ev.data as HostBootPayload | HostSandboxPortMsg | undefined;
+    if (!d || d.source !== HOST_SOURCE) return;
+    if (d.type === "boot") {
+      if (rt.bootDone) return;
+      if (!d.bootNonce || d.bootNonce !== bootNonceFromLocation(rt.locationHref)) return;
+      rt.bootDone = true;
+      void handleBootOnPort(d, rt);
+      return;
+    }
+    handleSandboxHostMessage(d as HostSandboxPortMsg, rt.allowed, api);
+  };
+}
+
+export function handleSandboxBootChannelMessage(
+  ev: MessageEvent,
+  rt: SandboxFrameRuntime,
+  api: SandboxZoto = zoto,
+): void {
+  if (!isHostBootChannel(ev.data)) return;
+  if (ev.source !== window.parent) return;
+  const nonce = bootNonceFromLocation(rt.locationHref);
+  if (!nonce || ev.data.bootNonce !== nonce) return;
+  const port = ev.ports[0];
+  if (!port) return;
+  attachSandboxHostPort(port, rt, api);
+}
+
+/** Listen for `boot-channel` on a jsdom iframe `contentWindow` (e2e tests). */
+export function installSandboxBootChannelListener(win: Window, parentWin: Window): void {
+  win.addEventListener("message", (ev) => {
+    if (ev.source !== parentWin) return;
+    handleSandboxBootChannelMessage(ev, runtime, zoto);
+  });
+}
+
+function isSandboxBootstrapDocument(): boolean {
+  try {
+    const path = new URL(location.href).pathname;
+    return path.endsWith("/plugin-sandbox.html") || path.endsWith("plugin-sandbox.html")
+      || location.hash.includes("zoto-boot=");
+  } catch {
+    return false;
+  }
+}
+
+/** Entry when this module is the sole script in plugin-sandbox.html. */
+export function activateSandboxFrameBundle(): void {
+  window.addEventListener("message", (ev) => {
+    handleSandboxBootChannelMessage(ev, runtime, zoto);
+  });
+  postFrameReadyToParent();
+}
+
+if (typeof window !== "undefined" && isSandboxBootstrapDocument()) {
+  activateSandboxFrameBundle();
+}

@@ -25,7 +25,7 @@ async function harnessPage(): Promise<Page> {
 describe("media ask UX (chromium)", () => {
   beforeAll(async () => {
     server = await createServer({
-      configFile: path.join(webRoot, "vite.config.ts"),
+      configFile: path.join(webRoot, "vite.config.mjs"),
       server: { port: 0, strictPort: false },
     });
     await server.listen();

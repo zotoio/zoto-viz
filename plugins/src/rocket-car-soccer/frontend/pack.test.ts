@@ -96,7 +96,7 @@ const FORM_DEFAULTS: Record<string, string> = {
   aggress: "55",
   gameSpeed: "100",
   trail: "soft",
-  camera: "director",
+  camera: "ballcam",
   minCutSec: "4",
   explode: "shockwave",
   replay: "true",
@@ -141,15 +141,16 @@ describe("rocket-car-soccer pack", () => {
 
   it("declares viz contract in plugin.yml and caps/mapping in pack source", () => {
     expect(PLUGIN).toMatch(/config\.read/);
-    expect(PLUGIN).toMatch(/maxBuffers:\s*3/);
+    expect(PLUGIN).toMatch(/maxBuffers:\s*8/);
+    expect(PLUGIN).toMatch(/hostMeshSlot:\s*3/);
     expect(PLUGIN).toMatch(/maxBufferFloats:\s*64/);
     expect(PLUGIN).not.toMatch(/liveMapping:/);
     expect(RCS_CAPS).toEqual({
-      maxCars: 6,
-      maxTeam: 3,
-      maxParticles: 48,
-      maxTrailSegments: 24,
-      maxPhysicsSubsteps: 4,
+      maxCars: 8,
+      maxTeam: 4,
+      maxParticles: 96,
+      maxTrailSegments: 48,
+      maxPhysicsSubsteps: 6,
     });
     for (const row of RCS_LIVE_MAPPING) {
       expect(row.field.length).toBeGreaterThan(0);
@@ -274,6 +275,14 @@ describe("rocket-car-soccer pack", () => {
       expect(b.trailSegments, id).toBeLessThanOrEqual(RCS_CAPS.maxTrailSegments);
       expect(b.physicsSubsteps, id).toBeLessThanOrEqual(RCS_CAPS.maxPhysicsSubsteps);
     }
+  });
+
+  it("ball camera uses exponential smoothing (no car-0 snap)", () => {
+    const match = readFileSync(join(PACK_DIR, "frontend/match.ts"), "utf8");
+    expect(match).toContain("camSmooth");
+    expect(match).toContain("dampScalar");
+    expect(match).toContain("followBall");
+    expect(match).not.toMatch(/yaw = h\.yaw \+ Math\.PI/);
   });
 
   it("smoke-packs non-zero drive data (never an empty board)", () => {
@@ -641,7 +650,7 @@ describe("rocket-car-soccer pack", () => {
     seed: "42",
     teamSize: "3",
     theme: "day",
-    camera: "director",
+    camera: "ballcam",
     aggress: "55",
     gameSpeed: "100",
     trail: "soft",

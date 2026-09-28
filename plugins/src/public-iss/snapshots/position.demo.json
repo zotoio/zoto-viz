@@ -1,0 +1,20 @@
+{
+  "demo": true,
+  "label": "DEMO SNAPSHOT — not live ISS telemetry",
+  "vizFrame": {
+    "headlines": [
+      {
+        "id": "iss:demo",
+        "label": "ISS",
+        "text": "DEMO position lat 51.5074 lon -0.1278 altitude ~420 km",
+        "kind": "demo"
+      }
+    ],
+    "talkers": [
+      { "id": "iss-track", "rate": 27600, "role": "internet" }
+    ],
+    "packets": [
+      { "proto": "TCP", "size": 256, "field": 0.42 }
+    ]
+  }
+}

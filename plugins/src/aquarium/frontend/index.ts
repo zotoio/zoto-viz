@@ -8,6 +8,9 @@ import {
   parseAquariumOptions,
   type AquariumOptions,
 } from "./aquarium";
+import { PackModelSlotController } from "../../../sdk/pack-model-slot";
+import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
+import { writeAquariumHostMeshSlots } from "./host-mesh-drive";
 
 type AquariumFrame = Pick<
   VizDataFrame,
@@ -28,6 +31,7 @@ let hostConfigCache: Record<string, string> = {};
 
 let options: AquariumOptions = parseAquariumOptions();
 const sim = new AquariumSim(options);
+const modelSlot = new PackModelSlotController(hostConfigCache);
 sim.mountTile();
 
 const buf0 = new Float32Array(64);
@@ -55,6 +59,8 @@ function applyLiveConfig(cfg: Record<string, string>): void {
   actionLatch.undo = next.undo;
   const parsed = parseAquariumOptions(cfg);
   options = applyConfigActions(sim, cfg, parsed, edges);
+  syncPackModelHostMeshAssets(modelSlot, cfg);
+  sim.setModelSlotFloat(modelSlot.slotFloat());
 }
 
 zoto.onConfig = (cfg) => {
@@ -74,6 +80,9 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(0, buf0);
   zoto.writeBuffer(1, buf1);
   zoto.writeBuffer(2, buf2);
+  if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
+    writeAquariumHostMeshSlots(zoto.writeBuffer, buf0, buf1, frame.t);
+  }
   if (packed.particleCount > 0) {
     zoto.writeParticles(
       packed.particles.subarray(0, packed.particleCount * 4),

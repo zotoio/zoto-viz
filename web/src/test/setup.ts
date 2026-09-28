@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, vi } from "vitest";
+import { installSandboxTestHandshake, resetSandboxTestHarnessState } from "../plugins/sandbox-test-harness";
 
 /** Default loopback API stubs so unit tests never need a monitor on :3000 / :7020. */
 function stubApiResponse(url: string): Response | null {
@@ -36,6 +37,8 @@ function stubApiResponse(url: string): Response | null {
 const realFetch = globalThis.fetch.bind(globalThis);
 
 beforeEach(() => {
+  resetSandboxTestHarnessState();
+  installSandboxTestHandshake();
   vi.stubGlobal("fetch", ((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === "string"
       ? input

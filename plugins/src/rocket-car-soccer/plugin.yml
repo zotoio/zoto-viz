@@ -1,7 +1,7 @@
 id: rocket-car-soccer
 name: Rocket Car Soccer
 version: 2
-hint: Self-playing boost-car arena on the plugin sky. Live talker rates boost cars; packet spikes and unit failures drive goals and Zoto Fail alerts. Caps 6 cars / 48 particles / 24 trail segments / 4 physics substeps (see pack RCS_CAPS).
+hint: Self-playing boost-car arena on the plugin sky. Live talker rates boost cars; packet spikes and unit failures drive goals and Zoto Fail alerts. Caps 8 cars / 96 particles / 48 trail segments / 6 physics substeps (see pack RCS_CAPS).
 description: Procedural stadium, AI 2v2–3v3, fixed-timestep physics, pooled particles/trails, replay from recorded state (no re-sim). Idle host fixture keeps a lively demo match labelled demo on the HUD. Live mapping documented in frontend/live.ts (RCS_LIVE_MAPPING).
 capabilities:
   - viz.read
@@ -12,12 +12,30 @@ datasource:
     - talkers
     - packets
     - sys
+assets:
+  - id: rocket-car
+    path: assets/rocket-car.glb
+    sha256: 0b9565a8e3c7f9ba633599c0a8255fb5dabacae0cd4e953994015ffc81fff424
+    bytes: 288556
+    triangles: 28284
+  - id: rocket-car-blue
+    path: assets/rocket-car-blue.glb
+    sha256: 0f8e5a464ff52efc070b96d8d7b42ae0631a5bfa54deac95af4278c86d5baf55
+    bytes: 282868
+    triangles: 28284
+  - id: soccer-ball
+    path: assets/soccer-ball.glb
+    sha256: 5f3ce4b8616e3540f6ec7095166a1220a92bdb4f4761755371a8f3f94678e815
+    bytes: 161676
+    triangles: 3968
 viz:
   graphWalk: false
   idle:
     fixture: host
-  maxBuffers: 3
+  maxBuffers: 8
   maxBufferFloats: 64
+  hostMeshSlot: 3
+  hostMeshSlotCount: 4
   maxParticles: 192
   uniforms:
     - uTime

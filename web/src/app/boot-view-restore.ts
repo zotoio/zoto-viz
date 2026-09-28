@@ -1,3 +1,5 @@
+import { remapSavedViewId } from "../core/saved-view-id";
+
 /** One committed view id after reload — session snapshot wins over bare localStorage. */
 export function resolveRestoredViewMode(args: {
   sessionMode?: string;
@@ -5,10 +7,10 @@ export function resolveRestoredViewMode(args: {
   fallback: string;
 }): string {
   const fromSession = args.sessionMode?.trim();
-  if (fromSession) return fromSession;
+  if (fromSession) return remapSavedViewId(fromSession);
   const fromLocal = args.localMode?.trim();
-  if (fromLocal) return fromLocal;
-  return args.fallback;
+  if (fromLocal) return remapSavedViewId(fromLocal);
+  return remapSavedViewId(args.fallback);
 }
 
 /**
@@ -21,15 +23,19 @@ export function reconcileMosaicTilesWithMode(
   mode: string,
   focusHint?: string | null,
 ): string[] {
-  if (!tiles.length || !mode.trim()) return tiles;
-  if (tiles.includes(mode)) return tiles;
+  const mappedMode = remapSavedViewId(mode);
+  const mappedTiles = tiles.map((t) => remapSavedViewId(t));
+  if (!mappedTiles.length || !mappedMode.trim()) return mappedTiles;
+  if (mappedTiles.includes(mappedMode)) return mappedTiles;
   const focus =
-    focusHint && tiles.includes(focusHint) ? focusHint : tiles[0] ?? null;
-  if (!focus) return tiles;
-  const idx = tiles.indexOf(focus);
-  if (idx < 0) return tiles;
-  const next = tiles.slice();
-  next[idx] = mode;
+    focusHint && mappedTiles.includes(remapSavedViewId(focusHint))
+      ? remapSavedViewId(focusHint)
+      : mappedTiles[0] ?? null;
+  if (!focus) return mappedTiles;
+  const idx = mappedTiles.indexOf(focus);
+  if (idx < 0) return mappedTiles;
+  const next = mappedTiles.slice();
+  next[idx] = mappedMode;
   return next;
 }
 

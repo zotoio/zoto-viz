@@ -1,11 +1,17 @@
 import { packNavigationStopped } from "./plugin-copy";
 import type { MosaicNoticeHost } from "./plugin-pack-feed";
+import { tileDisplayName, type PluginView } from "./plugin";
 
 const stoppedTiles = new Set<string>();
+const deferredNavNoticeTimer = new Map<string, ReturnType<typeof setTimeout>>();
 const navigationNoticeRetired = new Set<string>();
 const removeHandlers = new Map<string, () => void>();
 
 export function resetPackAssetNavigationState(): void {
+  for (const timer of deferredNavNoticeTimer.values()) {
+    clearTimeout(timer);
+  }
+  deferredNavNoticeTimer.clear();
   stoppedTiles.clear();
   navigationNoticeRetired.clear();
   removeHandlers.clear();
@@ -21,6 +27,11 @@ export function clearPackNavigationStopped(tileId: string): void {
   if (stoppedTiles.has(tileId)) navigationNoticeRetired.add(tileId);
   stoppedTiles.delete(tileId);
   removeHandlers.delete(tileId);
+  const timer = deferredNavNoticeTimer.get(tileId);
+  if (timer) {
+    clearTimeout(timer);
+    deferredNavNoticeTimer.delete(tileId);
+  }
 }
 
 /** User-initiated pack load (view pick, re-add after stop, page reload). */
@@ -67,14 +78,25 @@ export function packNavigationStoppedNotice(packName: string): string {
   return packNavigationStopped(packName);
 }
 
+function packViewForTile(tileId: string, packName: string): PluginView {
+  const id = tileId.startsWith("plugin:") ? tileId.slice("plugin:".length) : tileId;
+  return { id, name: packName, version: 1 };
+}
+
 export function applyPackNavigationStoppedNotice(
   mosaic: MosaicNoticeHost | null | undefined,
   tileId: string,
   packName: string,
 ): void {
   if (!mosaic || !packNavigationStoppedForTile(tileId)) return;
-  mosaic.setPaneNotice(tileId, packNavigationStoppedNotice(packName), "fail", {
-    showRemoveFromWall: true,
-    onRemoveFromWall: () => { invokePackNavigationRemove(tileId); },
-  });
+  if (deferredNavNoticeTimer.has(tileId)) return;
+  const timer = setTimeout(() => {
+    deferredNavNoticeTimer.delete(tileId);
+    const label = tileDisplayName(packViewForTile(tileId, packName));
+    mosaic.setPaneNotice(tileId, packNavigationStoppedNotice(label), "fail", {
+      showRemoveFromWall: true,
+      onRemoveFromWall: () => { invokePackNavigationRemove(tileId); },
+    });
+  }, 0);
+  deferredNavNoticeTimer.set(tileId, timer);
 }

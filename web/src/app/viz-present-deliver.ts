@@ -6,7 +6,7 @@ import type { NetScene } from "../graph/scene";
 import { noteHostDirect } from "../plugins/viz-drive";
 import type { PluginView } from "../plugins/plugin";
 import { illustratedSourceBind, parseSourceBind } from "../core/sources";
-import type { VizFrameBudget, VizBufferWriter } from "../plugins/viz-host";
+import type { VizDataFrame, VizFrameBudget, VizBufferWriter } from "../plugins/viz-host";
 import { syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
 import {
   mirrorMosaicTileCadenceFromPrimary,
@@ -24,8 +24,11 @@ import {
 } from "./main-viz-tile-lines";
 import { STEREO_BINS } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { normalizeVizDemoPackId, type VizHud } from "../ui/viz-hud";
+import { vizHudGovernorTickFields, type RenderScaleGovernorHost } from "./render-scale-governor-wiring";
 import type { ViewMode } from "../core/modes";
 import { notePackSandboxFrame, packPerfEnabled } from "../core/pack-host-perf";
+import { presentFrameStats } from "../core/present-clock";
+import { remixDeliverFrame, remixPairingActive, remixVisualPackId } from "../remix/remix-runtime";
 
 export interface VizPresentDeliverHost {
   modeById: (viewId: string) => ViewMode;
@@ -48,15 +51,22 @@ export interface VizPresentDeliverHost {
   getVizFrameClockMs: () => MonoMs;
   setVizFrameClockMs: (ms: MonoMs) => void;
   syncVizBudgetTileScope: () => void;
+  renderScaleGovernor: RenderScaleGovernorHost;
+  /** Production tile-health: viz pack wrote into the sandbox this frame. */
+  noteVizWrite?: () => void;
+  /** Production tile-health: a viz frame was delivered to the sandbox. */
+  onVizFrameDelivered?: (frame: VizDataFrame) => void;
 }
 
 /** One viz budget deliver + sandbox frame (display cadence, not websocket cadence). */
 export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHost): void {
   const mode = host.modeById(host.modeSelValue());
-  const active = (mode.pluginId && host.pluginSpecs.find((p) => p.id === mode.pluginId))
+  const remixPackId = remixVisualPackId();
+  const active = (remixPackId && host.pluginSpecs.find((p) => p.id === remixPackId))
+    || (mode.pluginId && host.pluginSpecs.find((p) => p.id === mode.pluginId))
     || host.pluginSpecs.find((p) => p.id === host.tsWatchId())
     || null;
-  const packId = normalizeVizDemoPackId(active?.id ?? mode.pluginId);
+  const packId = normalizeVizDemoPackId(remixPackId ?? active?.id ?? mode.pluginId);
   const mosaicDemoPacks = host.mosaic?.on
     && host.mosaic.tileIds.some((id) => normalizeVizDemoPackId(host.modeById(id).pluginId));
   const packPanelId = host.mosaic?.on
@@ -86,8 +96,13 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
     prevClockMs,
     state: shown,
     audio,
-    buildFrame: (s, pt, a) => mainVizBuildFrame(s, pt, a, idle, bind, active?.viz?.contract ?? 2),
+    buildFrame: (s, pt, a) => {
+      const remixFrame = remixDeliverFrame(pt, a);
+      if (remixFrame) return remixFrame;
+      return mainVizBuildFrame(s, pt, a, idle, bind, active?.viz?.contract ?? 2);
+    },
     onFrame: (f) => {
+      host.onVizFrameDelivered?.(f);
       if (packId === "stereo-gram") f.spectrum = host.scene.heardSpectrum(STEREO_BINS).spectrum;
       const coalesceMosaic = !!(host.mosaic?.on && mosaicDemoPacks);
       if (!coalesceMosaic && packId) {
@@ -131,15 +146,19 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
   const budgetTileId = host.mosaic?.on ? (host.mosaic.mainMode || host.mosaic.tileIds[0] || "main") : "main";
   const tileLinesRaw = host.mosaic?.on ? mosaicTileBudgetLines(host.mosaic.tileIds) : undefined;
   if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
+  const govFields = vizHudGovernorTickFields(host.renderScaleGovernor, host.vizBudget.stats);
   host.vizHud.tick({
     packId,
     packName: active?.name ?? packId ?? "",
-    stats: host.vizBudget.stats,
+    stats: govFields.stats,
     frame: host.vizBudget.lastBuilt,
     state: shown,
     now: vizClockMs(),
+    present: presentFrameStats(),
     tileBudget: vizTileBudgetRegistry.getTile(budgetTileId),
     activeTiles,
     tileBudgetLines: tileLinesRaw,
+    renderScale: govFields.renderScale,
+    governorEnabled: govFields.governorEnabled,
   });
 }

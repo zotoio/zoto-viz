@@ -1,0 +1,14 @@
+kind: data-source
+id: public-apod
+name: NASA APOD
+version: 1
+description: NASA Astronomy Picture of the Day metadata — demo snapshot only until live fetch lands.
+dataSource:
+  sources:
+    - id: metadata
+      hosts:
+        - api.nasa.gov
+      refreshSec: 86400
+      apiKeyRequired: true
+      outputShape: headlines
+      demoSnapshot: snapshots/apod.demo.json

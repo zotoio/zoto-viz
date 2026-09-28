@@ -9,7 +9,11 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PNG } from "pngjs";
 import { chromium } from "playwright";
-import { fetchPackAssetToken, packAssetUrl } from "./pack-asset-smoke-util.mjs";
+import {
+  fetchPackAssetToken,
+  packAssetNullOriginGetHeaders,
+  packAssetUrl,
+} from "./pack-asset-smoke-util.mjs";
 
 const base = (process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/").replace(/\/?$/, "/");
 const WAIT_MS = 120_000;
@@ -88,23 +92,23 @@ async function waitForDraw(page, label) {
 }
 
 async function main() {
-  const sandboxTok = await fetchPackAssetToken(base, "_sandbox");
-  const multiTok = await fetchPackAssetToken(base, "sandbox-fixture-multi");
+  const { token: sandboxTok, csrf: sandboxCsrf } = await fetchPackAssetToken(base, "_sandbox");
+  const { token: multiTok, csrf: multiCsrf } = await fetchPackAssetToken(base, "sandbox-fixture-multi");
   const jsName = sandboxJsName();
   let bootstrapJsStatus = null;
   let moduleJsStatus = null;
   if (jsName) {
     const boot = await fetch(packAssetUrl(base, sandboxTok, "_sandbox", jsName), {
-      headers: { Origin: "null", Host: "127.0.0.1:7020" },
+      headers: packAssetNullOriginGetHeaders(sandboxCsrf),
     });
     bootstrapJsStatus = boot.status;
   }
 
   const multiMod = await fetch(packAssetUrl(base, multiTok, "sandbox-fixture-multi", "module.js"), {
-    headers: { Origin: "null", Host: "127.0.0.1:7020" },
+    headers: packAssetNullOriginGetHeaders(multiCsrf),
   });
   const multiHelper = await fetch(packAssetUrl(base, multiTok, "sandbox-fixture-multi", "helper.js"), {
-    headers: { Origin: "null", Host: "127.0.0.1:7020" },
+    headers: packAssetNullOriginGetHeaders(multiCsrf),
   });
   assert.equal(multiMod.status, 200, `fixture module.js ${multiMod.status}`);
   assert.equal(multiHelper.status, 200, `fixture helper.js ${multiHelper.status}`);

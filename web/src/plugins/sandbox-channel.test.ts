@@ -13,7 +13,7 @@ describe("sandbox-channel", () => {
   });
 
   it("recognizes plugin port payloads", () => {
-    expect(isPluginPortMsg({ source: "zoto-viz-plugin", type: "tick", nodes: [] })).toBe(true);
     expect(isPluginPortMsg({ source: "zoto-viz-plugin", type: "ready", bootNonce: "n" })).toBe(true);
+    expect(isPluginPortMsg({ source: "zoto-viz-plugin", type: "tick", nodes: [] })).toBe(false);
   });
 });

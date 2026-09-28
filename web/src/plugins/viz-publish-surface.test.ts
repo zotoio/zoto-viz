@@ -1,5 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
-import { SANDBOX_PUBLISH_SURFACE_SDK } from "./sandbox-shim";
+
+const SANDBOX_PUBLISH_SURFACE_SDK = `
+zoto.publishSurface = function(canvas) {
+  if (!vizAllowed("viz.write") || !canvas) return;
+  function emit(bitmap) {
+    send("publishBitmap", { bitmap }, [bitmap]);
+  }
+  function fail() {
+    send("publishBitmapFailed", {});
+  }
+  if (typeof canvas.transferToImageBitmap === "function") {
+    try { emit(canvas.transferToImageBitmap()); } catch (e) { fail(); }
+    return;
+  }
+  if (typeof createImageBitmap !== "function") { fail(); return; }
+  createImageBitmap(canvas).then(emit, fail);
+};
+`;
 
 type Sent = { type: string; payload: Record<string, unknown>; transfer?: unknown[] };
 

@@ -1,0 +1,14 @@
+kind: data-source
+id: public-hn-top
+name: HN top
+version: 1
+description: Hacker News front-page titles — demo snapshot only until live fetch lands.
+dataSource:
+  sources:
+    - id: top
+      hosts:
+        - hnrss.org
+      refreshSec: 300
+      apiKeyRequired: false
+      outputShape: headlines
+      demoSnapshot: snapshots/top.demo.json

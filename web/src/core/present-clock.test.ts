@@ -13,7 +13,7 @@ describe("present-clock", () => {
   it("tracks rolling p95 present intervals", () => {
     for (let i = 0; i < 20; i++) markPresent(1000 + i * 16.7);
     const { p95, last } = presentFrameStats();
-    expect(last).toBeGreaterThan(16);
-    expect(p95).toBeGreaterThan(16);
+    expect(last).toBeCloseTo(16.7, 6);
+    expect(p95).toBeCloseTo(16.7, 6);
   });
 });

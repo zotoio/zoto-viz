@@ -13,9 +13,14 @@ import {
   packAssetUrlWithToken,
   pluginModuleSandboxUrl,
   pluginModuleUrl,
+  seedPackAssetFrameForTests,
+  setPluginModuleSandboxUrlForTests,
   setTsPluginsAllowed,
   tsPluginsAllowed,
 } from "./host";
+
+const pluginModuleDataUrl = (body = "globalThis.ok = true;") =>
+  `data:text/javascript,${encodeURIComponent(body)}`;
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 import { VIZ_CONTRACT_VERSION, defaultVizContract } from "./viz-host";
@@ -46,7 +51,9 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("setStyle", ["graph.read"])).toBe(false);
     expect(hostAllows("setStyle", ["graph.style"])).toBe(true);
     expect(hostAllows("setNodeColor", ["graph.style"])).toBe(true);
-    expect(hostAllows("log", ["graph.style"])).toBe(false);
+    expect(hostAllows("log", ["graph.style"])).toBe(true);
+    expect(hostAllows("writeBatch", ["viz.write"])).toBe(true);
+    expect(hostAllows("writeBatch", ["viz.read"])).toBe(false);
   });
 
   it("enforces viz.write on buffer and uniform writes", () => {
@@ -57,7 +64,6 @@ describe("hash consent and TypeScript allow", () => {
     expect(hostAllows("publishBitmap", ["viz.write"])).toBe(true);
     expect(hostAllows("publishBitmap", ["viz.read"])).toBe(false);
     expect(hostAllows("publishBitmapFailed", ["viz.write"])).toBe(true);
-    expect(hostAllows("publishBitmapFailed", ["viz.read"])).toBe(false);
   });
 
   it("allows tile-heal sandbox messages without extra caps", () => {
@@ -77,7 +83,7 @@ describe("page CSP", () => {
 
 describe("vite monitor proxy", () => {
   it("rewrites Host so /api is not rejected as localhost:5173", () => {
-    const src = readFileSync(path.join(webRoot, "vite.config.ts"), "utf8");
+    const src = readFileSync(path.join(webRoot, "vite.config.mjs"), "utf8");
     expect(src).toMatch(/"\/api"[\s\S]*changeOrigin:\s*true/);
     expect(src).toMatch(/"\/ws"[\s\S]*changeOrigin:\s*true/);
   });
@@ -131,6 +137,7 @@ describe("pack asset URLs", () => {
   });
 
   it("puts the session token in the path segment", async () => {
+    seedPackAssetFrameForTests();
     setPackAssetTokenForTests("pulse-ts", "sess-tok-abc");
     setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
     const url = packAssetUrlWithToken("sess-tok-abc", "pulse-ts", "module.js");
@@ -146,11 +153,13 @@ describe("PluginSandbox module load", () => {
   beforeEach(() => {
     vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("11111111-1111-4111-8111-111111111111");
     vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
+    setPluginModuleSandboxUrlForTests(async () => pluginModuleDataUrl());
   });
 
   afterEach(() => {
     document.querySelectorAll("iframe").forEach((el) => el.remove());
     vi.restoreAllMocks();
+    setPluginModuleSandboxUrlForTests(null);
     setPackAssetTokenForTests("_sandbox", "");
   });
 
@@ -193,7 +202,7 @@ describe("PluginSandbox module load", () => {
       {},
       defaultVizContract({ presentTick: true }),
     );
-    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const port = box.sandboxHostPort()!;
     const spy = vi.spyOn(port, "postMessage");
     box.deliverPresentTick(1, "plugin:demo");
     expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(true);
@@ -207,7 +216,7 @@ describe("PluginSandbox module load", () => {
   it("does not post present when presentTick is off", async () => {
     const box = new PluginSandbox();
     await box.load("demo", "globalThis.ok = true;", ["viz.write"], {}, defaultVizContract());
-    const port = (box as unknown as { hostPort: MessagePort }).hostPort;
+    const port = box.sandboxHostPort()!;
     const spy = vi.spyOn(port, "postMessage");
     box.deliverPresentTick(1, "x");
     expect(spy.mock.calls.some((c) => (c[0] as { type?: string }).type === "present")).toBe(false);

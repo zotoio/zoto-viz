@@ -40,6 +40,7 @@ import {
   validateStackedChildProofScope,
   validatePythonModule,
   validateRowMeta,
+  assertVitestTargetNotStaticallySkipped,
   validateTestFileRel,
   vitestTestNamePattern,
   assertReplayPullHeadTreeKey,
@@ -166,6 +167,11 @@ function listRows(mainRoot, prNumber, onlySlug, sourceRef = "HEAD") {
   const prefix = `revert-proofs/${prNumber}`;
   const ls = gitAt(mainRoot, ["ls-tree", "--name-only", sourceRef, `${prefix}/`]);
   if (ls.status !== 0 || !ls.stdout.trim()) {
+    if (sourceRef !== "HEAD") {
+      throw new Error(
+        `revert-proof replay: no record — missing proof tree ${prefix} at ${sourceRef}`,
+      );
+    }
     throw new Error(`revert-proofs directory not found at ${sourceRef}: ${prefix}`);
   }
   const patches = ls.stdout
@@ -483,6 +489,9 @@ async function runVitest(mainRoot, wtRoot, meta, slug, phase, timeoutMs, artifac
       REVERT_PROOF_ROOT: wtRoot,
       REVERT_PROOF_VITEST_BASE_CONFIG: baseConfigAbs,
       REVERT_PROOF_PYTHON: venvPython(mainRoot),
+      NODE_OPTIONS: [process.env.NODE_OPTIONS, "--experimental-strip-types"]
+        .filter(Boolean)
+        .join(" "),
     },
     timeoutMs,
   });
@@ -714,6 +723,9 @@ async function runRow(mainRoot, wtRoot, row, artifactsDir) {
   validateRowMeta(meta, slug);
   validateRowProofPr(meta, slug, row.prNumber);
   validateTestFileRel(meta.testFile, wtRoot);
+  if (meta.runner === "vitest") {
+    assertVitestTargetNotStaticallySkipped(wtRoot, meta, slug);
+  }
   validatePatchStructure(patchText, slug);
   validatePatchRevertProofsScope(patchText, slug, row.prNumber);
   validatePatchTouchesOnlyProduction(patchText, slug);

@@ -38,7 +38,7 @@ function activeSelector(page: Page): Promise<string> {
 describe("media ask focus (chromium)", () => {
   beforeAll(async () => {
     server = await createServer({
-      configFile: path.join(webRoot, "vite.config.ts"),
+      configFile: path.join(webRoot, "vite.config.mjs"),
       server: { port: 0, strictPort: false },
     });
     await server.listen();

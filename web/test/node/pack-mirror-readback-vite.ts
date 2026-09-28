@@ -14,7 +14,7 @@ export async function acquirePackMirrorReadbackVite(): Promise<ViteDevServer> {
   if (shared) return shared;
   if (!starting) {
     starting = createServer({
-      configFile: path.join(webRoot, "vite.config.ts"),
+      configFile: path.join(webRoot, "vite.config.mjs"),
       server: { middlewareMode: true, hmr: false, watch: null },
     }).then((vite) => {
       shared = vite;

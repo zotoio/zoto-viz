@@ -25,6 +25,17 @@
       "type": "integer",
       "minimum": 1
     },
+    "kind": {
+      "type": "string",
+      "enum": [
+        "data-source"
+      ],
+      "description": "When data-source, the tree ships public feed metadata and bundled demo snapshots only (no view menu row). Omit for normal view plugins."
+    },
+    "dataSource": {
+      "$ref": "#/$defs/dataSourcePlugin",
+      "description": "Required when kind is data-source: declared hosts, refresh policy, and bundled demo snapshots per source."
+    },
     "description": {
       "type": "string",
       "maxLength": 2000
@@ -869,6 +880,72 @@
         }
       }
     },
+    "dataSourcePlugin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sources"
+      ],
+      "properties": {
+        "sources": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 16,
+          "items": {
+            "$ref": "#/$defs/dataSourceEntry"
+          }
+        }
+      }
+    },
+    "dataSourceEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "hosts",
+        "refreshSec",
+        "apiKeyRequired",
+        "outputShape",
+        "demoSnapshot"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,31}$"
+        },
+        "hosts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 253
+          }
+        },
+        "refreshSec": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 86400
+        },
+        "apiKeyRequired": {
+          "type": "boolean"
+        },
+        "outputShape": {
+          "type": "string",
+          "enum": [
+            "vizFrame",
+            "headlines",
+            "json"
+          ]
+        },
+        "demoSnapshot": {
+          "type": "string",
+          "pattern": "^(?!.*\\.\\.)[A-Za-z0-9._/-]+\\.json$",
+          "maxLength": 120
+        }
+      }
+    },
     "vizPacketSample": {
       "type": "object",
       "additionalProperties": false,
@@ -1124,6 +1201,20 @@
           "type": "boolean",
           "default": false,
           "description": "When true with viz.write, the host delivers rAF present timestamps to the sandbox so the pack can advance simulation on its own clock."
+        },
+        "hostMeshSlot": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 7,
+          "default": 2,
+          "description": "Sandbox buffer slot carrying column-major 4×4 matrices for host-owned GLTF instancing (see HostMeshLane). Sim data may use other slots when this is not 2."
+        },
+        "hostMeshSlotCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 6,
+          "default": 1,
+          "description": "Number of consecutive buffer slots starting at hostMeshSlot used for host mesh draw batches."
         },
         "uniforms": {
           "type": "array",

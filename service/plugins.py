@@ -27,6 +27,7 @@ from typing import Any
 
 from . import hooks
 from . import paths
+from .shipped_pack_slug import COLLISION_MSG, find_shipped_pack_slug_collisions
 from . import plugin_backend as pb
 from . import plugin_sky as psky
 from . import plugin_instances as pins
@@ -49,6 +50,7 @@ from .pack_runtime import (
     zip_block_cache_key,
 )
 from .plugin_install import InstallV2BlockedError
+from . import data_source_plugin as dsp
 import yaml
 from aiohttp import web
 
@@ -161,9 +163,18 @@ def optional_part_flags(
     has_frontend = has_frontend_part(doc, home, tuple(partset), nested=nested)
     entry = resolve_frontend_entry(doc, home) if nested or has_frontend else DEFAULT_FRONTEND_ENTRY
     caps = [c for c in (doc.get("capabilities") or []) if c in ALLOWED_CAPS]
+    inspect = nested and home.is_dir()
+    if dsp.plugin_kind(doc) == "data-source":
+        return {
+            "has_frontend": False,
+            "capabilities": caps,
+            "has_sky": "sky" in partset or (inspect and (home / "sky").is_dir()),
+            "has_sky_shader": inspect and (home / "sky" / "fragment.glsl").is_file(),
+            "has_backend": False,
+            "has_datasource": False,
+        }
     fe = dict(doc["frontend"]) if isinstance(doc.get("frontend"), dict) else {}
     fe["entry"] = entry
-    inspect = nested and home.is_dir()
     return {
         "has_frontend": has_frontend,
         "frontend": fe,
@@ -1019,6 +1030,11 @@ def _option_rows(doc: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def _check_semantics(doc: dict[str, Any], *, include_settings: bool = False) -> None:
+    dsp.check_data_source_semantics(doc)
+    if dsp.plugin_kind(doc) == "data-source":
+        if include_settings:
+            _check_plugin_settings(doc)
+        return
     keys: set[str] = set()
     for opt in _option_rows(doc):
         key = _take_key(keys, opt)
@@ -1196,6 +1212,13 @@ def validate_plugin_home(home: Path) -> dict[str, Any]:
     yml = home / "plugin.yml"
     doc = load_file(yml)
     rel = str(yml)
+    if dsp.plugin_kind(doc) == "data-source":
+        dsp.validate_data_source_tree(home, doc)
+    wall_layout = home / "wall-layout.yml"
+    if wall_layout.is_file():
+        from .pack_wall_layout import validate_wall_layout_file
+
+        validate_wall_layout_file(wall_layout)
     merged = _attach_visualisation({**doc}, home, errors, rel, blocked=None)
     if errors:
         raise ValueError(errors[0]["error"])
@@ -1492,6 +1515,17 @@ def _scan_uncached(root: Path | None = None) -> dict[str, Any]:
     """Build the catalog from src trees plus non-colliding zips, or a YAML tree."""
     global _scan_builds
     _scan_builds += 1
+    src_probe = paths.plugin_src_dir()
+    if root is None and src_probe.is_dir():
+        pairs = find_shipped_pack_slug_collisions(src_probe)
+        if pairs:
+            a, b = pairs[0]
+            return _scan_payload(
+                src_probe,
+                [],
+                [{"file": str(src_probe), "error": COLLISION_MSG.format(a=a, b=b)}],
+                [],
+            )
     layout = _catalog_layout(root)
     if layout is not None:
         src_dir, zips_dir, runtime_dir = layout
@@ -1673,6 +1707,8 @@ def _catalog_row(
     )
     if row is None:
         return None
+    if dsp.plugin_kind(row) == "data-source":
+        row["pluginKind"] = "data-source"
     if isinstance(doc.get("assets"), list) and doc["assets"]:
         row["assets"] = doc["assets"]
         assets_digest = _assets_manifest_sha256(home, doc)
@@ -1868,6 +1904,27 @@ def api_list(_: web.Request) -> web.Response:
         return web.json_response({"error": str(e)}, status=500)
 
 
+def api_data_source_demo(req: web.Request) -> web.Response:
+    """Serve a bundled demo snapshot for a data-source plugin (YAML-only; no live fetch)."""
+    pid = req.match_info["id"]
+    source_id = str(req.match_info.get("source_id") or "").strip()
+    row = _plugin_row(pid)
+    if not row:
+        return web.json_response({"error": "unknown plugin"}, status=404)
+    if dsp.plugin_kind(row) != "data-source":
+        return web.json_response({"error": "not a data-source plugin"}, status=404)
+    home = _plugin_pack_home(row)
+    if not home:
+        return web.json_response({"error": "plugin home missing"}, status=404)
+    try:
+        payload = dsp.read_demo_snapshot(home, row, source_id)
+    except KeyError:
+        return web.json_response({"error": "unknown source"}, status=404)
+    except (ValueError, OSError) as e:
+        return web.json_response({"error": str(e)}, status=400)
+    return web.json_response(payload, headers={"Cache-Control": "no-store"})
+
+
 async def api_list_http(request: web.Request) -> web.Response:
     return await asyncio.to_thread(api_list, request)
 
@@ -1882,6 +1939,10 @@ async def api_sky_http(request: web.Request) -> web.StreamResponse:
 
 async def api_asset_http(request: web.Request) -> web.StreamResponse:
     return await asyncio.to_thread(api_asset, request)
+
+
+async def api_data_source_demo_http(request: web.Request) -> web.Response:
+    return await asyncio.to_thread(api_data_source_demo, request)
 
 
 def python_allow(spec: dict[str, Any]) -> bool:

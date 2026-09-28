@@ -83,7 +83,7 @@ export function readRevertProofHeadRecord(gitRoot, prNumber, ref, runGit = defau
   const rel = revertProofHeadRecordRel(prNumber);
   const r = runGit(gitRoot, ["show", `${ref}:${rel}`]);
   if (r.status !== 0) {
-    throw new Error(`revert-proof head record missing at ${ref}:${rel}`);
+    throw new Error(`revert-proof replay: no record at ${ref}:${rel}`);
   }
   let parsed;
   try {
@@ -195,6 +195,84 @@ export function validateTestFileRel(testFile, wtRoot) {
   const root = path.resolve(wtRoot);
   if (!abs.startsWith(`${root}${path.sep}`) && abs !== root) {
     throw new Error(`testFile escapes repo: ${testFile}`);
+  }
+}
+
+function escapeRegex(text) {
+  return String(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function quotedTitlePattern(title) {
+  return `['"\`]${escapeRegex(title)}['"\`]`;
+}
+
+/**
+ * Static scan for vitest skip forms on a revert-proof target (fail before baseline).
+ * @param {string} source
+ * @param {string} testName vitest full name (`describe > leaf`)
+ * @returns {string | null} short label when a forbidden skip form matches
+ */
+export function vitestTargetForbiddenSkipReason(source, testName) {
+  const parts = String(testName)
+    .split(/\s+>\s+/)
+    .map((p) => p.trim())
+    .filter(Boolean);
+  if (!parts.length) {
+    return "invalid testName";
+  }
+  const leaf = parts[parts.length - 1];
+  const leafQ = quotedTitlePattern(leaf);
+  const text = String(source).replace(/\r\n/g, "\n");
+
+  if (new RegExp(`\\bit\\.skip\\s*\\(\\s*${leafQ}`).test(text)) {
+    return "it.skip";
+  }
+  if (new RegExp(`\\bit\\.skip\\.each[\\s\\S]*?\\(\\s*${leafQ}`).test(text)) {
+    return "it.skip.each";
+  }
+  if (new RegExp(`\\btest\\.skipIf[\\s\\S]*?${leafQ}`).test(text)) {
+    return "test.skipIf";
+  }
+  for (const segment of parts.slice(0, -1)) {
+    const segQ = quotedTitlePattern(segment);
+    if (new RegExp(`\\bdescribe\\.skipIf[\\s\\S]*?\\(\\s*${segQ}`).test(text)) {
+      return "describe.skipIf";
+    }
+  }
+  if (new RegExp(`\\bit\\.skipIf\\s+\\(`).test(text) && new RegExp(leafQ).test(text)) {
+    return "it.skipIf space";
+  }
+  if (new RegExp(`\\bit\\.skipIf\\s*\\([^)]+,\\s*${leafQ}\\s*,`).test(text)) {
+    return "it.skipIf three-arg";
+  }
+  if (new RegExp(`\\bit\\.skipIf\\s*\\([^)]*\\)\\s*\\(\\s*${leafQ}`).test(text)) {
+    return "it.skipIf curried";
+  }
+  if (new RegExp(`\\bit\\s*\\(\\s*${leafQ}\\s*,\\s*\\{[^}]*\\bskip\\s*:`).test(text)) {
+    return "it options.skip";
+  }
+  if (new RegExp(`\\bit\\.skipIf\\b[\\s\\S]*?${leafQ}`).test(text)) {
+    return "it.skipIf";
+  }
+  return null;
+}
+
+/**
+ * @param {string} wtRoot
+ * @param {{ testFile: string, testName: string }} meta
+ * @param {string} slug
+ */
+export function assertVitestTargetNotStaticallySkipped(wtRoot, meta, slug) {
+  const rel = meta.testFile.replace(/\\/g, "/");
+  const abs = path.join(wtRoot, rel);
+  if (!fs.existsSync(abs)) {
+    return;
+  }
+  const reason = vitestTargetForbiddenSkipReason(fs.readFileSync(abs, "utf8"), meta.testName);
+  if (reason) {
+    throw new Error(
+      `row ${slug}: baseline test selection failed (target skipped; never a pass)`,
+    );
   }
 }
 
@@ -1223,6 +1301,31 @@ export function assertVitestNodeAssertFailClosed(slug, target) {
 
 const GIT_APPLY_OFFSET_FUZZ_RE = /\b(?:offset|fuzz)\b/i;
 
+/** Prefer stable `error: patch failed:` lines across git versions (2.55+ logs "Checking patch …"). */
+function summarizeGitApplyCheckFailure(verbose) {
+  const text = verbose.trim();
+  if (!text) {
+    return text;
+  }
+  const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
+  const patchFailed = lines.find((line) => /^error: patch failed:/i.test(line));
+  if (patchFailed) {
+    return patchFailed;
+  }
+  const errLine = lines.find((line) => /^error:/i.test(line));
+  if (errLine) {
+    return errLine;
+  }
+  const checking = lines.find((line) => /^Checking patch /i.test(line));
+  if (checking) {
+    const m = checking.match(/^Checking patch (.+?)\.\.\.$/);
+    if (m) {
+      return `error: patch failed: ${m[1]}:1`;
+    }
+  }
+  return lines[0];
+}
+
 /**
  * Run `git apply --check -v` and reject any line mentioning offset or fuzz.
  * @param {string} wtRoot
@@ -1238,7 +1341,7 @@ function assertGitApplyCheckStrict(wtRoot, patchText) {
     });
     const verbose = `${check.stdout ?? ""}${check.stderr ?? ""}`;
     if (check.status !== 0) {
-      throw new Error(`git apply --check failed: ${verbose.trim()}`);
+      throw new Error(`git apply --check failed: ${summarizeGitApplyCheckFailure(verbose)}`);
     }
     for (const line of verbose.split("\n")) {
       if (GIT_APPLY_OFFSET_FUZZ_RE.test(line)) {

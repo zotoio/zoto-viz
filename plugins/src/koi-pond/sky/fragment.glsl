@@ -52,11 +52,21 @@ vec3 koiPatternCol(float sp, float vig) {
 
 vec3 pondWater(vec2 xz, float clarity, float murk, float tint, float simTime) {
   float rip = noise3(vec3(xz * 3.5, simTime * 0.35));
+  float rip2 = noise3(vec3(xz * 7.0 + 2.0, simTime * 0.55));
   vec3 deep = mix(vec3(0.02, 0.18, 0.22), vec3(0.05, 0.28, 0.32), tint);
   vec3 shallow = mix(vec3(0.08, 0.42, 0.38), vec3(0.12, 0.55, 0.48), tint);
   vec3 base = mix(deep, shallow, clarity * 0.85 + rip * 0.15);
   base = mix(base, vec3(0.12, 0.14, 0.1), murk * 0.75);
+  base += vec3(0.02, 0.04, 0.03) * (rip2 - 0.5) * clarity;
   return base;
+}
+
+vec3 pondNormal(vec2 xz, float simTime) {
+  float e = 0.015;
+  float h = noise3(vec3(xz * 4.2, simTime * 0.4));
+  float hx = noise3(vec3((xz + vec2(e, 0.0)) * 4.2, simTime * 0.4)) - h;
+  float hz = noise3(vec3((xz + vec2(0.0, e)) * 4.2, simTime * 0.4)) - h;
+  return normalize(vec3(-hx * 2.5, 1.0, -hz * 2.5));
 }
 
 float sdEllipse(vec2 p, vec2 r) {
@@ -114,24 +124,32 @@ void main() {
   vec3 col = mix(skyHor, skyTop, clamp(dir.y * 0.5 + 0.5, 0.0, 1.0));
 
   vec3 water = pondWater(xz, clarity, murk, waterTint, simTime);
-  float caust = noise3(vec3(xz * 4.0, simTime * 0.5 + 1.0));
-  if (caustOn > 0.5) water += vec3(0.35, 0.75, 0.65) * caust * caustStr * 0.18 * (1.0 - murk);
+  vec3 wn = pondNormal(xz, simTime);
+  float fres = pow(1.0 - clamp(dot(wn, normalize(vec3(-dir.x, 0.65, -dir.z))), 0.0, 1.0), 4.0);
+  water = mix(water, mix(skyTop, skyHor, 0.45), fres * 0.28 * clarity * (1.0 - murk));
+  water = mix(water, water * 1.08, max(0.0, dot(wn, normalize(vec3(-0.2, 0.85, 0.35)))) * 0.35);
+  float caust = noise3(vec3(xz * 4.0 + wn.xz * 0.5, simTime * 0.5 + 1.0));
+  float caust2 = noise3(vec3(xz * 9.0 - wn.xz, simTime * 0.85));
+  if (caustOn > 0.5) water += vec3(0.35, 0.75, 0.65) * (caust * 0.65 + caust2 * 0.35) * caustStr * 0.22 * (1.0 - murk);
 
   int nKoi = int(clamp(slotF(0, 24.0), 0.0, 16.0));
   for (int i = 0; i < 16; i++) {
     if (i >= nKoi) break;
     float fi = float(i * 4);
     vec2 kp = vec2(slotF(1, fi), slotF(1, fi + 2.0));
+    float swimW = slotF(1, fi + 1.0);
     float yaw = slotF(1, fi + 3.0);
     float meta = slotF(0, 35.0 + float(i));
     float sp = floor(meta + 0.01);
     float vig = clamp((meta - sp) * 64.0, 0.0, 1.0);
-    vec2 off = vec2(cos(yaw), sin(yaw)) * 0.08;
+    vec2 off = vec2(cos(yaw), sin(yaw)) * (0.08 + swimW * 0.35);
     vec2 p = xz - (kp + off);
     float body = sdEllipse(p, vec2(0.11 * sizeScale * (0.85 + vig * 0.35), 0.05 * sizeScale));
-    float fin = sdEllipse(p - vec2(0.06 * cos(yaw), 0.06 * sin(yaw)), vec2(0.04, 0.025));
+    float fin = sdEllipse(p - vec2(0.06 * cos(yaw + swimW), 0.06 * sin(yaw + swimW)), vec2(0.04, 0.025));
     float k = exp(-min(body, fin) * 55.0);
-    water = mix(water, koiPatternCol(sp, vig), k * 0.92);
+    vec3 kcol = koiPatternCol(sp, vig);
+    kcol *= 0.85 + 0.25 * max(0.0, dot(wn, vec3(0.0, 1.0, 0.0)));
+    water = mix(water, kcol, k * 0.92);
     water += vec3(0.9, 0.95, 1.0) * exp(-body * 80.0) * ripple * 0.08;
   }
 

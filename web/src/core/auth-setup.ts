@@ -29,6 +29,7 @@ export type AuthCtx = {
   sources?: Record<string, AuthSourceLive>;
   cursorConfigured?: boolean;
   typesafeConfigured?: boolean;
+  nasaApiKeyConfigured?: boolean;
 };
 
 export const AUTH_SETUPS: Record<AuthKind, AuthSetup> = {
@@ -59,7 +60,7 @@ export const AUTH_SETUPS: Record<AuthKind, AuthSetup> = {
     id: "apod",
     title: "NASA APOD key",
     summary: "DEMO_KEY works for light use. A personal key raises the hourly cap if APOD starts 429ing.",
-    configure: "Mint a key at api.nasa.gov, then replace DEMO_KEY on the apod source URL in Settings → Sources.",
+    configure: "Mint a key at api.nasa.gov, then paste it under Settings → Sources (or set NASA_API_KEY in the monitor env and restart).",
     links: [
       { label: "Get a NASA API key", href: "https://api.nasa.gov/" },
       { label: "APOD API", href: "https://api.nasa.gov/#apod" },
@@ -126,16 +127,16 @@ export function sourceAuthKind(id: string, url = ""): AuthKind | null {
   return null;
 }
 
-export function sourceAuthReady(kind: AuthKind, url: string, live?: AuthSourceLive): boolean {
+export function sourceAuthReady(kind: AuthKind, url: string, live?: AuthSourceLive, ctx: AuthCtx = {}): boolean {
   if (kind === "guardian") {
     if (live?.ok && (live.items?.length ?? 0) > 0) return true;
     const key = queryValue(url, "api-key");
     return !!key && !PLACEHOLDER["api-key"]!.includes(key);
   }
   if (kind === "apod") {
+    if (ctx.nasaApiKeyConfigured) return true;
     if (live?.ok === false && /401|403|429/.test(String(live.error || ""))) {
-      const key = queryValue(url, "api_key");
-      return !!key && !PLACEHOLDER.api_key!.includes(key);
+      return false;
     }
     return true;
   }
@@ -167,7 +168,7 @@ export function viewAuthBlock(
   if (!kind) return null;
   const setup = AUTH_SETUPS[kind];
   if (!setup.blocksDice) return null;
-  return sourceAuthReady(kind, live?.url || "", live) ? null : setup;
+  return sourceAuthReady(kind, live?.url || "", live, ctx) ? null : setup;
 }
 
 export function renderAuthSetup(setup: AuthSetup, extra?: { pcmUrl?: string | null }): HTMLElement {

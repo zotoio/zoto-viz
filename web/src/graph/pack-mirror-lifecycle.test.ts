@@ -10,7 +10,7 @@ import {
   sandboxBitmapGpuCount,
   syncSandboxBitmapGpuScopes,
 } from "./pack-mirror-gl";
-import { deviceSizeFromCssBox } from "./pack-mirror-rect";
+import { cssRect, deviceSizeFromCssBox } from "./pack-mirror-rect";
 import { surfaceLetterboxFill } from "./letterbox-fill";
 
 function stubRenderer(antialias: boolean, pr = 1): THREE.WebGLRenderer {
@@ -38,17 +38,17 @@ function simulateTwoTileFrame(
   rd: THREE.WebGLRenderer,
   key: string,
   antialias: boolean,
-  box = { w: 64, h: 48 },
+  box = cssRect(0, 0, 64, 48),
 ): void {
   reg.beginFrame();
   const { scene, camera } = emptyScene();
   reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias);
-  reg.presentPack(key, rd, { x: 0, y: 0, w: box.w, h: box.h }, {
+  reg.presentPack(key, rd, cssRect(0, 0, box.w, box.h), {
     letterbox: false,
     fill: null,
     aspect: box.w / box.h,
   });
-  reg.presentPack(key, rd, { x: 80, y: 0, w: 90, h: 70 }, {
+  reg.presentPack(key, rd, cssRect(80, 0, 90, 70), {
     letterbox: true,
     fill: surfaceLetterboxFill(0x0a1020, 0.25),
     aspect: box.w / box.h,
@@ -60,22 +60,22 @@ function simulateThreeTileFrame(
   rd: THREE.WebGLRenderer,
   key: string,
   antialias: boolean,
-  box = { w: 64, h: 48 },
+  box = cssRect(0, 0, 64, 48),
 ): void {
   reg.beginFrame();
   const { scene, camera } = emptyScene();
   reg.renderPrimary(key, rd, scene, camera, box, 0x0a1020, antialias);
-  reg.presentPack(key, rd, { x: 0, y: 0, w: box.w, h: box.h }, {
+  reg.presentPack(key, rd, cssRect(0, 0, box.w, box.h), {
     letterbox: false,
     fill: null,
     aspect: box.w / box.h,
   });
-  reg.presentPack(key, rd, { x: 70, y: 0, w: 50, h: 40 }, {
+  reg.presentPack(key, rd, cssRect(70, 0, 50, 40), {
     letterbox: true,
     fill: surfaceLetterboxFill(0x0a1020, 0.25),
     aspect: box.w / box.h,
   });
-  reg.presentPack(key, rd, { x: 130, y: 0, w: 50, h: 40 }, {
+  reg.presentPack(key, rd, cssRect(130, 0, 50, 40), {
     letterbox: true,
     fill: surfaceLetterboxFill(0x0a1020, 0.25),
     aspect: box.w / box.h,
@@ -217,10 +217,10 @@ describe("PackTexturePresenter", () => {
     const p = new PackTexturePresenter();
     const rd = stubRenderer(false);
     const tex = new THREE.Texture();
-    p.draw(rd, tex, { x: 0, y: 0, w: 10, h: 10 }, null, 1, { letterbox: false });
+    p.draw(rd, tex, cssRect(0, 0, 10, 10), null, 1, { letterbox: false });
     const v0 = p.material.version;
     for (let i = 0; i < 299; i++) {
-      p.draw(rd, tex, { x: 0, y: 0, w: 10, h: 10 }, null, 1, { letterbox: false });
+      p.draw(rd, tex, cssRect(0, 0, 10, 10), null, 1, { letterbox: false });
     }
     expect(p.material.version).toBe(v0);
     p.dispose();

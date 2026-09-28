@@ -13,13 +13,66 @@ capabilities:
   - viz.read
   - viz.write
   - config.read
+assets:
+  - id: aquarium-plants
+    path: assets/aquarium-plants.glb
+    sha256: 9f029e86b6e9c72c8a51a14252b782e2c7f09d1780d86759fade524959fa6999
+    bytes: 87520
+    triangles: 4608
+  - id: aquarium-substrate
+    path: assets/aquarium-substrate.glb
+    sha256: a7b40d1830d584d7d6268a2964c5839288c4c8c29f0a1363b07221691603a2eb
+    bytes: 1208172
+    triangles: 10070
+  - id: fish-angelfish
+    path: assets/fish-angelfish.glb
+    sha256: ebdd087c98a1cd724aef430e50a1dfa36761ca7465a7342950492d3523ecccbe
+    bytes: 91132
+    triangles: 4044
+  - id: fish-betta
+    path: assets/fish-betta.glb
+    sha256: f443d0e61a2696fed0c6946af1746c18a993c5e7027bd4bd354bd3e889d5493f
+    bytes: 121976
+    triangles: 4084
+  - id: fish-clownfish
+    path: assets/fish-clownfish.glb
+    sha256: 5fca55c57cfc5aa1cad61b57a92e9a4c8b34f493929289a2e47b114826fd0b95
+    bytes: 97504
+    triangles: 3972
+  - id: fish-discus
+    path: assets/fish-discus.glb
+    sha256: 6ad411ba5114f4e8ac5f516d057568aa50be1510745f9a19d1bc5388db14761a
+    bytes: 152792
+    triangles: 5036
+  - id: fish-guppy
+    path: assets/fish-guppy.glb
+    sha256: 6a0911c88a64cb4243b7693f209e5a7e8f72312a64e2cb44f344b5f99a8cbc0b
+    bytes: 144272
+    triangles: 3716
+  - id: fish-neon-tetra
+    path: assets/fish-neon-tetra.glb
+    sha256: 58723a4172f5791b28eb4a9c104edd081472fb87f3a59af52cd1f76aa3c63c22
+    bytes: 85140
+    triangles: 3740
+  - id: fish-cory
+    path: assets/fish-cory.glb
+    sha256: 0216b95bf57c62e72e57678c3fd135f7db6b7e632c34cfbae9f0404f8bcf3502
+    bytes: 135748
+    triangles: 4432
+  - id: fish-cichlid
+    path: assets/fish-cichlid.glb
+    sha256: 39e06328def10361df8dae6994277fa357ff11a3c4abf5872ed353031d32d5d2
+    bytes: 106856
+    triangles: 4264
 viz:
   graphWalk: false
   idle:
     fixture: host
-  maxBuffers: 3
+  maxBuffers: 8
   maxBufferFloats: 64
-  maxParticles: 16
+  hostMeshSlot: 3
+  hostMeshSlotCount: 6
+  maxParticles: 24
   uniforms:
     - uTime
     - uAudio

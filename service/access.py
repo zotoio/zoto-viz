@@ -25,6 +25,7 @@ _HOST_INJECTION = re.compile(r'[;\s,"\']')
 _PACK_ASSETS = re.compile(
     r"^/pack-assets/([^/]+)/([^/]+)/(.+)$",
 )
+_CANONICAL_LOOPBACK = frozenset({"localhost", "127.0.0.1", "::1"})
 
 
 def parse_pack_assets_path(path: str) -> tuple[str, str, str] | None:
@@ -58,9 +59,69 @@ def read_sandbox_asset_token(request: web.Request) -> str:
     return parsed[0] if parsed else ""
 
 
-def pack_asset_token_ok(request: web.Request) -> bool:
+def pack_asset_session_ids(request: web.Request) -> list[str]:
+    """Session keys bound into pack-asset tokens for this request.
+
+    Opaque-origin sandbox loads send the CSRF cookie, not ``X-Zoto-Viz-Csrf``. After a monitor
+    restart the cookie can lag the process token; allow the live ``app[\"csrf\"]`` only when
+    the client did not send an explicit CSRF header (so a wrong header cannot piggyback).
+    """
+    header = request.headers.get(HEADER, "").strip()
+    cookie = request.cookies.get(COOKIE, "").strip()
+    app_csrf = str(request.app.get("csrf") or "").strip()
+    out: list[str] = []
+    seen: set[str] = set()
+
+    def add(raw: str) -> None:
+        s = (raw or "").strip()
+        if not s or s in seen:
+            return
+        seen.add(s)
+        out.append(s)
+
+    if header:
+        add(header)
+        return out
+    if cookie:
+        add(cookie)
+    if app_csrf:
+        add(app_csrf)
+    return out
+
+
+def _pack_asset_token_ok_for_session(
+    request: web.Request,
+    *,
+    secret: bytes,
+    pack_id: str,
+    token: str,
+    frame_id: str,
+    session_id: str,
+) -> bool:
     from . import pack_asset_frames
 
+    reg = pack_asset_frames.registry_for_app(request.app)
+    live = reg.is_live(session_id, frame_id)
+    if pack_asset_tokens.verify_pack_asset_token(
+        secret,
+        pack_id,
+        token,
+        session_id=session_id,
+        frame_live=live,
+    ):
+        return True
+    if pack_id == "_sandbox":
+        return False
+    return pack_asset_tokens.verify_pack_asset_token(
+        secret,
+        "_sandbox",
+        token,
+        session_id=session_id,
+        frame_live=live,
+    )
+
+
+def pack_asset_token_ok(request: web.Request) -> bool:
     parsed = parse_pack_assets_path(request.path or "")
     if not parsed:
         return False
@@ -68,33 +129,21 @@ def pack_asset_token_ok(request: web.Request) -> bool:
     secret = request.app.get("pack_asset_secret")
     if not secret:
         return False
-    sid = pack_asset_tokens.session_id_from_request(request)
-    if not sid:
-        return False
     parsed_tok = pack_asset_tokens.parse_pack_asset_token(token)
     if not parsed_tok:
         return False
     frame_id, _mac = parsed_tok
-    reg = pack_asset_frames.registry_for_app(request.app)
-    live = reg.is_live(sid, frame_id)
-    if pack_asset_tokens.verify_pack_asset_token(
-        secret,
-        pack_id,
-        token,
-        session_id=sid,
-        frame_live=live,
-    ):
-        return True
-    # Sandbox bootstrap token is minted for ``_sandbox`` but CSP only allows that path prefix.
-    if pack_id == "_sandbox":
-        return False
-    return pack_asset_tokens.verify_pack_asset_token(
-        secret,
-        "_sandbox",
-        token,
-        session_id=sid,
-        frame_live=live,
-    )
+    for sid in pack_asset_session_ids(request):
+        if _pack_asset_token_ok_for_session(
+            request,
+            secret=secret,
+            pack_id=pack_id,
+            token=token,
+            frame_id=frame_id,
+            session_id=sid,
+        ):
+            return True
+    return False
 
 
 def redact_sandbox_token(text: str, token: str) -> str:
@@ -196,10 +245,35 @@ def is_loopback_name(name: str) -> bool:
         return False
 
 
-def origin_hostname(origin: str) -> str:
-    if not origin or origin == "null":
+def strict_origin_hostname(origin: str) -> str | None:
+    """Parse a browser Origin (scheme, host, optional port only). Reject userinfo, path, query, fragment, trailing dot."""
+    if not origin:
         return ""
-    return (urlparse(origin).hostname or "").lower()
+    if origin == "null":
+        return None
+    parsed = urlparse(origin)
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if parsed.username is not None or parsed.password is not None:
+        return None
+    if parsed.params or parsed.query or parsed.fragment:
+        return None
+    if parsed.path not in ("", "/"):
+        return None
+    netloc = parsed.netloc
+    if not netloc or "@" in netloc:
+        return None
+    host = (parsed.hostname or "").lower()
+    if not host or host.endswith("."):
+        return None
+    return host
+
+
+def origin_hostname(origin: str) -> str:
+    host = strict_origin_hostname(origin)
+    if host is None:
+        return ""
+    return host
 
 
 def host_ok(request: web.Request) -> bool:
@@ -227,8 +301,12 @@ def origin_ok(request: web.Request) -> bool:
     if raw == "null":
         if parse_pack_assets_path(request.path or ""):
             return request.method in {"GET", "HEAD"}
-        return sandbox_null_origin_allowed(request)
-    name = origin_hostname(raw)
+        return False
+    name = strict_origin_hostname(raw)
+    if not name:
+        return False
+    if not request.app.get("insecure_lan") and name not in _CANONICAL_LOOPBACK:
+        return False
     host = header_hostname(request.headers.get("Host", ""))
     # Vite proxies localhost:5173 → 127.0.0.1:7020 with changeOrigin, so Origin
     # and Host loopback names can differ. LAN still requires an exact match.
