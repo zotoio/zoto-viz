@@ -3,7 +3,8 @@ name: Aquarium
 version: 1
 hint: Photoreal tank — talkers are fish, packets are bubbles and plankton, SYS failures cloud the water.
 description: >-
-  Raymarched glass aquarium (procedural GLSL only). Data mapping is declared in
+  Glass tank and its contents are meshes (fish, plants, gravel). The sky is the
+  room behind the tank. Data mapping is declared in
   data-mapping.yml (talkers→fish by id, packets→particles, sys.failed→tank murk).
   Per-frame work budget (counts): raymarch steps 72, fish instances ≤16, particles ≤16,
   draw calls 1 (host plugin sky). Caps match viz below.

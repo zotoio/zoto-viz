@@ -13,6 +13,12 @@ export default defineConfig({
       input: {
         "plugin-sandbox": path.resolve(webRoot, "plugin-sandbox.html"),
       },
+      output: {
+        // One file. The sandbox CSP only allows this entry's pack-asset URL, so a
+        // split chunk (viz-write-batch, preload helper) never loads and frame-ready
+        // never arrives.
+        codeSplitting: false,
+      },
     },
   },
 });

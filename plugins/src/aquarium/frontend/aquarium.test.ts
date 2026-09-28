@@ -104,7 +104,7 @@ describe("aquarium shipped pack", () => {
     expect("error" in wrapped).toBe(false);
     if ("error" in wrapped) return;
     expect(wrapped.frag).toContain("zotoVizSlots");
-    expect(FRAG).toContain("mapScene");
+    expect(FRAG).toContain("roomWash");
     expect(FRAG).not.toMatch(/\+\s*sun\.xy\b/);
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
@@ -317,6 +317,42 @@ describe("aquarium shipped pack", () => {
     const next = applyConfigActions(sim, cfg, parseAquariumOptions(cfg), edges);
     expect(next.seed).not.toBe(100);
     expect(sim.getOptions().seed).toBe(next.seed);
+  });
+
+  it("keeps fish moving forward along their heading", () => {
+    const sim = new AquariumSim(parseAquariumOptions({ preset: "planted", fishCount: "3", temperament: "0.4" }));
+    const samples: { x: number; z: number; yaw: number }[][] = [];
+    for (let i = 0; i < 240; i++) {
+      sim.advance(frame({ t: i / 60, dt: 1 / 60 }));
+      const n = sim.slot0[17] ?? 0;
+      const row = [];
+      for (let f = 0; f < n; f++) {
+        row.push({
+          x: sim.slot1[f * 4]!,
+          z: sim.slot1[f * 4 + 2]!,
+          yaw: sim.slot1[f * 4 + 3]!,
+        });
+      }
+      samples.push(row);
+    }
+    let backward = 0;
+    let steps = 0;
+    let forward = 0;
+    for (let i = 30; i < samples.length; i++) {
+      const prev = samples[i - 1]!;
+      const cur = samples[i]!;
+      for (let f = 0; f < Math.min(prev.length, cur.length); f++) {
+        const dx = cur[f]!.x - prev[f]!.x;
+        const dz = cur[f]!.z - prev[f]!.z;
+        const dot = dx * Math.sin(cur[f]!.yaw) + dz * Math.cos(cur[f]!.yaw);
+        if (dot < -1e-5) backward++;
+        forward += Math.max(0, dot);
+        steps++;
+      }
+    }
+    expect(steps).toBeGreaterThan(0);
+    expect(backward / steps).toBeLessThan(0.02);
+    expect(forward).toBeGreaterThan(0.2);
   });
 
   it("stores per-fish yaw and species in slots for the sky", () => {

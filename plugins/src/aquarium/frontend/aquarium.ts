@@ -792,24 +792,33 @@ export class AquariumSim {
         tx += Math.sin(simT * 0.9 + idHash(f.id) * 5) * chase * 0.12;
         tz += Math.cos(simT * 0.85 + idHash(f.id) * 4) * chase * 0.12;
       }
-      const ax = (tx - f.x) * (0.8 + vigor) * dt;
+      // Cruise along the nose. A point behind the fish turns them; it does not pull them tail-first.
+      let sx = tx - f.x;
+      let sz = tz - f.z;
+      const wall = 0.9;
+      if (f.x > wall) sx -= (f.x - wall) * 3;
+      if (f.x < -wall) sx += (-wall - f.x) * 3;
+      if (f.z > wall) sz -= (f.z - wall) * 3;
+      if (f.z < -wall) sz += (-wall - f.z) * 3;
+      const desired = Math.atan2(sx, sz + 0.0001);
+      let dyaw = Math.atan2(Math.sin(desired - f.yaw), Math.cos(desired - f.yaw));
+      const nearWall = Math.abs(f.x) > wall || Math.abs(f.z) > wall;
+      const turn = (nearWall ? 2.6 : 0.85 + vigor * 1.15 + (feedPt ? 0.7 : 0)) * dt;
+      if (dyaw > turn) dyaw = turn;
+      else if (dyaw < -turn) dyaw = -turn;
+      f.yaw += dyaw;
+      const fx = Math.sin(f.yaw);
+      const fz = Math.cos(f.yaw);
+      const cruise = (0.0024 + vigor * 0.0024) * (0.75 + chase);
+      const facing = sx * fx + sz * fz;
+      const speed = cruise * (facing < 0 ? 0.7 : 1);
+      f.vx = fx * speed;
+      f.vz = fz * speed;
       const ay = (ty - f.y) * (0.6 + vigor * 0.4) * dt;
-      const az = (tz - f.z) * (0.8 + vigor) * dt;
-      f.vx = f.vx * 0.92 + ax;
       f.vy = f.vy * 0.9 + ay;
-      f.vz = f.vz * 0.92 + az;
-      const spd = Math.hypot(f.vx, f.vy, f.vz);
-      const maxSpd = 0.35 + vigor * (0.25 + chase * 0.55);
-      if (spd > maxSpd && spd > 0) {
-        const s = maxSpd / spd;
-        f.vx *= s;
-        f.vy *= s;
-        f.vz *= s;
-      }
       f.x = clamp(f.x + f.vx, -1.1, 1.1);
       f.y = clamp(f.y + f.vy, -0.55, 0.75);
       f.z = clamp(f.z + f.vz, -1.15, 1.15);
-      f.yaw = Math.atan2(f.vx, f.vz + 0.001);
     }
   }
 

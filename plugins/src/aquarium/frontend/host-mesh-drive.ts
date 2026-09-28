@@ -35,10 +35,8 @@ export const AQU_SPECIES_TO_ASSET: number[] = [7, 2, 6, 8, 5, 9, 3];
  */
 export const AQU_REEF_SPECIES_TO_ASSET: number[] = [4, 2, 7, 8, 6, 5];
 
-/** Designer fish are ~8 cm; the tank camera reads them at this multiple. */
-const FISH_SCALE = 4;
-/** Gravel and plants are a small patch; scale them up to the tank floor. */
-const DECOR_SCALE = 2.2;
+/** Designer fish are about 8–20 cm; this sits them in the tank without filling it. */
+const FISH_SCALE = 1.35;
 
 /** Cory belly sits ~9 mm below rig origin — lift above gravel (scaled with the mesh). */
 const CORY_SPECIES_INDEX = 3;
@@ -83,10 +81,8 @@ export function writeAquariumHostMeshSlots(
     push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw, FISH_SCALE), phase);
   }
 
-  // After the fish so a full school keeps the mesh slots (5 usable × 3 instances).
-  push(1, hostMeshMatrixYawPos(0, -0.72, 0, 0, DECOR_SCALE), 0);
-  push(0, hostMeshMatrixYawPos(0.15, -0.68, -0.1, 0.4, DECOR_SCALE), 0);
-
+  // Plants and gravel are pinned by the host when the pack mounts. These slots
+  // are only the school, so a full tank of fish does not drop the scenery.
   const packets: number[][] = [];
   for (const [assetIndex, instances] of byAsset.entries()) {
     for (const part of chunkInstances(instances)) {

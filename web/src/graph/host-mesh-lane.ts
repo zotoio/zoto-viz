@@ -5,6 +5,7 @@ import { clone as cloneSkinnedRoot } from "three/addons/utils/SkeletonUtils.js";
 import {
   decodeHostMeshSlotPacket,
   HOST_MESH_FRAME_V1,
+  hostMeshMatrixYawPos,
   type HostMeshInstanceExtras,
 } from "../../../plugins/sdk/host-mesh-frame";
 
@@ -24,6 +25,7 @@ export const HOST_MESH_MAX_INSTANCES_DEFAULT = 48;
 /** Dispose GPU resources on a template or loaded glTF root (returns dispose call count). */
 export function disposeHostMeshObject3D(root: THREE.Object3D): number {
   let disposes = 0;
+  const closedBitmaps = new Set<object>();
   root.traverse((o) => {
     const mesh = o as THREE.Mesh;
     if (mesh.isMesh) {
@@ -37,7 +39,13 @@ export function disposeHostMeshObject3D(root: THREE.Object3D): number {
         for (const key of Object.keys(m)) {
           const val = (m as unknown as Record<string, unknown>)[key];
           if (val && typeof val === "object" && (val as THREE.Texture).isTexture) {
-            (val as THREE.Texture).dispose();
+            const tex = val as THREE.Texture;
+            const image = tex.image as { close?: () => void } | null;
+            if (image && typeof image.close === "function" && !closedBitmaps.has(image)) {
+              closedBitmaps.add(image);
+              image.close();
+            }
+            tex.dispose();
             disposes += 1;
           }
         }
@@ -47,6 +55,58 @@ export function disposeHostMeshObject3D(root: THREE.Object3D): number {
     }
   });
   return disposes;
+}
+
+/** flags bit 0: host-pinned fish that drift until a sandbox packet (flags 0) replaces them. */
+function tagAquariumDecor(
+  root: THREE.Object3D,
+  matrix: ArrayLike<number>,
+  extras: HostMeshInstanceExtras,
+): void {
+  if ((extras.flags & 1) === 0) {
+    delete root.userData.aquDecor;
+    return;
+  }
+  const scale = matrix[5] || 1;
+  const y = matrix[13] || 0;
+  root.userData.aquDecor = {
+    x: matrix[12] || 0,
+    y,
+    z: matrix[14] || 0,
+    yaw: Math.atan2(matrix[2] || 0, matrix[0] || scale),
+    scale,
+    phase: extras.param1,
+    speed: extras.param2 > 0 ? extras.param2 : 0.4,
+    homeY: y,
+  };
+}
+
+export type AquariumDecorPose = {
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  scale: number;
+  phase: number;
+  speed: number;
+  homeY: number;
+};
+
+/** Pinned fish cruise nose-first and arc at the glass instead of sliding tail-first. */
+export function stepAquariumDecor(d: AquariumDecorPose, t: number, dt: number): void {
+  if (dt <= 0 || !Number.isFinite(dt)) return;
+  let yaw = d.yaw + Math.sin(t * 0.17 + d.phase) * 0.55 * dt;
+  const fx0 = Math.sin(yaw);
+  const fz0 = Math.cos(yaw);
+  if (d.x > 0.9 && fx0 > 0) yaw += 2.2 * dt;
+  if (d.x < -0.9 && fx0 < 0) yaw -= 2.2 * dt;
+  if (d.z > 0.62 && fz0 > 0) yaw += 2.2 * dt;
+  if (d.z < -0.72 && fz0 < 0) yaw -= 2.2 * dt;
+  d.yaw = yaw;
+  const spd = 0.16 + d.speed * 0.22;
+  d.x = Math.max(-1.05, Math.min(1.05, d.x + Math.sin(yaw) * spd * dt));
+  d.z = Math.max(-0.85, Math.min(0.75, d.z + Math.cos(yaw) * spd * dt));
+  d.y = d.homeY + Math.sin(t * 0.65 + d.phase) * 0.04;
 }
 
 const WHEEL_NODE_NAMES = [
@@ -107,6 +167,78 @@ export function ensureHostMeshoptDecoder(loader: GLTFLoader): Promise<void> {
     });
   }
   return meshoptReady;
+}
+
+/**
+ * glTF images live in the GLB buffer. Three's ImageBitmapLoader then `fetch()`es
+ * a `blob:` URL, which this page's connect-src rejects, so every map is dropped
+ * and the mesh renders as flat metal. Decode the buffer here instead.
+ */
+const GL_MAG_FILTER: Record<number, THREE.MagnificationTextureFilter> = {
+  9728: THREE.NearestFilter,
+  9729: THREE.LinearFilter,
+};
+
+const GL_MIN_FILTER: Record<number, THREE.MinificationTextureFilter> = {
+  9728: THREE.NearestFilter,
+  9729: THREE.LinearFilter,
+  9984: THREE.NearestMipmapNearestFilter,
+  9985: THREE.LinearMipmapNearestFilter,
+  9986: THREE.NearestMipmapLinearFilter,
+  9987: THREE.LinearMipmapLinearFilter,
+};
+
+const GL_WRAP: Record<number, THREE.Wrapping> = {
+  33071: THREE.ClampToEdgeWrapping,
+  33648: THREE.MirroredRepeatWrapping,
+  10497: THREE.RepeatWrapping,
+};
+
+type EmbeddedImageParser = {
+  json: {
+    textures?: { source?: number; sampler?: number; name?: string }[];
+    images?: { name?: string; uri?: string; mimeType?: string; bufferView?: number }[];
+    samplers?: { magFilter?: number; minFilter?: number; wrapS?: number; wrapT?: number }[];
+  };
+  getDependency: (type: string, index: number) => Promise<ArrayBuffer>;
+};
+
+export function embeddedImageTexturePlugin(parser: EmbeddedImageParser): {
+  name: string;
+  loadTexture: (textureIndex: number) => Promise<THREE.Texture | null> | null;
+} {
+  return {
+    name: "ZOTO_EMBEDDED_IMAGE",
+    loadTexture(textureIndex) {
+      const texDef = parser.json.textures?.[textureIndex];
+      const source = texDef?.source === undefined ? undefined : parser.json.images?.[texDef.source];
+      if (!source || source.bufferView === undefined || typeof createImageBitmap !== "function") return null;
+      const bufferView = source.bufferView;
+      const sampler = texDef?.sampler === undefined ? undefined : parser.json.samplers?.[texDef.sampler];
+      return parser.getDependency("bufferView", bufferView).then(async (bytes) => {
+        try {
+          const blob = new Blob([bytes], source.mimeType ? { type: source.mimeType } : undefined);
+          const bitmap = await createImageBitmap(blob, {
+            premultiplyAlpha: "none",
+            colorSpaceConversion: "none",
+          } as ImageBitmapOptions);
+          const texture = new THREE.Texture(bitmap);
+          texture.name = texDef?.name || source.name || "";
+          texture.flipY = false;
+          texture.magFilter = (sampler?.magFilter !== undefined && GL_MAG_FILTER[sampler.magFilter]) || THREE.LinearFilter;
+          texture.minFilter = (sampler?.minFilter !== undefined && GL_MIN_FILTER[sampler.minFilter]) || THREE.LinearMipmapLinearFilter;
+          texture.wrapS = (sampler?.wrapS !== undefined && GL_WRAP[sampler.wrapS]) || THREE.RepeatWrapping;
+          texture.wrapT = (sampler?.wrapT !== undefined && GL_WRAP[sampler.wrapT]) || THREE.RepeatWrapping;
+          texture.generateMipmaps = texture.minFilter !== THREE.NearestFilter && texture.minFilter !== THREE.LinearFilter;
+          texture.needsUpdate = true;
+          return texture;
+        } catch (e) {
+          console.warn("zoto-viz host mesh: embedded image", source.name || bufferView, e);
+          return null;
+        }
+      });
+    },
+  };
 }
 
 function countSceneMeshes(root: THREE.Object3D): number {
@@ -175,9 +307,13 @@ export class HostMeshLane {
   private clockSec = 0;
   /** Bumped on {@link clear} so in-flight GLTF loads are discarded. */
   private loadEpoch = 0;
+  /** Last slot packet per asset index, replayed when that GLB finishes loading. */
+  private pendingByAsset = new Map<number, ArrayLike<number>>();
+  private scenery: THREE.Object3D | null = null;
 
   constructor() {
     this.group.name = "HostMeshLane";
+    this.loader.register((parser) => embeddedImageTexturePlugin(parser as EmbeddedImageParser));
   }
 
   setAssetOrder(ids: string[]): void {
@@ -191,7 +327,8 @@ export class HostMeshLane {
   async ensureAssets(packId: string, decls: HostMeshAssetDecl[]): Promise<void> {
     this.setAssetOrder(decls.map((d) => d.id));
     await ensureHostMeshoptDecoder(this.loader);
-    const rows = await Promise.all(decls.map((d) => this.load(packId, d)));
+    const rows = [];
+    for (const decl of decls) rows.push(await this.load(packId, decl));
     const anyOk = rows.some((r) => r?.loadOk);
     if (!anyOk && decls.length > 0) {
       console.warn("zoto-viz host mesh: no assets loaded for", packId);
@@ -208,6 +345,8 @@ export class HostMeshLane {
 
   clear(): void {
     this.loadEpoch += 1;
+    this.pendingByAsset.clear();
+    this.disposeScenery();
     this.clearLive();
     for (const t of this.templates.values()) {
       t.template.removeFromParent();
@@ -227,8 +366,22 @@ export class HostMeshLane {
         row.mixer.time =
           row.animOffset + this.clockSec * (row.clipDuration > 0 ? 1 : 0);
         row.mixer.update(0);
+        this.driftDecor(row.root, dtSec);
       }
     }
+    for (const list of this.rigidLive.values()) {
+      for (const row of list) this.driftDecor(row.root, dtSec);
+    }
+  }
+
+  /** Gentle swim for host-pinned fish until a sandbox packet replaces them. */
+  private driftDecor(root: THREE.Object3D, dt: number): void {
+    const d = root.userData.aquDecor as AquariumDecorPose | undefined;
+    if (!d) return;
+    if (d.homeY === undefined) d.homeY = d.y;
+    stepAquariumDecor(d, this.clockSec, dt);
+    root.matrix.fromArray(hostMeshMatrixYawPos(d.x, d.y, d.z, d.yaw, d.scale));
+    root.updateMatrixWorld(true);
   }
 
   /**
@@ -241,6 +394,7 @@ export class HostMeshLane {
       pkt.version === HOST_MESH_FRAME_V1 ? slotAssetIndexOffset : pkt.assetIndex;
     const assetId = this.assetOrder[assetIndex];
     if (!assetId) return;
+    this.pendingByAsset.set(assetIndex, data);
     const tpl = this.templates.get(assetId);
     if (!tpl?.loadOk) return;
     if (tpl.kind === "skinned") {
@@ -286,6 +440,7 @@ export class HostMeshLane {
       tmp.fromArray(inst.matrix);
       root.matrix.copy(tmp);
       root.matrixAutoUpdate = false;
+      tagAquariumDecor(root, inst.matrix, inst.extras);
       applyRigidArticulation(root, inst.extras);
       root.updateMatrixWorld(true);
       this.group.add(root);
@@ -311,6 +466,7 @@ export class HostMeshLane {
       tmp.fromArray(inst.matrix);
       root.matrix.copy(tmp);
       root.matrixAutoUpdate = false;
+      tagAquariumDecor(root, inst.matrix, inst.extras);
       root.updateMatrixWorld(true);
       const mixer = new THREE.AnimationMixer(root);
       const action = mixer.clipAction(tpl.swimClip);
@@ -405,8 +561,29 @@ export class HostMeshLane {
     }
   }
 
+  /** Glass tank (or any non-GLB scenery) parented with the live instances. */
+  setScenery(root: THREE.Object3D | null): void {
+    this.disposeScenery();
+    if (!root) return;
+    this.scenery = root;
+    this.group.add(root);
+  }
+
+  private disposeScenery(): void {
+    const root = this.scenery;
+    this.scenery = null;
+    if (!root) return;
+    root.removeFromParent();
+    disposeHostMeshObject3D(root);
+  }
+
   private storeTemplate(id: string, row: LoadedTemplate): LoadedTemplate {
     this.templates.set(id, row);
+    if (row.loadOk) {
+      const idx = this.assetOrder.indexOf(id);
+      const pending = idx >= 0 ? this.pendingByAsset.get(idx) : undefined;
+      if (pending) this.applySlotBuffer(pending);
+    }
     return row;
   }
 }

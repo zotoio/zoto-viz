@@ -33,9 +33,9 @@ _BACKEND_MARKERS = frozenset({"backend", "service", "collector", "datasource"})
 def _sandbox_bootstrap_file(tail: str) -> bool:
     if tail == "plugin-sandbox.html":
         return True
-    return bool(re.fullmatch(r"plugin-sandbox-[\w-]+\.js", tail)) or bool(
-        re.fullmatch(r"preload-helper-[\w-]+\.js", tail)
-    ) or bool(re.fullmatch(r"sandbox-channel-[\w-]+\.js", tail))
+    # Hashed Vite chunks next to the bootstrap (plugin-sandbox, its preload helper,
+    # and any sibling the entry imports). Basename only — no paths.
+    return bool(re.fullmatch(r"[A-Za-z0-9][\w.-]*\.js", tail))
 
 
 def _plugin_home(row: dict[str, Any]) -> Path | None:
@@ -178,14 +178,38 @@ def _sandbox_token_asset_src(request: web.Request, token: str) -> str:
     return f"{origin}/pack-assets/{safe_tok}/"
 
 
+def _loopback_page_asset_src(request: web.Request, token: str) -> str | None:
+    """Vite (:5173) proxies pack-assets to the monitor. CSP must allow that page origin too."""
+    raw = (request.headers.get("Referer") or request.headers.get("Origin") or "").strip()
+    if not raw or raw == "null":
+        return None
+    try:
+        from urllib.parse import urlsplit
+        from .access import is_loopback_name, strict_origin_hostname
+        parts = urlsplit(raw)
+        host = strict_origin_hostname(f"{parts.scheme}://{parts.netloc}")
+        if not host or not is_loopback_name(host):
+            return None
+        page = f"{parts.scheme}://{parts.netloc}".rstrip("/")
+        bound = _sandbox_token_asset_src(request, token)
+        if page == bound.split("/pack-assets/", 1)[0]:
+            return None
+        safe_tok = quote(token, safe="")
+        return f"{page}/pack-assets/{safe_tok}/"
+    except Exception:
+        return None
+
+
 def sandbox_csp_for_token(request: web.Request, token: str) -> str:
     src = _sandbox_token_asset_src(request, token)
+    extra = _loopback_page_asset_src(request, token)
+    srcs = f"{src} {extra}" if extra else src
     return (
         f"default-src 'none'; "
-        f"script-src {src}; "
-        f"img-src {src}; "
-        f"style-src {src}; "
-        f"font-src {src}; "
+        f"script-src {srcs}; "
+        f"img-src {srcs}; "
+        f"style-src {srcs}; "
+        f"font-src {srcs}; "
         f"object-src 'none'; "
         f"frame-src 'none'; "
         f"worker-src 'none'; "
@@ -288,7 +312,7 @@ def _rewrite_sandbox_html(body: str, token: str) -> str:
         return f'{attr}="{url}"'
 
     body = re.sub(
-        r'(?P<attr>src|href)="(?P<path>/assets/(?:plugin-sandbox|preload-helper)-[\w-]+\.js)"',
+        r'(?P<attr>src|href)="(?P<path>/assets/[\w.-]+\.js)"',
         repl_asset,
         body,
     )
