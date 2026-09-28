@@ -1285,19 +1285,39 @@ def test_service_live_value():
     assertNoRevertProofWorktrees(root);
   });
 
+  function reachExemptLibPatch(root: string): string {
+    const rel = "scripts/revert-proof-lib.mjs";
+    const abs = path.join(root, rel);
+    const orig = fs.readFileSync(abs, "utf8");
+    const marker = "\nexport const MAX_TIMER_MS";
+    const idx = orig.indexOf(marker);
+    if (idx === -1) {
+      throw new Error("reach-exempt fixture: MAX_TIMER_MS anchor missing in revert-proof-lib.mjs");
+    }
+    const patched = `${orig.slice(0, idx)}\n// reach-exempt dogfood touch${orig.slice(idx)}`;
+    const a = path.join(root, ".reach-exempt-a.mjs");
+    const b = path.join(root, ".reach-exempt-b.mjs");
+    fs.writeFileSync(a, orig);
+    fs.writeFileSync(b, patched);
+    const diff = spawnSync("diff", ["-u", a, b], { encoding: "utf8" });
+    fs.unlinkSync(a);
+    fs.unlinkSync(b);
+    if (diff.status !== 1 || !diff.stdout) {
+      throw new Error(`reach-exempt fixture: diff failed (${diff.stderr || diff.stdout})`);
+    }
+    return diff.stdout
+      .split("\n")
+      .map((line) => {
+        if (line.startsWith("--- ")) return `--- a/${rel}`;
+        if (line.startsWith("+++ ")) return `+++ b/${rel}`;
+        return line;
+      })
+      .join("\n");
+  }
+
   it("(reach-exempt-first) reachExempt from config applies before first touched file", () => {
     const root = mkFixture();
-    const exemptPatch = `--- a/scripts/revert-proof-lib.mjs
-+++ b/scripts/revert-proof-lib.mjs
-@@ -167,6 +167,7 @@
-   fs.writeFileSync(abs, \`\${JSON.stringify(body, null, 2)}\\n\`, "utf8");
- }
- 
-+// reach-exempt dogfood touch
- export const MAX_TIMER_MS = 2_147_483_647;
- 
- export const TEST_PATH_RE =
-`;
+    const exemptPatch = reachExemptLibPatch(root);
     writeRow(root, "99", "reach-exempt-touch", exemptPatch, {
       runner: "vitest",
       testFile: "web/revert-proof/widget.test.ts",

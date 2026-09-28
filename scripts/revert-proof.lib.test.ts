@@ -606,12 +606,18 @@ describe("strict git apply", () => {
 
   it("(strict) accepts a patch with exact context", () => {
     const root = strictApplyRoot();
+    if (!fs.existsSync(strictGitApplySamplePatch)) {
+      throw new Error(`missing fixture patch: ${strictGitApplySamplePatch}`);
+    }
     const patch = fs.readFileSync(strictGitApplySamplePatch, "utf8");
     expect(() => gitApplyPatchStrict(root, patch)).not.toThrow();
   });
 
   it("(strict) rejects patches that only apply at an offset", () => {
     const root = strictApplyRoot();
+    if (!fs.existsSync(strictGitApplySamplePatch)) {
+      throw new Error(`missing fixture patch: ${strictGitApplySamplePatch}`);
+    }
     const good = fs.readFileSync(strictGitApplySamplePatch, "utf8");
     const stalePatch = good.replace(
       /@@ -(\d+),(\d+) \+(\d+),\2 @@/,

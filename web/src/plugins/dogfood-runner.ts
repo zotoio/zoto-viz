@@ -356,7 +356,7 @@ export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCount
     let delivered = 0;
 
     const gatedBuild: typeof buildVizFrame = (s, pt = monoMs(0), a = 0, bind) => {
-      const frame = buildVizFrameForPlugin(s, pt, a, contract.idle, bind);
+      const frame = buildVizFrameForPlugin(s, pt, a, contract.idle, 1, bind);
       bumpFrameObject();
       const work = takeVizBuildWorkSnapshot();
       maxWork.flowVisits = Math.max(maxWork.flowVisits, work.flowVisits);
