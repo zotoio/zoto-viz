@@ -5,7 +5,7 @@ import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../c
 import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
-import { mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
+import { makePaneDiceButton, mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
 import { Settings, makeViewCogButton } from "../ui/settings";
 import {
   activateRemixPairing,
@@ -13,7 +13,7 @@ import {
   hydrateRemixFromStorage,
   remixPairingActive,
 } from "../remix/remix-runtime";
-import { remixViewId } from "../remix/remix-store";
+import { remixViewId, loadRemixPairing } from "../remix/remix-store";
 import { illustratedSourceBind, parseSourceBind, sourceHeadlines } from "../core/sources";
 import { bindSourceOf, viewAuthBlock, type AuthCtx } from "../core/auth-setup";
 import { LiveFeed, feedViewShift } from "../ui/feed";
@@ -76,6 +76,8 @@ import {
 } from "./render-scale-governor-wiring";
 import { readSessionLive, writeSessionLive } from "../core/session-live";
 import { diceLookForRoll, shuffleLook } from "../core/shuffle";
+import { pickPaneDiceView } from "../graph/pane-dice";
+import { usesFullDeviceTable } from "../graph/layout-budget";
 import { cycleSkyPool } from "../graph/backdrop";
 import { PongView } from "../arcade/pong";
 import { InvadersView } from "../arcade/invaders";
@@ -95,11 +97,13 @@ import { CarouselView } from "../arcade/carousel";
 import { spawnArcade } from "../arcade/spawn";
 import { Mosaic, mosaicPaneMode } from "../graph/mosaic";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
+import { noteUserView, recentViewIds, setRecentViews } from "../plugins/recent-views";
 import { hostModeById } from "./host-mode";
 import { globalViewLeavesMosaic } from "./global-view";
+import { mosaicPluginSkyPaneView } from "./mosaic-host-bindings";
 import { RenderHost } from "../graph/render-host";
 import {
-  applyPluginConfigs,
+  replacePluginConfigs,
   collectPluginConfigs,
   fetchPlugins,
   grantPluginConsent,
@@ -389,7 +393,7 @@ const touch = () => { profiles?.touch(); persistLive(); };
 const profileSel = new Select({
   id: "profile",
   caption: "profile",
-  title: "settings profile (~/.zoto-viz/profiles.yml); zoto viz is the shipped default",
+  title: "settings profile — restores every setting last saved on it (~/.zoto-viz/profiles.yml)",
   options: [{ value: SHIPPED_ID, label: "zoto viz", hint: "shipped" }],
   value: SHIPPED_ID,
   onChange: (id) => { void profiles?.select(id); },
@@ -709,7 +713,7 @@ function syncOverlayStack(): void {
 const modeSel = new Select({
   id: "mode",
   caption: "view",
-  title: "view mode (keys 1–9, 0 for the 10th). Type to filter.",
+  title: "view mode (keys 1–9, 0 for the 10th). Your last 10 picks stay at the top. Type to filter.",
   filterable: true,
   options: viewSelectOptions(),
   onChange: (id) => applyMode(id, {}, { channel: "user" }),
@@ -724,7 +728,7 @@ const feedTitleCube = new FeedTitleCube($("wall"));
 const vizPresentHost: VizPresentDeliverHost = {
   modeById,
   modeSelValue: () => modeSel.value,
-  pluginSpecs,
+  get pluginSpecs() { return pluginSpecs; },
   tsWatchId: () => tsWatchId,
   mosaic,
   scene,
@@ -1267,7 +1271,7 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
         if (!target) continue;
         const tileSky = mosaic.paneSky(id);
         const pane = pluginSpecForMode(id);
-        const wantPlugin = tileSky === "plugin" || (!tileSky && (lookForMode(id)?.backdrop === "plugin"));
+        const wantPlugin = mosaicPluginSkyPaneView(id, tileSky, lookForMode).wantPlugin;
         await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
       }
     } finally {
@@ -1710,6 +1714,31 @@ const labelsChrome = new Toggle({
   onChange: (on) => setLabels(on),
 });
 $("labelsBox").appendChild(labelsChrome.el);
+const OVERLAYS_KEY = "zoto-viz.overlays";
+function readOverlays(): boolean {
+  return localStorage.getItem(OVERLAYS_KEY) !== "0";
+}
+function setOverlays(on: boolean): void {
+  localStorage.setItem(OVERLAYS_KEY, on ? "1" : "0");
+  document.body.classList.toggle("overlays-off", !on);
+  overlaysChrome.checked = on;
+  overlaysSettings.checked = on;
+}
+const overlaysChrome = new Toggle({
+  id: "overlays",
+  label: "overlays",
+  title: "on-picture overlays: viz HUD, status chip, pane captions, graph tags (key O)",
+  checked: readOverlays(),
+  onChange: (on) => setOverlays(on),
+});
+const overlaysSettings = new Toggle({
+  label: "overlays",
+  title: "on-picture overlays: viz HUD, status chip, pane captions, graph tags (key O)",
+  checked: readOverlays(),
+  onChange: (on) => setOverlays(on),
+});
+$("overlaysBox").appendChild(overlaysChrome.el);
+document.body.classList.toggle("overlays-off", !readOverlays());
 function setLabels(on: boolean): void {
   sysLabels.checked = on;
   labelsChrome.checked = on;
@@ -1861,10 +1890,13 @@ settings = new Settings({
 });
 settings.onRemixSave = async (pairing) => {
   await activateRemixPairing(pairing);
+  if (noteUserView(remixViewId(pairing.visualPackId))) refreshViewMenus();
+  touch();
   applyMode(remixViewId(pairing.visualPackId), {}, { channel: "user" });
 };
 settings.onRemixClear = () => {
   deactivateRemix();
+  touch();
 };
 bindServerRestartWallNotice();
 let pendingSandboxPush: PendingSandboxConfigPush | null = null;
@@ -1919,9 +1951,15 @@ const tileHealToggle = new Toggle({
   onChange: (on) => {
     tileHealErrorsOn = on;
     writeTileHealErrors(on);
+    touch();
   },
 });
 settings.addSection("Tiles", [tileHealToggle], "Automatic empty-panel detection runs either way; this only controls visible heal messages.");
+settings.addSection(
+  "Overlays",
+  [overlaysSettings],
+  "Viz HUD, the corner status chip, pane captions, graph tags, and tile-heal notes. Header overlays / O is the same switch. Feed, chat, and debug stay on their own switches.",
+);
 const MOSAIC_FOCUS_KEY = "zoto-viz.mosaicFocus";
 function persistMosaicFocus(id: string | null | undefined): void {
   const v = id?.trim();
@@ -1943,6 +1981,7 @@ mosaic = new Mosaic({
     noteTileHealthGrace(id);
   },
   onPromote: (id, theme) => {
+    if (noteUserView(id)) refreshViewMenus();
     applyMode(id, { keepLayout: true }, { channel: "user" });
     if (theme) applyTheme(theme.id);
     applyViewLook();
@@ -1962,6 +2001,10 @@ mosaic = new Mosaic({
       bindThisView(id);
       settings.openView(id);
     },
+  }),
+  paneDice: (id) => makePaneDiceButton({
+    pane: id,
+    onClick: () => { rollPaneDice(id); },
   }),
   sync: () => ({
     theme: scene.currentTheme,
@@ -2034,8 +2077,10 @@ async function pickMosaicPane(from: string, to: string): Promise<boolean> {
     settings.refreshMosaicSlots();
     return false;
   }
+  if (noteUserView(to)) refreshViewMenus();
   noteTileHealthGrace(from);
   noteTileHealthGrace(to);
+  touch();
   return true;
 }
 
@@ -2088,12 +2133,19 @@ function syncHeaderViewChrome(): void {
   const wall = !!mosaic?.on;
   modeSel.setCaption(wall ? "global" : "view");
   modeSel.setTitle(wall
-    ? "leave the wall and show this one view full screen (keys 1–9). A wall pack such as Syscon opens its wall."
-    : "view mode (keys 1–9, 0 for the 10th). Type to filter.");
+    ? "leave the wall and show this one view full screen (keys 1–9, 0 for the 10th). Your last 10 picks stay at the top. A wall pack such as Syscon opens its wall."
+    : "view mode (keys 1–9, 0 for the 10th). Your last 10 picks stay at the top. Type to filter.");
+}
+
+function refreshViewMenus(): void {
+  modeSel.setOptions(viewSelectOptions());
+  mosaic?.refreshViewMenus();
+  settings.refreshMosaicSlots();
 }
 
 /** Header and digit picks. On a wall this is one global view, not another pane. */
 function selectHeaderView(id: string): void {
+  if (noteUserView(id)) refreshViewMenus();
   if (globalViewLeavesMosaic(!!mosaic?.on, lookForMode(id))) {
     modeSel.value = id;
     settings.applyAnim({
@@ -2151,6 +2203,7 @@ function setDebug(on: boolean): void {
   debugToggle.checked = on;
   debugSettings.checked = on;
   debugLog.setOn(on);
+  touch();
 }
 debugLog.onClose = () => setDebug(false);
 debugToggle.onChange = setDebug;
@@ -2416,7 +2469,9 @@ const profileTools = document.createElement("div");
 profileTools.className = "prow";
 const profileHost = document.createElement("div");
 profileHost.className = "sec-controls";
-profileHost.append(profileSel.el, profileTools);
+const profileBox = $("profileBox");
+if (profileBox) profileBox.append(profileSel.el);
+profileHost.append(profileTools);
 const chromeHost = document.createElement("div");
 chromeHost.className = "sec-controls";
 chromeHost.append(chromeSel.el, layoutRow);
@@ -2438,7 +2493,7 @@ settings.prependSection(
 );
 settings.prependSection(
   "Profile",
-  "Saved in ~/.zoto-viz/profiles.yml. Choosing a profile makes it the one a new tab loads. zoto viz is the shipped default. Backend and model are stored on that profile; the Cursor key stays in ~/.zoto-viz/cursor-key.",
+  "The header profile menu loads this profile's last saved settings: view, theme, motion, mosaic, feed, chat, plugins, camera, and agent. Saved in ~/.zoto-viz/profiles.yml. Choosing one makes it the startup profile. zoto viz is the shipped default. The Cursor key stays in ~/.zoto-viz/cursor-key.",
   profileHost,
 );
 uiReady = true;
@@ -2640,13 +2695,30 @@ async function applyAgentLook(look: AgentLookInput): Promise<void> {
   await profiles?.writeAi(collectSettings(), agent.modelTag);
 }
 
+const ARCADE_STORAGE_RE = /^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom|waves|orbits|helix|skyline|pacman|tetris|portal|carousel)\./;
+
+function storageKeys(): string[] {
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k) keys.push(k);
+  }
+  return keys;
+}
+
+function replaceStorage(re: RegExp, entries: [string, string][]): void {
+  for (const k of storageKeys()) if (re.test(k)) localStorage.removeItem(k);
+  for (const [k, v] of entries) if (re.test(k)) localStorage.setItem(k, v);
+}
+
 function collectSettings(): ProfileSettings {
   const modeOptions: Record<string, Record<string, string>> = {};
   for (const m of allModes()) modeOptions[m.id] = optsFor(m);
   const arcade: Record<string, string> = {};
-  for (const k of Object.keys(localStorage)) {
-    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom|waves|orbits|helix|skyline|pacman|tetris|portal|carousel)\./.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
+  for (const k of storageKeys()) {
+    if (ARCADE_STORAGE_RE.test(k)) arcade[k] = localStorage.getItem(k) ?? "";
   }
+  const operator = agent.operatorPrefs();
   return {
     theme: theme.id,
     dream: dreamToggle.checked,
@@ -2678,6 +2750,17 @@ function collectSettings(): ProfileSettings {
     autosave: true,
     ai: agent.aiPrefs(),
     vizGovernor: loadVizGovernorSetting(),
+    recentViews: [...recentViewIds()],
+    mosaicFocus: localStorage.getItem(MOSAIC_FOCUS_KEY) ?? "",
+    operator: { ...operator, tileHealErrors: tileHealErrorsOn, debug: debugToggle.checked },
+    remix: loadRemixPairing(),
+    operatorSaved: true,
+    recentSaved: true,
+    remixSaved: true,
+    mosaicFocusSaved: true,
+    pluginsSaved: true,
+    arcadeSaved: true,
+    modeOptionsSaved: true,
   };
 }
 
@@ -2685,16 +2768,15 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   bumpPluginCatalogRevision();
   void import("../plugins/plugin-settings").then((m) => m.clearPluginSettingsUiState());
   profiles?.adoptAutosave(s.autosave);
-  for (const k of Object.keys(localStorage)) {
-    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) localStorage.removeItem(k);
+  if (s.arcadeSaved) replaceStorage(ARCADE_STORAGE_RE, Object.entries(s.arcade ?? {}) as [string, string][]);
+  if (s.modeOptionsSaved) {
+    const modeEntries: [string, string][] = [];
+    for (const [mid, opts] of Object.entries(s.modeOptions ?? {})) {
+      for (const [k, v] of Object.entries(opts)) modeEntries.push([`zoto-viz.mode.${mid}.${k}`, v]);
+    }
+    replaceStorage(/^zoto-viz\.mode\./, modeEntries);
   }
-  for (const [k, v] of Object.entries(s.arcade ?? {})) {
-    if (/^zoto-viz\.(pong|invaders|command|frogger|cpupong|doom)\./.test(k)) localStorage.setItem(k, v);
-  }
-  for (const [mid, opts] of Object.entries(s.modeOptions ?? {})) {
-    for (const [k, v] of Object.entries(opts)) localStorage.setItem(`zoto-viz.mode.${mid}.${k}`, v);
-  }
-  applyPluginConfigs(s.plugins);
+  if (s.pluginsSaved) replacePluginConfigs(s.plugins);
   applyTheme(s.theme, s.theme !== theme.id);
   setDream(s.dream);
   userChrome = parseChrome(s.chrome);
@@ -2720,6 +2802,24 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   settings.applyChat(s.chat ?? settings.chatSettings);
   settings.applyDice(s.dice ?? settings.diceSettings);
   agent.applyAi(s.ai);
+  if (s.operatorSaved) {
+    agent.applyOperator(s.operator);
+    tileHealErrorsOn = s.operator.tileHealErrors;
+    writeTileHealErrors(tileHealErrorsOn);
+    tileHealToggle.checked = tileHealErrorsOn;
+    setDebug(s.operator.debug);
+  }
+  if (s.recentSaved) setRecentViews(s.recentViews);
+  if (s.mosaicFocusSaved) {
+    if (s.mosaicFocus) localStorage.setItem(MOSAIC_FOCUS_KEY, s.mosaicFocus);
+    else localStorage.removeItem(MOSAIC_FOCUS_KEY);
+  }
+  if (s.remixSaved) {
+    if (s.remix) void activateRemixPairing(s.remix);
+    else deactivateRemix();
+    settings.refreshRemixPicker(pluginSpecs);
+  }
+  refreshViewMenus();
   if (s.camera) settings.setCamPolicy(s.camera);
   if (s.mic) settings.setMicPolicy(s.mic);
   settings.setSoundOn(!!s.sound);
@@ -2733,6 +2833,7 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
     scene.setStageOnly(false);
   }
   applyMode(s.mode, { keepLayout: flags.keepLayout }, { channel: "user" });
+  if (s.mosaicFocusSaved && s.mosaicFocus && mosaic?.on) mosaic.focus(s.mosaicFocus);
   if (lastRaw) feed(lastRaw);
   void syncWifiWatch();
   persistLive();
@@ -2818,6 +2919,18 @@ function diceModes(): ViewMode[] {
       capabilities: spec?.capabilities,
     }, ctx);
   });
+}
+
+function rollPaneDice(paneId: string): void {
+  if (!mosaic?.on) return;
+  const to = pickPaneDiceView(
+    paneId,
+    mosaic.tileIds,
+    diceModes().map((m) => m.id),
+    (id) => usesFullDeviceTable(modeById(id)),
+  );
+  if (!to) return;
+  void pickMosaicPane(paneId, to);
 }
 
 async function rollDice(force: { view?: boolean } = {}): Promise<void> {
@@ -2965,6 +3078,7 @@ window.addEventListener("keydown", (e) => {
   if (e.key === "c" || e.key === "C") settings.setChatOn(!settings.chatSettings.on);
   if (e.key === "b" || e.key === "B") setDebug(!debugToggle.checked);
   if (e.key === "l" || e.key === "L") setLabels(!sysLabels.checked);
+  if (e.key === "o" || e.key === "O") setOverlays(!overlaysChrome.checked);
   if (e.key === "t" || e.key === "T") applyTheme(THEMES[(THEMES.findIndex((t) => t.id === theme.id) + (e.shiftKey ? THEMES.length - 1 : 1)) % THEMES.length].id, true);
   const idx = e.key === "0" ? 9 : Number(e.key) - 1;
   const modes = viewSelectOptions();

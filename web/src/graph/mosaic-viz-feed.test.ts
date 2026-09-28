@@ -75,6 +75,7 @@ describe("mosaic onPanePick wiring", () => {
     const host = new RenderHost(wall, { software: true });
     const main = new NetScene(sceneEl, { host });
     main.retargetPanel("plugin:topology");
+    const diceCalls: string[] = [];
     const pickCalls: [string, string][] = [];
     const pick = vi.fn(async (from: string, to: string) => {
       pickCalls.push([from, to]);
@@ -92,6 +93,14 @@ describe("mosaic onPanePick wiring", () => {
       onLayout: () => {},
       onCloseLast: () => {},
       onPanePick: pick,
+      paneDice: (id) => {
+        const b = document.createElement("button");
+        b.type = "button";
+        b.className = "mosaic-pane-dice";
+        b.dataset.pane = id;
+        b.addEventListener("click", () => diceCalls.push(id));
+        return b;
+      },
       sync: () => ({
         theme: themeById("midnight"),
         filters: {},
@@ -109,6 +118,10 @@ describe("mosaic onPanePick wiring", () => {
     pane!.dispatchEvent(new Event("change", { bubbles: true }));
     await Promise.resolve();
     expect(pickCalls).toEqual([["plugin:topology", "plugin:wifi"]]);
+    const dice = wall.querySelectorAll<HTMLButtonElement>(".mosaic-pane-dice");
+    expect(dice.length).toBe(2);
+    dice[0]!.click();
+    expect(diceCalls).toEqual(["plugin:topology"]);
     host.dispose();
     main.dispose();
   });

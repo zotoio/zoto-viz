@@ -22,6 +22,7 @@ import {
   pluginViewId,
 } from "./instances";
 import type { PluginInstance } from "./instances";
+import { RECENT_VIEW_GROUP, recentViewIds } from "./recent-views";
 import {
   blockedCatalogEntries,
   blockedViewSelectRow,
@@ -100,6 +101,7 @@ export interface PluginLook {
   skyBright?: number;
   skySpeed?: number;
   skyEase?: number;
+  skyPhotoS?: number;
   skyAudio?: boolean;
   skyCycle?: ThemeCycle;
   bgColor?: string;
@@ -252,7 +254,7 @@ export interface PluginView {
 }
 
 const LOOK_ANIM_KEYS = [
-  "backdrop", "skyOpacity", "skyBright", "skySpeed", "skyEase", "skyAudio", "skyCycle",
+  "backdrop", "skyOpacity", "skyBright", "skySpeed", "skyEase", "skyPhotoS", "skyAudio", "skyCycle",
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
@@ -513,6 +515,17 @@ export function collectPluginConfigs(specs: PluginView[]): Record<string, Record
   }));
 }
 
+/** Drop stored plugin knobs, then write exactly the profile's saved values. */
+export function replacePluginConfigs(raw: Record<string, Record<string, string>> | undefined): void {
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k?.startsWith("zoto-viz.plugin.")) keys.push(k);
+  }
+  for (const k of keys) localStorage.removeItem(k);
+  applyPluginConfigs(raw);
+}
+
 export function applyPluginConfigs(raw: Record<string, Record<string, string>> | undefined): void {
   if (!raw) return;
   for (const [id, values] of Object.entries(raw)) {
@@ -749,7 +762,17 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
   if (blockedRow) rows.push(blockedRow);
   rows.sort((a, b) => (CATALOG_GROUP_RANK[a.group] ?? 9) - (CATALOG_GROUP_RANK[b.group] ?? 9)
     || a.label.localeCompare(b.label));
-  const numbered = rows.map((row, i) => ({
+  const byId = new Map(rows.map((row) => [row.value, row]));
+  const pinned = new Set<string>();
+  const recentRows: { value: string; label: string; group: string }[] = [];
+  for (const id of recentViewIds()) {
+    const row = byId.get(id);
+    if (!row || pinned.has(row.value)) continue;
+    pinned.add(row.value);
+    recentRows.push({ ...row, group: RECENT_VIEW_GROUP });
+  }
+  const ordered = [...recentRows, ...rows.filter((row) => !pinned.has(row.value))];
+  const numbered = ordered.map((row, i) => ({
     ...row,
     hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : row.group,
   }));

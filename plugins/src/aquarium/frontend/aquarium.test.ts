@@ -36,7 +36,7 @@ import {
   tileInternalResScale,
   unpackFishMeta,
 } from "./aquarium";
-import { AQU_HOST_MESH_ASSETS, AQU_SPECIES_TO_ASSET } from "./host-mesh-drive";
+import { AQU_HOST_MESH_ASSETS, AQU_REEF_SPECIES_TO_ASSET, AQU_SPECIES_TO_ASSET } from "./host-mesh-drive";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import { probePluginSkyCompile, wrapPluginSky } from "./sky-test-harness";
 
@@ -433,7 +433,8 @@ describe("aquarium shipped pack", () => {
   it("host mesh maps cory and cichlid to appended GLB indices 8 and 9", () => {
     expect(AQU_HOST_MESH_ASSETS[8]).toBe("fish-cory");
     expect(AQU_HOST_MESH_ASSETS[9]).toBe("fish-cichlid");
-    expect(AQU_SPECIES_TO_ASSET).toEqual([7, 2, 6, 8, 5, 9]);
+    expect(AQU_SPECIES_TO_ASSET).toEqual([7, 2, 6, 8, 5, 9, 3]);
+    expect(AQU_REEF_SPECIES_TO_ASSET[0]).toBe(4);
     expect(PLUGIN).toContain("fish-cory.glb");
     expect(PLUGIN).toContain("fish-cichlid.glb");
   });

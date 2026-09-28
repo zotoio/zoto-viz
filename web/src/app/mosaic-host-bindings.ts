@@ -52,7 +52,7 @@ export function mosaicPluginSkyPaneView(
   lookForMode: (modeId: string) => PluginLook | undefined,
 ): { viewId: string; wantPlugin: boolean } {
   const viewId = mosaicTileViewId(tileSlotId);
-  const wantPlugin = tileSky === "plugin" || (!tileSky && lookForMode(viewId)?.backdrop === "plugin");
+  const wantPlugin = tileSky === "plugin" || lookForMode(viewId)?.backdrop === "plugin";
   return { viewId, wantPlugin };
 }
 

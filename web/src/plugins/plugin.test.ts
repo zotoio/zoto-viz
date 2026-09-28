@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, afterEach } from "vitest";
 import { applyInstance } from "./instances";
 import { HEADLINES_PACK } from "./test/load-settings-fixture";
 import {
-  applyPluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
+  applyPluginConfigs, replacePluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
   loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
   viewSelectOptions, fillViewSelect, writePluginConfig, type PluginView,
 } from "./plugin";
@@ -90,6 +90,10 @@ describe("plugin config", () => {
     expect(pluginViewKnobs(s).some((f) => f.key === VIEW_PROMPT_KEY && f.type === "textarea")).toBe(true);
     applyPluginConfigs({ pulse: { gain: "2" } });
     expect(loadPluginConfig(s).gain).toBe("2");
+    writePluginConfig("pulse", { leftover: "1" });
+    replacePluginConfigs({ pulse: { gain: "5" } });
+    expect(loadPluginConfig(s).gain).toBe("5");
+    expect(localStorage.getItem("zoto-viz.plugin.pulse.leftover")).toBeNull();
     applyPluginConfigs(undefined);
   });
 

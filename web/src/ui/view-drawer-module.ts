@@ -43,7 +43,7 @@ export function clearViewDrawerHost(host: HTMLDivElement, viewMosaicSec: HTMLEle
   if (!viewMosaicSec) {
     const empty = document.createElement("div");
     empty.className = "sec";
-    empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">On a single view, the cog next to the header view menu opens this tab. On a wall, use the corner cog on that pane. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
+    empty.innerHTML = `<div class="sec-title">View</div><div class="sec-hint">On a single view, the cog next to the header view menu opens this tab. On a wall, use the corner cog on that pane. The dice beside that cog rolls a new view onto the pane. Network and system visibility live under Graph. Host and subnet filters live under Privacy.</div>`;
     host.append(empty);
   }
   if (viewMosaicSec) host.append(viewMosaicSec);

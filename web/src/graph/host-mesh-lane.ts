@@ -125,6 +125,29 @@ function hasSkinnedMesh(root: THREE.Object3D): boolean {
   return skinned;
 }
 
+/**
+ * Plugin skies are transparent and fill the view, so they composite after the
+ * opaque pass. Live meshes join that pass, after the sky (renderOrder -10).
+ */
+const HOST_MESH_RENDER_ORDER = 2;
+
+export function showHostMeshInstance(root: THREE.Object3D): void {
+  root.visible = true;
+  root.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    mesh.renderOrder = HOST_MESH_RENDER_ORDER;
+    mesh.frustumCulled = false;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const m of mats) {
+      if (!m) continue;
+      m.transparent = true;
+      m.depthTest = true;
+      m.depthWrite = true;
+    }
+  });
+}
+
 function applyRigidArticulation(root: THREE.Object3D, extras: HostMeshInstanceExtras): void {
   const spin = extras.param1;
   for (const name of WHEEL_NODE_NAMES) {
@@ -259,6 +282,7 @@ export class HostMeshLane {
     for (let i = 0; i < cap; i++) {
       const inst = instances[i]!;
       const root = tpl.template.clone(true);
+      showHostMeshInstance(root);
       tmp.fromArray(inst.matrix);
       root.matrix.copy(tmp);
       root.matrixAutoUpdate = false;
@@ -283,6 +307,7 @@ export class HostMeshLane {
     for (let i = 0; i < cap; i++) {
       const inst = instances[i]!;
       const root = cloneSkinnedRoot(tpl.template) as THREE.Object3D;
+      showHostMeshInstance(root);
       tmp.fromArray(inst.matrix);
       root.matrix.copy(tmp);
       root.matrixAutoUpdate = false;

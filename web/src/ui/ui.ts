@@ -683,6 +683,28 @@ export class Toggle {
 
 const DICE_ICON = `<svg viewBox="0 0 20 20" aria-hidden="true" width="16" height="16"><rect x="1.8" y="1.8" width="16.4" height="16.4" rx="3.4" fill="currentColor" opacity="0.18"/><rect x="1.8" y="1.8" width="16.4" height="16.4" rx="3.4" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="6.6" cy="6.6" r="1.35" fill="currentColor"/><circle cx="13.4" cy="6.6" r="1.35" fill="currentColor"/><circle cx="10" cy="10" r="1.35" fill="currentColor"/><circle cx="6.6" cy="13.4" r="1.35" fill="currentColor"/><circle cx="13.4" cy="13.4" r="1.35" fill="currentColor"/></svg>`;
 
+/** Corner control on a mosaic pane: one roll of a new view for that pane. */
+export function makePaneDiceButton(opts: { pane: string; onClick: () => void }): HTMLButtonElement {
+  const btn = document.createElement("button");
+  btn.type = "button";
+  btn.className = "mosaic-pane-dice";
+  btn.title = "roll a new view on this pane";
+  btn.setAttribute("aria-label", "roll this pane");
+  btn.dataset.pane = opts.pane;
+  btn.innerHTML = DICE_ICON;
+  btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    btn.classList.remove("rolling");
+    void btn.offsetWidth;
+    btn.classList.add("rolling");
+    window.setTimeout(() => btn.classList.remove("rolling"), 450);
+    opts.onClick();
+  });
+  return btn;
+}
+
 /** Header dice: left switch is repeat; right icon is a one-shot roll that does not toggle. */
 export function mountDiceSplit(box: HTMLElement, toggle: Toggle, onRoll: () => void): HTMLButtonElement {
   box.classList.add("dice-split");

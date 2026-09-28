@@ -8,6 +8,8 @@ import { EMPTY_LOOK, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { DEFAULT_DICE, normalizeDice, type DiceConfig } from "./shuffle";
 import { apiFetch } from "./http";
 import { remapSavedViewId } from "./saved-view-id";
+import { normalizeRecentViews } from "../plugins/recent-views";
+import type { RemixPairing } from "../remix/remix-types";
 
 /** Shipped profile id. Always present, never overwritten from the UI. */
 export const SHIPPED_ID = "zoto-viz";
@@ -67,6 +69,37 @@ export interface ProfileSettings {
   autosave: boolean;
   /** Agent backend and model. The Cursor key itself stays in ~/.zoto-viz/cursor-key. */
   ai: ProfileAi;
+  /** View ids the user picked, most recent first (header, digits, mosaic panes). */
+  recentViews: string[];
+  /** Focused mosaic pane, when the user last left one. */
+  mosaicFocus: string;
+  /** Header and Settings controls that used to live only in this browser. */
+  operator: ProfileOperator;
+  /** Remix data/visual pairing. Null when the user cleared it. */
+  remix: RemixPairing | null;
+  /** False when an older file has no saved copy of that block yet. */
+  operatorSaved: boolean;
+  recentSaved: boolean;
+  remixSaved: boolean;
+  mosaicFocusSaved: boolean;
+  pluginsSaved: boolean;
+  arcadeSaved: boolean;
+  modeOptionsSaved: boolean;
+}
+
+/** Settings the operator toggles outside the motion / graph blob. */
+export interface ProfileOperator {
+  voice: boolean;
+  listen: boolean;
+  watchword: string;
+  ttsVoice: string;
+  includeScreen: boolean;
+  mosaicLayout: boolean;
+  tsPlugins: boolean;
+  temper: number;
+  weather: string;
+  tileHealErrors: boolean;
+  debug: boolean;
 }
 
 /** Agent choices stored on the profile so a new tab or the other port keeps them. */
@@ -142,7 +175,67 @@ export function shippedSettings(): ProfileSettings {
     dice: { ...DEFAULT_DICE, include: { ...DEFAULT_DICE.include } },
     autosave: true,
     ai: emptyAi(),
+    recentViews: [],
+    mosaicFocus: "",
+    operator: defaultOperator(),
+    remix: null,
+    operatorSaved: true,
+    recentSaved: true,
+    remixSaved: true,
+    mosaicFocusSaved: true,
+    pluginsSaved: true,
+    arcadeSaved: true,
+    modeOptionsSaved: true,
   };
+}
+
+export function defaultOperator(): ProfileOperator {
+  return {
+    voice: true,
+    listen: true,
+    watchword: "zoto",
+    ttsVoice: "",
+    includeScreen: true,
+    mosaicLayout: true,
+    tsPlugins: true,
+    temper: 22,
+    weather: "drift",
+    tileHealErrors: false,
+    debug: false,
+  };
+}
+
+const WEATHERS = new Set(["hush", "drift", "pulse", "storm"]);
+
+export function normalizeOperator(raw: unknown): ProfileOperator {
+  const d = defaultOperator();
+  const s = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const temper = Number(s.temper);
+  const weather = typeof s.weather === "string" ? s.weather : d.weather;
+  const watch = typeof s.watchword === "string" ? s.watchword.trim().slice(0, 32) : d.watchword;
+  return {
+    voice: bool(s.voice, d.voice),
+    listen: bool(s.listen, d.listen),
+    watchword: watch || d.watchword,
+    ttsVoice: typeof s.ttsVoice === "string" ? s.ttsVoice.trim().slice(0, 80) : d.ttsVoice,
+    includeScreen: bool(s.includeScreen, d.includeScreen),
+    mosaicLayout: bool(s.mosaicLayout, d.mosaicLayout),
+    tsPlugins: bool(s.tsPlugins, d.tsPlugins),
+    temper: Number.isFinite(temper) ? Math.min(100, Math.max(0, Math.round(temper))) : d.temper,
+    weather: WEATHERS.has(weather) ? weather : d.weather,
+    tileHealErrors: bool(s.tileHealErrors, d.tileHealErrors),
+    debug: bool(s.debug, d.debug),
+  };
+}
+
+export function normalizeRemix(raw: unknown): RemixPairing | null {
+  if (!raw || typeof raw !== "object") return null;
+  const s = raw as Record<string, unknown>;
+  const dataPluginId = typeof s.dataPluginId === "string" ? s.dataPluginId.trim() : "";
+  const sourceId = typeof s.sourceId === "string" ? s.sourceId.trim() : "";
+  const visualPackId = typeof s.visualPackId === "string" ? s.visualPackId.trim() : "";
+  if (!dataPluginId || !sourceId || !visualPackId) return null;
+  return { dataPluginId, sourceId, visualPackId };
 }
 
 export function emptyAi(): ProfileAi {
@@ -229,6 +322,17 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     dice: normalizeDice(s.dice),
     autosave: true,
     ai: normalizeAi(s.ai),
+    recentViews: normalizeRecentViews(s.recentViews),
+    mosaicFocus: typeof s.mosaicFocus === "string" ? s.mosaicFocus.trim().slice(0, 80) : "",
+    operator: normalizeOperator(s.operator),
+    remix: normalizeRemix(s.remix),
+    operatorSaved: !!s.operator && typeof s.operator === "object",
+    recentSaved: Array.isArray(s.recentViews),
+    remixSaved: Object.prototype.hasOwnProperty.call(s, "remix"),
+    mosaicFocusSaved: typeof s.mosaicFocus === "string",
+    pluginsSaved: !!s.plugins && typeof s.plugins === "object",
+    arcadeSaved: !!s.arcade && typeof s.arcade === "object",
+    modeOptionsSaved: !!s.modeOptions && typeof s.modeOptions === "object",
   };
 }
 

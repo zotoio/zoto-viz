@@ -22,12 +22,32 @@ export const AQU_HOST_MESH_ASSETS = [
 export const AQU_HOST_MESH_SLOT_COUNT = 6;
 const perSlot = maxHostMeshInstancesPerSlot();
 
-/** Species index (aquarium.ts) → plugin.yml asset index. */
-export const AQU_SPECIES_TO_ASSET: number[] = [7, 2, 6, 8, 5, 9];
+/**
+ * Freshwater species index → plugin.yml asset index.
+ * neon, angel, guppy, cory, discus, cichlid, betta.
+ */
+export const AQU_SPECIES_TO_ASSET: number[] = [7, 2, 6, 8, 5, 9, 3];
 
-/** Cory belly sits ~9 mm below rig origin — lift above gravel. */
+/**
+ * Reef species index → plugin.yml asset index.
+ * clown, tang (angelfish GLB), damsel (neon), goby (cory), wrasse (guppy), anemone (discus).
+ * Tang, damsel, goby, wrasse, and anemone have no dedicated mesh; the closest shipped GLB fills the slot.
+ */
+export const AQU_REEF_SPECIES_TO_ASSET: number[] = [4, 2, 7, 8, 6, 5];
+
+/** Designer fish are ~8 cm; the tank camera reads them at this multiple. */
+const FISH_SCALE = 4;
+/** Gravel and plants are a small patch; scale them up to the tank floor. */
+const DECOR_SCALE = 2.2;
+
+/** Cory belly sits ~9 mm below rig origin — lift above gravel (scaled with the mesh). */
 const CORY_SPECIES_INDEX = 3;
 const CORY_BELLY_LIFT_M = 0.009;
+
+function assetForSpecies(species: number, reef: boolean): number {
+  const table = reef ? AQU_REEF_SPECIES_TO_ASSET : AQU_SPECIES_TO_ASSET;
+  return table[species] ?? (reef ? 4 : 7);
+}
 
 function chunkInstances<T>(items: T[]): T[][] {
   const out: T[][] = [];
@@ -48,10 +68,8 @@ export function writeAquariumHostMeshSlots(
     byAsset.set(assetIndex, list);
   };
 
-  push(1, hostMeshMatrixYawPos(0, 0, 0, 0), 0);
-  push(0, hostMeshMatrixYawPos(0, 0.05, 0, 0), 0);
-
   const fishCount = Math.round(Number(slot0[AQU_SLOT.fishCount]) || 0);
+  const reef = Number(slot0[AQU_SLOT.water]) > 0.5;
   for (let fi = 0, n = 0; n < fishCount && fi + 3 < slot1.length; fi += 4, n++) {
     const x = Number(slot1[fi]) || 0;
     const y = Number(slot1[fi + 1]) || 0;
@@ -59,11 +77,15 @@ export function writeAquariumHostMeshSlots(
     const yaw = Number(slot1[fi + 3]) || 0;
     const species = Math.round(Number(slot0[AQU_SLOT.fishSpecies0 + n]) || 0);
     const vigor = Number(slot0[AQU_SLOT.fishVigor0 + n]) || 0.5;
-    const assetIndex = AQU_SPECIES_TO_ASSET[species] ?? 7;
-    const fishY = species === CORY_SPECIES_INDEX ? y + CORY_BELLY_LIFT_M : y;
+    const assetIndex = assetForSpecies(species, reef);
+    const fishY = species === CORY_SPECIES_INDEX ? y + CORY_BELLY_LIFT_M * FISH_SCALE : y;
     const phase = clock * (0.9 + vigor * 0.4) + n * 0.29;
-    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw), phase);
+    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw, FISH_SCALE), phase);
   }
+
+  // After the fish so a full school keeps the mesh slots (5 usable × 3 instances).
+  push(1, hostMeshMatrixYawPos(0, -0.72, 0, 0, DECOR_SCALE), 0);
+  push(0, hostMeshMatrixYawPos(0.15, -0.68, -0.1, 0.4, DECOR_SCALE), 0);
 
   const packets: number[][] = [];
   for (const [assetIndex, instances] of byAsset.entries()) {

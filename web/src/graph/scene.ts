@@ -29,7 +29,8 @@ import { capBluetoothDevices, categorize, heat, isSysBase, paneLabelCap, topolog
 import { rIp, rName } from "../core/redact";
 import { DEFAULT_THEME, effectiveSceneLuminance, fadeTowardPole, grayHex, guardLabelMix, hexToHsl, hslHex, sceneInk, SKY_LUMA_CAP, toCssHex, type Theme } from "../core/themes";
 import { assessVisibility, type VisibilityReport } from "../core/visibility";
-import { Backdrop, type BackdropKind } from "./backdrop";
+import { Backdrop, PHOTO_LOOP_MAX_S, PHOTO_LOOP_MIN_S, PHOTO_LOOP_S, type BackdropKind } from "./backdrop";
+import { stageMeshPackId, stageMeshPose } from "./stage-mesh-camera";
 import { LumaProbe } from "./lumaProbe";
 import { ensureSkyRecipe } from "./sky-ai";
 import { liveCam } from "../camera/livecam";
@@ -685,6 +686,8 @@ export interface DreamAnim {
   skySpeed: number;
   /** 0–1 how gently that clock's speed follows the pulse and the slider: 0 snaps, 1 glides over seconds */
   skyEase: number;
+  /** seconds for one pan across a photographic still (before sky speed) */
+  skyPhotoS: number;
   /** minutes between Gemma sky recipes when backdrop is AI Dynamic */
   skyAiMin: number;
   /** pulse the scene clear / fog (the fill behind the sky) */
@@ -885,6 +888,7 @@ export const DEFAULT_DREAM: DreamAnim = {
   skyAudio: true,
   skySpeed: 1,
   skyEase: 0.55,
+  skyPhotoS: PHOTO_LOOP_S,
   skyAiMin: 5,
   bgAudio: false,
   bgColor: "",
@@ -926,6 +930,7 @@ export const DEFAULT_DREAM: DreamAnim = {
   mosaicMaxId: "",
   mosaicTiles: [],
   mosaicSharedTheme: false,
+  mosaicUniqueSkies: true,
   focus: "activity",
   partAmt: 1,
   partBusy: 1,
@@ -965,6 +970,7 @@ export const DREAM_BOUNDS = {
   bright: { min: 0, max: 2, step: 0.05 },
   skySpeed: { min: 0, max: 4, step: 0.05 },
   skyEase: { min: 0, max: 1, step: 0.05 },
+  skyPhotoS: { min: PHOTO_LOOP_MIN_S, max: PHOTO_LOOP_MAX_S, step: 5 },
   skyAiMin: { min: 1, max: 30, step: 1 },
   gridSize: { min: 16, max: 160, step: 4 },
   gridFollow: { min: 0, max: 1, step: 0.05 },
@@ -1148,6 +1154,8 @@ export class NetScene implements HostedView, RenderScalePane {
   private graphRenderCount = 0;
   /** hide the graph and keep only sky / floor / fog (arcade views draw on top) */
   private stageOnly = false;
+  /** True while the aquarium / koi stage camera has pulled the near plane in. */
+  private stageMeshCam = false;
   /** Duplicate mosaic tiles of the same pack: one tick/draw on primary, letterboxed mirrors. */
   private packCoalesce: {
     role: "primary" | "mirror";
@@ -2418,6 +2426,7 @@ export class NetScene implements HostedView, RenderScalePane {
     );
     this.backdrop.setLumaCap(this.visCap);
     this.backdrop.setMotion(skySp, a.skyEase);
+    this.backdrop.setPhotoPeriod(a.skyPhotoS);
     this.paintGrid();
     this.grid.setLook(
       a.gridAudio ? Math.min(1, a.gridOpacity * (0.28 + 0.85 * floorP)) : a.gridOpacity,
@@ -2922,6 +2931,34 @@ export class NetScene implements HostedView, RenderScalePane {
   /** True while the pointer, a wheel burst, or OrbitControls damping still owns the camera. */
   private userOwnsCamera(): boolean {
     return this.dreamHeld || !!this.dragging || performance.now() < this.camCoastUntil;
+  }
+
+  /**
+   * Sit the stage camera inside the aquarium or koi shader camera so host-mesh
+   * GLBs occupy the tank. Returns true when this view owns that pose.
+   */
+  private applyStageMeshCamera(): boolean {
+    const pack = stageMeshPackId(this.mode.id, this.mode.pluginId);
+    const pose = stageMeshPose(pack, (slot, index) => this.backdrop.pluginSlot(slot, index));
+    if (!pose) {
+      if (this.stageMeshCam) {
+        this.camera.near = 1;
+        this.camera.updateProjectionMatrix();
+        this.stageMeshCam = false;
+      }
+      return false;
+    }
+    if (this.userOwnsCamera()) return true;
+    const [px, py, pz] = pose.position;
+    const [tx, ty, tz] = pose.target;
+    this.camera.position.set(px, py, pz);
+    this.controls.target.set(tx, ty, tz);
+    this.camera.lookAt(this.controls.target);
+    if (pose.fov !== undefined) this.camera.fov = pose.fov;
+    this.camera.near = pose.near;
+    this.camera.updateProjectionMatrix();
+    this.stageMeshCam = true;
+    return true;
   }
 
   private followUserCameraCoast(): void {
@@ -3909,8 +3946,9 @@ export class NetScene implements HostedView, RenderScalePane {
         this.controls.update();
         this.followUserCameraCoast();
         this.hostMeshLane.tick(dt);
-        // Hold a level horizon for FPS plugin skies; skip dream pitch nod.
-        if (!this.userOwnsCamera()) {
+        // Fish GLBs live in the shader's metre-scale tank. That pose replaces the
+        // level-horizon lock, which would flatten the koi camera.
+        if (!this.applyStageMeshCamera() && !this.userOwnsCamera()) {
           const t = this.controls.target;
           _off.copy(this.camera.position).sub(t);
           _sph.setFromVector3(_off);
@@ -3929,6 +3967,7 @@ export class NetScene implements HostedView, RenderScalePane {
           this.paintClear();
         }
         this.tickViewShift(dt);
+        this.container.dataset.mesh = String(this.hostMeshLane.group.children.length);
         this.present();
       return;
     }

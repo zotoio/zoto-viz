@@ -105,15 +105,23 @@ export function pinPluginTileSkies(
   return out;
 }
 
+/** A view that names its own picture (plugin shader or an authored backdrop) does not follow the wall sky. */
+export function authoredTileSky(id: string): BackdropKind | undefined {
+  const backdrop = lookForTile(id)?.backdrop;
+  if (!backdrop || backdrop === "none" || backdrop === "custom" || backdrop === "dynamic") return undefined;
+  return backdrop;
+}
+
 export function mosaicAnimForTile(
   wall: DreamAnim,
   id: string,
   tileSky?: BackdropKind,
+  pinLook = true,
 ): DreamAnim {
-  const merged = mergeLook(wall, lookForTile(id));
-  if (lookForTile(id)?.backdrop === "plugin" || tileSky === "plugin") {
-    return { ...merged, backdrop: "plugin" };
-  }
+  const look = lookForTile(id);
+  const merged = pinLook ? mergeLook(wall, look) : { ...wall };
+  const authored = authoredTileSky(id);
+  if (authored) return { ...merged, backdrop: authored };
   if (tileSky) return { ...merged, backdrop: tileSky };
   return merged;
 }
@@ -304,6 +312,8 @@ export class Mosaic {
     /** Live tile picker (consent, setMode, sky sync). When set, pane chrome uses this instead of bare assignViews. */
     onPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
     paneCog?: (id: string) => HTMLButtonElement;
+    /** One-shot roll of a new view onto this pane. Sits beside the corner cog. */
+    paneDice?: (id: string) => HTMLButtonElement;
     sync: () => MosaicSync;
     testHooks?: {
       onSkyHold?: (id: string) => void;
@@ -326,13 +336,23 @@ export class Mosaic {
   get mainMode(): string { return this.mainId; }
   get mainTileId(): string { return this.mainId; }
   get tileIds(): string[] { return this.tree ? leafIds(this.tree) : []; }
+  /** Live pane elements, in tile order. */
+  get paneElements(): HTMLElement[] {
+    const out: HTMLElement[] = [];
+    for (const id of this.tileIds) {
+      const pane = this.panes.get(id);
+      if (pane) out.push(pane);
+    }
+    return out;
+  }
   get layout(): MosaicLayoutPatch {
+    const share = this.skyShare();
     return {
       tree: this.tree,
       maximized: this.maximized,
       tiles: this.tileIds,
-      uniqueSkies: this.tileSkies.size > 1,
-      skies: Object.fromEntries(this.tileSkies),
+      uniqueSkies: share.unique,
+      skies: share.skies,
     };
   }
 
@@ -433,7 +453,7 @@ export class Mosaic {
     this.syncPanes(ids);
     this.placeTree();
     void this.cfg.wall.offsetHeight;
-    this.ingestSkyPlan(this.cfg.sync().anim, true);
+    this.ingestSkyPlan(this.cfg.sync().anim);
     this.applyLooks(this.cfg.sync().anim);
     this.paintPanes(this.cfg.sync().theme);
     this.syncCompactLabels();
@@ -487,15 +507,10 @@ export class Mosaic {
   }
 
   applyLooks(a: DreamAnim, pin = true): void {
-    this.ingestSkyPlan(a, false);
-    if (!pin) {
-      this.cfg.main.setAnim(a);
-      for (const e of this.extras) e.scene.setAnim(a);
-      return;
-    }
+    this.ingestSkyPlan(a);
     const mainId = this.mainId || this.cfg.main.currentMode.id;
-    this.cfg.main.setAnim(this.animFor(mainId, a));
-    for (const e of this.extras) e.scene.setAnim(this.animFor(e.id, a));
+    this.cfg.main.setAnim(this.animFor(mainId, a, pin));
+    for (const e of this.extras) e.scene.setAnim(this.animFor(e.id, a, pin));
   }
 
   setTheme(t: Theme, fade = false): void {
@@ -644,13 +659,23 @@ export class Mosaic {
     paintPackAssetPaneNotice(pane, text, recipe, opts);
   }
 
+  /** One sky shares the wall image. Distinct skies are an explicit choice, not "more than one entry in the map". */
+  private skyShare(): { unique: boolean; skies: Record<string, BackdropKind> } {
+    const unique = this.cfg.sync().anim.mosaicUniqueSkies !== false;
+    return {
+      unique,
+      skies: unique ? Object.fromEntries(this.tileSkies) : {},
+    };
+  }
+
   private emitLayout(): void {
+    const share = this.skyShare();
     this.cfg.onLayout({
       tree: this.tree,
       maximized: this.maximized,
       tiles: this.tileIds,
-      uniqueSkies: this.tileSkies.size > 1,
-      skies: Object.fromEntries(this.tileSkies),
+      uniqueSkies: share.unique,
+      skies: share.skies,
     });
   }
 
@@ -719,6 +744,7 @@ export class Mosaic {
       pane.appendChild(this.cfg.sceneEl);
     }
     if (this.paneBound(id)) {
+      this.holdPluginSkies(new Set([id]));
       this.auditPane(id, "bind");
       return;
     }
@@ -740,6 +766,7 @@ export class Mosaic {
         s.setMode(m, this.cfg.optsFor(m));
         this.extras.push({ id, scene: s });
       }
+      this.holdPluginSkies(new Set([id]));
       this.auditPane(id, "bind");
       return;
     }
@@ -781,7 +808,7 @@ export class Mosaic {
   private paneSnap(id: string) {
     const graph = this.graphScene(id);
     const bound = this.paneBound(id);
-    const look = lookForMode(id);
+    const look = lookForTile(id);
     const tileSky = this.tileSkies.get(id);
     return {
       id,
@@ -792,7 +819,7 @@ export class Mosaic {
       stageOnly: !!(mosaicPaneMode(id).stageOnly || look?.stageOnly),
       backdrop: graph?.dreamAnim.backdrop ?? tileSky ?? look?.backdrop ?? "",
       pluginSkyId: graph?.pluginSkyId ?? null,
-      pluginSkyWanted: tileSky === "plugin" || (!tileSky && look?.backdrop === "plugin"),
+      pluginSkyWanted: tileSky === "plugin" || look?.backdrop === "plugin",
       nodes: graph?.nodeCount ?? 0,
       hasSnapshot: !!this.cfg.sync().lastMsg,
     };
@@ -991,6 +1018,11 @@ export class Mosaic {
     return el;
   }
 
+  /** Rebuild tile view menus after the catalog or recent-pick list changes. */
+  refreshViewMenus(): void {
+    this.refreshChrome();
+  }
+
   private refreshChrome(): void {
     for (const [id, pane] of this.panes) {
       const pick = pane.querySelector<HTMLSelectElement>(".mosaic-pick");
@@ -1041,6 +1073,8 @@ export class Mosaic {
     this.bindSwapHandle(bar, id, "chrome");
     this.bindPaneBodySwap(pane, id);
     pane.appendChild(bar);
+    const dice = this.cfg.paneDice?.(id);
+    if (dice) pane.appendChild(dice);
     const cog = this.cfg.paneCog?.(id);
     if (cog) pane.appendChild(cog);
     bindVizDriveElement(id, pane);
@@ -1062,7 +1096,7 @@ export class Mosaic {
   private bindSwapHandle(handle: HTMLElement, id: string, kind: "chrome" | "alt"): void {
     handle.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
-      if ((e.target as HTMLElement).closest(".mosaic-tool, .mosaic-pick, .mosaic-pane-cog")) return;
+      if ((e.target as HTMLElement).closest(".mosaic-tool, .mosaic-pick, .mosaic-pane-cog, .mosaic-pane-dice")) return;
       e.preventDefault();
       e.stopPropagation();
       this.beginSwapDrag(id, e.clientX, e.clientY, kind);
@@ -1074,7 +1108,7 @@ export class Mosaic {
     pane.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       const t = e.target as HTMLElement;
-      if (t.closest(".mosaic-tool, .mosaic-handle, .mosaic-chrome, .mosaic-pane-cog")) return;
+      if (t.closest(".mosaic-tool, .mosaic-handle, .mosaic-chrome, .mosaic-pane-cog, .mosaic-pane-dice")) return;
       if (e.altKey || e.metaKey) {
         e.preventDefault();
         e.stopPropagation();
@@ -1163,60 +1197,49 @@ export class Mosaic {
     if (st.lastMsg) s.update(st.lastMsg);
   }
 
-  private animFor(id: string, wall: DreamAnim): DreamAnim {
-    return mosaicAnimForTile(wall, id, this.tileSkies.get(id));
+  private animFor(id: string, wall: DreamAnim, pinLook = true): DreamAnim {
+    return mosaicAnimForTile(wall, id, this.tileSkies.get(id), pinLook);
   }
 
-  /** Dice / settings plan wins; a new wall with no plan rolls unique skies half the time. */
-  private ingestSkyPlan(a: DreamAnim, rollIfEmpty: boolean): void {
+  /** One sky is off unless it was turned on. Distinct host skies are the default. */
+  private ingestSkyPlan(a: DreamAnim): void {
     if (a.mosaicUniqueSkies === false) {
       this.tileSkies.clear();
       this.applyRecoveredSkies();
       return;
     }
     const planned = a.mosaicSkies && Object.keys(a.mosaicSkies).length ? a.mosaicSkies : null;
-    if (a.mosaicUniqueSkies === true || planned) {
-      const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
-      const rolled = assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop);
-      const next = pinPluginTileSkies(
-        planned ?? rolled,
+    const ids = this.tileIds.length ? this.tileIds : Object.keys(planned ?? {});
+    const rolled = assignMosaicSkies(ids, a.backdrop, cycleSkyPool(), (id) => lookForTile(id)?.backdrop);
+    const next = pinPluginTileSkies(
+      planned ?? rolled,
+      ids,
+      Object.fromEntries(this.tileSkies),
+    );
+    const missing = ids.filter((id) => next[id] === undefined);
+    if (missing.length) {
+      const filled = assignMosaicSkies(
         ids,
-        Object.fromEntries(this.tileSkies),
+        a.backdrop,
+        cycleSkyPool(),
+        (id) => next[id] ?? lookForTile(id)?.backdrop,
       );
-      this.tileSkies = new Map(Object.entries(next));
-      this.applyRecoveredSkies();
-      return;
+      for (const id of missing) if (filled[id]) next[id] = filled[id];
     }
-    if (!rollIfEmpty || this.tileIds.length <= 1) {
-      this.applyRecoveredSkies();
-      return;
-    }
-    const stale = this.tileSkies.size > 0 && this.tileIds.some((id) => !this.tileSkies.has(id));
-    if (this.tileSkies.size && stale) {
-      const next = pinPluginTileSkies(
-        assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
-        this.tileIds,
-        Object.fromEntries(this.tileSkies),
-      );
-      this.tileSkies = new Map(Object.entries(next));
-      this.applyRecoveredSkies();
-      return;
-    }
-    if (!this.tileSkies.size && shouldUniqueMosaicSkies()) {
-      const next = pinPluginTileSkies(
-        assignMosaicSkies(this.tileIds, a.backdrop, cycleSkyPool(), (id) => lookForMode(id)?.backdrop),
-        this.tileIds,
-        Object.fromEntries(this.tileSkies),
-      );
-      this.tileSkies = new Map(Object.entries(next));
-    }
+    this.tileSkies = new Map(Object.entries(next));
     this.applyRecoveredSkies();
   }
 
   /** Host-sky fallbacks survive a later unique-sky / plugin pin so the tile does not go black again. */
   private applyRecoveredSkies(): void {
     for (const [id, sky] of this.recoveredSkies) {
-      if (this.tileIds.includes(id)) this.tileSkies.set(id, sky);
+      if (!this.tileIds.includes(id)) continue;
+      if (lookForTile(id)?.backdrop === "plugin") {
+        this.recoveredSkies.delete(id);
+        this.tileSkies.set(id, "plugin");
+        continue;
+      }
+      this.tileSkies.set(id, sky);
     }
   }
 

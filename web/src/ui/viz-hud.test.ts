@@ -324,7 +324,7 @@ describe("viz hud helpers", () => {
     }, state)).toEqual({ label: "talkers", value: "1" });
   });
 
-  it("hides HUD separator after DEGRADED badge when failure gauges are zero", () => {
+  it("keeps the HUD strip free of the failure badge", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
     hud.setActive("talker-storm", "Talker Storm");
@@ -348,6 +348,7 @@ describe("viz hud helpers", () => {
     const visibleSeps = () =>
       [...hud.root.querySelectorAll<HTMLElement>(".viz-hud-sep")].filter((el) => !el.hidden);
     expect(visibleSeps().length).toBe(3);
+    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(true);
     hud.tick({
       ...healthy,
       frame: {
@@ -356,10 +357,12 @@ describe("viz hud helpers", () => {
         sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0.5, udev: 0 },
       },
     });
-    expect(visibleSeps().length).toBe(4);
+    expect(visibleSeps().length).toBe(3);
+    expect(hud.root.textContent).not.toContain("DEGRADED");
+    expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe("⚠ DEGRADED 40% TCP · 2 units");
   });
 
-  it("shows DEGRADED strip badge from talker TCP failure ratio", () => {
+  it("shows DEGRADED corner chip from talker TCP failure ratio", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
     hud.setActive("talker-storm", "Talker Storm");
@@ -380,10 +383,11 @@ describe("viz hud helpers", () => {
       state: minimalState(),
       now: 1000,
     });
-    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe("⚠ DEGRADED 55% TCP · 2 units");
+    expect(hud.root.textContent).not.toContain("DEGRADED");
+    expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe("⚠ DEGRADED 55% TCP · 2 units");
   });
 
-  it("shows DEGRADED stage pill matching strip badge text", () => {
+  it("shows DEGRADED corner chip on the stage", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
     hud.setActive("talker-storm", "Talker Storm");
@@ -423,7 +427,7 @@ describe("viz hud helpers", () => {
     })).toBe("⚠ DEGRADED 60% TCP · 1 unit");
   });
 
-  it("idle-failed fixture shows the same DEGRADED copy on strip and stage pill", () => {
+  it("idle-failed fixture shows DEGRADED copy on the corner chip", () => {
     const frame = buildIdleVizFrameFailed(12, 0);
     const expected = idleVizFrameFailedBadgeText();
     expect(vizFrameFailureBadge(frame)).toBe(expected);
@@ -438,11 +442,37 @@ describe("viz hud helpers", () => {
       state: minimalState(),
       now: 1000,
     });
-    expect(hud.root.querySelector(".viz-hud-degraded")?.textContent).toBe(expected);
+    expect(hud.root.textContent).not.toContain("DEGRADED");
     expect(host.querySelector(".viz-stage-fail-label")?.textContent).toBe(expected);
   });
 
-  it("hides stage fail pill when demo pack is deactivated", () => {
+  it("puts the same corner chip on each status panel and hides the stage chip", () => {
+    const host = document.createElement("div");
+    const hud = new VizHud(host, () => {});
+    const a = document.createElement("div");
+    const b = document.createElement("div");
+    hud.syncStatusPanels([a, b]);
+    hud.setActive("talker-storm", "Talker Storm");
+    hud.tick({
+      packId: "talker-storm",
+      packName: "Talker Storm",
+      stats: { skipped: 0, overBudget: 0, lastMs: 0, total: 0 },
+      frame: buildIdleVizFrameFailed(0, 0),
+      state: minimalState(),
+      now: 1000,
+    });
+    const expected = idleVizFrameFailedBadgeText();
+    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(true);
+    expect(a.querySelector(".pane-status")?.textContent).toBe(expected);
+    expect(b.querySelector(".pane-status")?.textContent).toBe(expected);
+    hud.syncStatusPanels([a]);
+    expect(b.querySelector(".pane-status")).toBeNull();
+    expect(a.querySelector(".pane-status")?.textContent).toBe(expected);
+    hud.clearStatus();
+    expect(a.querySelector(".pane-status")).toBeNull();
+  });
+
+  it("keeps the corner chip when the demo HUD is deactivated", () => {
     const host = document.createElement("div");
     const hud = new VizHud(host, () => {});
     hud.setActive("talker-storm", "Talker Storm");
@@ -456,6 +486,8 @@ describe("viz hud helpers", () => {
     });
     expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(false);
     hud.setActive(null, "");
+    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(false);
+    hud.clearStatus();
     expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(true);
   });
 

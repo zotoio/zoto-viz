@@ -205,6 +205,17 @@ describe("mosaic unique skies", () => {
     expect(planned["plugin:air-ssid"]).toBe("space");
     const wall = { ...DEFAULT_DREAM, backdrop: "tornado" as const };
     expect(mosaicAnimForTile(wall, "plugin:backrooms", "matrix").backdrop).toBe("plugin");
+    expect(mosaicAnimForTile(wall, "plugin:backrooms", "matrix", false).backdrop).toBe("plugin");
+    expect(mosaicAnimForTile({ ...wall, backdrop: "lagoon" }, "plugin:talkers", "fire", false).backdrop).toBe("fire");
+    applyPluginCatalog([{
+      id: "lagoon-graph",
+      name: "Lagoon",
+      version: 1,
+      engine: "graph",
+      look: { backdrop: "lagoon" },
+    }]);
+    expect(mosaicAnimForTile({ ...wall, backdrop: "alpine" }, "plugin:lagoon-graph", "fire").backdrop).toBe("lagoon");
+    expect(mosaicAnimForTile({ ...wall, backdrop: "alpine" }, "plugin:lagoon-graph", undefined, false).backdrop).toBe("lagoon");
   });
 });
 

@@ -275,6 +275,7 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
     skyBright: DREAM_BOUNDS.bright,
     skySpeed: DREAM_BOUNDS.skySpeed,
     skyEase: DREAM_BOUNDS.skyEase,
+    skyPhotoS: DREAM_BOUNDS.skyPhotoS,
     skyAiMin: DREAM_BOUNDS.skyAiMin,
     bgOpacity: DREAM_BOUNDS.opacity,
     gridOpacity: DREAM_BOUNDS.opacity,

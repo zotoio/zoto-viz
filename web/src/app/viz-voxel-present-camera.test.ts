@@ -135,6 +135,7 @@ describe("voxel world camera via host viz loop", () => {
   it("revert row: present deliver wired outside websocket feed()", () => {
     const main = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "main.ts"), "utf8");
     expect(main).toContain("tickVizPresentDeliver(shown, vizPresentHost)");
+    expect(main).toContain("get pluginSpecs() { return pluginSpecs; }");
     expect(main).not.toMatch(/function feed\([\s\S]*deliverVizPluginFrame\(/);
   });
 });

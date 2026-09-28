@@ -155,6 +155,11 @@ config:
     label: cichlid
     type: boolean
     default: false
+  - key: sp_betta
+    label: betta
+    type: boolean
+    default: true
+    hint: Freshwater species toggle.
   - key: sp_clown
     label: clownfish
     type: boolean

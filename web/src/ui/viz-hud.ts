@@ -229,10 +229,9 @@ export class VizHud {
   private readonly frameEl: HTMLElement;
   private readonly budgetEl: HTMLElement;
   private readonly budgetSepBefore: HTMLElement;
-  private readonly degradedEl: HTMLElement;
-  private readonly degradedSepBefore: HTMLElement;
-  private readonly degradedSepAfter: HTMLElement;
   private readonly stageFailEl: HTMLDivElement;
+  private statusText: string | null = null;
+  private statusPanels: HTMLElement[] = [];
   private readonly tileShareRow: HTMLElement;
   private readonly swapRow: HTMLElement;
   private budgetVisible = false;
@@ -294,16 +293,11 @@ export class VizHud {
     this.budgetEl.hidden = true;
     this.budgetEl.title = "Present or GPU frame time (unclamped) and p95 over a rolling window";
 
-    this.degradedEl = document.createElement("span");
-    this.degradedEl.className = "viz-hud-degraded";
-    this.degradedEl.hidden = true;
-    this.degradedEl.title = "Elevated per-host TCP failure ratio and/or failed systemd units (viz contract v2)";
-
     this.stageFailEl = document.createElement("div");
     this.stageFailEl.className = "viz-stage-fail-label";
     this.stageFailEl.hidden = true;
     this.stageFailEl.setAttribute("role", "status");
-    this.stageFailEl.textContent = "⚠ DEGRADED";
+    this.stageFailEl.title = "Peak per-host TCP reset ratio, and failed systemd units when present";
 
     this.tileShareRow = document.createElement("div");
     this.tileShareRow.className = "viz-hud-tile-shares";
@@ -328,10 +322,6 @@ export class VizHud {
     };
     this.budgetSepBefore = sep();
     this.budgetSepBefore.hidden = true;
-    this.degradedSepBefore = sep();
-    this.degradedSepBefore.hidden = true;
-    this.degradedSepAfter = sep();
-    this.degradedSepAfter.hidden = true;
     line.append(
       this.packEl,
       sep(),
@@ -342,9 +332,6 @@ export class VizHud {
       this.skipEl,
       this.budgetSepBefore,
       this.budgetEl,
-      this.degradedSepBefore,
-      this.degradedEl,
-      this.degradedSepAfter,
       this.swapRow,
     );
     this.devBadInputEl = document.createElement("div");
@@ -380,10 +367,7 @@ export class VizHud {
     this.metricEl.hidden = false;
     this.skipEl.hidden = false;
     this.root.hidden = !this.activeId;
-    if (!this.activeId) {
-      this.stageFailEl.hidden = true;
-      return;
-    }
+    if (!this.activeId) return;
     if (changed) this.resetSkipBaseline();
     this.packBaseName = packName;
     this.renderPackLine();
@@ -450,11 +434,63 @@ export class VizHud {
     this.tileShareRow.hidden = this.mosaicTileLines.size === 0;
   }
 
+  /** Mosaic panes get their own corner chip; an empty list uses the stage chip. */
+  syncStatusPanels(panels: readonly HTMLElement[]): void {
+    const next = panels.slice();
+    for (const prev of this.statusPanels) {
+      if (next.includes(prev)) continue;
+      prev.querySelector(":scope > .viz-stage-fail-label.pane-status")?.remove();
+    }
+    this.statusPanels = next;
+    this.applyStatus();
+  }
+
+  clearStatus(): void {
+    this.statusText = null;
+    this.applyStatus();
+  }
+
+  private paintStatus(text: string | null): void {
+    this.statusText = text;
+    this.applyStatus();
+  }
+
+  private applyStatus(): void {
+    const text = this.statusText;
+    if (this.statusPanels.length) {
+      this.stageFailEl.hidden = true;
+      for (const pane of this.statusPanels) {
+        let el = pane.querySelector(":scope > .viz-stage-fail-label.pane-status");
+        if (!text) {
+          el?.remove();
+          continue;
+        }
+        if (!(el instanceof HTMLElement)) {
+          el = document.createElement("div");
+          el.className = "viz-stage-fail-label pane-status";
+          el.setAttribute("role", "status");
+          el.title = this.stageFailEl.title;
+          pane.append(el);
+        }
+        if (el.textContent !== text) el.textContent = text;
+      }
+      return;
+    }
+    if (!text) {
+      this.stageFailEl.hidden = true;
+      if (this.stageFailEl.textContent) this.stageFailEl.textContent = "";
+      return;
+    }
+    this.stageFailEl.hidden = false;
+    if (this.stageFailEl.textContent !== text) this.stageFailEl.textContent = text;
+  }
+
   tick(input: VizHudTick): void {
+    const displayFrame = input.tileBudget ? tileHudDisplayFrame(input.tileBudget, input.frame) : input.frame;
+    this.paintStatus(vizFrameFailureBadge(displayFrame));
     if (!this.activeId) return;
     if (this.settingsCaptionHud) return;
-    const { stats, frame, state, now, tileBudget, activeTiles = 1, tileBudgetLines } = input;
-    const displayFrame = tileBudget ? tileHudDisplayFrame(tileBudget, frame) : frame;
+    const { stats, state, now, tileBudget, activeTiles = 1, tileBudgetLines } = input;
     const metric = vizHudMetric(this.activeId, displayFrame, state);
     if (metric.label !== this.lastMetricLabel) {
       this.metricLabelEl.textContent = metric.label;
@@ -522,20 +558,6 @@ export class VizHud {
         input.governorEnabled ?? false,
       );
       this.budgetEl.textContent = formatVizBudgetOverlay(model);
-    }
-
-    const failBadge = vizFrameFailureBadge(displayFrame);
-    if (failBadge) {
-      this.degradedEl.hidden = false;
-      this.degradedSepAfter.hidden = false;
-      if (this.degradedEl.textContent !== failBadge) this.degradedEl.textContent = failBadge;
-      this.stageFailEl.hidden = false;
-      if (this.stageFailEl.textContent !== failBadge) this.stageFailEl.textContent = failBadge;
-    } else {
-      this.degradedEl.hidden = true;
-      this.degradedSepAfter.hidden = true;
-      if (this.degradedEl.textContent) this.degradedEl.textContent = "";
-      this.stageFailEl.hidden = true;
     }
 
     const lines = tileBudgetLines ?? [];

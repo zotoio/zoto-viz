@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import * as hostMeshLane from "./host-mesh-lane";
-import { disposeHostMeshObject3D, HostMeshLane, normalizeSwimClipStart } from "./host-mesh-lane";
+import { disposeHostMeshObject3D, HostMeshLane, normalizeSwimClipStart, showHostMeshInstance } from "./host-mesh-lane";
 
 const N_LOADED_MESHES = 3;
 const M_LIVE_MIXERS = 2;
@@ -54,6 +54,39 @@ describe("host mesh lane", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  it("shows live copies even though the loaded template is hidden", async () => {
+    const lane = new HostMeshLane();
+    const loader = (lane as unknown as { loader: { loadAsync: (url: string) => Promise<unknown> } }).loader;
+    const root = new THREE.Group();
+    root.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+    vi.spyOn(loader, "loadAsync").mockResolvedValue(mockGltf(root));
+    lane.setAssetOrder(["box"]);
+    const priv = lane as unknown as LanePrivate;
+    await priv.load("pack", { id: "box", path: "box.glb" });
+    const ident = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
+    lane.applySlotBuffer([2, 0, 1, ...ident, 0, 0, 0, 0]);
+    expect(lane.group.children).toHaveLength(1);
+    const live = lane.group.children[0]!;
+    expect(live.visible).toBe(true);
+    const mesh = live.children[0] as THREE.Mesh;
+    expect(mesh.renderOrder).toBe(2);
+    expect((mesh.material as THREE.Material).transparent).toBe(true);
+  });
+
+  it("showHostMeshInstance draws a hidden template copy over the stage sky", () => {
+    const mat = new THREE.MeshBasicMaterial();
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), mat);
+    const root = new THREE.Group();
+    root.visible = false;
+    root.add(mesh);
+    const live = root.clone(true);
+    showHostMeshInstance(live);
+    expect(live.visible).toBe(true);
+    expect((live.children[0] as THREE.Mesh).renderOrder).toBe(2);
+    expect(mat.transparent).toBe(true);
+    expect(mat.depthWrite).toBe(true);
   });
 
   it("parses instance matrices from a buffer slot", async () => {

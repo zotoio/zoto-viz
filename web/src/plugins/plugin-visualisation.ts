@@ -32,7 +32,7 @@ const LABEL_STYLES = new Set(["default", "all", "none", "top"]);
 const CHROMES = new Set(["top", "left", "right"]);
 const LOOK_KEYS = [
   "theme", "chrome", "backdrop", "stageOnly",
-  "skyOpacity", "skyBright", "skySpeed", "skyEase", "skyAudio", "skyCycle",
+  "skyOpacity", "skyBright", "skySpeed", "skyEase", "skyPhotoS", "skyAudio", "skyCycle",
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
@@ -85,6 +85,8 @@ export type CatalogRow = {
   shader_sha256?: unknown;
   sky_available?: unknown;
   sky_error?: unknown;
+  assets?: unknown;
+  assets_sha256?: unknown;
 };
 
 function asRecord(raw: unknown): Record<string, unknown> | null {
@@ -396,6 +398,25 @@ export function hasVisualisation(raw: CatalogRow): boolean {
     || raw.options !== undefined || raw.config !== undefined;
 }
 
+/** Host-mesh GLBs from the catalog `assets` list. Rows without an id and path are dropped. */
+export function parseCatalogAssets(raw: unknown): NonNullable<PluginView["assets"]> {
+  if (!Array.isArray(raw)) return [];
+  const out: NonNullable<PluginView["assets"]> = [];
+  for (const row of raw) {
+    const rec = asRecord(row);
+    const id = asString(rec?.id);
+    const path = asString(rec?.path);
+    if (!id || !path) continue;
+    const asset: NonNullable<PluginView["assets"]>[number] = { id, path };
+    const sha = asString(rec?.sha256);
+    if (sha) asset.sha256 = sha;
+    if (typeof rec?.bytes === "number") asset.bytes = rec.bytes;
+    if (typeof rec?.triangles === "number") asset.triangles = rec.triangles;
+    out.push(asset);
+  }
+  return out;
+}
+
 /**
  * Translate a catalog row (plugin.yml identity + optional visualisation.yml) into PluginView.
  * visualisation.yml wins over legacy top-level engine/look/style/layout/options/config.
@@ -479,6 +500,9 @@ export function toPluginView(raw: unknown): PluginView {
   if (asString(row.sha256)) spec.sha256 = asString(row.sha256);
   if (typeof row.sky_available === "boolean") spec.sky_available = row.sky_available;
   if (asString(row.sky_error)) spec.sky_error = asString(row.sky_error);
+  const assets = parseCatalogAssets(row.assets);
+  if (assets.length) spec.assets = assets;
+  if (asString(row.assets_sha256)) spec.assets_sha256 = asString(row.assets_sha256);
   if (row.pluginKind === "data-source" || row.kind === "data-source") {
     spec.pluginKind = "data-source";
     const ds = parseDataSourceBlock(row.dataSource);

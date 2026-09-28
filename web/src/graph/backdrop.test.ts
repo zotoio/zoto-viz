@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import {
   BACKDROP_OPTIONS, CYCLE_SKIES, cycleSkyPool, Backdrop, RECIPE_EASE_MAX_S,
-  PLUGIN_SKY_FALLBACK, PHOTO_LOOP_S, PHOTO_LOOP_FADE_S, PHOTO_SKY_CROSSFADE_S, PHOTO_SKIES, configurePhotoStillTexture, isPhotoSky, isPhotoVideoUrl, photoCacheRetainUrls, photoSkyCandidates, photoLoopPhase, photoLoopMix, photoStillLoopSample, photoVideoSeamFadeSec, pluginShaderError, prunePhotoTextureCache, prunePhotoVideoCache, probePluginSkyCompile, wrapPluginSky, skyGroup,
+  PLUGIN_SKY_FALLBACK, PHOTO_LOOP_S, PHOTO_LOOP_MIN_S, PHOTO_LOOP_FADE_S, PHOTO_SKY_CROSSFADE_S, PHOTO_SKIES, clampPhotoLoopS, configurePhotoStillTexture, isPhotoSky, isPhotoVideoUrl, photoCacheRetainUrls, photoSkyCandidates, photoLoopPhase, photoLoopMix, photoStillLoopSample, photoVideoSeamFadeSec, pluginShaderError, prunePhotoTextureCache, prunePhotoVideoCache, probePluginSkyCompile, wrapPluginSky, skyGroup,
   type PhotoVideoLoop,
 } from "./backdrop";
 import { liveCam } from "../camera/livecam";
@@ -44,6 +44,9 @@ describe("BACKDROP_OPTIONS", () => {
     ]));
     expect(isPhotoSky("fungi")).toBe(true);
     expect(PHOTO_LOOP_S).toBe(75);
+    expect(clampPhotoLoopS(Number.NaN)).toBe(PHOTO_LOOP_S);
+    expect(clampPhotoLoopS(1)).toBe(PHOTO_LOOP_MIN_S);
+    expect(clampPhotoLoopS(900)).toBe(300);
     expect(photoLoopPhase(0)).toBe(0);
     expect(photoLoopPhase(PHOTO_LOOP_S)).toBe(0);
     expect(photoLoopPhase(PHOTO_LOOP_S / 2)).toBeCloseTo(0.5);
@@ -159,6 +162,16 @@ describe("plugin sky contract", () => {
     sky.setPluginShader(null);
     expect(sky.pluginSkyId()).toBeNull();
     expect(PLUGIN_SKY_FALLBACK).toBe("space");
+  });
+
+  it("does not paint another tile's plugin shader on a pane that has none", () => {
+    const backrooms = new Backdrop();
+    const aquarium = new Backdrop();
+    expect(backrooms.setPluginShader({ id: "backrooms", source: OK_FRAG })).toBeNull();
+    backrooms.setKind("plugin");
+    aquarium.setKind("plugin");
+    expect(backrooms.pluginSkyId()).toBe("backrooms");
+    expect(aquarium.pluginSkyId()).toBeNull();
   });
 
   it("rebuilds the GPU program when swapping one plugin sky for another", () => {
@@ -467,6 +480,18 @@ describe("photo sky loop seam", () => {
     expect(photoLoopMix(dur, dur)).toBe(0);
     expect(photoLoopMix(dur * 2, dur)).toBe(0);
     expect(photoLoopMix(1, 0.4)).toBe(0);
+  });
+
+  it("photo cycle period is a uniform the sky can change", () => {
+    const sky = new Backdrop();
+    const photoMat = (sky as unknown as { photoMat: THREE.ShaderMaterial }).photoMat;
+    expect(photoMat.fragmentShader).toContain("uPhotoPeriod");
+    expect(photoMat.uniforms.uPhotoPeriod!.value).toBe(PHOTO_LOOP_S);
+    sky.setPhotoPeriod(120);
+    expect(photoMat.uniforms.uPhotoPeriod!.value).toBe(120);
+    sky.setPhotoPeriod(1);
+    expect(photoMat.uniforms.uPhotoPeriod!.value).toBe(PHOTO_LOOP_MIN_S);
+    sky.dispose();
   });
 
   it("Ken Burns sample at t=0 matches t=period (closed loop)", () => {

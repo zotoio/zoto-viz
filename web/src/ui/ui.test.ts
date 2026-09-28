@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ColorField, GroupedChips, group, morphCopy, mountDiceSplit, pinFlyout, Select, Slider, TextField, Toggle, unpinFlyout } from "./ui";
+import { ColorField, GroupedChips, group, makePaneDiceButton, morphCopy, mountDiceSplit, pinFlyout, Select, Slider, TextField, Toggle, unpinFlyout } from "./ui";
 
 describe("Select", () => {
   it("creates a labelled control and opens", () => {
@@ -108,6 +108,18 @@ describe("controls", () => {
     expect(toggles).toBe(1);
     expect(t.checked).toBe(true);
     box.remove();
+  });
+
+  it("builds a pane dice that rolls without toggling anything else", () => {
+    let rolls = 0;
+    const btn = makePaneDiceButton({ pane: "plugin:cpu", onClick: () => { rolls += 1; } });
+    expect(btn.classList.contains("mosaic-pane-dice")).toBe(true);
+    expect(btn.dataset.pane).toBe("plugin:cpu");
+    expect(btn.getAttribute("aria-label")).toBe("roll this pane");
+    expect(btn.querySelector("svg")).toBeTruthy();
+    btn.click();
+    expect(rolls).toBe(1);
+    expect(btn.classList.contains("rolling")).toBe(true);
   });
 
   it("morphs copy instead of snapping the text", async () => {

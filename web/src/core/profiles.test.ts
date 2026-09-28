@@ -26,6 +26,10 @@ describe("profiles", () => {
     expect(s.dice.mosaicMax).toBe("6");
     expect(s.autosave).toBe(true);
     expect(s.ai).toEqual({ backend: "", model: "", cursorModel: "", cycle: false });
+    expect(s.recentViews).toEqual([]);
+    expect(s.mosaicFocus).toBe("");
+    expect(s.remix).toBeNull();
+    expect(s.operator).toMatchObject({ voice: true, listen: true, watchword: "zoto", debug: false, weather: "drift", temper: 22 });
     expect(s.sound).toBe(false);
     expect(normalizeSettings({ theme: "ember" }).sound).toBe(false);
     expect(normalizeSettings({ sound: true }).sound).toBe(true);
@@ -60,6 +64,20 @@ describe("profiles", () => {
       backend: "cursor", model: "", cursorModel: "grok-4.6", cycle: true,
     });
     expect(normalizeSettings({ ai: { backend: "nope", cycle: "yes" } }).ai.cycle).toBe(false);
+    expect(normalizeSettings({}).operatorSaved).toBe(false);
+    expect(normalizeSettings({}).recentSaved).toBe(false);
+    expect(normalizeSettings({ operator: { debug: true } }).operatorSaved).toBe(true);
+    expect(normalizeSettings({
+      recentViews: ["plugin:heat!2", "plugin:heat", "", 3, "plugin:talkers"],
+      mosaicFocus: " plugin:heat ",
+      operator: { voice: false, temper: 140, weather: "nope", watchword: "  hey  " },
+      remix: { dataPluginId: "hn", sourceId: "top", visualPackId: "rain" },
+    })).toMatchObject({
+      recentViews: ["plugin:heat", "plugin:talkers"],
+      mosaicFocus: "plugin:heat",
+      operator: { voice: false, temper: 100, weather: "drift", watchword: "hey" },
+      remix: { dataPluginId: "hn", sourceId: "top", visualPackId: "rain" },
+    });
     expect(aiCycleSettings(shippedSettings()).ai.cycle).toBe(true);
     expect(quiet(() => 7)).toBe(7);
     expect(isQuiet()).toBe(false);

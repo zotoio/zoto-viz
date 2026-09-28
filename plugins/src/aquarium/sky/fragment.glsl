@@ -185,6 +185,13 @@ void main() {
   dir = normalize(dir + vec3(uv.x * 0.08, uv.y * 0.06, 0.0));
 
   int nFish = int(clamp(slotF(0, 17.0), 0.0, 16.0));
+  {
+    // modelFlags: bit 2 (value 2) loaded, bit 1 (value 1) procedural. Host GLBs replace the SDF fish.
+    float mf = floor(slotF(0, 60.0) + 0.001);
+    float loaded = step(0.5, mod(floor(mf / 2.0), 2.0));
+    float procedural = step(0.5, mod(mf, 2.0));
+    if (loaded * (1.0 - procedural) > 0.5) nFish = 0;
+  }
   vec3 fishPos[16];
   float fishYaw[16];
   float fishSp[16];

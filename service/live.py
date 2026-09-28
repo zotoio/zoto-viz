@@ -132,6 +132,7 @@ ANIM_NUM: dict[str, dict[str, float]] = {
     "skyBright": {"min": 0, "max": 2, "step": 0.05},
     "skySpeed": {"min": 0, "max": 4, "step": 0.05},
     "skyEase": {"min": 0, "max": 1, "step": 0.05},
+    "skyPhotoS": {"min": 15, "max": 300, "step": 5},
     "skyAiMin": {"min": 1, "max": 30, "step": 1},
     "bgOpacity": {"min": 0, "max": 1, "step": 0.05},
     "gridOpacity": {"min": 0, "max": 1, "step": 0.05},

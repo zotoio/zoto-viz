@@ -91,7 +91,7 @@ export function buildIdleVizFrameFailed(t: number, dt = 0): VizDataFrame {
   return base;
 }
 
-/** Expected HUD DEGRADED copy for {@link buildIdleVizFrameFailed} (strip + stage pill). */
+/** Expected DEGRADED copy for {@link buildIdleVizFrameFailed} (corner status chip). */
 export function idleVizFrameFailedBadgeText(): string {
   const tcpPct = Math.round(IDLE_VIZ_FAILED_TCP * 100);
   const units = Math.max(1, Math.round(IDLE_VIZ_FAILED_SYS * 4));

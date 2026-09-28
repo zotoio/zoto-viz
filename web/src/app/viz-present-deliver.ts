@@ -35,7 +35,7 @@ export interface VizPresentDeliverHost {
   modeSelValue: () => string;
   pluginSpecs: PluginView[];
   tsWatchId: () => string;
-  mosaic: Pick<Mosaic, "on" | "tileIds" | "mainMode" | "focusedId" | "graphScene"> | null | undefined;
+  mosaic: Pick<Mosaic, "on" | "tileIds" | "paneElements" | "mainMode" | "focusedId" | "graphScene"> | null | undefined;
   scene: NetScene;
   renderHost: RenderHost;
   sandbox: PluginSandbox & { handlers: VizFrameTickSandbox["handlers"] };
@@ -73,7 +73,11 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
     ? (host.mosaic.focusedId || host.mosaic.mainMode || host.mosaic.tileIds[0] || "main")
     : "main";
   host.syncPanelPackSub(packPanelId, !!(packId && (active?.capabilities?.includes("viz.read") || packId)));
-  if (!(active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks)) return;
+  if (!(active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks)) {
+    host.vizHud.syncStatusPanels([]);
+    host.vizHud.clearStatus();
+    return;
+  }
 
   host.syncVizBudgetTileScope();
 
@@ -147,6 +151,7 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
   const tileLinesRaw = host.mosaic?.on ? mosaicTileBudgetLines(host.mosaic.tileIds) : undefined;
   if (tileLinesRaw) bindMosaicTileBudgetLines(tileLinesRaw, (id) => vizTileBudgetRegistry.getTile(id));
   const govFields = vizHudGovernorTickFields(host.renderScaleGovernor, host.vizBudget.stats);
+  host.vizHud.syncStatusPanels(host.mosaic?.on ? host.mosaic.paneElements : []);
   host.vizHud.tick({
     packId,
     packName: active?.name ?? packId ?? "",

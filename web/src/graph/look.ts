@@ -20,7 +20,7 @@ export class LookStage {
   private renderer: THREE.WebGLRenderer | null = null;
   private readonly world = new THREE.Scene();
   private readonly camera: THREE.PerspectiveCamera;
-  private readonly backdrop = new Backdrop();
+  private readonly backdrop = new Backdrop(true);
   private readonly grid = new FloorGrid();
   private readonly fog: THREE.FogExp2;
   private readonly rim: THREE.PointLight;
@@ -134,6 +134,7 @@ export class LookStage {
       skyP,
     );
     this.backdrop.setMotion(anim.skySpeed, anim.skyEase);
+    this.backdrop.setPhotoPeriod(anim.skyPhotoS);
     if (anim.gridColor) {
       _grid.set(anim.gridColor);
       this.grid.setColors(_grid.getHex(), _gridMinor.copy(_grid).multiplyScalar(0.55).getHex());

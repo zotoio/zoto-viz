@@ -90,7 +90,7 @@ export const CONFIG_KEYS = [
   "water", "fishCount", "temperament", "feedingMin", "feedingTraffic",
   "lighting", "dayNight", "density", "bubbles", "camera", "seed", "label",
   "reducedMotion",
-  "sp_neon", "sp_angel", "sp_guppy", "sp_cory", "sp_discus", "sp_cichlid",
+  "sp_neon", "sp_angel", "sp_guppy", "sp_cory", "sp_discus", "sp_cichlid", "sp_betta",
   "sp_clown", "sp_tang", "sp_damsel", "sp_goby", "sp_wrasse", "sp_anemone",
   "modelGlb",
 ] as const;
@@ -111,7 +111,7 @@ export const PRESET_IDS: PresetId[] = [
   "night_reef",
 ];
 
-const FRESH_SPECIES = ["neon", "angel", "guppy", "cory", "discus", "cichlid"] as const;
+const FRESH_SPECIES = ["neon", "angel", "guppy", "cory", "discus", "cichlid", "betta"] as const;
 const REEF_SPECIES = ["clown", "tang", "damsel", "goby", "wrasse", "anemone"] as const;
 
 export const PRESET_CAPS: Record<PresetId, { maxFish: number; maxParticles: number }> = {
@@ -253,7 +253,7 @@ export const DEFAULT_OPTIONS: AquariumOptions = {
   seed: 4242,
   label: true,
   reducedMotion: false,
-  freshSpecies: [1, 1, 1, 1, 1, 0],
+  freshSpecies: [1, 1, 1, 1, 1, 0, 1],
   reefSpecies: [0, 0, 0, 0, 0, 0],
 };
 
@@ -304,7 +304,7 @@ function presetDefaults(preset: PresetId): Partial<AquariumOptions> {
         temperament: 0.28,
         density: 0.85,
         lighting: "daylight",
-        freshSpecies: [1, 1, 1, 1, 1, 0],
+        freshSpecies: [1, 1, 1, 1, 1, 0, 1],
       };
     case "reef_lagoon":
       return {
@@ -322,7 +322,7 @@ function presetDefaults(preset: PresetId): Partial<AquariumOptions> {
         temperament: 0.82,
         density: 0.45,
         lighting: "daylight",
-        freshSpecies: [0, 0, 0, 0, 0, 1],
+        freshSpecies: [0, 0, 0, 0, 0, 1, 0],
       };
     case "calm_zen":
       return {
@@ -331,7 +331,7 @@ function presetDefaults(preset: PresetId): Partial<AquariumOptions> {
         temperament: 0.08,
         density: 0.55,
         lighting: "moonlight",
-        freshSpecies: [1, 1, 0, 1, 1, 0],
+        freshSpecies: [1, 1, 0, 1, 1, 0, 1],
       };
     case "night_reef":
       return {

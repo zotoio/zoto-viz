@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { topology, setPluginModes } from "../core/modes";
 import { themeById } from "../core/themes";
 import { DEFAULT_DREAM } from "./scene";
+import { applyPluginCatalog } from "../plugins/plugin";
 import { Mosaic } from "./mosaic";
 import { RenderHost } from "./render-host";
 import { NetScene } from "./scene";
@@ -52,7 +53,6 @@ function mosaicWall(ids: readonly string[]) {
   });
 
   mosaic.setSize(String(ids.length) as "3", ids[0], "off", { tiles: [...ids] });
-  mosaic.settlePanes();
 
   return {
     mosaic,
@@ -60,9 +60,9 @@ function mosaicWall(ids: readonly string[]) {
     setAnim(patch: typeof anim) {
       anim = patch;
     },
-    applyAnim(patch: Partial<typeof anim>) {
+    applyAnim(patch: Partial<typeof anim>, pin = true) {
       Object.assign(anim, patch);
-      mosaic.applyLooks(anim);
+      mosaic.applyLooks(anim, pin);
     },
   };
 }
@@ -89,6 +89,56 @@ describe("Mosaic.ingestSkyPlan via applyLooks", () => {
     const skies = mosaic.layout.skies ?? {};
     for (const id of ids) expect(skies[id]).toBeDefined();
     expect(Object.values(skies).every((sky) => sky !== undefined)).toBe(true);
+
+    host.dispose();
+  });
+
+  it("keeps a plugin stage on its own sky when the wall look is not pinned", () => {
+    applyPluginCatalog([{
+      id: "aquarium",
+      name: "Aquarium",
+      version: 1,
+      engine: "graph",
+      look: { backdrop: "plugin", stageOnly: true, mosaic: "off" },
+    }]);
+    const ids = ["plugin:a", "plugin:b", "plugin:aquarium"] as const;
+    const { mosaic, host, applyAnim } = mosaicWall(ids);
+
+    expect(mosaic.paneSky("plugin:aquarium")).toBe("plugin");
+    expect(mosaic.graphScene("plugin:aquarium")?.dreamAnim.backdrop).toBe("plugin");
+
+    applyAnim({ backdrop: "lagoon" }, false);
+
+    expect(mosaic.paneSky("plugin:aquarium")).toBe("plugin");
+    expect(mosaic.graphScene("plugin:aquarium")?.dreamAnim.backdrop).toBe("plugin");
+    expect(mosaic.paneSky("plugin:a")).not.toBe("lagoon");
+    expect(mosaic.paneSky("plugin:b")).not.toBe("lagoon");
+    expect(mosaic.graphScene("plugin:a")?.dreamAnim.backdrop).not.toBe("lagoon");
+
+    host.dispose();
+  });
+
+  it("shares the wall sky on panes that do not author one", () => {
+    applyPluginCatalog([{
+      id: "aquarium",
+      name: "Aquarium",
+      version: 1,
+      engine: "graph",
+      look: { backdrop: "plugin", stageOnly: true, mosaic: "off" },
+    }]);
+    const ids = ["plugin:a", "plugin:b", "plugin:aquarium"] as const;
+    const { mosaic, host, applyAnim } = mosaicWall(ids);
+
+    applyAnim({
+      mosaicUniqueSkies: false,
+      mosaicSkies: {},
+      backdrop: "lagoon",
+    });
+
+    expect(mosaic.paneSky("plugin:a")).toBeUndefined();
+    expect(mosaic.graphScene("plugin:a")?.dreamAnim.backdrop).toBe("lagoon");
+    expect(mosaic.graphScene("plugin:b")?.dreamAnim.backdrop).toBe("lagoon");
+    expect(mosaic.graphScene("plugin:aquarium")?.dreamAnim.backdrop).toBe("plugin");
 
     host.dispose();
   });

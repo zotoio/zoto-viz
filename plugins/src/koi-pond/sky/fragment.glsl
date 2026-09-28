@@ -133,6 +133,13 @@ void main() {
   if (caustOn > 0.5) water += vec3(0.35, 0.75, 0.65) * (caust * 0.65 + caust2 * 0.35) * caustStr * 0.22 * (1.0 - murk);
 
   int nKoi = int(clamp(slotF(0, 24.0), 0.0, 16.0));
+  {
+    // modelFlags: bit 2 (value 2) loaded, bit 1 (value 1) procedural. Host GLBs replace the ellipse koi.
+    float mf = floor(slotF(0, 52.0) + 0.001);
+    float loaded = step(0.5, mod(floor(mf / 2.0), 2.0));
+    float procedural = step(0.5, mod(mf, 2.0));
+    if (loaded * (1.0 - procedural) > 0.5) nKoi = 0;
+  }
   for (int i = 0; i < 16; i++) {
     if (i >= nKoi) break;
     float fi = float(i * 4);

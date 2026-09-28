@@ -141,7 +141,7 @@ export class Settings {
   private onChatChange: (c: ChatConfig) => void = () => {};
   private animUi: {
     follow: Toggle; cycle: Toggle; randomize: Toggle;
-    skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider; skyAi: Slider;
+    skyOp: Slider; skyBr: Slider; skySp: Slider; skyEz: Slider; skyPhoto: Slider; skyAi: Slider;
     gridOp: Slider; gridBr: Slider; gridSize: Slider; gridFollow: Slider; gridColor: ColorField; bgColor: ColorField; bgOp: Slider;
     yaw: Slider; pitch: Slider; pitchCycle: Slider; zoom: Slider; zoomCycle: Slider; cadence: Slider;
     camAudio: Slider; camChange: Slider; camGaze: Slider; camInertia: Slider; camEase: Slider; camTheme: Toggle;
@@ -155,6 +155,7 @@ export class Settings {
     setHero: (v: HeroPos) => void;
     syncTiles: () => void;
     sharedTheme: Toggle;
+    sharedSky: Toggle;
     setFocus: (v: FocusMode) => void;
     setGlow: (v: EdgeGlow) => void;
     setFabric: (v: FabricKind) => void;
@@ -753,7 +754,7 @@ export class Settings {
     for (const c of controls) list.appendChild(c.el);
     sec.appendChild(list);
     const pane = title.toLowerCase() === "privacy" ? "privacy"
-      : /^(show|network|system)$/.test(title.toLowerCase()) ? "graph"
+      : /^(show|network|system|overlays)$/.test(title.toLowerCase()) ? "graph"
       : "appearance";
     this.pane(pane).appendChild(sec);
     return { el: sec, list };
@@ -955,6 +956,12 @@ export class Settings {
       format: (v) => `${v}%`,
       onInput: (v) => { this.anim.skyEase = v / 100; this.persistAnim(); },
     });
+    const skyPhoto = new Slider({
+      label: "photo cycle", title: "seconds for one pan across a photographic sky, before the speed slider. 75s is a slow drift",
+      min: B.skyPhotoS.min, max: B.skyPhotoS.max, step: B.skyPhotoS.step, value: this.anim.skyPhotoS,
+      format: (v) => `${v}s`,
+      onInput: (v) => { this.anim.skyPhotoS = v; this.persistAnim(); },
+    });
     const skyAi = new Slider({
       label: "AI rebuild", title: "legacy minutes tick; Agent weather now owns how often AI Dynamic asks Gemma (probability bands)",
       min: B.skyAiMin.min, max: B.skyAiMin.max, step: B.skyAiMin.step, value: this.anim.skyAiMin,
@@ -969,7 +976,7 @@ export class Settings {
       checked: this.anim.skyAudio,
       onChange: (on) => { this.anim.skyAudio = on; setMod("sky", on); this.persistAnim(); },
     });
-    const skyWrap = lookBlock("sky", skyPick.el, skyOp, skyBr, skySp, skyEz, skyAi);
+    const skyWrap = lookBlock("sky", skyPick.el, skyOp, skyBr, skySp, skyPhoto, skyEz, skyAi);
     skyWrap.querySelector(".look-head")!.appendChild(skyPulse.el);
     const shapeRow = document.createElement("div");
     shapeRow.className = "skypick";
@@ -1159,9 +1166,19 @@ export class Settings {
       checked: !!this.anim.mosaicSharedTheme,
       onChange: (on) => { this.anim.mosaicSharedTheme = on; this.persistAnim(); },
     });
+    const sharedSky = new Toggle({
+      label: "one sky",
+      title: "Use the wall sky image on every pane that does not need its own. A plugin sky or an authored backdrop stays on that view.",
+      checked: this.anim.mosaicUniqueSkies === false,
+      onChange: (on) => {
+        this.anim.mosaicUniqueSkies = !on;
+        this.anim.mosaicSkies = {};
+        this.persistAnim();
+      },
+    });
     const mosaicHint = document.createElement("div");
     mosaicHint.className = "sec-hint";
-    mosaicHint.textContent = "A wall composes other views. Each tile is its own view — menu on the tile, same pickers here, corner cog for that view's settings. Size the wall, then set every pane. Picking a view already on the wall copies it onto this pane and leaves the others. The header Global menu leaves the wall for one full-screen view. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
+    mosaicHint.textContent = "A wall composes other views. Each tile is its own view — menu on the tile, same pickers here, corner cog for that view's settings, dice beside it rolls a new view on that pane. Size the wall, then set every pane. One sky shares the wall picture on panes that work with any sky; turn it off for a different picture on each of those panes. Picking a view already on the wall copies it onto this pane and leaves the others. The header Global menu leaves the wall for one full-screen view. Drag tiles to swap, gutters to resize, close to expand the neighbour.";
     const mosaicBtns = document.createElement("div");
     mosaicBtns.className = "sec-links";
     mosaicBtns.append(resetBtn, equalBtn);
@@ -1172,6 +1189,7 @@ export class Settings {
       labeled("hero", hero.el),
       labeled("tiles", tilePicker),
       sharedTheme.el,
+      sharedSky.el,
       mosaicHint,
       mosaicBtns,
     );
@@ -1501,9 +1519,9 @@ export class Settings {
     sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, grid);
     this.animUi = {
       follow, cycle, randomize, setSky, setShape,
-      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setSpace: space.set, setLayout: layout.set, setLinks: links.set, setMod,
+      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, sharedSky, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setSpace: space.set, setLayout: layout.set, setLinks: links.set, setMod,
       skyPulse, floorPulse, bgPulse,
-      skyOp, skyBr, skySp, skyEz, skyAi, gridOp, gridBr, gridSize, gridFollow, gridColor, bgColor, bgOp,
+      skyOp, skyBr, skySp, skyEz, skyPhoto, skyAi, gridOp, gridBr, gridSize, gridFollow, gridColor, bgColor, bgOp,
       yaw, pitch, pitchCycle, zoom, zoomCycle, cadence, camAudio, camChange, camGaze, camInertia, camEase, camTheme, sens,
       labels, shown, nodes, edges, glowAmt, glowSpeed, autoTune,
       partAmt, partBusy, partQuiet, partPeak, partCap, partSpeed, partSize,
@@ -2323,6 +2341,7 @@ export class Settings {
     ui.skyBr.value = Math.round(a.skyBright * 100);
     ui.skySp.value = Math.round(a.skySpeed * 100);
     ui.skyEz.value = Math.round(a.skyEase * 100);
+    ui.skyPhoto.value = a.skyPhotoS;
     ui.skyAi.value = a.skyAiMin;
     ui.gridOp.value = Math.round(a.gridOpacity * 100);
     ui.gridBr.value = Math.round(a.gridBright * 100);
@@ -2339,6 +2358,7 @@ export class Settings {
     ui.setHero(a.hero);
     ui.syncTiles();
     ui.sharedTheme.checked = !!a.mosaicSharedTheme;
+    ui.sharedSky.checked = a.mosaicUniqueSkies === false;
     ui.setFocus(a.focus);
     ui.setGlow(a.edgeGlow);
     ui.setFabric(a.graphFabric);
@@ -2411,6 +2431,7 @@ export class Settings {
     localStorage.setItem(`${p}.anim.skyBright`, String(a.skyBright));
     localStorage.setItem(`${p}.anim.skySpeed`, String(a.skySpeed));
     localStorage.setItem(`${p}.anim.skyEase`, String(a.skyEase));
+    localStorage.setItem(`${p}.anim.skyPhotoS`, String(a.skyPhotoS));
     localStorage.setItem(`${p}.anim.skyAiMin`, String(a.skyAiMin));
     localStorage.setItem(`${p}.anim.skyAudio`, a.skyAudio ? "1" : "0");
     localStorage.setItem(`${p}.anim.bgAudio`, a.bgAudio ? "1" : "0");
@@ -2761,6 +2782,7 @@ function loadAnim(prefix: string): DreamAnim {
     skyBright: n("skyBright", d.skyBright, B.bright.min, B.bright.max),
     skySpeed: n("skySpeed", d.skySpeed, B.skySpeed.min, B.skySpeed.max),
     skyEase: n("skyEase", d.skyEase, B.skyEase.min, B.skyEase.max),
+    skyPhotoS: n("skyPhotoS", d.skyPhotoS, B.skyPhotoS.min, B.skyPhotoS.max),
     skyAiMin: n("skyAiMin", d.skyAiMin, B.skyAiMin.min, B.skyAiMin.max),
     skyAudio: localStorage.getItem(`${prefix}.anim.skyAudio`) !== "0",
     bgAudio: localStorage.getItem(`${prefix}.anim.bgAudio`) === "1",

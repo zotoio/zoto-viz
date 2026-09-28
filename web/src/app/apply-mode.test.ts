@@ -885,7 +885,7 @@ describe("applyMode via main host", () => {
         <div class="row controls">
           <span id="modeBox"></span><span id="modeOpts"></span>
           <span id="dreamBox"></span><span id="feedBox"></span><span id="chatBox"></span>
-          <span id="debugBox"></span><span id="labelsBox"></span>
+          <span id="debugBox"></span><span id="labelsBox"></span><span id="overlaysBox"></span>
           <span id="cameraBox"></span><span id="micBox"></span><span id="soundBox"></span>
           <span id="diceBox"></span><span id="aiBox"></span><div id="quick" hidden></div>
           <span id="settingsBox"></span>

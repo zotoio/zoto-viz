@@ -39,5 +39,7 @@ plugins/src/.pack-sdk/
 **/.zip-install-blocks.json
 **/.install-catalog-records.json
 revert-proofs/**/red/*.txt
-tmp/glb-bundle/
+# Scratch and HN still dumps. Live stills live in ~/.zoto-viz/images.
+/tmp/
+/tmp-hn-*.svg
 web/.vitest/

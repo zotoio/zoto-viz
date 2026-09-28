@@ -24,7 +24,7 @@ describe("plugin sky load wiring", () => {
   });
 
   it("plugin-sky-mosaic-look", () => {
-    expect(mainSrc.indexOf('import { Mosaic } from "../graph/mosaic"')).toBeGreaterThan(-1);
+    expect(mainSrc).toContain('from "../graph/mosaic"');
     const syncStart = mainSrc.indexOf("async function syncPluginSky");
     const syncEnd = mainSrc.indexOf("function teardownMosaicPanelView", syncStart);
     const sync = mainSrc.slice(syncStart, syncEnd);

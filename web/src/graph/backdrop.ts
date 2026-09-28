@@ -61,8 +61,17 @@ export const PHOTO_SKIES: Record<PhotoSkyKind, string> = {
   seastacks: "/skies/seastacks.jpg",
 };
 
-/** Target length of a photo-sky video loop (seconds). Stills Ken-Burns on this period until a clip lands. */
+/** Default still Ken Burns period (seconds). Settings → sky → photo cycle overrides it. */
 export const PHOTO_LOOP_S = 75;
+/** Slider range for that period. */
+export const PHOTO_LOOP_MIN_S = 15;
+export const PHOTO_LOOP_MAX_S = 300;
+
+/** Clamp a photo-sky pan period onto the settings range. Non-finite values keep the default. */
+export function clampPhotoLoopS(seconds: number): number {
+  if (!Number.isFinite(seconds)) return PHOTO_LOOP_S;
+  return Math.min(PHOTO_LOOP_MAX_S, Math.max(PHOTO_LOOP_MIN_S, seconds));
+}
 /** Crossfade from the last frames onto a second decoder at t=0 so the wrap has no hitch. */
 export const PHOTO_LOOP_FADE_S = 0.35;
 /** Crossfade between still photo plates when switching sky (seconds on the sky clock). */
@@ -622,6 +631,7 @@ uniform float uBright;
 uniform float uAudio;
 uniform float uLumaCap;
 uniform float uTime;
+uniform float uPhotoPeriod;
 uniform float uAnimate;
 uniform float uLoopMix;
 uniform vec3 uBg;
@@ -637,7 +647,8 @@ void main() {
   float va = video.x / video.y;
   vec2 scale = ca > va ? vec2(1.0, va / ca) : vec2(ca / va, 1.0);
   float live = step(0.5, uAnimate);
-  float ang = live * fract(max(uTime, 0.0) / ${PHOTO_LOOP_S}.0) * 6.28318530718;
+  float period = max(uPhotoPeriod, 1.0);
+  float ang = live * fract(max(uTime, 0.0) / period) * 6.28318530718;
   float zoom = mix(1.0, 1.08 + 0.035 * sin(ang), live);
   vec2 pan = live * vec2(cos(ang), sin(ang * 2.0)) * 0.018;
   vec2 uv = (vUv - 0.5) * scale / zoom + 0.5 + pan;
@@ -754,7 +765,7 @@ function makeSkyVideoTex(el: HTMLVideoElement): THREE.VideoTexture {
 /** Last compiled agent fragment, so arcade LookStage skies can share it. */
 let lastCustomFrag: string | null = null;
 
-/** Last accepted plugin fragment, so LookStage's separate Backdrop can share it. */
+/** Last accepted plugin fragment, so LookStage's separate Backdrop can share the solo sky. Mosaic tiles do not. */
 let lastPlugin: { id: string; frag: string } | null = null;
 
 export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
@@ -810,6 +821,8 @@ export class Backdrop {
   private pluginMat: THREE.ShaderMaterial | null = null;
   private pluginId: string | null = null;
   private pluginFrag: string | null = null;
+  /** This pane's shader, kept when the material is dropped so another tile cannot borrow it. */
+  private ownPlugin: { id: string; frag: string } | null = null;
   private readonly pluginUbo = new Float32Array(VIZ_UBO.totalFloats);
   private pluginRenderScale = 1;
   private pluginExposeRenderScale = false;
@@ -839,7 +852,7 @@ export class Backdrop {
   private lookOpacity = 1;
   private outgoingMat: THREE.ShaderMaterial | null = null;
 
-  constructor() {
+  constructor(private readonly shareLastPlugin = false) {
     this.mat = new THREE.ShaderMaterial({
       uniforms: {
         uTime: { value: 0 },
@@ -911,6 +924,7 @@ export class Backdrop {
         uAudio: { value: 0 },
         uLumaCap: { value: SKY_LUMA_CAP },
         uTime: { value: 0 },
+        uPhotoPeriod: { value: PHOTO_LOOP_S },
         uAnimate: { value: 1 },
         uLoopMix: { value: 0 },
         uVideoB: { value: blankTex() },
@@ -944,9 +958,11 @@ export class Backdrop {
         this.dropPluginMat();
       }
     } else if (kind === "plugin") {
-      const ready = this.pluginFrag || lastPlugin?.frag || null;
+      const shared = this.shareLastPlugin ? lastPlugin : null;
+      const ready = this.pluginFrag ?? this.ownPlugin?.frag ?? shared?.frag ?? null;
+      const id = this.pluginId ?? this.ownPlugin?.id ?? shared?.id ?? "plugin";
       if (ready) {
-        this.ensurePluginMat(lastPlugin?.id ?? this.pluginId ?? "plugin", ready);
+        this.ensurePluginMat(id, ready);
       } else {
         this.dropPluginMat();
         if (this.mat.fragmentShader !== FRAG) this.applyFrag(FRAG);
@@ -984,18 +1000,14 @@ export class Backdrop {
     gpuProbe?: () => string | null,
   ): string | null {
     if (!opts) {
-      lastPlugin = null;
-      this.pluginId = null;
-      this.pluginFrag = null;
+      this.clearOwnPlugin();
       this.dropPluginMat();
       if (this.kind === "plugin") this.setKind("plugin");
       return null;
     }
     const wrapped = wrapPluginSky(opts.source);
     if ("error" in wrapped) {
-      lastPlugin = null;
-      this.pluginId = null;
-      this.pluginFrag = null;
+      this.clearOwnPlugin();
       this.dropPluginMat();
       if (this.kind === "plugin") this.setKind("plugin");
       return wrapped.error;
@@ -1005,14 +1017,13 @@ export class Backdrop {
     const gpuErr = gpuProbe ? gpuProbe() : probePluginSkyCompile(wrapped.frag);
     if (this.kind !== "plugin") this.mesh.material = prevMat;
     if (gpuErr) {
-      lastPlugin = null;
-      this.pluginId = null;
-      this.pluginFrag = null;
+      this.clearOwnPlugin();
       this.dropPluginMat();
       if (this.kind === "plugin") this.setKind("plugin");
       return gpuErr;
     }
-    lastPlugin = { id: opts.id, frag: wrapped.frag };
+    this.ownPlugin = { id: opts.id, frag: wrapped.frag };
+    lastPlugin = this.ownPlugin;
     this.pluginId = opts.id;
     this.pluginFrag = wrapped.frag;
     if (this.kind === "plugin") this.setKind("plugin");
@@ -1350,6 +1361,12 @@ export class Backdrop {
     return this.pluginMat && this.mesh.material === this.pluginMat ? this.pluginId : null;
   }
 
+  /** One float from the host viz UBO mirror (slot × 64 + index). */
+  pluginSlot(slot: number, index: number): number {
+    const i = slot * VIZ_UBO.slotFloats + index;
+    return this.pluginUbo[i] ?? 0;
+  }
+
   /** Copy the host viz UBO mirror into the active plugin shader (std140 layout). */
   setPluginUboBuffer(buf: Float32Array): void {
     if (buf.length !== VIZ_UBO.totalFloats) return;
@@ -1373,6 +1390,13 @@ export class Backdrop {
     if (typeof value !== "number" || !Number.isFinite(value)) return false;
     u.value = value;
     return true;
+  }
+
+  private clearOwnPlugin(): void {
+    if (lastPlugin === this.ownPlugin) lastPlugin = null;
+    this.ownPlugin = null;
+    this.pluginId = null;
+    this.pluginFrag = null;
   }
 
   private dropPluginMat(clear = true): void {
@@ -1523,6 +1547,14 @@ export class Backdrop {
   setMotion(speed: number, ease: number): void {
     this.speed = Math.max(0, speed);
     this.ease = Math.min(1, Math.max(0, ease));
+  }
+
+  /** Seconds for one pan of a photographic still. The sky speed slider still scales the clock. */
+  setPhotoPeriod(seconds: number): void {
+    const s = clampPhotoLoopS(seconds);
+    this.photoMat.uniforms.uPhotoPeriod!.value = s;
+    const out = this.outgoingMat?.uniforms.uPhotoPeriod;
+    if (out) out.value = s;
   }
 
   /** Advance the sky by wall-clock time `t` (seconds); the animation clock itself runs at the eased speed. */

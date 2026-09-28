@@ -11,6 +11,7 @@ import { micCaptureAllowed } from "../audio/want";
 import { soundAllowed } from "../audio/sound";
 import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
 import { isNasaStillUrl } from "../core/nasa-stills";
+import type { ProfileOperator } from "../core/profiles";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
@@ -145,6 +146,13 @@ export class AgentPanel {
   private cursorKey!: TextField;
   private cursorHelp!: HTMLElement;
   private ttsHelp!: HTMLElement;
+  private listenToggle!: Toggle;
+  private voiceToggle!: Toggle;
+  private viewToggle!: Toggle;
+  private mosaicLayoutToggle!: Toggle;
+  private tsToggle!: Toggle;
+  private watchField!: TextField;
+  private ttsVoiceField!: TextField;
   private history: { role: "user" | "assistant"; content: string; thinking?: string; usage?: Record<string, unknown> }[] = [];
   private hydrateP: Promise<void> | null = null;
   private logEpoch = 0;
@@ -219,14 +227,14 @@ export class AgentPanel {
     this.controlToggle = control;
     document.body.classList.toggle("ai-control", control.checked);
 
-    const ts = new Toggle({
+    const ts = this.tsToggle = new Toggle({
       label: "allow TypeScript plugins",
       title: "compile and run sandboxed entry.ts after you confirm you wrote or reviewed the source",
       checked: tsPluginsAllowed(),
-      onChange: (on) => setTsPluginsAllowed(on),
+      onChange: (on) => { setTsPluginsAllowed(on); this.onPrefs?.(); },
     });
 
-    const listen = new Toggle({
+    const listen = this.listenToggle = new Toggle({
       label: "listen for watchword",
       title: "hold a live mic stream; after the watchword, talk, then say send — or zoto stop to cut speech",
       checked: this.wakeOn,
@@ -240,35 +248,36 @@ export class AgentPanel {
         }
         else this.stopWake();
         this.paintHeader();
+        this.onPrefs?.();
       },
     });
 
-    const voice = new Toggle({
+    const voice = this.voiceToggle = new Toggle({
       label: "speak replies",
       title: "read agent replies through the speakers (ElevenLabs / Kokoro / Piper stream, else espeak). Header sound must be on. Say zoto stop to halt until the watchword again",
       checked: localStorage.getItem(VOICE_KEY) !== "0",
-      onChange: (on) => localStorage.setItem(VOICE_KEY, on ? "1" : "0"),
+      onChange: (on) => { localStorage.setItem(VOICE_KEY, on ? "1" : "0"); this.onPrefs?.(); },
     });
 
-    const watch = new TextField({
+    const watch = this.watchField = new TextField({
       caption: "watchword",
       title: "always-on listening waits for this word (also ‘hey …’ / ‘okay …’); say send after the question, or zoto stop to cut speech",
       value: localStorage.getItem(WATCH_KEY) || DEFAULT_WATCH,
       placeholder: DEFAULT_WATCH,
-      onInput: (v) => localStorage.setItem(WATCH_KEY, v.trim() || DEFAULT_WATCH),
+      onInput: (v) => { localStorage.setItem(WATCH_KEY, v.trim() || DEFAULT_WATCH); this.onPrefs?.(); },
     });
 
-    const view = new Toggle({
+    const view = this.viewToggle = new Toggle({
       label: "include screen",
       title: "attach a JPEG of the live canvas plus a compact HUD of mode, theme, and stats",
       checked: includeView(),
-      onChange: (on) => localStorage.setItem(VIEW_KEY, on ? "1" : "0"),
+      onChange: (on) => { localStorage.setItem(VIEW_KEY, on ? "1" : "0"); this.onPrefs?.(); },
     });
-    const mosaicLayout = new Toggle({
+    const mosaicLayout = this.mosaicLayoutToggle = new Toggle({
       label: "AI mosaic layout",
       title: "On: the model may resize, rearrange, close, or change the mosaic grid. Off: it may only change which views sit in the existing tiles.",
       checked: aiMosaicLayoutOn(),
-      onChange: (on) => localStorage.setItem(MOSAIC_LAYOUT_KEY, on ? "1" : "0"),
+      onChange: (on) => { localStorage.setItem(MOSAIC_LAYOUT_KEY, on ? "1" : "0"); this.onPrefs?.(); },
     });
 
     this.backendSel = new Select({
@@ -318,21 +327,22 @@ export class AgentPanel {
     this.cursorKey.input.type = "password";
     this.cursorKey.input.autocomplete = "off";
     this.cursorKey.input.addEventListener("change", () => void this.saveCursorKey());
-    const ttsVoice = new TextField({
+    const ttsVoice = this.ttsVoiceField = new TextField({
       caption: "TTS voice",
       title: "ElevenLabs voice id, or Kokoro name (af_heart). Empty uses the monitor default.",
       value: localStorage.getItem(TTS_VOICE_KEY) || "",
       placeholder: "af_heart",
-      onInput: (v) => localStorage.setItem(TTS_VOICE_KEY, v.trim()),
+      onInput: (v) => { localStorage.setItem(TTS_VOICE_KEY, v.trim()); this.onPrefs?.(); },
     });
 
     this.temperRail = new TemperRail({
-      onChange: (n) => this.pushTemper({ temper: n }),
+      onChange: (n) => { this.pushTemper({ temper: n }); this.onPrefs?.(); },
     });
     this.oddsStrip = new OddsStrip({
       onChange: (w) => {
         setCurrentWeather(w);
         this.pushTemper({ weather: w });
+        this.onPrefs?.();
       },
     });
     setCurrentWeather(this.oddsStrip.value);
@@ -431,6 +441,48 @@ export class AgentPanel {
     this.setCycleChecked(ai.cycle === true);
     this.paintModels();
     this.paintCursorKey();
+  }
+
+  /** Operator toggles last managed on this profile (voice, listen, temper, debug stays outside). */
+  operatorPrefs(): ProfileOperator {
+    return {
+      voice: this.voiceToggle.checked,
+      listen: this.listenToggle.checked,
+      watchword: this.watchField.value.trim() || DEFAULT_WATCH,
+      ttsVoice: this.ttsVoiceField.value.trim(),
+      includeScreen: this.viewToggle.checked,
+      mosaicLayout: this.mosaicLayoutToggle.checked,
+      tsPlugins: this.tsToggle.checked,
+      temper: this.temper,
+      weather: this.weather,
+      tileHealErrors: false,
+      debug: false,
+    };
+  }
+
+  /** Restore operator toggles from a profile without treating them as fresh edits. */
+  applyOperator(op: ProfileOperator): void {
+    this.voiceToggle.checked = op.voice;
+    localStorage.setItem(VOICE_KEY, op.voice ? "1" : "0");
+    this.listenToggle.checked = op.listen;
+    this.wakeOn = op.listen;
+    localStorage.setItem(LISTEN_KEY, op.listen ? "1" : "0");
+    if (op.listen) {
+      if (micCaptureAllowed()) this.startWake();
+    } else this.stopWake();
+    this.watchField.value = op.watchword || DEFAULT_WATCH;
+    localStorage.setItem(WATCH_KEY, op.watchword || DEFAULT_WATCH);
+    this.ttsVoiceField.value = op.ttsVoice;
+    localStorage.setItem(TTS_VOICE_KEY, op.ttsVoice);
+    this.viewToggle.checked = op.includeScreen;
+    localStorage.setItem(VIEW_KEY, op.includeScreen ? "1" : "0");
+    this.mosaicLayoutToggle.checked = op.mosaicLayout;
+    localStorage.setItem(MOSAIC_LAYOUT_KEY, op.mosaicLayout ? "1" : "0");
+    this.tsToggle.checked = op.tsPlugins;
+    setTsPluginsAllowed(op.tsPlugins);
+    this.syncTemper({ temper: op.temper, weather: op.weather });
+    this.pushTemper({ temper: op.temper, weather: this.weather });
+    this.paintHeader();
   }
 
   /** Show Cursor when the monitor already has a key and this profile never chose a backend. */

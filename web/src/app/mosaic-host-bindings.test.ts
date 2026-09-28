@@ -57,6 +57,13 @@ describe("mosaic host bindings", () => {
     expect(mosaicPluginSkyPaneView("plugin:topology!2", "plugin", lookForMode).viewId).toBe("plugin:topology");
   });
 
+  it("mosaicPluginSkyPaneView still wants a plugin sky when a host sky was stored on the tile", () => {
+    const look = (id: string) => (id === "plugin:aquarium" ? { backdrop: "plugin" as const } : undefined);
+    expect(mosaicPluginSkyPaneView("plugin:aquarium", "lagoon", look).wantPlugin).toBe(true);
+    expect(mosaicPluginSkyPaneView("plugin:aquarium!1", "space", look).wantPlugin).toBe(true);
+    expect(mosaicPluginSkyPaneView("plugin:topology", "fire", look).wantPlugin).toBe(false);
+  });
+
   it("bindMosaicHostSettings wires pane pick to focus duplicate slot after setPaneView", () => {
     setPluginModes([
       { ...topology, id: "plugin:topology", pluginId: "topology", label: "Topology" },
