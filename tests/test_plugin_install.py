@@ -589,7 +589,6 @@ def test_retry_and_scan_race_single_install(
     assert len(list(blocks_dir.glob("*.json"))) == 1
 
 
-@pytest.mark.skip(reason="real-time race flake under load")
 def test_retry_and_scan_race_single_install_20_of_20(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -637,7 +636,6 @@ def test_failed_v2_start_next_scan_stays_on_v1(
     assert (_runtime_parent() / pid / "frontend/sdk/marker.ts").read_text(encoding="utf-8") == marker_v1
 
 
-@pytest.mark.skip(reason="real-time barrier flake; covered by test_qe_peer_staging_token_survives_concurrent_install")
 def test_concurrent_install_same_pack_serializes_with_barriers(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

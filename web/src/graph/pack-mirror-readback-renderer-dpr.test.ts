@@ -14,7 +14,6 @@ import {
   PACK_MIRROR_READBACK_CHROME_PATH,
   requireReadbackChrome,
 } from "./pack-mirror-readback-chrome";
-
 requireReadbackChrome();
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -75,7 +74,7 @@ async function runQuadrantCase(
 beforeAll(async () => {
   vite = await createServer({
     configFile: path.join(webRoot, "vite.config.ts"),
-    server: { middlewareMode: true },
+    server: { middlewareMode: true, hmr: false },
   });
   httpServer = http.createServer((req, res) => vite!.middlewares(req, res));
   await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", resolve));
