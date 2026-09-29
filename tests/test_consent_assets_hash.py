@@ -294,3 +294,44 @@ class ConsentRefusalBodyTests(AioHTTPTestCase):
         row = _row("koi-pond")
         plugins.grant_consent({**row, "assets_sha256": "0" * 64}, "authored")
         await self._assert_refusal("koi-pond", "changed")
+
+
+class ShippedMeshExemptionTests(AioHTTPTestCase):
+    """Pins today's rule (#170 option (b)): shipped ``origin: src`` meshes skip consent on the mesh
+    route, contrib zips do not. If #170 goes to option (a), flip the src rows to expect 403.
+
+    Revert proof: drop the ``origin == "src"`` early return in ``_plugin_enabled_for_serve`` and the
+    src rows go red (403); make it return True for every origin and the zip row goes red (200).
+    """
+
+    async def get_application(self) -> web.Application:
+        return _app()
+
+    async def _mesh_status(self, row: dict[str, Any]) -> int:
+        resp = await self.client.get(_mesh_url(row), headers=HOST)
+        return resp.status
+
+    async def test_src_mesh_served_with_no_record(self) -> None:
+        for pid in ASSET_PACKS:
+            row = _row(pid)
+            assert row.get("origin") == "src", pid
+            assert plugins.consent_state(row) == "none", pid
+            assert await self._mesh_status(row) == 200, pid
+
+    async def test_src_mesh_served_with_stale_record(self) -> None:
+        for pid in ZOTO_PRE_KEY:
+            _save_pre_key_record(pid)
+            row = _row(pid)
+            assert row["consent_state"] == "stale", pid
+            assert await self._mesh_status(row) == 200, pid
+
+    async def test_contrib_zip_mesh_refused_without_consent(self) -> None:
+        row = _row("koi-pond")
+        zip_row = {**row, "origin": "zip"}
+        real = plugins._plugin_row
+        plugins._plugin_row = lambda pid: zip_row if pid == "koi-pond" else real(pid)  # type: ignore[assignment]
+        try:
+            assert plugins.consent_state(zip_row) == "none"
+            assert await self._mesh_status(zip_row) == 403
+        finally:
+            plugins._plugin_row = real  # type: ignore[assignment]
