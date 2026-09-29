@@ -1,3 +1,4 @@
+import { SkyDrawnSignal } from "./sky-drawn";
 import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import type { SimNode, SimLink } from "d3-force-3d";
@@ -1591,6 +1592,9 @@ export class NetScene implements HostedView, RenderScalePane {
     window.addEventListener("pointerup", this.onCamPtrLost);
     window.addEventListener("pointercancel", this.onCamPtrLost);
     this.inputEl.addEventListener("pointerdown", (e) => {
+      // A control drawn over the tile (notice Retry, caption links) keeps its own pointer: no pick,
+      // no drag, no pointer capture that would steal the click from it.
+      if (isOverlayControl(e.target)) return;
       camPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
       if (camPts.size >= 2) {
         const c = pointerCentroid(camPts.values());
@@ -1629,6 +1633,7 @@ export class NetScene implements HostedView, RenderScalePane {
       this.captureDreamRest();
     }, true);
     const finishPointer = (e: PointerEvent) => {
+      if (isOverlayControl(e.target)) return void dropCamPtr(e.pointerId);
       const multi = camPts.size >= 2;
       dropCamPtr(e.pointerId);
       const wasDrag = this.dragging;
@@ -1771,6 +1776,19 @@ export class NetScene implements HostedView, RenderScalePane {
   }
 
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
+  /** One-shot "first frame drawn with this sky" signal; armed per install, disarmed once it fires. */
+  private readonly skyDrawn = new SkyDrawnSignal(() => this.backdrop.pluginSkyId());
+
+  /** The view's own sky, once a frame with it has been drawn on this tile; null until then. */
+  get pluginSkyDrawn(): string | null {
+    return this.skyDrawn.drawn(this.backdrop.pluginSkyId());
+  }
+
+  /** Called once per sky install, after the first frame drawn with it. Returns an unsubscribe. */
+  onPluginSkyDrawn(cb: (id: string) => void): () => void {
+    return this.skyDrawn.on(cb);
+  }
+
   private present(countGraphRender = true): void {
     if (countGraphRender) this.graphRenderCount++;
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
@@ -1811,6 +1829,8 @@ export class NetScene implements HostedView, RenderScalePane {
       });
       else draw();
     }
+    // Render has returned, so any first-use compile of the sky program is done and the frame is drawn.
+    this.skyDrawn.frame();
     if (countGraphRender) this.notePaneChange();
   }
 
@@ -1984,6 +2004,8 @@ export class NetScene implements HostedView, RenderScalePane {
   get currentMode(): ViewMode { return this.mode; }
   get nodeCount(): number { return this.nodes.size; }
   get pluginSkyId(): string | null { return this.backdrop.pluginSkyId(); }
+  /** Built-in sky actually drawn, or null (theme background, pack sky, photo). */
+  get builtInSkyShown(): string | null { return this.backdrop.builtInSkyShown(); }
 
   /** Pause / resume rendering and layout ticks (the data model keeps updating either way). */
   setActive(on: boolean): void {
@@ -2295,6 +2317,8 @@ export class NetScene implements HostedView, RenderScalePane {
         (m) => console.warn("zoto-viz tile shader:", m),
       )
       : undefined;
+    // Every install (or clear) needs its own first drawn frame before it counts as on screen.
+    this.skyDrawn.arm(!!opts);
     if (!opts) {
       this.host?.clearShaderFallback(this.tileId);
       return this.backdrop.setPluginShader(null, gpuProbe);
@@ -4949,3 +4973,9 @@ export function escapeHtml(s: string): string {
 }
 
 export { fmtBytes };
+
+/** Buttons and links layered over a tile's canvas, which the scene's pointer handling must not take. */
+export function isOverlayControl(target: EventTarget | null): boolean {
+  const el = target instanceof Element ? target : null;
+  return !!el?.closest("button, a[href], input, select, textarea, [role=button]");
+}

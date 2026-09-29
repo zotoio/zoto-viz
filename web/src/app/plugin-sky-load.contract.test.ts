@@ -47,7 +47,8 @@ describe("plugin sky load wiring", () => {
 
   it("plugin-sky-load-wiring", () => {
     const block = loadPluginSkyOntoBlock();
-    expect(block).toContain("fetchPluginSky(spec.id");
+    // One shared request per pack sky (fetchSkyOnce wraps fetchPluginSky).
+    expect(block).toContain("fetchSkyOnce(spec.id");
     expect(block).toContain("setPluginShader({ id: spec.id, source })");
     expect(block).toContain("spec.sky_error = err");
     expect(block).toContain("spec.sky_available = false");

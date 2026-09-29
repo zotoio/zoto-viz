@@ -64,6 +64,11 @@ export interface TileHealthDeps {
    */
   previewOnly?: (tileId: string) => boolean;
   /**
+   * Optional: the tile's own sky is still starting ("<View> · Starting…" card up). It is not
+   * blank, so it is neither healed nor given the live-blank notice.
+   */
+  skyStarting?: (tileId: string) => boolean;
+  /**
    * Optional: a ready frame with draws rising is sampling uniform. The ladder does not escalate
    * (the pack is running), but the wall must say so — `blank` false clears the notice.
    */
@@ -248,7 +253,7 @@ export class TileHealthMonitor {
       this.liveBlankReads.delete(tileId);
       this.setLiveBlank(tileId, null);
     }
-    if (this.deps.previewOnly?.(tileId)) {
+    if (this.deps.previewOnly?.(tileId) || this.deps.skyStarting?.(tileId)) {
       this.resetProgress(tileId);
       this.setLiveBlank(tileId, null);
       return;
