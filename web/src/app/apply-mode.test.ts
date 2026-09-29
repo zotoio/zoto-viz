@@ -1,7 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { setPackAssetTokenForTests } from "../core/http";
 import * as packAssetFrame from "../plugins/pack-asset-frame";
-import { countPluginSandboxIframes, PluginSandbox } from "../plugins/host";
+import { countPluginSandboxIframes, PluginSandbox, setPluginModuleSandboxUrlForTests } from "../plugins/host";
 import { defaultVizContract } from "../plugins/viz-host";
 import type { ViewMode } from "../core/modes";
 import type { PluginView } from "../plugins/plugin";
@@ -817,6 +817,9 @@ describe("mode switch cleanup counts", () => {
   it("committed attempt detaches abort listeners so switching to C disposes B once", async () => {
     const skyDisposals: Record<string, number> = {};
     let liveSkyPack: string | null = null;
+    // Node can't import http pack-asset URLs; hand the frame a data: module so it really reaches ready.
+    setPluginModuleSandboxUrlForTests(async () => "data:text/javascript,export%20%7B%7D");
+    onTestFinished(() => setPluginModuleSandboxUrlForTests(null));
     const sandbox = new PluginSandbox();
     const unloadSpy = vi.spyOn(PluginSandbox.prototype, "unload");
     vi.spyOn(pluginModule, "fetchPluginSky").mockResolvedValue(

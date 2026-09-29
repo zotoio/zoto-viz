@@ -82,15 +82,22 @@ export function packAssetFrameIdForTests(tileId = "main"): string {
   return activePackAssetFrameByTile.get(tileId) ?? "";
 }
 
-function resolvePackAssetFrameId(tileId = "main"): string {
+function resolvePackAssetFrameId(tileId: string): string {
   return activePackAssetFrameByTile.get(tileId) || packAssetFrameForTile(tileId) || "";
 }
 
-export async function packAssetUrl(packId: string, ...parts: string[]): Promise<string> {
-  const frameId = resolvePackAssetFrameId();
-  if (!frameId) throw new Error("pack asset frame required");
-  const sandboxTok = sandboxAssetTokenByFrame.get(frameId);
-  const token = sandboxTok ?? await mintPackAssetToken(packId, frameId);
+/**
+ * Pack file URL for the sandbox frame on `tileId`, using that frame's own `_sandbox` token.
+ *
+ * The frame's CSP only allows scripts under `/pack-assets/<its _sandbox token>/`, and the server accepts
+ * that token for pack files, so a pack-bound token here would always be CSP-blocked. Call it only after
+ * {@link pluginSandboxFrameUrl} has minted the frame's token.
+ */
+export async function packAssetUrl(tileId: string, packId: string, ...parts: string[]): Promise<string> {
+  const frameId = resolvePackAssetFrameId(tileId);
+  if (!frameId) throw new Error(`pack asset frame required for tile ${tileId}`);
+  const token = sandboxAssetTokenByFrame.get(frameId);
+  if (!token) throw new Error(`sandbox frame token not minted yet for tile ${tileId}`);
   return packAssetUrlWithToken(token, packId, ...parts);
 }
 
@@ -162,18 +169,18 @@ export function pluginModuleUrl(id: string, hash?: string): string {
 }
 
 /** Pack module URL for opaque-origin sandbox import (token in path). */
-let pluginModuleSandboxUrlOverride: ((id: string, hash?: string) => Promise<string>) | null = null;
+let pluginModuleSandboxUrlOverride: ((id: string, hash: string | undefined, tileId: string) => Promise<string>) | null = null;
 
 /** @internal unit tests — avoid http module imports under the Node ESM loader. */
 export function setPluginModuleSandboxUrlForTests(
-  fn: ((id: string, hash?: string) => Promise<string>) | null,
+  fn: ((id: string, hash: string | undefined, tileId: string) => Promise<string>) | null,
 ): void {
   pluginModuleSandboxUrlOverride = fn;
 }
 
-export async function pluginModuleSandboxUrl(id: string, hash?: string): Promise<string> {
-  if (pluginModuleSandboxUrlOverride) return pluginModuleSandboxUrlOverride(id, hash);
-  const path = await packAssetUrl(id, "module.js");
+export async function pluginModuleSandboxUrl(id: string, hash: string | undefined, tileId: string): Promise<string> {
+  if (pluginModuleSandboxUrlOverride) return pluginModuleSandboxUrlOverride(id, hash, tileId);
+  const path = await packAssetUrl(tileId, id, "module.js");
   let url = `${location.origin}${path}`;
   if (hash) url += `?h=${encodeURIComponent(hash)}`;
   return url;
@@ -327,9 +334,9 @@ export class PluginSandbox {
     if (epoch !== this.bootEpoch) return;
     this.frameId = frameId;
     activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
-    const moduleSrc = await pluginModuleSandboxUrl(id, hash);
-    if (epoch !== this.bootEpoch) return;
-    await this.bootFrame(moduleSrc, config, viz, epoch);
+    // module.js must carry the frame's _sandbox token, which bootFrame mints, so resolve it there.
+    const tile = this.activeTileId;
+    await this.bootFrame(() => pluginModuleSandboxUrl(id, hash, tile), config, viz, epoch);
   }
 
   async loadModuleUrl(
@@ -351,7 +358,7 @@ export class PluginSandbox {
   }
 
   private async bootFrame(
-    moduleSrc: string,
+    moduleSrcOrResolve: string | (() => Promise<string>),
     config: Record<string, string>,
     viz: VizPluginContract | undefined,
     epoch: number,
@@ -370,6 +377,8 @@ export class PluginSandbox {
     iframe.hidden = true;
     iframe.style.cssText = "position:absolute;width:0;height:0;border:0;visibility:hidden";
     iframe.src = await pluginSandboxFrameUrl(this.frameId, bootOut);
+    if (epoch !== this.bootEpoch) return;
+    const moduleSrc = typeof moduleSrcOrResolve === "string" ? moduleSrcOrResolve : await moduleSrcOrResolve();
     if (epoch !== this.bootEpoch) return;
     this.bootNonce = bootOut.nonce;
     document.body.appendChild(iframe);

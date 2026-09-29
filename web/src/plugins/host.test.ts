@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as http from "../core/http";
 import { setPackAssetTokenForTests } from "../core/http";
 import * as packAssetFrame from "./pack-asset-frame";
 import * as tileBudget from "./viz-tile-budget";
@@ -13,6 +14,7 @@ import {
   packAssetUrlWithToken,
   pluginModuleSandboxUrl,
   pluginModuleUrl,
+  pluginSandboxFrameUrl,
   seedPackAssetFrameForTests,
   setPluginModuleSandboxUrlForTests,
   setTsPluginsAllowed,
@@ -137,15 +139,64 @@ describe("pack asset URLs", () => {
   });
 
   it("puts the session token in the path segment", async () => {
-    seedPackAssetFrameForTests();
-    setPackAssetTokenForTests("pulse-ts", "sess-tok-abc");
-    setPackAssetTokenForTests("_sandbox", "sess-tok-abc");
     const url = packAssetUrlWithToken("sess-tok-abc", "pulse-ts", "module.js");
     expect(url).toBe("/pack-assets/sess-tok-abc/pulse-ts/module.js");
     expect(url).not.toContain("?");
-    expect(await pluginModuleSandboxUrl("pulse-ts", "deadbeef")).toContain(
-      "/pack-assets/sess-tok-abc/pulse-ts/module.js?h=deadbeef",
-    );
+  });
+
+  it("loads module.js with the frame's own sandbox token, never a pack-bound one", async () => {
+    // Real tokens differ per pack; the frame CSP only allows scripts under its _sandbox token.
+    seedPackAssetFrameForTests("main", "11111111-1111-4111-8111-111111111111");
+    setPackAssetTokenForTests("pulse-ts", "pack-tok");
+    setPackAssetTokenForTests("_sandbox", "sbx-tok");
+    await pluginSandboxFrameUrl("11111111-1111-4111-8111-111111111111");
+    const src = await pluginModuleSandboxUrl("pulse-ts", "deadbeef", "main");
+    expect(src).toContain("/pack-assets/sbx-tok/pulse-ts/module.js?h=deadbeef");
+    expect(src).not.toContain("pack-tok");
+  });
+
+  it("refuses to build module.js before the frame token exists", async () => {
+    seedPackAssetFrameForTests("tile-early", "33333333-3333-4333-8333-333333333333");
+    setPackAssetTokenForTests("pulse-ts", "pack-tok");
+    await expect(pluginModuleSandboxUrl("pulse-ts", undefined, "tile-early")).rejects.toThrow(/not minted yet/);
+  });
+
+  it("uses each tile's own frame token, not the main tile's", async () => {
+    seedPackAssetFrameForTests("main", "11111111-1111-4111-8111-111111111111");
+    seedPackAssetFrameForTests("tile-2", "22222222-2222-4222-8222-222222222222");
+    setPackAssetTokenForTests("_sandbox", "sbx-main");
+    await pluginSandboxFrameUrl("11111111-1111-4111-8111-111111111111");
+    setPackAssetTokenForTests("_sandbox", "sbx-tile2");
+    await pluginSandboxFrameUrl("22222222-2222-4222-8222-222222222222");
+    expect(await pluginModuleSandboxUrl("koi", undefined, "tile-2")).toContain("/pack-assets/sbx-tile2/koi/module.js");
+    expect(await pluginModuleSandboxUrl("koi", undefined, "main")).toContain("/pack-assets/sbx-main/koi/module.js");
+  });
+});
+
+describe("PluginSandbox module load ordering", () => {
+  afterEach(() => {
+    document.querySelectorAll("iframe").forEach((el) => el.remove());
+    vi.restoreAllMocks();
+    setPackAssetTokenForTests("_sandbox", "");
+    setPackAssetTokenForTests("pulse", "");
+  });
+
+  it("mints the frame token before resolving module.js, so the bootstrap frame is created", async () => {
+    vi.spyOn(packAssetFrame, "openPackAssetFrame").mockResolvedValue("44444444-4444-4444-8444-444444444444");
+    vi.spyOn(packAssetFrame, "closePackAssetFrameForTile").mockResolvedValue();
+    setPackAssetTokenForTests("_sandbox", "sbx-tok");
+    setPackAssetTokenForTests("pulse", "pack-tok");
+    const mint = vi.spyOn(http, "mintPackAssetToken");
+    const box = new PluginSandbox();
+    const boot = box.loadModule("pulse", ["graph.read"], {}, "deadbeef").catch((e: unknown) => e);
+    await vi.waitFor(() => {
+      expect(document.querySelector("iframe[sandbox]")).not.toBeNull();
+    });
+    expect(document.querySelector("iframe[sandbox]")?.getAttribute("src")).toContain("/pack-assets/sbx-tok/_sandbox/");
+    // A pack-bound token for module.js is what the frame CSP blocked; only the frame token is minted.
+    expect(mint.mock.calls.map((c) => c[0])).toEqual(["_sandbox"]);
+    box.unload();
+    await boot;
   });
 });
 
