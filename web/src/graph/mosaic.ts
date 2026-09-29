@@ -541,6 +541,16 @@ export class Mosaic {
     for (const id of this.tileIds) this.panes.get(id)?.classList.add("warming");
   }
 
+  /**
+   * One tile's own sky load finished, or it had none to wait for: end that tile's hold and check
+   * just that pane. A held sky on one tile never keeps the other tiles warming.
+   */
+  settlePane(id: string): void {
+    if (!this.tileIds.includes(id)) return;
+    this.skyPending.delete(id);
+    this.auditPane(id, "settle");
+  }
+
   /** After shader fetch/compile: recover blank tiles instead of leaving a black plugin stage. */
   settlePanes(): void {
     this.skyPending.clear();

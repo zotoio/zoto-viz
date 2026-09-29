@@ -1336,6 +1336,9 @@ async function installPluginSky(
     if (target === scene) skyLoaded = packKey;
     // The card stays until a frame with the sky is actually drawn (first-use compile included).
     if (waitKey) landWhenDrawn(skyWaits, waitKey, target, spec.id);
+    // Check the pane again now its own sky is on it: a Retry's sky lands after the sync that
+    // settled this pane (fault no-sky), and nothing else would clear its warming state.
+    if (mosaic?.on && paneId) mosaic.settlePane(paneId);
   } catch (e) {
     const owner = ctl.signal();
     if (waitKey && ctl.current()) skyWaits.cancelOwned(waitKey, owner);
@@ -1413,15 +1416,24 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
         if (!(pane.has_sky_shader === true || !!pane.shader_sha256)) continue;
         beginSkyWait(id, target, pane, id, signal);
       }
-      for (const id of mosaic.tileIds) {
+      // Each tile loads on its own and settles its own pane when its own load ends, so one held
+      // sky (Backrooms first in the list) never keeps the other panes covered by the warming state.
+      const m = mosaic;
+      const loads = [...m.tileIds].map(async (id) => {
         throwIfAborted(signal);
-        const target = mosaic.graphScene(id);
-        if (!target) continue;
-        const tileSky = mosaic.paneSky(id);
-        const pane = pluginSpecForMode(id);
-        const wantPlugin = mosaicPluginSkyPaneView(id, tileSky, lookForMode).wantPlugin;
-        await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
-      }
+        const target = m.graphScene(id);
+        try {
+          if (!target) return;
+          const tileSky = m.paneSky(id);
+          const pane = pluginSpecForMode(id);
+          const wantPlugin = mosaicPluginSkyPaneView(id, tileSky, lookForMode).wantPlugin;
+          await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
+        } finally {
+          if (!signal.aborted && m.on) m.settlePane(id);
+        }
+      });
+      const failed = (await Promise.allSettled(loads)).find((r) => r.status === "rejected");
+      if (failed) throw (failed as PromiseRejectedResult).reason;
     } finally {
       // A switched-away sync never leaves a pane on "Starting…"; the next sync begins its own wait.
       // Only this sync's own waits: a newer sync may already have begun the pane's card and deadline.
