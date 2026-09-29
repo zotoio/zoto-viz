@@ -482,17 +482,48 @@ def _consent_doc() -> dict[str, Any]:
     return raw if isinstance(raw, dict) else {}
 
 
-def consent_kind(doc: dict[str, Any]) -> str | None:
+ConsentState = str  # "none" | "granted" | "changed" | "stale"
+
+
+def consent_state(doc: dict[str, Any]) -> ConsentState:
+    """Why a pack is or isn't approved, without exposing any hash values.
+
+    - ``granted``: no review needed, or the stored record matches the stamp and every hash the pack has.
+    - ``none``: never approved.
+    - ``changed``: the stamp differs, or a hash the record holds no longer matches.
+    - ``stale``: the record matches everything it holds but lacks a hash the pack now has
+      (for example meshes added after approval). Strict: never treated as granted.
+    """
+    if not needs_review(doc):
+        return "granted"
     rec = _consent_doc().get(str(doc.get("id") or ""))
-    if not isinstance(rec, dict):
-        return None
+    if not isinstance(rec, dict) or rec.get("kind") not in {"reviewed", "authored"}:
+        return "none"
     if rec.get("stamp") != consent_stamp(doc):
-        return None
+        return "changed"
+    missing = False
     for key in _CONSENT_HASH_KEYS:
         current = doc.get(key)
-        if current and rec.get(key) != current:
-            return None
-    kind = rec.get("kind")
+        if not current:
+            continue
+        held = rec.get(key)
+        if not held:
+            missing = True
+        elif held != current:
+            return "changed"
+    return "stale" if missing else "granted"
+
+
+def consent_kind(doc: dict[str, Any]) -> str | None:
+    """Label only: which kind of grant covers ``doc`` (``reviewed``/``authored``), else None.
+
+    Never gates on its own — it answers from :func:`consent_state`, the single evaluator, so the
+    catalog, ``/pack-assets``, the sky shader and the Python loader cannot disagree.
+    """
+    if consent_state(doc) != "granted":
+        return None
+    rec = _consent_doc().get(str(doc.get("id") or ""))
+    kind = rec.get("kind") if isinstance(rec, dict) else None
     return kind if kind in {"reviewed", "authored"} else None
 
 
@@ -517,21 +548,22 @@ def maybe_autoconsent(doc: dict[str, Any]) -> bool:
     """Grant consent for eligible catalog rows when auto-consent is on. Returns True when granted."""
     if not needs_review(doc) or not autoconsent_enabled() or not autoconsent_eligible(doc):
         return False
-    if consent_kind(doc) in {"reviewed", "authored"}:
+    if consent_state(doc) == "granted":
         return False
     grant_consent(doc, autoconsent_kind(doc))
     return True
 
 
 def consented(doc: dict[str, Any]) -> bool:
-    if not needs_review(doc):
-        return True
-    kind = consent_kind(doc)
-    if kind in {"reviewed", "authored"}:
-        return True
-    if maybe_autoconsent(doc):
-        return True
-    return False
+    """The one gate, and a pure read: True only when :func:`consent_state` says ``granted``.
+
+    Never writes a consent record. ``/pack-assets``, ``module.js``, the sandbox token check, the
+    sky shader, the catalog and ``python_allow`` all come through here, so fetching an asset can
+    never approve it. Auto-consent grants only through the client's review path
+    (``POST /api/plugins/{id}/consent``) or an explicit :func:`maybe_autoconsent` call.
+    Callers must pass the finished catalog row (assets hashed).
+    """
+    return consent_state(doc) == "granted"
 
 
 def consented_for(doc: dict[str, Any], hashes: dict[str, str] | None = None) -> bool:
@@ -736,10 +768,7 @@ def _plugin_enabled_for_serve(row: dict[str, Any]) -> bool:
         return False
     if str(row.get("origin") or "zip").strip().lower() == "src":
         return True
-    if not needs_review(row):
-        return True
-    kind = consent_kind(row)
-    return kind in {"reviewed", "authored"}
+    return consent_state(row) == "granted"
 
 
 def _asset_content_type(suffix: str) -> str:
@@ -1700,20 +1729,25 @@ def _catalog_row(
         ))
         return None
     merged = {**doc, **more, **extra}
-    kind = consent_kind(merged)
-    sky = psky.catalog(merged, home, allowed=consented(merged))
+    # Hash declared assets before any consent check so the catalog agrees with /pack-assets,
+    # which checks ``consented(row)`` on the full row (a GLB added after approval is not approved).
+    if isinstance(doc.get("assets"), list) and doc["assets"]:
+        merged["assets"] = doc["assets"]
+        assets_digest = _assets_manifest_sha256(home, doc)
+        if assets_digest:
+            merged["assets_sha256"] = assets_digest
+    # One evaluator on the finished row, read-only (the catalog never auto-grants).
+    state = consent_state(merged)
+    allowed = state == "granted"
+    kind = consent_kind(merged) if allowed else None
+    sky = psky.catalog(merged, home, allowed=allowed)
     row = _attach_visualisation(
-        {**merged, "consent": kind, **sky}, home, errors, rel, blocked,
+        {**merged, "consent": kind, "consent_state": state, **sky}, home, errors, rel, blocked,
     )
     if row is None:
         return None
     if dsp.plugin_kind(row) == "data-source":
         row["pluginKind"] = "data-source"
-    if isinstance(doc.get("assets"), list) and doc["assets"]:
-        row["assets"] = doc["assets"]
-        assets_digest = _assets_manifest_sha256(home, doc)
-        if assets_digest:
-            row["assets_sha256"] = assets_digest
     if not isinstance(row.get("visualisation"), dict):
         try:
             _validate_merged_catalog_row(row)

@@ -240,6 +240,8 @@ export interface PluginView {
   sha256?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;
+  /** Why consent is or isn't in place (catalog). Read it through `app/consent-store`, never directly. */
+  consent_state?: "none" | "granted" | "changed" | "stale";
   /** Catalog provenance: src (shipped), zip (contrib), or local (~/.zoto-viz/plugins/local). */
   origin?: "src" | "zip" | "local";
   has_frontend?: boolean;
@@ -872,6 +874,8 @@ export async function installPlugins(): Promise<PluginView[]> {
       }
     }
     applyPluginCatalog(specs);
+    const { seedConsentFromCatalog } = await import("../app/consent-store");
+    seedConsentFromCatalog(specs);
     return specs;
   } catch (e) {
     console.warn("zoto-viz plugins:", e);

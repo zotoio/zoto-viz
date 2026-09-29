@@ -1,4 +1,5 @@
 import type { PluginView } from "../plugins/plugin";
+import { noteConsentGranted } from "./consent-store";
 
 const CONSENT_ONLY_KEYS = new Set(["pluginConsent", "reloadPlugins"]);
 
@@ -25,6 +26,7 @@ export function mergePluginConsentLivePatch(
   const spec = specs.find((p) => p.id === id);
   if (!spec) return false;
   spec.consent = kind;
+  noteConsentGranted(spec, kind);
   if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
   return true;
 }

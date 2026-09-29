@@ -33,7 +33,14 @@ import {
 } from "./present-drive-app";
 import { applyModeImpl, type ApplyModeFlags, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
 import type { ConsentReviewResult } from "./pack-consent";
-import { ensurePackReviewedOutcome } from "./pack-consent";
+import {
+  consentErrorOf,
+  consentGranted,
+  consentStateOf,
+  onConsentChange,
+  requestConsent,
+  seedConsent,
+} from "./consent-store";
 import {
   addModeSwitchAbortListener,
   beginModeSwitchAttempt,
@@ -259,7 +266,7 @@ import { maybeReportPackHostPerf } from "./pack-perf-report";
 import { createHostMeshBridge, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { showPluginSkyConsentNotice, warnPluginSkyConsent } from "./plugin-sky-consent-notice";
-import { shouldPromptPluginReview } from "./plugin-consent-mount";
+import { packNeedsConsent, shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { livePatchIsConsentOnly, mergePluginConsentLivePatch } from "./plugin-consent-live";
 import { initPluginConsentSync } from "./plugin-consent-sync";
@@ -965,51 +972,39 @@ const refreshPluginSignal = new AbortController();
 let ensureReviewedOverride: ((spec: PluginView | null, signal: AbortSignal) => Promise<ConsentReviewResult>) | null = null;
 let askPluginReviewOverride: typeof askPluginReview | null = null;
 
+/** After any grant: the catalog row (not a copy) learns its sky may load, and tiles get a heal grace. */
+function afterConsentGranted(packId: string): void {
+  const raw = pluginSpecs.find((p) => p.id === packId);
+  if (raw) {
+    if (raw.hash) consentHash(raw.id, raw.hash);
+    if (raw.has_sky_shader || raw.shader_sha256) raw.sky_available = true;
+  }
+  noteTileHealthGrace("main");
+  mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
+}
+
 async function ensureReviewedImpl(spec: PluginView | null, signal: AbortSignal): Promise<ConsentReviewResult> {
   if (!spec || !pluginNeedsReview(spec)) return "ok";
-  if (spec.consent) return "ok";
+  if (consentGranted(spec)) return "ok";
   if (!shouldPromptPluginReview(spec, catalogReady)) return "aborted";
-  return ensurePackReviewedOutcome(spec, async (reviewSignal) => {
-    if (reviewSignal.aborted) return "aborted";
+  const packId = spec.id;
+  const out = await requestConsent(spec, async (reviewSignal) => {
+    let kind: "reviewed" | "authored" | null;
     if (autoconsentEnabled() && autoconsentEligible(spec)) {
-      const kind = autoconsentKind(spec);
-      try {
-        await grantPluginConsent(spec.id, kind);
-        if (reviewSignal.aborted) return "aborted";
-        spec.consent = kind;
-        if (spec.hash) consentHash(spec.id, spec.hash);
-        if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-        noteTileHealthGrace("main");
-        mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
-        return "ok";
-      } catch (e) {
-        console.warn("zoto-viz plugin autoconsent:", e);
-        return reviewSignal.aborted ? "aborted" : "failed";
-      }
-    }
-    try {
-      const kind = await (askPluginReviewOverride ?? askPluginReview)(spec, { signal: reviewSignal });
-      if (reviewSignal.aborted) return "aborted";
+      kind = autoconsentKind(spec);
+    } else {
+      kind = await (askPluginReviewOverride ?? askPluginReview)(spec, {
+        signal: reviewSignal,
+        state: consentStateOf(spec),
+      });
       if (!kind) return "declined";
-      try {
-        await grantPluginConsent(spec.id, kind);
-        if (reviewSignal.aborted) return "aborted";
-        spec.consent = kind;
-        if (spec.hash) consentHash(spec.id, spec.hash);
-        if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-        noteTileHealthGrace("main");
-        mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
-        return "ok";
-      } catch (e) {
-        console.warn("zoto-viz plugin consent:", e);
-        return reviewSignal.aborted ? "aborted" : "failed";
-      }
-    } catch (e) {
-      if (reviewSignal.aborted) return "aborted";
-      console.warn("zoto-viz plugin review:", e);
-      return "failed";
     }
+    await grantPluginConsent(packId, kind);
+    return kind;
   }, signal);
+  if (out === "ok") afterConsentGranted(packId);
+  else if (out === "failed") console.warn("zoto-viz plugin consent:", packId, consentErrorOf(packId));
+  return out;
 }
 
 function hostTileConfig(): Record<string, string> {
@@ -1047,7 +1042,7 @@ async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promi
     tsWatchStoreId = spec ? configStoreId(spec) : "";
     return;
   }
-  if (pluginNeedsReview(spec) && !spec.consent) {
+  if (packNeedsConsent(spec)) {
     console.warn("zoto-viz plugin frontend: needs review before module load", spec.id);
     markPluginNeedsReview(spec);
     sandbox.unload();
@@ -1133,6 +1128,7 @@ async function refreshTsPlugin(): Promise<void> {
         spec.hash = next.hash;
         spec.capabilities = next.capabilities;
         spec.consent = next.consent ?? null;
+        seedConsent(next);
         const reviewed = await ensureReviewed(spec, refreshPluginSignal.signal);
         if (reviewed !== "ok") return;
         await loadTsPlugin(spec, refreshPluginSignal.signal);
@@ -1187,7 +1183,7 @@ function tileHealthModeId(tileId: string): string {
 function tileHealthAwaitingApproval(tileId: string): boolean {
   const m = modeById(tileHealthModeId(tileId));
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  if (spec && pluginNeedsReview(spec) && !spec.consent) return true;
+  if (packNeedsConsent(spec)) return true;
   return !!viewAuthBlock({
     id: m.id,
     pluginId: m.pluginId,
@@ -1254,7 +1250,7 @@ async function loadPluginSkyOnto(
     }
     return;
   }
-  if (pluginNeedsReview(spec) && !spec.consent) {
+  if (packNeedsConsent(spec)) {
     cancelSkyWait(target, paneId);
     warnPluginSkyConsent(spec.id);
     showPluginSkyConsentNotice(target === scene ? $("scene") : null, true);
@@ -1413,7 +1409,7 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
         const pane = pluginSpecForMode(id);
         if (!target || !pane || target.pluginSkyDrawn === pane.id) continue;
         if (!mosaicPluginSkyPaneView(id, mosaic.paneSky(id), lookForMode).wantPlugin) continue;
-        if (pluginNeedsReview(pane) && !pane.consent) continue;
+        if (packNeedsConsent(pane)) continue;
         if (!(pane.has_sky_shader === true || !!pane.shader_sha256)) continue;
         beginSkyWait(id, target, pane, id, signal);
       }
@@ -1495,7 +1491,7 @@ async function runMosaicPaneSwitch(
 function pluginIsConsented(pluginId: string): boolean {
   const spec = pluginSpecs.find((p) => p.id === pluginId);
   if (!spec) return false;
-  return !pluginNeedsReview(spec) || !!spec.consent;
+  return !packNeedsConsent(spec);
 }
 
 async function resumeMosaicConsentPending(): Promise<void> {
@@ -3075,7 +3071,7 @@ function diceModes(): ViewMode[] {
     if (!allowed.has(m.id)) return false;
     if (!m.pluginId) return true;
     const spec = pluginSpecForMode(m.id);
-    if (spec && pluginNeedsReview(spec) && !spec.consent) return false;
+    if (packNeedsConsent(spec)) return false;
     if (viewAuthBlock({
       id: m.id,
       pluginId: m.pluginId,

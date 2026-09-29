@@ -2,7 +2,7 @@ import type { ViewMode } from "../core/modes";
 import type { DreamAnim } from "../graph/scene";
 import type { ConsentReviewResult } from "./pack-consent";
 import type { PluginView } from "../plugins/plugin";
-import { pluginNeedsReview } from "../plugins/plugin";
+import { packNeedsConsent } from "./plugin-consent-mount";
 import type { Select } from "../ui/ui";
 import type { Mosaic } from "../graph/mosaic";
 import {
@@ -98,7 +98,7 @@ function resolveKeptModeId(
 }
 
 function needsConsentBeforeShow(spec: PluginView | null): boolean {
-  return !!spec && pluginNeedsReview(spec) && !spec.consent;
+  return packNeedsConsent(spec);
 }
 
 function commitTargetPublicSurfaces(

@@ -90,6 +90,7 @@ export type CatalogRow = {
   sky_error?: unknown;
   assets?: unknown;
   assets_sha256?: unknown;
+  consent_state?: unknown;
 };
 
 function asRecord(raw: unknown): Record<string, unknown> | null {
@@ -532,6 +533,9 @@ export function toPluginView(raw: unknown): PluginView {
   if (asString(row.hash)) spec.hash = asString(row.hash);
   if (asString(row.service)) spec.service = asString(row.service);
   if (row.consent === "reviewed" || row.consent === "authored" || row.consent === null) spec.consent = row.consent;
+  if (row.consent_state === "none" || row.consent_state === "granted" || row.consent_state === "changed" || row.consent_state === "stale") {
+    spec.consent_state = row.consent_state;
+  }
   if (row.origin === "src" || row.origin === "zip" || row.origin === "local") spec.origin = row.origin;
   if (typeof row.has_frontend === "boolean") spec.has_frontend = row.has_frontend;
   if (typeof row.has_sky === "boolean") spec.has_sky = row.has_sky;

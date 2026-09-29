@@ -640,7 +640,7 @@ export function fillPluginFields(
 /** Modal: the operator wrote this plugin, or they examined the source (AI IDE suggested). */
 export function askPluginReview(
   spec: PluginView,
-  opts?: { signal?: AbortSignal },
+  opts?: { signal?: AbortSignal; state?: "none" | "changed" | "stale" | "granted" },
 ): Promise<"reviewed" | "authored" | null> {
   return new Promise((resolve) => {
     const bits: string[] = [];
@@ -660,7 +660,12 @@ export function askPluginReview(
     const head = document.createElement("div");
     head.className = "mhead";
     const h = document.createElement("strong");
-    h.textContent = `Review “${spec.name}” before activating`;
+    h.textContent =
+      opts?.state === "changed"
+        ? `“${spec.name}” has changed since you approved it`
+        : opts?.state === "stale"
+          ? `“${spec.name}” needs a fresh OK after an update`
+          : `Review “${spec.name}” before activating`;
     head.appendChild(h);
     const body = document.createElement("div");
     body.className = "ask-body";
@@ -671,6 +676,14 @@ export function askPluginReview(
     const p3 = document.createElement("p");
     p3.className = "muted";
     p3.textContent = spec.file ? `Source: ${spec.file}` : `id ${spec.id} · v${spec.version}`;
+    if (opts?.state === "changed" || opts?.state === "stale") {
+      const p0 = document.createElement("p");
+      p0.textContent =
+        opts.state === "changed"
+          ? "Its code, shader or assets differ from what you approved, so it stays off until you OK this version."
+          : "It now ships content (such as meshes or textures) that your earlier OK did not cover, so it stays off until you OK this version.";
+      body.append(p0);
+    }
     body.append(p1, p2, p3);
     const row = document.createElement("div");
     row.className = "ask-actions";

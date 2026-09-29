@@ -1,5 +1,6 @@
 import type { PluginView } from "../plugins/plugin";
 import { pluginNeedsReview } from "../plugins/plugin";
+import { consentGranted } from "./consent-store";
 
 import {
   pendingByPackId,
@@ -67,7 +68,7 @@ export async function ensurePackReviewedOutcome(
   signal: AbortSignal,
 ): Promise<ConsentReviewResult> {
   if (!spec || !pluginNeedsReview(spec)) return "ok";
-  if (spec.consent) return "ok";
+  if (consentGranted(spec)) return "ok";
   return ensurePackConsent(spec.id, review, signal);
 }
 
