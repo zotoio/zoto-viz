@@ -541,6 +541,16 @@ export class Mosaic {
     for (const id of this.tileIds) this.panes.get(id)?.classList.add("warming");
   }
 
+  /**
+   * One tile's own sky load finished, or it had none to wait for: end that tile's hold and check
+   * just that pane. A held sky on one tile never keeps the other tiles warming.
+   */
+  settlePane(id: string): void {
+    if (!this.tileIds.includes(id)) return;
+    this.skyPending.delete(id);
+    this.auditPane(id, "settle");
+  }
+
   /** After shader fetch/compile: recover blank tiles instead of leaving a black plugin stage. */
   settlePanes(): void {
     this.skyPending.clear();
@@ -892,7 +902,7 @@ export class Mosaic {
       return;
     }
     if (phase === "bind" && fault !== "unbound") return;
-    const plan = paneRecovery(fault);
+    const plan = paneRecovery(fault, lookForTile(id)?.backdrop === "plugin");
     if (plan.flush) this.flushSync();
     if (!inspectPaneStartup(this.paneSnap(id))) {
       pane.classList.remove("warming");
@@ -937,6 +947,8 @@ export class Mosaic {
   }
 
   private fallbackHostSky(id: string): void {
+    // A pack-sky pane waits on the theme background; a built-in here is the "matrix on Backrooms" bug.
+    if (lookForTile(id)?.backdrop === "plugin") return;
     const used = [...this.tileSkies.values()].filter((k) => k !== "plugin");
     const sky = nextHostSky(used, cycleSkyPool(), this.cfg.sync().anim.backdrop);
     this.recoveredSkies.set(id, sky);

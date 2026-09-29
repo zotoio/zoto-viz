@@ -11,6 +11,12 @@ export function liveBlankNoticeText(packName: string): string {
   return `${name} is running but not showing anything.`;
 }
 
+/** A view's own sky did not arrive before the Starting deadline. */
+export function packSkyTimedOut(packName: string): string {
+  const name = packName.trim() || "Pack";
+  return `${name} couldn't start.`;
+}
+
 export function packSandboxStartFailed(packName: string): string {
   const name = packName.trim() || "Pack";
   return `${name} couldn't start, its sandbox didn't respond`;

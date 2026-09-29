@@ -47,6 +47,27 @@ PREFETCH_STILLS = 48
 HEADLINE_LIMIT = 64
 _COUNT_Q = re.compile(r"([?&]count=)(\d+)")
 _PAGE_Q = re.compile(r"([?&]page-size=)(\d+)")
+# Bundled per-source demo stills (``demo: true``). When a pictured feed's live fetch fails
+# (5xx, 403/429, timeout, bad XML) or yields no stills, the row serves ITS OWN sample so a
+# carousel never keeps showing another source's pictures. Every image in a sample must sit
+# on that source's own host.
+SAMPLE_DIR = Path(__file__).resolve().parents[1] / "plugins" / "src" / "carousel" / "snapshots"
+SAMPLE_HOSTS: dict[str, tuple[str, ...]] = {
+    "nasa": ("www.nasa.gov",),
+    "apod": ("apod.nasa.gov",),
+    "earth-iotd": ("science.nasa.gov",),
+    "commons-potd": ("wikimedia.org",),
+}
+MAX_SAMPLE_BYTES = 256_000
+# Name used in "Showing sample pictures. <name> isn't responding."
+SAMPLE_NAMES = {
+    "nasa": "NASA",
+    "apod": "APOD",
+    "earth-iotd": "Earth Observatory",
+    "commons-potd": "Wikimedia Commons",
+}
+# Widths tried, largest first, when a still is over the proxy cap.
+RENDITION_WIDTHS = (2048, 1280)
 
 DEFAULT_SOURCES: list[dict[str, Any]] = [
     {
@@ -593,6 +614,50 @@ def pick_image_url(*blobs: str) -> str:
     return max(enumerate(found), key=lambda iv: (_image_score(iv[1]), iv[0]))[1]
 
 
+def _too_large(child: ET.Element) -> bool:
+    """An enclosure the still proxy would refuse (``length`` over its cap)."""
+    raw = _attr(child, "length").strip()
+    return raw.isdigit() and int(raw) > agent_assets.MAX_BYTES
+
+
+_WP_UPLOAD = re.compile(r"^https://(?:www\.nasa\.gov|science\.nasa\.gov)/wp-content/uploads/", re.I)
+_EO_DYNAMIC = re.compile(r"^https://assets\.science\.nasa\.gov/dynamicimage/", re.I)
+_WIKI_ORIG = re.compile(
+    r"^https://upload\.wikimedia\.org/wikipedia/commons/([0-9a-f]/[0-9a-f]{2})/([^/?]+\.(?:jpe?g|png|webp|gif))$",
+    re.I,
+)
+
+
+def _with_width(url: str, width: int) -> str:
+    parsed = urlparse(url)
+    q = [(k, v) for k, v in parse_qs(parsed.query, keep_blank_values=True).items() if k not in {"w", "h", "resize"}]
+    flat = [(k, vals[-1] if vals else "") for k, vals in q]
+    return urlunparse(parsed._replace(query=urlencode([*flat, ("w", str(width))])))
+
+
+def smaller_renditions(url: str) -> list[str]:
+    """Smaller renditions of the SAME still, largest first. Empty when the host offers none.
+
+    NASA WordPress uploads and science.nasa.gov dynamic images resize on ``?w=``;
+    Wikimedia originals and thumbs have ``/NNNpx-`` thumbs. Never another image.
+    """
+    raw = (url or "").strip()
+    out: list[str] = []
+    if _WP_UPLOAD.match(raw) or _EO_DYNAMIC.match(raw):
+        cur = parse_qs(urlparse(raw).query).get("w", [""])[-1]
+        cur_w = int(cur) if cur.isdigit() else 1 << 30
+        out = [_with_width(raw, w) for w in RENDITION_WIDTHS if w < cur_w]
+    elif m := _WIKI_ORIG.match(raw):
+        name = m.group(2)
+        out = [
+            f"https://upload.wikimedia.org/wikipedia/commons/thumb/{m.group(1)}/{name}/{w}px-{name}"
+            for w in RENDITION_WIDTHS
+        ]
+    elif "wikimedia.org/" in raw and (px := _WIKI_PX.search(raw)):
+        out = [raw[:px.start()] + f"/{w}px-" + raw[px.end():] for w in RENDITION_WIDTHS if w < int(px.group(1))]
+    return [u for u in out if u != raw]
+
+
 def _item_image(it: ET.Element) -> str:
     """enclosure / media:content / img-in-description — NASA IOTD uses enclosure."""
     enclosed: list[str] = []
@@ -605,6 +670,12 @@ def _item_image(it: ET.Element) -> str:
         medium = _attr(child, "medium").lower()
         if not url.startswith("https://"):
             continue
+        if _too_large(child):
+            # Over the proxy cap: use a smaller rendition of the same still, else drop it.
+            smaller = smaller_renditions(url)
+            if not smaller:
+                continue
+            url = smaller[0]
         if typ.startswith("image/") or medium == "image" or _IMG_HREF.match(url):
             enclosed.append(url)
         elif not typ and not medium:
@@ -619,9 +690,25 @@ def _item_image(it: ET.Element) -> str:
     return pick_image_url(*enclosed, *blobs)
 
 
+_GLUED_ATTR = re.compile(r'"(?=[A-Za-z_][\w.-]*(?::[\w.-]+)?=")')
+
+
+def _xml_root(body: str) -> ET.Element:
+    """Parse, repairing attributes glued together in the prolog/root tag (NASA Science feed)."""
+    try:
+        return ET.fromstring(body)
+    except ET.ParseError:
+        head = body[:4000]
+        starts = [i for i in (head.find("<rss"), head.find("<feed")) if i >= 0]
+        end = head.find(">", min(starts)) if starts else -1
+        if end < 0:
+            raise
+        return ET.fromstring(_GLUED_ATTR.sub('" ', body[:end]) + body[end:])
+
+
 def parse_rss(body: str) -> dict[str, Any]:
     """RSS 2.0 or Atom → ``{title, items[]}``."""
-    root = ET.fromstring(body)
+    root = _xml_root(body)
     tag = root.tag.split("}")[-1].lower()
     items: list[dict[str, str]] = []
     title = ""
@@ -938,7 +1025,102 @@ def _record(row: dict[str, Any], *, ok: bool, payload: dict[str, Any] | None = N
     _live[row["id"]] = live
 
 
+def _default_row(sid: str) -> dict[str, Any] | None:
+    return next((r for r in DEFAULT_SOURCES if r["id"] == sid), None)
+
+
+def _host_ok(url: str, hosts: tuple[str, ...]) -> bool:
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return url.startswith("https://") and any(host == h or host.endswith("." + h) for h in hosts)
+
+
+def sample_for(row: dict[str, Any]) -> dict[str, Any] | None:
+    """This row's own bundled demo stills, or None.
+
+    Only shipped pictured rows that still point at their shipped host get one, so an
+    operator who repoints ``nasa`` elsewhere never sees NASA sample pictures. Items whose
+    image is not on the source's own host are dropped.
+    """
+    sid = str(row.get("id") or "")
+    hosts = SAMPLE_HOSTS.get(sid)
+    shipped = _default_row(sid)
+    if not hosts or not shipped:
+        return None
+    try:
+        live_host = urlparse(str(row.get("url") or "")).hostname
+        if live_host != urlparse(str(shipped["url"])).hostname:
+            return None
+        path = SAMPLE_DIR / f"{sid}.demo.json"
+        raw = path.read_bytes()
+        if len(raw) > MAX_SAMPLE_BYTES:
+            return None
+        doc = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(doc, dict) or doc.get("demo") is not True or doc.get("source") != sid:
+        return None
+    items: list[dict[str, str]] = []
+    for it in doc.get("items") or []:
+        if not isinstance(it, dict):
+            continue
+        image = str(it.get("image") or "").strip()
+        title = " ".join(str(it.get("title") or "").split())[:MAX_TITLE]
+        if not title or not _host_ok(image, hosts):
+            continue
+        items.append({
+            "title": title,
+            "link": str(it.get("link") or "")[:500] if _host_ok(str(it.get("link") or ""), hosts) else "",
+            "published": str(it.get("published") or "")[:80],
+            "summary": " ".join(str(it.get("summary") or "").split())[:MAX_SUMMARY],
+            "image": image[:MAX_IMAGE_URL],
+        })
+    if not items:
+        return None
+    return {
+        "label": str(doc.get("label") or "DEMO SNAPSHOT")[:120],
+        "name": SAMPLE_NAMES.get(sid, str(row.get("label") or sid)),
+        "items": items[:MAX_ITEMS],
+    }
+
+
+def _pictured(live: dict[str, Any]) -> bool:
+    return any(str(it.get("image") or "").startswith("https://") for it in live.get("items") or [])
+
+
+def _serve_sample(row: dict[str, Any], reason: str) -> bool:
+    """Swap a failed / still-less live row for its own demo stills. False when it has none."""
+    sample = sample_for(row)
+    if sample is None:
+        return False
+    # ok stays true so the carousel binds these items; feed=false keeps demo titles off the
+    # news ticker; demo/sample tell the view to say "sample pictures".
+    _record(row, ok=True, payload={
+        "items": sample["items"],
+        "demo": True,
+        "sample": True,
+        "sampleLabel": sample["label"],
+        "sampleSource": sample["name"],
+        "liveError": nasa_api.redact_string(reason)[:160],
+    })
+    _live[row["id"]]["feed"] = False
+    _schedule_prefetch(sample["items"])
+    return True
+
+
 async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
+    live = await _fetch_live(row)
+    if row["id"] in SAMPLE_HOSTS and row.get("type") in ("rss", "http"):
+        if not live.get("ok"):
+            _serve_sample(row, str(live.get("error") or "live fetch failed"))
+        elif not _pictured(live):
+            _serve_sample(row, "no pictured items")
+    return _live[row["id"]]
+
+
+async def _fetch_live(row: dict[str, Any]) -> dict[str, Any]:
     kind = row["type"]
     try:
         if kind == "file":
@@ -977,8 +1159,8 @@ async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
                 _record(row, ok=True, payload=payload)
             else:
                 _record(row, ok=True, payload={"text": body[:MAX_BODY]})
-    except (ValueError, ClientError, OSError, ET.ParseError) as e:
-        _record(row, ok=False, error=str(e))
+    except (ValueError, ClientError, OSError, ET.ParseError, asyncio.TimeoutError) as e:
+        _record(row, ok=False, error=str(e) or type(e).__name__)
     return _live[row["id"]]
 
 
@@ -1056,7 +1238,7 @@ def headlines(limit: int = HEADLINE_LIMIT) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for row in ensure():
         live = _live.get(row["id"])
-        if not live or not row.get("feed", True) or not row.get("enabled", True):
+        if not live or not row.get("feed", True) or not row.get("enabled", True) or live.get("demo"):
             continue
         label = str(live.get("label") or row["label"])
         for item in live.get("items") or []:
@@ -1106,10 +1288,36 @@ async def api_image(request: web.Request) -> web.Response:
     try:
         row = await agent_assets.ensure_photo(raw)
     except (ValueError, ClientError, TimeoutError) as e:
+        if isinstance(e, ValueError) and "too large" in str(e):
+            for smaller in smaller_renditions(raw):
+                try:
+                    return agent_assets.file_response(await agent_assets.ensure_photo(smaller))
+                except (ValueError, ClientError, TimeoutError):
+                    continue
+            drop_still(raw)
         status = agent_assets.image_http_status(e)
         err = str(e) if isinstance(e, ValueError) else f"fetch failed: {e}"
         return web.json_response({"error": nasa_api.redact_string(err)}, status=status)
     return agent_assets.file_response(row)
+
+
+def drop_still(url: str) -> None:
+    """Forget a still the proxy cannot serve at any size.
+
+    The owning row stops offering it; a row left with no stills serves its own sample.
+    """
+    key = (url or "").strip()
+    for row in ensure():
+        live = _live.get(row["id"])
+        if not live or live.get("demo") or not live.get("items"):
+            continue
+        items = live["items"]
+        keep = [it for it in items if str(it.get("image") or "") != key]
+        if len(keep) == len(items):
+            continue
+        live["items"] = keep
+        if row["id"] in SAMPLE_HOSTS and not _pictured(live):
+            _serve_sample(row, "image too large")
 
 
 async def api_source_library(_request: web.Request) -> web.Response:

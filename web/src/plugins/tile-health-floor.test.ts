@@ -63,6 +63,7 @@ function harness(opts: {
   live?: boolean;
   tiles?: string[];
   previewOnly?: (id: string) => boolean;
+  skyStarting?: (id: string) => boolean;
   pack?: (id: string) => string;
 }): Harness {
   let packId = "voxel-world";
@@ -92,6 +93,7 @@ function harness(opts: {
     onHeal: (id, step) => { heals.push(`${id}:${step}`); },
     onLiveBlank: (id, p, on) => { blanks.push(`${id}:${p}:${on}`); },
     previewOnly: opts.previewOnly,
+    skyStarting: opts.skyStarting,
   };
   if (opts.live) deps.packLive = (_id, p) => p === packId;
   const mon = new TileHealthMonitor(deps);
@@ -230,6 +232,22 @@ describe("tile-heal: mosaic preview panes (option 2)", () => {
     run(h, 0, 40_000, false);
     expect(h.heals.filter((x) => x.startsWith("plugin:koi-pond:"))).toEqual([]);
     expect(h.heals.some((x) => x.startsWith("topology:"))).toBe(true);
+    info.mockRestore();
+  });
+});
+
+describe("tile-heal: a view whose own sky is still starting", () => {
+  it("is never healed and gets no blank notice while its Starting card is up (60s compile)", () => {
+    const info = vi.spyOn(console, "info").mockImplementation(() => {});
+    let starting = true;
+    const h = harness({ kind: "black", live: true, skyStarting: () => starting });
+    const t = run(h, 0, 60_000, true);
+    expect(h.heals).toEqual([]);
+    expect(h.blanks).toEqual([]);
+    // Once the sky lands the tile is judged again: a still-uniform tile gets the notice.
+    starting = false;
+    run(h, t, 40_000, true);
+    expect(h.blanks.some((b) => b.endsWith(":true"))).toBe(true);
     info.mockRestore();
   });
 });

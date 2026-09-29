@@ -1,0 +1,50 @@
+{
+  "demo": true,
+  "source": "commons-potd",
+  "label": "DEMO SNAPSHOT — sample Commons picture of the day pictures, not live",
+  "note": "Bundled demo data. Served only when the live feed fails or has no stills. Every image is on this source's own host.",
+  "items": [
+    {
+      "title": "Wikimedia Commons picture of the day for September 20",
+      "summary": "Picture of the day Inflorescence of a Rostrinucula dependens . This subshrub is native to China and blooms from August to October. Focus stack of 54 photos.",
+      "link": "https://commons.wikimedia.org/wiki/Special:FeedItem/potd/20260920000000/en",
+      "published": "2026-09-20T00:00:00Z",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/8/80/Bloeiwijze_van_een_Rostrinucula_dependens._11-10-2025._%28d.j.b%29.jpg/960px-Bloeiwijze_van_een_Rostrinucula_dependens._11-10-2025._%28d.j.b%29.jpg"
+    },
+    {
+      "title": "Wikimedia Commons picture of the day for September 21",
+      "summary": "Picture of the day Chief Joseph of the Wallowa band of Nez Perce , an American Native American tribe in the Pacific Northwest . This photo was taken by Edward Sheriff Curtis . Chief Joseph died on this day in 1904.",
+      "link": "https://commons.wikimedia.org/wiki/Special:FeedItem/potd/20260921000000/en",
+      "published": "2026-09-21T00:00:00Z",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/Chief_Joseph_by_Edward_Sheriff_Curtis.jpg/960px-Chief_Joseph_by_Edward_Sheriff_Curtis.jpg"
+    },
+    {
+      "title": "Wikimedia Commons picture of the day for September 22",
+      "summary": "Picture of the day Beach of Cape Fiolent during the storm at sea. Cape Fiolent in Crimea is of ancient Jurassic origin. Upper Miocene lava and carbonate intrusions on heavily eroded Jurassic foundation.",
+      "link": "https://commons.wikimedia.org/wiki/Special:FeedItem/potd/20260922000000/en",
+      "published": "2026-09-22T00:00:00Z",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/4/45/Beach_of_Cape_Fiolent%2C_Crimea.jpg/960px-Beach_of_Cape_Fiolent%2C_Crimea.jpg"
+    },
+    {
+      "title": "Wikimedia Commons picture of the day for September 23",
+      "summary": "Picture of the day Paraskevi of Iconium church in Kwiatoń, Southern Poland.",
+      "link": "https://commons.wikimedia.org/wiki/Special:FeedItem/potd/20260923000000/en",
+      "published": "2026-09-23T00:00:00Z",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/d/d9/Zabytkowa_cerkiew_wpisana_na_list%C4%99_UNESCO.jpg/960px-Zabytkowa_cerkiew_wpisana_na_list%C4%99_UNESCO.jpg"
+    },
+    {
+      "title": "Wikimedia Commons picture of the day for September 24",
+      "summary": "Picture of the day Female violet-backed starling ( Cinnyricinclus leucogaster verreauxi ), Damaraland , Namibia .",
+      "link": "https://commons.wikimedia.org/wiki/Special:FeedItem/potd/20260924000000/en",
+      "published": "2026-09-24T00:00:00Z",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/c/c6/Violet-backed_starling_%28Cinnyricinclus_leucogaster_verreauxi%29_female.jpg/960px-Violet-backed_starling_%28Cinnyricinclus_leucogaster_verreauxi%29_female.jpg"
+    },
+    {
+      "title": "Wikimedia Commons picture of the day for September 25",
+      "summary": "Picture of the day Bab Louta Reservoir, Tazekka National Park , Taza province, Morocco",
+      "link": "https://commons.wikimedia.org/wiki/Special:FeedItem/potd/20260925000000/en",
+      "published": "2026-09-25T00:00:00Z",
+      "image": "https://thumb.wikimedia.org/wikipedia/commons/thumb/1/1a/NE_Lac_Bab_Louta_Tazekka_Nov25_A7CR_09270-4_HDR1.jpg/960px-NE_Lac_Bab_Louta_Tazekka_Nov25_A7CR_09270-4_HDR1.jpg"
+    }
+  ]
+}
