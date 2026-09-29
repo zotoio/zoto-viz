@@ -10,7 +10,7 @@ describe("main.ts wires the sky wait (Starting… then couldn't start)", () => {
     const body = between("async function installPluginSky(", "const skyWaitTiles");
     const begin = body.indexOf("beginSkyWait(waitKey");
     expect(begin).toBeGreaterThan(0);
-    expect(begin).toBeLessThan(body.indexOf("fetchPluginSky("));
+    expect(begin).toBeLessThan(body.indexOf("fetchSkyOnce("));
     expect(body).toContain("landWhenDrawn(skyWaits, waitKey");
     expect(body).toMatch(/catch \(e\) \{\s*if \(waitKey\) skyWaits\.cancel\(waitKey\);/);
   });

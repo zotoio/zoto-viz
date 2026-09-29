@@ -1269,6 +1269,26 @@ async function loadPluginSkyOnto(
     installPluginSky(target, spec, packKey, lookOpts, signal, current, paneId));
 }
 
+/**
+ * One network request per sky at a time, shared by every caller and tile. Not tied to any one
+ * caller's signal: a superseded sync (boot re-apply, mode switch) drops its interest after the await
+ * instead of cancelling a request the next sync would repeat.
+ */
+const skyFetches = new Map<string, Promise<string>>();
+function fetchSkyOnce(id: string, hash?: string): Promise<string> {
+  const key = `${id}:${hash || ""}`;
+  const cur = skyFetches.get(key);
+  if (cur) return cur;
+  console.info(`[zoto-viz sky] step=request pack=${id}`);
+  const p = fetchPluginSky(id, hash);
+  skyFetches.set(key, p);
+  const clear = () => {
+    if (skyFetches.get(key) === p) skyFetches.delete(key);
+  };
+  p.then(clear, clear);
+  return p;
+}
+
 /** Tiles' installed sky (packKey) and in-flight sky loads, so each sky is requested once per tile. */
 const skyInstalled = new WeakMap<NetScene, string>();
 const skyLoads = new SkyLoads<NetScene>();
@@ -1292,8 +1312,7 @@ async function installPluginSky(
   addModeSwitchAbortListener(signal, disposeSky, { once: true });
   try {
     recordPluginSkyLoad({ packId: spec.id, packKey: packKey, isShaderPack: true, look: lookOpts });
-    console.info(`[zoto-viz sky] tile=${waitKey || "?"} step=request pack=${spec.id}`);
-    const source = await fetchPluginSky(spec.id, spec.shader_sha256, signal);
+    const source = await fetchSkyOnce(spec.id, spec.shader_sha256);
     throwIfAborted(signal);
     // A Retry started a newer load for this tile; that one installs the sky.
     if (!current()) return;
@@ -1340,6 +1359,7 @@ const skyWaits = new SkyWaits({
     if (!w) return;
     console.info(`[zoto-viz sky] tile=${key} step=retry`);
     skyLoads.forget(w.target); // a stuck request doesn't absorb the retry
+    skyFetches.delete(`${w.spec.id}:${w.spec.shader_sha256 || ""}`);
     void loadPluginSkyOnto(w.target, w.spec, true, getActiveModeSwitchSignal() ?? refreshPluginSignal.signal, w.paneId).catch(() => {});
     skyWaits.begin(key);
   },

@@ -151,11 +151,11 @@ describe("Retry is a real, reachable button on a click-through notice", () => {
 
 describe("scene reports the first frame drawn with the sky", () => {
   const scene = readFileSync(resolve(__dirname, "../graph/scene.ts"), "utf8");
-  it("noteSkyDrawn runs after the render call, and every install resets it", () => {
+  it("the signal fires after the render call, and every install re-arms it", () => {
     const present = scene.slice(scene.indexOf("  private present("), scene.indexOf("  private notePaneChange("));
-    expect(present.indexOf("this.noteSkyDrawn();")).toBeGreaterThan(present.indexOf("this.renderer.render("));
+    expect(present.indexOf("this.skyDrawn.frame();")).toBeGreaterThan(present.indexOf("this.renderer.render("));
     const set = scene.slice(scene.indexOf("  setPluginShader("), scene.indexOf("return this.backdrop.setPluginShader(opts, gpuProbe);"));
-    expect(set).toContain("this.skyDrawnId = null;");
+    expect(set).toContain("this.skyDrawn.arm(!!opts);");
   });
   it("main.ts lands the wait on the drawn frame and dedupes the request", () => {
     const main = readFileSync(resolve(__dirname, "main.ts"), "utf8");
@@ -163,5 +163,47 @@ describe("scene reports the first frame drawn with the sky", () => {
     expect(main).toContain("skyLoads.share(target, packKey, signal,");
     expect(main).toContain("w.target.pluginSkyDrawn === w.spec.id");
     expect(main).not.toMatch(/skyWaits\.landed\(waitKey\)/);
+    const install = main.slice(main.indexOf("async function installPluginSky("), main.indexOf("const skyWaitTiles"));
+    expect(install).toContain("await fetchSkyOnce(spec.id, spec.shader_sha256)");
+    expect(install).not.toContain("fetchPluginSky(");
+  });
+});
+
+describe("Retry press is not taken by the tile's camera handlers", () => {
+  afterEach(() => { vi.restoreAllMocks(); document.body.replaceChildren(); });
+
+  it("isOverlayControl is true for the notice buttons and false for the canvas", async () => {
+    const { isOverlayControl } = await import("../graph/scene");
+    const { paintPackAssetPaneNotice } = await import("../plugins/pack-asset-pane-notice");
+    const pane = document.createElement("div");
+    const canvas = document.createElement("canvas");
+    pane.append(canvas);
+    paintPackAssetPaneNotice(pane, "Backrooms couldn't start.", "fail", { showRetry: true, onRetry: () => {} });
+    const btn = pane.querySelector(".mosaic-pane-notice-retry");
+    expect(isOverlayControl(btn)).toBe(true);
+    expect(isOverlayControl(btn?.firstChild ?? null)).toBe(false); // text node: not an Element
+    expect(isOverlayControl(canvas)).toBe(false);
+    expect(isOverlayControl(pane.querySelector(".mosaic-pane-notice-text"))).toBe(false);
+  });
+
+  it("pointerdown on Retry does not reach a bubbling orbit handler on the tile", async () => {
+    const { paintPackAssetPaneNotice } = await import("../plugins/pack-asset-pane-notice");
+    const pane = document.createElement("div");
+    document.body.append(pane);
+    const orbit = vi.fn();
+    pane.addEventListener("pointerdown", orbit);
+    const onRetry = vi.fn();
+    paintPackAssetPaneNotice(pane, "Backrooms couldn't start.", "fail", { showRetry: true, onRetry });
+    const btn = pane.querySelector<HTMLButtonElement>(".mosaic-pane-notice-retry")!;
+    btn.dispatchEvent(new PointerEvent("pointerdown", { bubbles: true, button: 0 }));
+    btn.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(orbit).not.toHaveBeenCalled();
+    expect(onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it("scene's capture-phase pointerdown returns early on overlay controls", () => {
+    const scene = readFileSync(resolve(__dirname, "../graph/scene.ts"), "utf8");
+    const i = scene.indexOf('this.inputEl.addEventListener("pointerdown", (e) => {');
+    expect(scene.slice(i, i + 400)).toContain("if (isOverlayControl(e.target)) return;");
   });
 });

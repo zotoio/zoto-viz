@@ -42,6 +42,8 @@ export function paintPackAssetPaneNotice(
     btn.type = "button";
     btn.className = "mosaic-pane-notice-retry";
     btn.textContent = "Retry";
+    // Keep the press on the button: tile camera / orbit handlers below must not capture it.
+    btn.addEventListener("pointerdown", (e) => e.stopPropagation());
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       opts.onRetry?.();
@@ -55,6 +57,7 @@ export function paintPackAssetPaneNotice(
     btn.type = "button";
     btn.className = "mosaic-pane-notice-remove";
     btn.textContent = "Remove from wall";
+    btn.addEventListener("pointerdown", (e) => e.stopPropagation());
     btn.addEventListener("click", (e) => {
       e.stopPropagation();
       opts.onRemoveFromWall?.();
