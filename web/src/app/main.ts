@@ -214,7 +214,7 @@ import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycl
 import { addPresentListener } from "../core/fps";
 import { bindTileHealthPresentTick } from "./tile-health-present";
 import { paintLiveBlankNotice } from "./live-blank-notice";
-import { SkyWaits } from "./sky-wait";
+import { SkyLoads, SkyWaits, landWhenDrawn } from "./sky-wait";
 import { createProductionTileHealthMonitor } from "./tile-health-boot";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
@@ -1262,17 +1262,41 @@ async function loadPluginSkyOnto(
     return;
   }
   showPluginSkyConsentNotice(target === scene ? $("scene") : null, false);
+  // Already on this tile: nothing to fetch or compile again.
+  if (skyInstalled.get(target) === packKey && target.pluginSkyId === spec.id) return;
+  // One request per tile per sky: concurrent syncs (mode apply, pane mount, refresh) share it.
+  return skyLoads.share(target, packKey, signal, (current) =>
+    installPluginSky(target, spec, packKey, lookOpts, signal, current, paneId));
+}
+
+/** Tiles' installed sky (packKey) and in-flight sky loads, so each sky is requested once per tile. */
+const skyInstalled = new WeakMap<NetScene, string>();
+const skyLoads = new SkyLoads<NetScene>();
+
+async function installPluginSky(
+  target: NetScene,
+  spec: PluginView,
+  packKey: string,
+  lookOpts: Parameters<typeof recordPluginSkyLoad>[0]["look"],
+  signal: AbortSignal,
+  current: () => boolean,
+  paneId?: string,
+): Promise<void> {
   const waitKey = skyWaitKey(target, paneId);
-  if (target.pluginSkyId !== spec.id) beginSkyWait(waitKey, target, spec, paneId);
+  if (target.pluginSkyDrawn !== spec.id) beginSkyWait(waitKey, target, spec, paneId);
   const disposeSky = () => {
     target.setPluginShader(null);
+    skyInstalled.delete(target);
     if (target === scene) skyLoaded = "";
   };
   addModeSwitchAbortListener(signal, disposeSky, { once: true });
   try {
     recordPluginSkyLoad({ packId: spec.id, packKey: packKey, isShaderPack: true, look: lookOpts });
+    console.info(`[zoto-viz sky] tile=${waitKey || "?"} step=request pack=${spec.id}`);
     const source = await fetchPluginSky(spec.id, spec.shader_sha256, signal);
     throwIfAborted(signal);
+    // A Retry started a newer load for this tile; that one installs the sky.
+    if (!current()) return;
     const err = target.setPluginShader({ id: spec.id, source });
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
@@ -1282,8 +1306,10 @@ async function loadPluginSkyOnto(
     }
     spec.sky_available = true;
     delete spec.sky_error;
+    skyInstalled.set(target, packKey);
     if (target === scene) skyLoaded = packKey;
-    if (waitKey) skyWaits.landed(waitKey);
+    // The card stays until a frame with the sky is actually drawn (first-use compile included).
+    if (waitKey) landWhenDrawn(skyWaits, waitKey, target, spec.id);
   } catch (e) {
     if (waitKey) skyWaits.cancel(waitKey);
     if (signal.aborted) return;
@@ -1307,12 +1333,13 @@ const skyWaits = new SkyWaits({
   },
   skyReady: (key) => {
     const w = skyWaitTiles.get(key);
-    return !!w && w.target.pluginSkyId === w.spec.id;
+    return !!w && w.target.pluginSkyDrawn === w.spec.id;
   },
   retry: (key) => {
     const w = skyWaitTiles.get(key);
     if (!w) return;
     console.info(`[zoto-viz sky] tile=${key} step=retry`);
+    skyLoads.forget(w.target); // a stuck request doesn't absorb the retry
     void loadPluginSkyOnto(w.target, w.spec, true, getActiveModeSwitchSignal() ?? refreshPluginSignal.signal, w.paneId).catch(() => {});
     skyWaits.begin(key);
   },
@@ -1352,7 +1379,7 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
       for (const id of mosaic.tileIds) {
         const target = mosaic.graphScene(id);
         const pane = pluginSpecForMode(id);
-        if (!target || !pane || target.pluginSkyId === pane.id) continue;
+        if (!target || !pane || target.pluginSkyDrawn === pane.id) continue;
         if (!mosaicPluginSkyPaneView(id, mosaic.paneSky(id), lookForMode).wantPlugin) continue;
         if (pluginNeedsReview(pane) && !pane.consent) continue;
         if (!(pane.has_sky_shader === true || !!pane.shader_sha256)) continue;

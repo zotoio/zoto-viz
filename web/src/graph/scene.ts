@@ -1771,6 +1771,33 @@ export class NetScene implements HostedView, RenderScalePane {
   }
 
   /** Draw this frame: into the shared host's viewport for this pane, or onto the scene's own canvas. */
+  /** Plugin sky id whose first frame has actually been drawn (not just handed to the backdrop). */
+  private skyDrawnId: string | null = null;
+  private readonly skyDrawnListeners = new Set<(id: string) => void>();
+
+  /** The view's own sky, once a frame with it has been drawn on this tile; null until then. */
+  get pluginSkyDrawn(): string | null {
+    const id = this.backdrop.pluginSkyId();
+    return id && id === this.skyDrawnId ? id : null;
+  }
+
+  /** Called once per sky install, after the first frame drawn with it. Returns an unsubscribe. */
+  onPluginSkyDrawn(cb: (id: string) => void): () => void {
+    this.skyDrawnListeners.add(cb);
+    return () => this.skyDrawnListeners.delete(cb);
+  }
+
+  private noteSkyDrawn(): void {
+    const id = this.backdrop.pluginSkyId();
+    if (!id) {
+      this.skyDrawnId = null;
+      return;
+    }
+    if (id === this.skyDrawnId) return;
+    this.skyDrawnId = id;
+    for (const cb of [...this.skyDrawnListeners]) cb(id);
+  }
+
   private present(countGraphRender = true): void {
     if (countGraphRender) this.graphRenderCount++;
     // After the camera has moved this frame, so a camera-locked plugin sky is never a frame behind.
@@ -1811,6 +1838,8 @@ export class NetScene implements HostedView, RenderScalePane {
       });
       else draw();
     }
+    // Render has returned, so any first-use compile of the sky program is done and the frame is drawn.
+    this.noteSkyDrawn();
     if (countGraphRender) this.notePaneChange();
   }
 
@@ -2297,6 +2326,8 @@ export class NetScene implements HostedView, RenderScalePane {
         (m) => console.warn("zoto-viz tile shader:", m),
       )
       : undefined;
+    // Every install (or clear) needs its own first drawn frame before it counts as on screen.
+    this.skyDrawnId = null;
     if (!opts) {
       this.host?.clearShaderFallback(this.tileId);
       return this.backdrop.setPluginShader(null, gpuProbe);

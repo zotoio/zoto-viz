@@ -24,6 +24,8 @@ export function paintPackAssetPaneNotice(
   const el = existing instanceof HTMLElement ? existing : document.createElement("div");
   if (!existing) {
     el.className = "mosaic-pane-notice";
+    el.setAttribute("role", "status");
+    el.setAttribute("aria-live", "polite");
     pane.appendChild(el);
   }
   el.classList.toggle("mosaic-pane-notice-fail", recipe === "fail");

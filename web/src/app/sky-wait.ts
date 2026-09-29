@@ -128,3 +128,51 @@ export class SkyWaits {
     this.waits.delete(key);
   }
 }
+
+/** The part of a tile scene the wait needs: the sky it has actually drawn a frame with. */
+export interface SkyDrawnSource {
+  readonly pluginSkyDrawn: string | null;
+  onPluginSkyDrawn(cb: (id: string) => void): () => void;
+}
+
+/** Land the tile's wait on the first frame drawn with `skyId`, not when the sky is handed over. */
+export function landWhenDrawn(waits: SkyWaits, key: string, target: SkyDrawnSource, skyId: string): void {
+  if (target.pluginSkyDrawn === skyId) {
+    waits.landed(key);
+    return;
+  }
+  const off = target.onPluginSkyDrawn((id) => {
+    if (!waits.state(key)) return void off();
+    if (id !== skyId) return;
+    off();
+    waits.landed(key);
+  });
+}
+
+type SkyLoad = { packKey: string; signal: AbortSignal; p: Promise<void>; token: object };
+
+/**
+ * One sky request per tile: concurrent syncs for the same sky (mode apply, pane mount, refresh)
+ * share the in-flight load. `forget` (Retry) lets the next call start fresh, and the stale load
+ * sees `current()` false and does not install.
+ */
+export class SkyLoads<T extends object> {
+  private readonly loads = new WeakMap<T, SkyLoad>();
+
+  share(target: T, packKey: string, signal: AbortSignal, start: (current: () => boolean) => Promise<void>): Promise<void> {
+    const cur = this.loads.get(target);
+    if (cur && cur.packKey === packKey && !cur.signal.aborted) return cur.p;
+    const token = {};
+    const p = start(() => this.loads.get(target)?.token === token);
+    this.loads.set(target, { packKey, signal, p, token });
+    const clear = () => {
+      if (this.loads.get(target)?.token === token) this.loads.delete(target);
+    };
+    p.then(clear, clear);
+    return p;
+  }
+
+  forget(target: T): void {
+    this.loads.delete(target);
+  }
+}

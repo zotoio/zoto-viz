@@ -7,11 +7,11 @@ const between = (a: string, b: string) => main.slice(main.indexOf(a), main.index
 
 describe("main.ts wires the sky wait (Starting… then couldn't start)", () => {
   it("loadPluginSkyOnto begins the wait before the fetch/compile, lands on success, cancels on error", () => {
-    const body = between("async function loadPluginSkyOnto(", "const skyWaitTiles");
+    const body = between("async function installPluginSky(", "const skyWaitTiles");
     const begin = body.indexOf("beginSkyWait(waitKey");
     expect(begin).toBeGreaterThan(0);
     expect(begin).toBeLessThan(body.indexOf("fetchPluginSky("));
-    expect(body).toContain("skyWaits.landed(waitKey)");
+    expect(body).toContain("landWhenDrawn(skyWaits, waitKey");
     expect(body).toMatch(/catch \(e\) \{\s*if \(waitKey\) skyWaits\.cancel\(waitKey\);/);
   });
 
