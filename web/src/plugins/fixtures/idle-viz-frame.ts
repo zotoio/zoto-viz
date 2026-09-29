@@ -30,27 +30,34 @@ const DEMO_RF: readonly VizRfBeacon[] = [
   { ssid: "guest-wifi", rssi: 0.42, channel: 6 },
 ];
 
+/** Every demo host is a device of the golden LAN state (`golden-lan-state.ts`): same address, same name. */
 const DEMO_TALKERS: readonly VizTalkerSample[] = [
   { id: "10.0.0.42", rate: 120, role: "lan" },
   { id: "10.0.0.1", rate: 88, role: "gateway" },
   { id: "8.8.8.8", rate: 64, role: "internet" },
-  { id: "10.0.0.17", rate: 40, role: "lan" },
+  { id: "10.0.0.51", rate: 40, role: "lan" },
+  { id: "1.1.1.1", rate: 36, role: "internet" },
+  { id: "104.16.0.1", rate: 30, role: "internet" },
 ];
 
 const DEMO_LINKS: readonly VizLinkSample[] = [
   { src: "10.0.0.42", dst: "10.0.0.1", rate: 72 },
   { src: "10.0.0.1", dst: "8.8.8.8", rate: 58 },
   { src: "10.0.0.42", dst: "8.8.8.8", rate: 44 },
-  { src: "10.0.0.17", dst: "10.0.0.1", rate: 22 },
-  { src: "10.0.0.17", dst: "10.0.0.42", rate: 12 },
+  { src: "10.0.0.51", dst: "10.0.0.1", rate: 22 },
+  { src: "10.0.0.51", dst: "10.0.0.42", rate: 12 },
+  { src: "10.0.0.51", dst: "1.1.1.1", rate: 16 },
+  { src: "10.0.0.1", dst: "104.16.0.1", rate: 20 },
 ];
 
-/** Display names for the demo hosts (the arcade idle feed asks DNS for these and shows them on the board). */
+/** Display names for the demo hosts: the golden LAN state's names (the arcade idle feed asks DNS for these). */
 const DEMO_HOST_NAMES: Readonly<Record<string, string>> = {
   "10.0.0.42": "zoto-host",
   "10.0.0.1": "gateway",
   "8.8.8.8": "dns.google",
-  "10.0.0.17": "laptop",
+  "10.0.0.51": "phone",
+  "1.1.1.1": "cloudflare",
+  "104.16.0.1": "cdn",
 };
 
 /** One demo host: a talker of the idle frame, with the hosts it has a demo link to (either direction). */
@@ -90,12 +97,8 @@ const DEMO_HEADLINES: readonly VizHeadline[] = [
   { id: "demo:1", label: "Demo", text: "Live traffic wins when present", kind: "demo" },
 ];
 
-const PINNED_FAILED_TALKERS: readonly VizTalkerSample[] = [
-  { id: "10.0.0.42", rate: 120, role: "lan", failed: IDLE_VIZ_FAILED_TCP },
-  { id: "10.0.0.1", rate: 88, role: "gateway" },
-  { id: "8.8.8.8", rate: 64, role: "internet" },
-  { id: "10.0.0.17", rate: 40, role: "lan" },
-];
+/** The demo talkers with the pinned TCP failure on the busiest LAN host. */
+const PINNED_FAILED_TALKERS: readonly VizTalkerSample[] = DEMO_TALKERS.map((t) => (t.id === "10.0.0.42" ? { ...t, failed: IDLE_VIZ_FAILED_TCP } : t));
 
 /** Deterministic per-talker failed ratios for failure-demo fixtures/tests only. */
 export function demoTalkersWithFailed(): VizTalkerSample[] {
