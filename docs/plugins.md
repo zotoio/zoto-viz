@@ -46,7 +46,9 @@ switch.
 <id>.zip
   plugin.yml                 # required
   visualisation.yml          # optional (engine / base / look / style / layout / …)
-                             # style.fabric: tubes|cloth|ribbon weaves nodes+edges as a mesh
+                             # style.fabric: tubes|cloth|jelly|tornado|… weaves nodes+edges as a mesh
+                             # style.library: orbit-helix|jelly-bloom|… or a list to combine; own keys extend it
+                             # datasource.library: usgs-quakes|bbc-news|… (not polled until added)
                              # look.graphLayout / graphLinks: tree|globe|helix|hilbert|spectrum|heap|… + arrows|bundle
   frontend/                  # optional TypeScript module (+ tests)
   sky/sky.yml                # optional sky recipe / pins

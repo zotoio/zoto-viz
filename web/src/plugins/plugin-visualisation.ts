@@ -3,6 +3,8 @@ import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { parseMosaicTiles } from "../graph/mosaic-layout";
 import { parseFabric, parseGraphSpace } from "../graph/fabric";
 import { parseGraphLayout, parseGraphLinks } from "../graph/graph-layouts";
+import { resolveStyleLibrary } from "../graph/style-library";
+import { nodeShapePin } from "../graph/node-shapes";
 import { parsePluginIdle } from "./fixtures/golden-state";
 import { parseRenderScaleConfig } from "./render-scale-governor";
 import { parseVizContract } from "./viz-host";
@@ -36,7 +38,7 @@ const LOOK_KEYS = [
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
-  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric", "graphSpace", "graphLayout", "graphLinks",
+  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "edgeOpacity", "nodeShape", "graphFabric", "graphSpace", "graphLayout", "graphLinks",
   "mosaic", "hero", "mosaicTiles", "mosaicSharedTheme", "mosaicUniqueSkies",
 ] as const;
 
@@ -51,6 +53,7 @@ export type CatalogRow = {
   look?: unknown;
   style?: unknown;
   layout?: unknown;
+  datasource?: unknown;
   options?: unknown;
   config?: unknown;
   visualisation?: unknown;
@@ -319,6 +322,14 @@ export function parseLook(raw: unknown): PluginLook | undefined {
       if (layout) look.graphLayout = layout;
       continue;
     }
+    if (key === "nodeShape") {
+      if (typeof v === "string") look.nodeShape = nodeShapePin(v);
+      continue;
+    }
+    if (key === "edgeOpacity") {
+      if (typeof v === "number" && Number.isFinite(v)) look.edgeOpacity = Math.min(1, Math.max(0.05, v));
+      continue;
+    }
     if (key === "graphLinks") {
       const links = parseGraphLinks(v);
       if (links) look.graphLinks = links;
@@ -366,7 +377,34 @@ export function parseStyle(raw: unknown): PluginStyle | undefined {
   if (typeof rec.flatten === "boolean") style.flatten = rec.flatten;
   const fabric = parseFabric(rec.fabric);
   if (fabric) style.fabric = fabric;
+  const library = libraryIdList(rec.library);
+  if (library.length) style.library = library;
   return Object.keys(style).length ? style : undefined;
+}
+
+function libraryIdList(raw: unknown): string[] {
+  if (typeof raw === "string" && raw.trim()) return [raw.trim()];
+  if (!Array.isArray(raw)) return [];
+  return raw.map((item) => (typeof item === "string" ? item.trim() : "")).filter(Boolean);
+}
+
+/** Fill fabric / space / layout / links from the style library. Explicit YAML keys stay. */
+export function applyStyleLibrary(spec: PluginView): PluginView {
+  const ids = spec.style?.library;
+  if (!ids?.length) return spec;
+  const resolved = resolveStyleLibrary(ids);
+  const style = { ...spec.style };
+  const look = { ...(spec.look ?? {}) };
+  if (style.fabric === undefined && resolved.fabric) style.fabric = resolved.fabric;
+  if (style.flatten === undefined && resolved.graphSpace === "plane") style.flatten = true;
+  if (style.flatten === undefined && resolved.graphSpace === "space") style.flatten = false;
+  if (look.graphFabric === undefined && resolved.fabric && resolved.fabric !== "auto" && resolved.fabric !== "off") {
+    look.graphFabric = resolved.fabric;
+  }
+  if (look.graphSpace === undefined && resolved.graphSpace) look.graphSpace = resolved.graphSpace;
+  if (look.graphLayout === undefined && resolved.graphLayout) look.graphLayout = resolved.graphLayout;
+  if (look.graphLinks === undefined && resolved.graphLinks) look.graphLinks = resolved.graphLinks;
+  return { ...spec, style, look: Object.keys(look).length ? look : spec.look };
 }
 
 export function parseLayout(raw: unknown): PluginLayout | undefined {
@@ -460,6 +498,10 @@ export function toPluginView(raw: unknown): PluginView {
     look: parseLook(viz.look ?? row.look),
     instances: parseInstances(row.instances),
   };
+  const datasource = asRecord(viz.datasource) ?? asRecord(row.datasource);
+  const sourceLibrary = libraryIdList(datasource?.library);
+  if (sourceLibrary.length) spec.sourceLibrary = sourceLibrary;
+  Object.assign(spec, applyStyleLibrary(spec));
   if (settings) spec.settings = settings;
   if (idle) spec.idle = idle;
   const workBudgetRaw = (viz as { workBudget?: unknown }).workBudget ?? row.workBudget;

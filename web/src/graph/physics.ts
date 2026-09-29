@@ -23,6 +23,7 @@ export const PHYS_EASE_KEYS = [
   "magnetMulticast",
   "magnetCross",
   "magnetRange",
+  "magnetTraffic",
   "gravity",
   "swirl",
   "chargeAmt",
@@ -190,9 +191,10 @@ export function stringSegs(stringAmt: number, bundle = 0): number {
   return Math.min(8, 2 + Math.round(a * 6));
 }
 
-/** Drawn edges always have enough samples to bend between their nodes. */
+/** Enough samples that a sag or a bundle reads as a smooth fibre, not a polyline. */
 export function edgeDrawSegs(stringAmt: number, bundle = 0): number {
-  return Math.max(4, stringSegs(stringAmt, bundle));
+  const a = Math.max(0, Math.min(1, Math.max(stringAmt, bundle)));
+  return 14 + Math.round(a * 6);
 }
 
 /** Stable −1..1 so neighbouring edges can bow on different sides. */
@@ -248,9 +250,10 @@ export function stringPoint(
  * Flexible edge pinned to both nodes. `pull` is the spring slack of the
  * middle (and any difference between the two nodes). The part across the
  * chord bows the edge. Slack that lies along the chord is folded toward the
- * graph center, so when the core moves away the middle draws inward. A still
- * edge, with no slack, is the string between its nodes. The ends stay put.
- * `bend` is unused; the bow comes from the slack, not a fixed kink.
+ * drag point, so a shove along the wire draws the middle inward. A sideways
+ * pull only bows. Pass `cx,cy,cz` when the drag point is a node rather than
+ * the layout origin. A still edge is the string between its nodes. The ends
+ * stay put. `bend` is unused; the bow comes from the slack, not a fixed kink.
  */
 export function organicEdgePoint(
   ax: number, ay: number, az: number,
@@ -262,6 +265,7 @@ export function organicEdgePoint(
   hx = 0, hy = 0, hz = 0,
   bundle = 0,
   bend = 1,
+  cx = 0, cy = 0, cz = 0,
 ): [number, number, number] {
   void bend;
   const u = Math.max(0, Math.min(1, t));
@@ -272,19 +276,20 @@ export function organicEdgePoint(
   const len2 = dx * dx + dy * dy + dz * dz;
   const len = Math.sqrt(len2) || 1;
   let px = pullX, py = pullY, pz = pullZ;
+  let alongLen = 0;
   if (len2 > 1e-8) {
     const along = (px * dx + py * dy + pz * dz) / len2;
+    alongLen = Math.abs(along) * len;
     px -= dx * along;
     py -= dy * along;
     pz -= dz * along;
   }
-  const slack = Math.hypot(pullX, pullY, pullZ);
-  const mx = (ax + bx) * 0.5;
-  const my = (ay + by) * 0.5;
-  const mz = (az + bz) * 0.5;
+  const mx = (ax + bx) * 0.5 - cx;
+  const my = (ay + by) * 0.5 - cy;
+  const mz = (az + bz) * 0.5 - cz;
   const ml = Math.hypot(mx, my, mz);
-  if (ml > 1e-4 && slack > 1e-4) {
-    const kin = len * 0.35 * Math.tanh(slack / 18);
+  if (ml > 1e-4 && alongLen > 1e-4) {
+    const kin = len * 0.35 * Math.tanh(alongLen / 18);
     px += (-mx / ml) * kin;
     py += (-my / ml) * kin;
     pz += (-mz / ml) * kin;
@@ -300,6 +305,84 @@ export function organicEdgePoint(
     base[1] + py * bow,
     base[2] + pz * bow,
   ];
+}
+
+/** How many of the hottest talkers count as "highest traffic". */
+export const TRAFFIC_HUB_CAP = 6;
+
+export interface TrafficBody {
+  key: number;
+  rate: number;
+  x?: number; y?: number; z?: number;
+  vx?: number; vy?: number; vz?: number;
+  visible?: boolean;
+}
+
+/**
+ * The hottest talkers: the leader, plus peers at least half as busy, up to `cap`.
+ * Idle nodes (rate 0) never qualify.
+ */
+export function hottestTrafficKeys(
+  nodes: readonly TrafficBody[],
+  cap = TRAFFIC_HUB_CAP,
+): Set<number> {
+  const live = nodes.filter((n) => n.visible !== false && n.rate > 0);
+  if (!live.length || cap < 1) return new Set();
+  live.sort((a, b) => b.rate - a.rate || a.key - b.key);
+  const floor = live[0]!.rate * 0.5;
+  const out = new Set<number>();
+  for (const n of live) {
+    if (out.size >= cap) break;
+    if (out.size > 0 && n.rate < floor) break;
+    out.add(n.key);
+  }
+  return out;
+}
+
+/**
+ * Push or pull along edges that touch a highest-traffic node.
+ * Positive `strength` attracts the neighbour toward that node (and the node toward the neighbour).
+ */
+export function applyTrafficNeighbours(
+  links: readonly { source: TrafficBody; target: TrafficBody }[],
+  hot: ReadonlySet<number>,
+  strength: number,
+  alpha: number,
+): void {
+  if (hot.size === 0 || Math.abs(strength) < 0.02 || alpha === 0) return;
+  for (const l of links) {
+    const a = l.source, b = l.target;
+    if (!hot.has(a.key) && !hot.has(b.key)) continue;
+    if (a.visible === false || b.visible === false) continue;
+    const dx = (b.x ?? 0) - (a.x ?? 0);
+    const dy = (b.y ?? 0) - (a.y ?? 0);
+    const dz = (b.z ?? 0) - (a.z ?? 0);
+    const d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < 4) continue;
+    const d = Math.sqrt(d2);
+    const f = strength * 90 * alpha / Math.max(d, 18);
+    const fx = (dx / d) * f, fy = (dy / d) * f, fz = (dz / d) * f;
+    a.vx = (a.vx ?? 0) + fx;
+    a.vy = (a.vy ?? 0) + fy;
+    a.vz = (a.vz ?? 0) + fz;
+    b.vx = (b.vx ?? 0) - fx;
+    b.vy = (b.vy ?? 0) - fy;
+    b.vz = (b.vz ?? 0) - fz;
+  }
+}
+
+export function trafficNeighbourForce(
+  links: () => { source: TrafficBody; target: TrafficBody }[],
+  nodes: () => TrafficBody[],
+  strength: () => number,
+) {
+  const force = (alpha: number) => {
+    const k = strength();
+    if (Math.abs(k) < 0.02) return;
+    applyTrafficNeighbours(links(), hottestTrafficKeys(nodes()), k, alpha);
+  };
+  force.initialize = () => {};
+  return force;
 }
 
 /** Same-type magnet, or the cross slider between different types. Positive attracts. */

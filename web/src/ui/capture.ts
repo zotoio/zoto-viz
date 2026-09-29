@@ -4,6 +4,7 @@ import type { ProfileSettings } from "../core/profiles";
 import { BACKDROP_OPTIONS, type BackdropKind } from "../graph/backdrop";
 import { EMPTY_LOOK, mergeAgentLook, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { DREAM_BOUNDS, type DreamAnim } from "../graph/scene";
+import { nodeShapePin } from "../graph/node-shapes";
 import { parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
 import { FLOOR_SHAPES } from "../graph/floor";
 import { DICE_INCLUDE_KEYS, mergeDice, DEFAULT_DICE, type DicePatch } from "../core/shuffle";
@@ -243,6 +244,7 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
   if (typeof s.themeCycle === "string" && THEME_CYCLES.has(s.themeCycle)) out.themeCycle = s.themeCycle as DreamAnim["themeCycle"];
   if (typeof s.skyCycle === "string" && THEME_CYCLES.has(s.skyCycle)) out.skyCycle = s.skyCycle as DreamAnim["skyCycle"];
   if (typeof s.edgeGlow === "string" && EDGE_GLOWS.has(s.edgeGlow)) out.edgeGlow = s.edgeGlow as DreamAnim["edgeGlow"];
+  if (typeof s.nodeShape === "string") out.nodeShape = nodeShapePin(s.nodeShape);
   if (typeof s.mosaic === "string" && MOSAICS.has(s.mosaic)) out.mosaic = s.mosaic as DreamAnim["mosaic"];
   if (typeof s.hero === "string" && HEROS.has(s.hero)) out.hero = s.hero as DreamAnim["hero"];
   const tree = parseMosaicNode(s.mosaicTree);
@@ -292,6 +294,7 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
     labelCount: DREAM_BOUNDS.labelCount,
     nodeWeight: DREAM_BOUNDS.nodeWeight,
     edgeWeight: DREAM_BOUNDS.edgeWeight,
+    edgeOpacity: DREAM_BOUNDS.edgeOpacity,
     edgeGlowAmt: DREAM_BOUNDS.edgeGlowAmt,
     edgeGlowSpeed: DREAM_BOUNDS.edgeGlowSpeed,
     partAmt: DREAM_BOUNDS.partAmt,
@@ -309,6 +312,7 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
     magnetMulticast: DREAM_BOUNDS.magnet,
     magnetCross: DREAM_BOUNDS.magnet,
     magnetRange: DREAM_BOUNDS.magnetRange,
+    magnetTraffic: DREAM_BOUNDS.magnet,
     gravity: DREAM_BOUNDS.gravity,
     swirl: DREAM_BOUNDS.swirl,
     chargeAmt: DREAM_BOUNDS.chargeAmt,

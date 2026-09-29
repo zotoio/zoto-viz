@@ -8,11 +8,24 @@ import {
   driftRig,
   easeCycle,
   figureEight,
+  driftInView,
   graphDriftPose,
   lagIntoLayout,
   edgeSpringTarget,
   nodeLagReach,
   nodeTravelScale,
+  pickDragCore,
+  angularAccelAt,
+  edgeAngularPull,
+  edgeBowPull,
+  edgeDragAccel,
+  edgeDragWeight,
+  edgeFlex,
+  edgeGravityPerLength,
+  edgeInertiaTarget,
+  edgeYieldOmega,
+  rigOmega,
+  stepAngles,
   stepSpring,
   unapplyDriftPoint,
 } from "./graph-drift";
@@ -44,9 +57,9 @@ describe("figureEight", () => {
 });
 
 describe("graphDriftPose", () => {
-  it("eases, and does not share the camera pitch period", () => {
-    const early = graphDriftPose(16 * 1.45 * 0.05, cam);
-    const mid = graphDriftPose(16 * 1.45 * 0.25, cam);
+  it("moves off the crossing and does not share the camera pitch period", () => {
+    const early = graphDriftPose(16 * 1.45 * 0.02, cam);
+    const mid = graphDriftPose(16 * 1.45 * 0.125, cam);
     expect(Math.hypot(early.x, early.z)).toBeLessThan(Math.hypot(mid.x, mid.z));
     const start = graphDriftPose(0, cam);
     const atCamPeriod = graphDriftPose(cam.pitchPeriod, cam);
@@ -66,10 +79,30 @@ describe("graphDriftPose", () => {
 });
 
 describe("easeCycle", () => {
-  it("is slower at the start of a turn than at the middle", () => {
-    const d0 = easeCycle(0.08) - easeCycle(0);
-    const d1 = easeCycle(0.5) - easeCycle(0.42);
-    expect(d0).toBeLessThan(d1);
+  it("keeps a steady rate through the lap so the eight does not halt", () => {
+    const d0 = easeCycle(0.02) - easeCycle(0);
+    const d1 = easeCycle(1.02) - easeCycle(1);
+    expect(d0).toBeCloseTo(0.02, 6);
+    expect(d1).toBeCloseTo(d0, 6);
+    const before = figureEight(easeCycle(0.99) * Math.PI * 2, 0);
+    const after = figureEight(easeCycle(1.01) * Math.PI * 2, 0);
+    expect(Math.hypot(before.x, before.z)).toBeGreaterThan(1);
+    expect(Math.hypot(after.x, after.z)).toBeGreaterThan(1);
+  });
+});
+
+describe("driftInView", () => {
+  it("keeps a screen-right slide on the camera's right as the view yaws", () => {
+    const local = { x: 10, y: 2, z: 0, pitch: 0.1, yaw: 0.4 };
+    const ahead = driftInView(local, 0);
+    expect(ahead.x).toBeCloseTo(10, 5);
+    expect(ahead.y).toBeCloseTo(2, 5);
+    expect(ahead.z).toBeCloseTo(0, 5);
+    expect(ahead.pitch).toBe(local.pitch);
+    expect(ahead.yaw).toBe(local.yaw);
+    const side = driftInView(local, Math.PI / 2);
+    expect(side.x).toBeCloseTo(0, 5);
+    expect(side.z).toBeCloseTo(-10, 5);
   });
 });
 
@@ -168,6 +201,30 @@ describe("node lag", () => {
   });
 });
 
+describe("whole-cloud turn", () => {
+  it("eases pitch and yaw instead of taking the target angle", () => {
+    const turned = stepAngles(0, 0, 0, 0, 0.4, 1.2, 0.05, CORE_OMEGA);
+    expect(Math.abs(turned.pitch)).toBeLessThan(0.12);
+    expect(Math.abs(turned.yaw)).toBeLessThan(0.2);
+    expect(turned.pitchV).not.toBe(0);
+    expect(turned.yawV).not.toBe(0);
+    let pitch = 0, pitchV = 0, yaw = 0, yawV = 0;
+    for (let i = 0; i < 180; i++) {
+      const next = stepAngles(pitch, pitchV, yaw, yawV, 0.4, 1.2, 1 / 30, CORE_OMEGA);
+      expect(Math.abs(next.pitch - pitch)).toBeLessThan(0.08);
+      expect(Math.abs(next.yaw - yaw)).toBeLessThan(0.12);
+      pitch = next.pitch;
+      pitchV = next.pitchV;
+      yaw = next.yaw;
+      yawV = next.yawV;
+    }
+    expect(pitch).toBeGreaterThan(0.3);
+    expect(pitch).toBeLessThan(0.42);
+    expect(yaw).toBeGreaterThan(1);
+    expect(yaw).toBeLessThan(1.22);
+  });
+});
+
 describe("applyDriftPoint", () => {
   it("round-trips a layout point", () => {
     const pose = graphDriftPose(9.2, cam, 0.3);
@@ -203,5 +260,76 @@ describe("applyDriftPoint", () => {
     expect(viaQuat.x).toBeCloseTo(viaPose.x, 4);
     expect(viaQuat.y).toBeCloseTo(viaPose.y, 4);
     expect(viaQuat.z).toBeCloseTo(viaPose.z, 4);
+  });
+});
+
+describe("drag core", () => {
+  it("uses the graph origin when nodes are a similar size", () => {
+    const core = pickDragCore([
+      { x: 0, y: 0, z: 0, scale: 4 },
+      { x: 30, y: 0, z: 0, scale: 5 },
+      { x: 0, y: 0, z: 30, scale: 4.5 },
+    ]);
+    expect(core.x).toBeCloseTo(10, 4);
+    expect(core.y).toBeCloseTo(0, 4);
+    expect(core.z).toBeCloseTo(10, 4);
+  });
+
+  it("uses the largest node when it clearly leads", () => {
+    const core = pickDragCore([
+      { x: 0, y: 0, z: 0, scale: 4 },
+      { x: 40, y: 8, z: -12, scale: 9 },
+      { x: 10, y: 0, z: 10, scale: 5 },
+    ]);
+    expect(core).toEqual({ x: 40, y: 8, z: -12 });
+  });
+
+  it("keeps edges quiet at the core and bows them opposite the acceleration", () => {
+    expect(edgeDragWeight({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 })).toBe(0);
+    expect(edgeDragWeight({ x: 80, y: 0, z: 0 }, { x: 0, y: 0, z: 0 })).toBeCloseTo(1, 4);
+    const coast = edgeDragAccel({ x: 0, y: 0, z: 0 }, { x: 4, y: 0, z: 0 }, { x: 4 * 0.02, y: 0, z: 0 }, 0.02);
+    expect(coast.accel.x).toBeCloseTo(0, 4);
+    const speeding = edgeDragAccel({ x: 0, y: 0, z: 0 }, { x: 0, y: 0, z: 0 }, { x: 2, y: 0, z: 0 }, 0.5);
+    expect(speeding.accel.x).toBeGreaterThan(0);
+    const sag = edgeInertiaTarget(speeding.accel);
+    expect(sag.x).toBeLessThan(0);
+    expect(Math.hypot(sag.x, sag.y, sag.z)).toBeLessThanOrEqual(12 + 1e-6);
+    let body = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+    for (let i = 0; i < 40; i++) body = stepSpring(body, sag, 0.05, 1.55);
+    expect(body.x).toBeLessThan(-1);
+    const bow = edgeBowPull(body, 1, 4);
+    expect(Math.hypot(bow.x, bow.y, bow.z)).toBeLessThanOrEqual(4 * 0.45 + 1e-6);
+  });
+
+  it("keeps a stiff edge straight and lets a slack edge hang and lag the spin", () => {
+    expect(edgeFlex(0, 1.6)).toBe(0);
+    expect(edgeFlex(1, 0, 1)).toBeGreaterThan(edgeFlex(1, 2, 1));
+    expect(edgeYieldOmega(0)).toBeGreaterThan(edgeYieldOmega(1));
+    const down = edgeGravityPerLength({ x: 0, y: -1, z: 0 }, 1, 1);
+    expect(down.y).toBeLessThan(-0.1);
+    expect(edgeGravityPerLength({ x: 0, y: -1, z: 0 }, 0, 1).y).toBeCloseTo(0, 6);
+    const level = rigOmega(0, 0.2, 0.4);
+    expect(level.x).toBeCloseTo(0.2, 5);
+    expect(level.y).toBeCloseTo(0.4, 5);
+    const spun = angularAccelAt({ x: 80, y: 0, z: 0 }, { x: 0, y: 0.5, z: 0 }, { x: 0, y: 0, z: 0 });
+    expect(spun.x).toBeLessThan(0);
+    const whip = edgeAngularPull(
+      { x: 80, y: 0, z: 0 },
+      { x: 0, y: 0, z: 0 },
+      { x: 0, y: 0.5, z: 0 },
+      { x: 0.4, y: 0, z: 0 },
+      1,
+      40,
+    );
+    expect(Math.hypot(whip.x, whip.y, whip.z)).toBeGreaterThan(1);
+    const rod = edgeAngularPull(
+      { x: 80, y: 0, z: 0 },
+      { x: 0, y: 0, z: 0 },
+      { x: 0, y: 0.5, z: 0 },
+      { x: 0.4, y: 0, z: 0 },
+      0,
+      40,
+    );
+    expect(rod).toEqual({ x: 0, y: 0, z: 0 });
   });
 });

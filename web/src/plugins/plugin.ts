@@ -83,6 +83,11 @@ export interface PluginStyle {
   flatten?: boolean;
   /** Nodes + edges become an animated fabric mesh (same highlight / glow as the sphere graph). */
   fabric?: FabricKind | boolean;
+  /**
+   * Style-library ids (`orbit-helix`, or a list to combine left to right).
+   * Resolved into fabric / space / layout / links. Keys set beside `library` win.
+   */
+  library?: string[];
 }
 
 export interface PluginLayout {
@@ -122,6 +127,8 @@ export interface PluginLook {
   edgeGlow?: EdgeGlow;
   edgeGlowAmt?: number;
   edgeGlowSpeed?: number;
+  edgeOpacity?: number;
+  nodeShape?: import("../graph/node-shapes").NodeShapePin;
   graphFabric?: FabricKind | boolean;
   graphSpace?: GraphSpace;
   graphLayout?: GraphLayout;
@@ -243,6 +250,8 @@ export interface PluginView {
   shader_sha256?: string;
   sky_available?: boolean;
   sky_error?: string;
+  /** Third-party datasource library ids this view wants (`usgs-quakes`, …). */
+  sourceLibrary?: string[];
   /** Host drawer: presets, HUD label fields, section order (from plugin.yml / visualisation.yml). */
   settings?: import("./plugin-visualisation").PluginSettingsDecl;
   /** Declared binary assets (meshes/textures) hashed into consent (`assets_sha256`). */
@@ -258,7 +267,7 @@ const LOOK_ANIM_KEYS = [
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
   "audioDrive", "audioSens", "audioCamera", "audioNodes",
-  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "graphFabric", "graphSpace", "graphLayout", "graphLinks",
+  "themeCycle", "edgeGlow", "edgeGlowAmt", "edgeGlowSpeed", "edgeOpacity", "nodeShape", "graphFabric", "graphSpace", "graphLayout", "graphLinks",
 ] as const satisfies readonly (keyof PluginLook)[];
 
 let looks = new Map<string, PluginLook>();

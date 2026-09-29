@@ -131,11 +131,17 @@ export function paintSoftwareGraph(
     const okB = projectPane(s.bx, s.by, s.bz, camera, rect, b);
     if (!okA && !okB) continue;
     if (!okA || !okB) continue;
-    ctx.strokeStyle = rgba(s.r, s.g, s.b, s.a ?? 0.85);
-    ctx.lineWidth = 1.15;
     ctx.beginPath();
     ctx.moveTo(a.x, a.y);
     ctx.lineTo(b.x, b.y);
+    ctx.strokeStyle = "rgba(246, 248, 255, 0.92)";
+    ctx.lineWidth = 4.6;
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(4, 6, 12, 0.94)";
+    ctx.lineWidth = 3.1;
+    ctx.stroke();
+    ctx.strokeStyle = rgba(s.r, s.g, s.b, s.a ?? 0.85);
+    ctx.lineWidth = 1.5;
     ctx.stroke();
   }
   }
@@ -172,6 +178,14 @@ export function paintSoftwareGraph(
       ctx.arc(x, y, rad, 0, Math.PI * 2);
       ctx.fill();
     }
+    ctx.beginPath();
+    ctx.arc(x, y, rad * ((n.shape ?? 0) >= 5.5 ? 1.2 : 1), 0, Math.PI * 2);
+    ctx.strokeStyle = "rgba(246, 248, 255, 0.95)";
+    ctx.lineWidth = Math.max(2.4, rad * 0.22);
+    ctx.stroke();
+    ctx.strokeStyle = "rgba(4, 6, 12, 0.94)";
+    ctx.lineWidth = Math.max(1.3, rad * 0.1);
+    ctx.stroke();
     if (n.selected || n.hovered) {
       ctx.strokeStyle = rgba(1, 1, 1, n.selected ? 0.85 : 0.45);
       ctx.lineWidth = n.selected ? 2 : 1.2;

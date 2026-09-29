@@ -1,8 +1,8 @@
 /**
  * Whole-cloud drift for graph views (topology and the other graph engines).
  * Floor, sky, and host-mesh models stay on their own motion. The cloud draws
- * a slow eased figure-8 whose long axis is Z, tilted a few degrees off the
- * floor, and nods at a different rate than the camera pitch.
+ * a slow figure-8 in the camera frame (screen right and depth), tilted a few
+ * degrees off the floor, so orbiting the view does not swing that slide sideways.
  */
 
 export type GraphDriftPose = {
@@ -21,13 +21,28 @@ const AMP_X = 14;
 const AMP_Z = 36;
 
 /**
- * Smootherstep. Position, speed, and acceleration all meet at each turn, so the
- * figure-8 target does not kick when a lap restarts.
+ * Constant rate. The figure-8 is sin/cos of this angle, and those already
+ * match position and velocity at every lap, so the cloud does not halt at
+ * the crossing and then catch up against the camera.
  */
 export function easeCycle(turns: number): number {
-  const u = turns - Math.floor(turns);
-  const s = u * u * u * (u * (u * 6 - 15) + 10);
-  return Math.floor(turns) + s;
+  return turns;
+}
+
+/**
+ * Turn a camera-frame slide into world space. `viewYaw` is the camera's
+ * spherical theta. Screen-right stays screen-right as the view orbits.
+ */
+export function driftInView(pose: GraphDriftPose, viewYaw: number): GraphDriftPose {
+  const c = Math.cos(viewYaw);
+  const s = Math.sin(viewYaw);
+  return {
+    x: pose.x * c - pose.z * s,
+    y: pose.y,
+    z: -pose.x * s - pose.z * c,
+    pitch: pose.pitch,
+    yaw: pose.yaw,
+  };
 }
 
 /** Gerono lemniscate, long axis Z, tilted by `pitch` so it is not parallel to the floor. */
@@ -177,6 +192,27 @@ export function edgeSpringTarget(
   };
 }
 
+/**
+ * Pitch and yaw of the whole cloud. Same critical damping as the slide, so a
+ * nod or a sphere turn eases in instead of taking the raw angle each frame.
+ */
+export function stepAngles(
+  pitch: number,
+  pitchV: number,
+  yaw: number,
+  yawV: number,
+  targetPitch: number,
+  targetYaw: number,
+  dt: number,
+  omega: number,
+): { pitch: number; pitchV: number; yaw: number; yawV: number } {
+  const t = Math.max(0, dt);
+  if (t === 0) return { pitch, pitchV, yaw, yawV };
+  const p = stepAxis(pitch, pitchV, targetPitch, t, omega);
+  const y = stepAxis(yaw, yawV, targetYaw, t, omega);
+  return { pitch: p.p, pitchV: p.v, yaw: y.p, yawV: y.v };
+}
+
 /** Advance one mass toward `target`. Critical damping, so it does not overshoot or snap. */
 export function stepSpring(
   body: SpringBody,
@@ -223,6 +259,198 @@ export function nodeTravelScale(id: string): number {
  */
 export function nodeLagReach(scale: number): number {
   return Math.max(3.5, Math.abs(scale) * 1.22);
+}
+
+export type DragNode = { x: number; y: number; z: number; scale: number };
+
+/** Mean position. The drag point when no single node leads the cloud. */
+export function graphOrigin(nodes: { x: number; y: number; z: number }[]): DriftCenter {
+  if (!nodes.length) return { x: 0, y: 0, z: 0 };
+  let x = 0, y = 0, z = 0;
+  for (const n of nodes) {
+    x += n.x;
+    y += n.y;
+    z += n.z;
+  }
+  const k = 1 / nodes.length;
+  return { x: x * k, y: y * k, z: z * k };
+}
+
+/**
+ * Where a moving cloud is pulled from. A node that is clearly the largest
+ * is the drag core. Otherwise the pull is the graph origin.
+ */
+export function pickDragCore(nodes: DragNode[]): DriftCenter {
+  const origin = graphOrigin(nodes);
+  let best: DragNode | null = null;
+  let second = 0;
+  for (const n of nodes) {
+    if (!best || n.scale > best.scale) {
+      second = best ? best.scale : 0;
+      best = n;
+    } else if (n.scale > second) {
+      second = n.scale;
+    }
+  }
+  if (best && best.scale >= 0.8 && (second <= 0.05 || best.scale >= second * 1.25)) {
+    return { x: best.x, y: best.y, z: best.z };
+  }
+  return origin;
+}
+
+/** 0 on the drag point, 1 once an edge middle sits well away from it. */
+export function edgeDragWeight(mid: DriftCenter, core: DriftCenter): number {
+  const d = Math.hypot(mid.x - core.x, mid.y - core.y, mid.z - core.z);
+  const u = Math.min(1, d / 72);
+  return u * u * (3 - 2 * u);
+}
+
+/** String follows the drag with a little mass, fast enough to track the figure-8. */
+export const EDGE_DRAG_OMEGA = 1.55;
+
+/** Where a string middle wants to sit: opposite the cloud's acceleration, capped. */
+export function edgeInertiaTarget(accel: DriftCenter, gain = 2.2, cap = 12): DriftCenter {
+  const x = -accel.x * gain;
+  const y = -accel.y * gain;
+  const z = -accel.z * gain;
+  const m = Math.hypot(x, y, z);
+  if (m <= cap || m < 1e-6) return { x, y, z };
+  const s = cap / m;
+  return { x: x * s, y: y * s, z: z * s };
+}
+
+/** Finite-difference the camera-frame slide. Camera orbit is not in this pose. */
+export function edgeDragAccel(
+  prev: DriftCenter,
+  prevVel: DriftCenter,
+  next: DriftCenter,
+  dt: number,
+): { vel: DriftCenter; accel: DriftCenter } {
+  const t = Math.max(dt, 1e-4);
+  const vel = {
+    x: (next.x - prev.x) / t,
+    y: (next.y - prev.y) / t,
+    z: (next.z - prev.z) / t,
+  };
+  let ax = (vel.x - prevVel.x) / t;
+  let ay = (vel.y - prevVel.y) / t;
+  let az = (vel.z - prevVel.z) / t;
+  const m = Math.hypot(ax, ay, az);
+  if (m > 40) {
+    const s = 40 / m;
+    ax *= s;
+    ay *= s;
+    az *= s;
+  }
+  return { vel, accel: { x: ax, y: ay, z: az } };
+}
+
+/**
+ * 0 is a stiff rod, 1 is a slack cable. The string slider loosens the edge.
+ * The spring slider tightens it. A longer rest length yields a little more.
+ */
+export function edgeFlex(stringAmt: number, spring: number, linkSpan = 1): number {
+  const loose = Math.max(0, Math.min(1, stringAmt));
+  const tight = Math.max(0, spring);
+  const span = Math.min(1.6, Math.max(0.4, linkSpan));
+  const give = loose * span;
+  return Math.max(0, Math.min(1, give / (give + tight * 0.85 + 0.2)));
+}
+
+/** Stiff edges snap back. Slack cables keep the slow drag spring. */
+export function edgeYieldOmega(flex: number, beat = false): number {
+  const f = Math.max(0, Math.min(1, flex));
+  const soft = beat ? EDGE_DRAG_OMEGA * 1.45 : EDGE_DRAG_OMEGA;
+  const stiff = beat ? 7.2 : 5.8;
+  return stiff + (soft - stiff) * f;
+}
+
+/** Rig spin in layout axes. Pitch rate is around X; yaw rate is around world Y. */
+export function rigOmega(pitch: number, pitchRate: number, yawRate: number): DriftCenter {
+  const cp = Math.cos(pitch);
+  const sp = Math.sin(pitch);
+  return { x: pitchRate, y: yawRate * cp, z: -yawRate * sp };
+}
+
+export function edgeCross(a: DriftCenter, b: DriftCenter): DriftCenter {
+  return {
+    x: a.y * b.z - a.z * b.y,
+    y: a.z * b.x - a.x * b.z,
+    z: a.x * b.y - a.y * b.x,
+  };
+}
+
+/** Tangential plus centripetal acceleration of a layout point on the spinning rig. */
+export function angularAccelAt(r: DriftCenter, omega: DriftCenter, alpha: DriftCenter): DriftCenter {
+  const centripetal = edgeCross(omega, edgeCross(omega, r));
+  const tangential = edgeCross(alpha, r);
+  return {
+    x: tangential.x + centripetal.x,
+    y: tangential.y + centripetal.y,
+    z: tangential.z + centripetal.z,
+  };
+}
+
+/** Spin change, clamped so a hitch cannot whip every cable. */
+export function edgeSpinAlpha(prev: DriftCenter, next: DriftCenter, dt: number): DriftCenter {
+  const t = Math.max(dt, 1e-4);
+  let x = (next.x - prev.x) / t;
+  let y = (next.y - prev.y) / t;
+  let z = (next.z - prev.z) / t;
+  const m = Math.hypot(x, y, z);
+  if (m > 1.5) {
+    const s = 1.5 / m;
+    x *= s;
+    y *= s;
+    z *= s;
+  }
+  return { x, y, z };
+}
+
+/**
+ * Hang per unit of edge length, toward world-down already mapped into layout.
+ * A stiff edge does not hang. Gravity strengthens the droop; a slack string
+ * still droops a little when the gravity slider is off.
+ */
+export function edgeGravityPerLength(down: DriftCenter, flex: number, gravity: number): DriftCenter {
+  const f = Math.max(0, Math.min(1, flex));
+  const g = Math.max(0, Math.min(2, gravity));
+  const k = f * (0.35 + 0.65 * g) * 0.16;
+  const m = Math.hypot(down.x, down.y, down.z) || 1;
+  return { x: (down.x / m) * k, y: (down.y / m) * k, z: (down.z / m) * k };
+}
+
+/** Bow from the rig's spin. Farther from the drag core, and only as the edge yields. */
+export function edgeAngularPull(
+  mid: DriftCenter,
+  core: DriftCenter,
+  omega: DriftCenter,
+  alpha: DriftCenter,
+  flex: number,
+  len: number,
+): DriftCenter {
+  const f = Math.max(0, Math.min(1, flex));
+  if (f < 1e-4) return { x: 0, y: 0, z: 0 };
+  const r = { x: mid.x - core.x, y: mid.y - core.y, z: mid.z - core.z };
+  const a = angularAccelAt(r, omega, alpha);
+  const gain = 1.15 * f;
+  return edgeBowPull({ x: -a.x * gain, y: -a.y * gain, z: -a.z * gain }, 1, len);
+}
+
+/** Slack at one edge, quieter near the drag core and never longer than the chord. */
+export function edgeBowPull(slack: DriftCenter, weight: number, len: number): DriftCenter {
+  let x = slack.x * weight;
+  let y = slack.y * weight;
+  let z = slack.z * weight;
+  const maxBow = Math.max(0.35, len * 0.45);
+  const m = Math.hypot(x, y, z);
+  if (m > maxBow && m > 1e-8) {
+    const s = maxBow / m;
+    x *= s;
+    y *= s;
+    z *= s;
+  }
+  return { x, y, z };
 }
 
 /** Group position that matches {@link applyDriftPoint} for children stored in layout space. */

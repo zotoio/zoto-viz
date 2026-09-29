@@ -226,6 +226,8 @@ const SHADOW_FOR_DARK_TEXT = "0 1px 0 #fff, 0 -1px 0 #fff, 1px 0 0 #fff, -1px 0 
 const SHADOW_FOR_LIGHT_TEXT = "0 1px 0 #000, 0 -1px 0 #000, 1px 0 0 #000, -1px 0 0 #000";
 /** WCAG AA. Label colour mix and `--hl` must stay at least this against the sky-adjusted fill. */
 export const LABEL_MIN_CONTRAST = 4.5;
+/** Dark letters only at this luminance and above — a white sky or a paper fill, not a bright colour. */
+export const WHITE_BG_LUMA = 0.82;
 /** Secondary scene text (legend, hint, IP line) still needs a readable floor. */
 export const MUTED_MIN_CONTRAST = 3;
 /** Ceiling on mixing a node's colour into scene ink (CSS used to take 85% and bloom). */
@@ -279,26 +281,18 @@ function contrastWalk(from: number, toward: number, bgHex: number, min: number):
   return mix(from, toward, best);
 }
 
-/** True = dark letters. Picks the ink that actually contrasts; hysteresis only when both meet AA. */
+/** True = dark letters. Only a near-white sky or fill qualifies; hysteresis stops a pulse on that edge from flickering. */
 export function preferDarkInk(bgHex: number, hold?: boolean): boolean {
-  const darkC = contrastRatio(INK_DARK, bgHex);
-  const lightC = contrastRatio(INK_LIGHT, bgHex);
-  const darkOk = darkC >= LABEL_MIN_CONTRAST;
-  const lightOk = lightC >= LABEL_MIN_CONTRAST;
-  if (darkOk !== lightOk) return darkOk;
-  if (darkOk && lightOk) {
-    if (hold === true && lightC > darkC * 1.12) return false;
-    if (hold === false && darkC > lightC * 1.12) return true;
-    if (hold === true) return true;
-    if (hold === false) return false;
-  }
-  return darkC >= lightC;
+  const y = relativeLuminance(bgHex);
+  if (hold === true) return y >= WHITE_BG_LUMA - 0.06;
+  if (hold === false) return y >= WHITE_BG_LUMA + 0.03;
+  return y >= WHITE_BG_LUMA;
 }
 
 /**
- * Black or white scene ink from the sky-adjusted fill, chosen so WCAG contrast holds.
+ * Light scene ink, except on a near-white sky or fill.
  * Stroke stays black (a white outline on dark letters reads as glow).
- * Hysteresis keeps a pulsing sky from flickering the ink.
+ * Hysteresis keeps a pulsing white sky from flickering the ink.
  */
 export function sceneInk(bgHex: number, hold?: boolean): SceneInk {
   const darkText = preferDarkInk(bgHex, hold);

@@ -18,6 +18,7 @@ import { getSurfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftMesh, type SoftRect } from "./software-draw";
 import { paintSoftwareFractal } from "../../../plugins/src/fractal-zoom/frontend/software-paint";
+import { paintSoftwareFluid } from "./software-fluid";
 import { disposeOwnedWebGLRenderer, probeWebGL } from "./webgl";
 import type { MosaicNode } from "./mosaic-layout";
 import {
@@ -25,6 +26,9 @@ import {
   N_SHELL_K, N_SHELL_R, N_SLOT, N_THETA, NODE_STRIDE, ROLES, roleIdx, type LayoutParams, type PositionsMsg,
 } from "./layout-core";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName, fmtBytes, type Device, type Flow, type Role, type StateMsg } from "../core/types";
+import { EdgeSheath, edgeHalfWidth, type FibreSample } from "./edge-sheath";
+import { lensFov } from "./lens-fov";
+import { nodeShapeIndex, type NodeShapePin } from "./node-shapes";
 import { sourcesSlice } from "../core/source-graph";
 import { capBluetoothDevices, categorize, heat, isSysBase, paneLabelCap, topology, type ModeCtx, type ViewMode } from "../core/modes";
 import { rIp, rName } from "../core/redact";
@@ -39,10 +43,12 @@ import { cameraConsumers } from "../camera/want";
 import { Gaze } from "../camera/gaze";
 import { FloorGrid, easeFloorPose, floorPose, type FloorPose, type FloorShape } from "./floor";
 import {
-  applyDriftPoint, driftOmegas, driftRig, edgeSpringTarget, graphDriftPose, lagIntoLayout, nodeTravelScale, stepSpring, unapplyDriftPoint,
+  applyDriftPoint, driftInView, driftOmegas, driftRig, edgeAngularPull, edgeBowPull, edgeDragAccel, edgeDragWeight, edgeFlex, edgeGravityPerLength, edgeInertiaTarget, edgeSpinAlpha, edgeYieldOmega, graphDriftPose, lagIntoLayout, pickDragCore, rigOmega, stepAngles, stepSpring, unapplyDriftPoint,
   type SpringBody,
+  type DriftCenter,
   type GraphDriftPose,
 } from "./graph-drift";
+import { GraphIllumination } from "./illumination";
 import { guardReadableAnim } from "./readable";
 import { AudioPulse } from "../audio/audio";
 import { liveMic, micCaptureAllowed, shouldRunMic } from "../audio/want";
@@ -747,8 +753,12 @@ export interface DreamAnim {
   autoTune: boolean;
   /** 0.4–2.5 multiplier on sphere radius */
   nodeWeight: number;
-  /** 0.3–2.5 multiplier on edge brightness and particle size */
+  /** 0.3–2.5 multiplier on edge thickness */
   edgeWeight: number;
+  /** 0–1 opacity of the edge body. The traveling light stays brighter inside it. */
+  edgeOpacity: number;
+  /** auto keeps the view's shapes; mixed or a named form overrides them */
+  nodeShape: NodeShapePin;
   /** traveling highlight on active edges: off, comet (directional head), or pulse (standing wave) */
   edgeGlow: EdgeGlow;
   /** 0–2 multiplier on the glow */
@@ -793,7 +803,7 @@ export interface DreamAnim {
   partCap: number;
   /** 0.25–3 spark travel speed */
   partSpeed: number;
-  /** 0.3–2.5 spark size (on top of edgeWeight) */
+  /** 0.3–2.5 spark size */
   partSize: number;
   /** pulse spark count and speed */
   audioParts: boolean;
@@ -808,6 +818,8 @@ export interface DreamAnim {
   magnetCross: number;
   /** 0.15–2 how far magnets reach */
   magnetRange: number;
+  /** −1…+1: highest-traffic nodes repel or attract their linked neighbours */
+  magnetTraffic: number;
   /** 0–2 pull toward the floor */
   gravity: number;
   /** 0–2 yaw torque around the origin */
@@ -926,6 +938,8 @@ export const DEFAULT_DREAM: DreamAnim = {
   autoTune: true,
   nodeWeight: 1,
   edgeWeight: 1,
+  edgeOpacity: 0.5,
+  nodeShape: "auto",
   edgeGlow: "comet",
   edgeGlowAmt: 1,
   edgeGlowSpeed: 1,
@@ -957,6 +971,7 @@ export const DEFAULT_DREAM: DreamAnim = {
   magnetMulticast: 0,
   magnetCross: 0,
   magnetRange: 1,
+  magnetTraffic: 0,
   gravity: 0,
   swirl: 0,
   chargeAmt: 1,
@@ -991,6 +1006,7 @@ export const DREAM_BOUNDS = {
   labelCount: { min: 8, max: 120, step: 4 },
   nodeWeight: { min: 0.4, max: 2.5, step: 0.05 },
   edgeWeight: { min: 0.3, max: 2.5, step: 0.05 },
+  edgeOpacity: { min: 0.05, max: 1, step: 0.05 },
   edgeGlowAmt: { min: 0.2, max: 2, step: 0.05 },
   edgeGlowSpeed: { min: 0.25, max: 3, step: 0.05 },
   partAmt: { min: 0, max: 2, step: 0.05 },
@@ -1027,13 +1043,20 @@ float shapeR(vec3 d, float s) {
   if (s < 3.5) return 1.46 / (a.x + a.y + a.z);                       // octahedron
   if (s < 4.5) return 1.35 / (0.95 * a.y + 1.35 * length(d.xz));      // diamond: two cones tip to base
   if (s < 5.5) return 1.15 / length(vec3(d.x, d.y * 2.6, d.z));       // disc
-  float hull = 0.58 / length(vec3(d.x * 1.2, d.y * 2.05, d.z * 1.2)); // drone: squat hull
+  if (s < 6.5) {                                                       // drone: squat hull + rotors
+  float hull = 0.58 / length(vec3(d.x * 1.2, d.y * 2.05, d.z * 1.2));
   float armX = 1.28 / max(a.y * 5.4, length(vec2(a.x * 0.38, a.z * 2.7)));
   float armZ = 1.28 / max(a.y * 5.4, length(vec2(a.z * 0.38, a.x * 2.7)));
   float tip = length(vec2(abs(d.x) - 0.62, abs(d.z) - 0.62));
   float rotor = 0.95 / length(vec3(d.x, d.y * 9.0, d.z));
   float rotorMask = 1.0 - smoothstep(0.18, 0.42, tip);
   return max(hull, max(armX, max(armZ, mix(hull, rotor, rotorMask * 0.85))));
+  }
+  if (s < 7.5) return 0.95 / max(0.08, length(vec2(length(d.xz) - 0.62, d.y * 2.4))); // ring
+  if (s < 8.5) return 1.05 / length(vec3(d.x * 1.55, d.y * 0.72, d.z * 1.55));         // capsule
+  if (s < 9.5) return 1.15 / (a.x + a.y * 0.45 + a.z);                                  // crystal
+  float pinch = 1.0 + 1.4 * max(d.y, 0.0);                                             // teardrop
+  return 1.05 / length(vec3(d.x * pinch, d.y * 0.85, d.z * pinch));
 }
 vec3 shapeNormal(vec3 d, float s) {
   vec3 t1 = normalize(cross(d, abs(d.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0)));
@@ -1117,18 +1140,41 @@ export class NetScene implements HostedView, RenderScalePane {
   /** Graph meshes only. Floor, sky, and host-mesh models stay on the scene root. */
   private readonly graphRig = new THREE.Group();
   private driftPose: GraphDriftPose = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0 };
-  /** Core, nodes, and edge middles. Each carries velocity and springs toward the one ahead of it. */
+  /** Look-at used as the drift pivot, so the cloud turns around the camera target. */
+  private driftCenter: DriftCenter = { x: 0, y: 0, z: 0 };
+  /** Mic-beat spring only. With beat off the pose is the figure-8 itself. */
   private coreBody: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
-  private nodeBody: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
-  private edgeBody: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+  /** String slack while the cloud is dragged. Zero when the motion is steady. */
+  private edgeSlack: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+  private edgeTarget: DriftCenter = { x: 0, y: 0, z: 0 };
+  /** Last camera-frame slide, so acceleration ignores the view orbit. */
+  private dragSample: DriftCenter = { x: 0, y: 0, z: 0 };
+  private cloudSlideVel: DriftCenter = { x: 0, y: 0, z: 0 };
+  /** Layout point the cloud is pulled from: graph origin, or the largest node. */
+  private dragCore: DriftCenter = { x: 0, y: 0, z: 0 };
+  /** How far the cloud extends from the drag point, in layout units. */
+  private dragReach = 80;
+  /** 0 rod, 1 cable, from the string and spring sliders. */
+  private edgeFlexNow = 0;
+  /** World down in layout axes, so a nod tips the hang. */
+  private gravDown: DriftCenter = { x: 0, y: -1, z: 0 };
+  /** Hang per unit length. Eased so a slack string does not pop. */
+  private gravSlack: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+  /** Rig spin. Angular acceleration whips flexible edges around the drag core. */
+  private rigOmegaNow: DriftCenter = { x: 0, y: 0, z: 0 };
+  private rigAlpha: DriftCenter = { x: 0, y: 0, z: 0 };
+  private spinPitch = 0;
+  private spinYaw = 0;
+  /** Eased nod and turn. The raw figure-8 angles are the target, not the pose. */
+  private driftPitch = 0;
+  private driftPitchV = 0;
+  private driftYaw = 0;
+  private driftYawV = 0;
   private driftLive = false;
-  private driftClock = 0;
+  /** Integrated with the same clamped frame dt as the camera, not wall clock. */
+  private driftTime = 0;
   /** Seconds until the next mic-beat kick on the graph drift springs. */
   private graphBeatCool = 0;
-  /** Layout-space trail shared by every node; per-node scale stretches it. */
-  private nodeLagLocal = { x: 0, y: 0, z: 0 };
-  /** Extra lag of the edge middle behind the nodes. This is what bows a wire inward. */
-  private edgeLagLocal = { x: 0, y: 0, z: 0 };
   private readonly driftPhase = Math.random();
   private readonly sphereMat = sphereMaterial();
   private readonly fabric = new GraphFabric();
@@ -1153,6 +1199,8 @@ export class NetScene implements HostedView, RenderScalePane {
   private pendingRelease: Float32Array | null = null;
   private lastLayoutParams: LayoutParams | null = null;
   private lines: THREE.LineSegments;
+  private readonly sheath = new EdgeSheath();
+  private readonly fibreSamples: FibreSample[] = [];
   private glowLines: THREE.LineSegments;
   private glowMat: THREE.ShaderMaterial;
   private linePos: Float32Array;
@@ -1233,7 +1281,7 @@ export class NetScene implements HostedView, RenderScalePane {
   private physWant: PhysEase | null = null;
   private dreamPulseT = 0;
   private theme: Theme = DEFAULT_THEME;
-  private rim: THREE.PointLight;
+  private illumination: GraphIllumination;
   private grid = new FloorGrid();
   private lastFloor: FloorPose = floorPose({ x: 0, y: 0, z: 0, hx: 280, hz: 280, n: 0 });
   private backdrop = new Backdrop();
@@ -1441,7 +1489,7 @@ export class NetScene implements HostedView, RenderScalePane {
       (this.controls as OrbitWheel)._handleMouseWheel({ deltaY, clientX: g.clientX, clientY: g.clientY });
       this.captureDreamRest();
     }, { passive: false });
-    this.controls.autoRotate = true;
+    this.controls.autoRotate = false;
     this.controls.autoRotateSpeed = 0.35;
     this.controls.addEventListener("start", () => {
       this.lastInteraction = performance.now();
@@ -1454,13 +1502,7 @@ export class NetScene implements HostedView, RenderScalePane {
       this.pinUserCamera();
     });
 
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.55));
-    const key = new THREE.DirectionalLight(0xffffff, 1.4);
-    key.position.set(300, 500, 400);
-    this.scene.add(key);
-    this.rim = new THREE.PointLight(this.theme.scene.rim, 4000, 0, 1.2);
-    this.rim.position.set(-400, -200, -300);
-    this.scene.add(this.rim);
+    this.illumination = new GraphIllumination(this.scene, this.theme.scene.rim);
     this.scene.fog = new THREE.FogExp2(this.theme.scene.fog, 0.00075);
 
     // faint reference grid on the "floor"
@@ -1497,7 +1539,9 @@ export class NetScene implements HostedView, RenderScalePane {
     // Light themes use normal blending and edgeColor() lerps from the background instead.
     this.lines = new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.9, depthWrite: false, blending: THREE.AdditiveBlending }));
     this.lines.frustumCulled = false;
+    this.lines.visible = false;
     this.graphRig.add(this.lines);
+    this.graphRig.add(this.sheath.mesh);
     this.glowAlong = new Float32Array(0);
     this.glowAb = new Float32Array(0);
     this.glowBa = new Float32Array(0);
@@ -1843,6 +1887,16 @@ export class NetScene implements HostedView, RenderScalePane {
         );
         return;
       }
+      const fluid = this.mode.id === "plugin:fluid-dyn" || this.mode.id.startsWith("plugin:fluid-dyn:");
+      if (fluid && this.stageOnly) {
+        paintSoftwareFluid(
+          ctx,
+          rect,
+          (buffer, index) => this.backdrop.pluginSlot(buffer, index),
+          this.backdrop.skyTime(),
+        );
+        return;
+      }
       paintSoftwarePluginRain(ctx, rect, this.now, this.pulseNow.bass, this.vizHeadlineText);
       if (this.stageOnly) return;
     }
@@ -2010,8 +2064,9 @@ export class NetScene implements HostedView, RenderScalePane {
     const kind = this.fabricKind();
     const mesh = show && fabricActive(kind);
     this.spheres.visible = show && !mesh;
-    this.lines.visible = show && !mesh;
-    this.glowLines.visible = show && !mesh && this.anim.edgeGlow !== "off";
+    this.lines.visible = false;
+    this.sheath.mesh.visible = show && !mesh;
+    this.glowLines.visible = false;
     this.arrows.visible = show && !mesh && graphLinksArrows(this.anim.graphLinks);
     this.fabric.mesh.visible = mesh;
     this.particles.visible = show && !mesh;
@@ -2030,11 +2085,23 @@ export class NetScene implements HostedView, RenderScalePane {
       return { x: (n.x ?? 0) + s.x, y: (n.y ?? 0) + s.y, z: (n.z ?? 0) + s.z, lx: s.x, ly: s.y, lz: s.z };
     };
     const A = end(a), B = end(b);
+    const len = Math.hypot(B.x - A.x, B.y - A.y, B.z - A.z);
+    const mid = { x: (A.x + B.x) * 0.5, y: (A.y + B.y) * 0.5, z: (A.z + B.z) * 0.5 };
+    const pull = edgeBowPull(this.edgeSlack, edgeDragWeight(mid, this.dragCore), len);
+    const hang = edgeBowPull({
+      x: this.gravSlack.x * len,
+      y: this.gravSlack.y * len,
+      z: this.gravSlack.z * len,
+    }, 1, len);
+    const spin = edgeAngularPull(mid, this.dragCore, this.rigOmegaNow, this.rigAlpha, this.edgeFlexNow, len);
+    pull.x += hang.x + spin.x;
+    pull.y += hang.y + spin.y;
+    pull.z += hang.z + spin.z;
     return {
       ax: A.x, ay: A.y, az: A.z, bx: B.x, by: B.y, bz: B.z,
-      px: (B.lx - A.lx) + this.edgeLagLocal.x,
-      py: (B.ly - A.ly) + this.edgeLagLocal.y,
-      pz: (B.lz - A.lz) + this.edgeLagLocal.z,
+      px: (B.lx - A.lx) + pull.x,
+      py: (B.ly - A.ly) + pull.y,
+      pz: (B.lz - A.lz) + pull.z,
       bend: 0,
     };
   }
@@ -2344,16 +2411,15 @@ export class NetScene implements HostedView, RenderScalePane {
     host.style.setProperty("--label-fw", String(Math.round(400 + 350 * Math.max(0, Math.min(1, a.labelWeight)))));
     const partCssSize = 3.2 * a.edgeWeight * (t?.partSize ?? a.partSize);
     (this.particles.material as THREE.PointsMaterial).size = partCssSize;
-    (this.lines.material as THREE.LineBasicMaterial).opacity = Math.min(1, 0.5 + 0.5 * a.edgeWeight);
     this.syncGlow();
   }
 
   private syncGlow(): void {
     const a = this.anim;
     const glowAmt = this.tune?.edgeGlowAmt ?? a.edgeGlowAmt;
-    this.glowLines.visible = !this.stageOnly && !fabricActive(this.fabricKind()) && a.edgeGlow !== "off" && glowAmt > 0.02;
+    this.glowLines.visible = false;
     const u = this.glowMat.uniforms;
-    u.uAmt.value = glowAmt * a.edgeWeight;
+    u.uAmt.value = glowAmt;
     u.uSpeed.value = a.edgeGlowSpeed;
     u.uMode.value = a.edgeGlow === "pulse" ? 1 : 0;
     u.uAdditive.value = this.additiveMarks() ? 1 : 0;
@@ -2387,12 +2453,11 @@ export class NetScene implements HostedView, RenderScalePane {
 
   private stringNow(): { segs: number; sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number } {
     const a = this.anim;
-    const pulse = this.physPulse();
     const bundle = this.bundleAmt();
     const hub = bundle > 0.01 ? this.bundleHub() : [0, 0, 0] as [number, number, number];
     return {
       segs: edgeDrawSegs(a.stringAmt, bundle),
-      sag: a.stringAmt * pulse,
+      sag: 0,
       wave: a.audioPhysics ? this.pulseBass * a.audioSens * a.stringAmt : 0,
       hx: hub[0], hy: hub[1], hz: hub[2], bundle,
     };
@@ -2409,6 +2474,7 @@ export class NetScene implements HostedView, RenderScalePane {
       ax, ay, az, bx, by, bz, t,
       pull.x, pull.y, pull.z,
       str.sag, str.wave, str.hx, str.hy, str.hz, str.bundle, pull.bend,
+      this.dragCore.x, this.dragCore.y, this.dragCore.z,
     );
   }
 
@@ -2531,7 +2597,7 @@ export class NetScene implements HostedView, RenderScalePane {
     const i = THREE.MathUtils.clamp(this.anim.camInertia ?? 0.55, 0, 1);
     this.controls.dampingFactor = 0.25 * (1 - i) * (1 - i) + 0.015;
     const drive = this.camDrive();
-    const fov = this.baseFov + 5.5 * drive.audio + 3.2 * drive.change;
+    const fov = lensFov(this.baseFov + 5.5 * drive.audio + 3.2 * drive.change, this.camera.aspect);
     const wantFov = (fov - this.camera.fov) * this.camK(dt);
     this.camStep.fov += (wantFov - this.camStep.fov) * this.moveK(dt);
     if (Math.abs(this.camStep.fov) > 0.002 || Math.abs(this.camera.fov - fov) > 0.01) {
@@ -2541,18 +2607,25 @@ export class NetScene implements HostedView, RenderScalePane {
   }
 
   /**
-   * Pose lerp for every camera move. 0% is immediate; 100% glides over a few seconds.
-   * Pointer drag and wheel zoom skip this (k = 1) so pan / zoom still land where they were released.
+   * Pose lerp for every camera move. Pointer drag and wheel zoom skip this (k = 1).
+   * Inertia at 0 is immediate only while dream or the audio camera is on.
    */
   private camK(dt: number): number {
     const i = THREE.MathUtils.clamp(this.anim.camInertia ?? 0.55, 0, 1);
+    const reactive = !!(this.anim.audioCamera || this.dreaming);
+    if (!reactive) return 1 - Math.exp(-Math.max(0, dt) / (0.85 + 2.4 * i * i));
     if (i < 0.01) return 1;
     return 1 - Math.exp(-dt / (0.12 + 3.7 * i * i));
   }
 
-  /** How fast a motion step may change heading. 0% adopts the new delta immediately; 100% must slow through zero. */
+  /**
+   * How fast a motion step may change heading. Ease at 0 is immediate only while
+   * dream, the audio camera, or graph mic-beat is on.
+   */
   private moveK(dt: number): number {
     const e = THREE.MathUtils.clamp(this.anim.moveEase ?? 0.45, 0, 1);
+    const reactive = !!(this.anim.audioCamera || this.anim.audioNodes || this.dreaming);
+    if (!reactive) return 1 - Math.exp(-Math.max(0, dt) / (0.45 + 1.6 * e * e));
     if (e < 0.01) return 1;
     return 1 - Math.exp(-dt / (0.06 + 2.2 * e * e));
   }
@@ -2675,7 +2748,9 @@ export class NetScene implements HostedView, RenderScalePane {
       spring: a.spring, chargeAmt: a.chargeAmt, linkSpan: a.linkSpan,
       drag: a.audioNodes ? 0.35 - 0.22 * ease : Math.max(0.46, 0.35 - 0.22 * ease), centerPull: a.centerPull,
       magnets: ROLES.map((r) => (byRole[r] ?? 0) * p),
-      magnetCross: a.magnetCross, magnetRange: a.magnetRange, gravity: a.gravity, swirl: a.swirl, pulse: p,
+      magnetCross: a.magnetCross, magnetRange: a.magnetRange,
+      magnetTraffic: Number.isFinite(a.magnetTraffic) ? a.magnetTraffic : 0,
+      gravity: a.gravity, swirl: a.swirl, pulse: p,
       spreadX: this.spreadX, spreadZ: this.spreadZ,
       flatten: resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace, this.anim.graphLayout),
       moveK: Math.round(this.layoutMoveK(dt, a.audioNodes) * 1000) / 1000,
@@ -3187,7 +3262,11 @@ export class NetScene implements HostedView, RenderScalePane {
     const minR = fitR * 0.62;
     let nextR = _sph.radius;
     if (nextR < minR) nextR = minR;
-    else if (!recently) nextR += (fitR - nextR);
+    else if (!recently) {
+      const reactive = !!(this.anim.audioCamera || this.dreaming);
+      const tau = reactive ? 0.05 : 1.8;
+      nextR += (fitR - nextR) * (1 - Math.exp(-Math.max(dt, 0) / tau));
+    }
     _sph.radius = THREE.MathUtils.clamp(nextR, 80, 8000);
     _restT.set(bx, by, bz);
     _camWant.copy(_restT).add(_off.setFromSpherical(_sph));
@@ -3289,7 +3368,7 @@ export class NetScene implements HostedView, RenderScalePane {
 
   private applyThemeColors(t: number): void {
     const k = t * t * (3 - 2 * t);
-    this.rim.color.setHex(this.mixHex(this.fadeFrom.rim, this.theme.scene.rim, k));
+    this.illumination.setRim(this.mixHex(this.fadeFrom.rim, this.theme.scene.rim, k));
     this.paintClear();
     for (const n of this.nodes.values()) {
       if (t >= 1) n.color.copy(n.colorWant);
@@ -3369,7 +3448,7 @@ export class NetScene implements HostedView, RenderScalePane {
     if (!n) return;
     this.raycaster.setFromCamera(this.pointer, this.camera);
     if (!this.raycaster.ray.intersectPlane(this.dragPlane, this.dragHit)) return;
-    const laid = unapplyDriftPoint(this.dragHit.x, this.dragHit.y, this.dragHit.z, this.driftPose, this.focus);
+    const laid = unapplyDriftPoint(this.dragHit.x, this.dragHit.y, this.dragHit.z, this.driftPose, this.driftCenter);
     this.dragVel.set(laid.x - (n.x ?? 0), laid.y - (n.y ?? 0), laid.z - (n.z ?? 0));
     n.x = n.fx = laid.x;
     n.y = n.fy = laid.y;
@@ -4034,7 +4113,8 @@ export class NetScene implements HostedView, RenderScalePane {
     this.lastTuneK = this.tune.k;
     this.easePhys(dt);
     const wall = wallMs / 1000;
-    this.stepGraphDrift(wall);
+    this.stepGraphDrift(wall, dt);
+    this.illumination.step(wall);
     this.backdrop.tick(wall);
     if (!this.satellite && this.anim.backdrop === "dynamic") ensureSkyRecipe(this.anim.skyAiMin * 60_000);
     this.applyLook(dt);
@@ -4134,10 +4214,10 @@ export class NetScene implements HostedView, RenderScalePane {
           _colA.setHSL(_hsl.h, Math.min(1, _hsl.s + 0.15 * (look.glow ?? 0)), Math.min(1, _hsl.l + 0.1 * (look.glow ?? 0)));
         }
         sp.setColorAt(ni, _colA);
-        shapeAttr.setX(ni, look.shape ?? n.shape);
-      } else if (styleDirty) {
-        sp.setColorAt(ni, n.color);
-        shapeAttr.setX(ni, n.shape);
+        shapeAttr.setX(ni, look.shape ?? nodeShapeIndex(this.anim.nodeShape, this.mode.nodeShape?.(n, modeCtx), deviceKind(n.device), n.id));
+      } else {
+        if (styleDirty) sp.setColorAt(ni, n.color);
+        shapeAttr.setX(ni, nodeShapeIndex(this.anim.nodeShape, this.mode.nodeShape?.(n, modeCtx), deviceKind(n.device), n.id));
       }
       const instGlow = n.glow + (this.anim.audioNodes ? 0.55 * this.pulseLevel : 0) + (look?.glow ?? 0);
       glowAttr.setX(ni, instGlow);
@@ -4171,21 +4251,25 @@ export class NetScene implements HostedView, RenderScalePane {
     sp.instanceMatrix.needsUpdate = true;
     glowAttr.needsUpdate = true;
     alphaAttr.needsUpdate = true;
+    shapeAttr.needsUpdate = true;
     if (styleDirty || liveStyle) {
       sp.instanceColor!.needsUpdate = true;
-      shapeAttr.needsUpdate = true;
       if (styleDirty) this.instanceStyleDirty = false;
     }
 
     // edges
     const str = this.stringNow();
+    const sheathOn = !this.stageOnly && !fabricActive(this.fabricKind());
+    _off.copy(this.camera.position);
+    this.graphRig.worldToLocal(_off);
+    const half = edgeHalfWidth(this.anim.edgeWeight);
+    let sheathSeg = 0;
     if (this.linePos.length !== this.links.size * str.segs * 6) this.rebuildLineBuffers();
     let i = 0;
     const sel = this.selected;
     const tmp = _colA, tmp2 = _colB;
     const ctx = this.ctx;
     const mode = this.mode;
-    const th = this.theme.scene;
     const fabricEdges: FabricEdgePose[] = [];
     for (const l of this.links.values()) {
       const a = l.source, b = l.target;
@@ -4199,19 +4283,19 @@ export class NetScene implements HostedView, RenderScalePane {
       else bright = this.additiveMarks() ? 0.14 : 0.38;
       if (!tether && mode.linkBright) bright = mode.linkBright(l, ctx, bright);
       bright = edgeHighlightBright(bright, !!(sel && (a === sel || b === sel)), !!sel, l.visible);
-      bright *= this.anim.edgeWeight * Math.min(a.opacity, b.opacity);
+      bright *= Math.min(a.opacity, b.opacity);
       bright = Math.min(bright, this.additiveMarks() ? 0.42 : 1.05);
       const prevBright = l.shownBright ?? bright;
       const brightK = 1 - Math.exp(-Math.max(dt, 0) / 2.4);
       bright = prevBright + (bright - prevBright) * brightK;
       l.shownBright = bright;
-      const isLan = a.device.role !== "internet" && b.device.role !== "internet";
       const mc = tether ? undefined : mode.linkColor?.(l, ctx);
-      const ca = Array.isArray(mc) ? mc[0] : mc ?? (tether ? th.tether : isLan ? th.lanEdge : th.wanEdge);
+      const ca = Array.isArray(mc) ? mc[0] : mc ?? (tether ? 0x9aa3b2 : 0xd2d7e0);
       const cb = Array.isArray(mc) ? mc[1] : ca;
-      this.edgeColor(tmp, ca, bright);
+      const tone = mc ? bright : tether ? 0.78 : 1;
+      this.edgeColor(tmp, ca, tone);
       const lr = tmp.r, lg = tmp.g, lb = tmp.b;
-      this.edgeColor(tmp2, cb, bright);
+      this.edgeColor(tmp2, cb, tone);
       const rr = tmp2.r, rg = tmp2.g, rb = tmp2.b;
       this.edgeColor(tmp, ca, 0.9);
       const gca = tmp.r, gcg = tmp.g, gcb = tmp.b;
@@ -4225,15 +4309,28 @@ export class NetScene implements HostedView, RenderScalePane {
         fabricEdges.push({
           a: a.id, b: b.id, r0: lr, g0: lg, b0: lb, r1: rr, g1: rg, b1: rb,
           gab, gba, wave: 0.18 + 0.55 * glowStrength(l.flow.rate), visible: l.visible && bright > 0.01,
-          sx: this.edgeLagLocal.x, sy: this.edgeLagLocal.y, sz: this.edgeLagLocal.z,
+          sx: d.px, sy: d.py, sz: d.pz,
         });
       }
+      let fibreN = 0;
+      const fibreAt = (n: number, x: number, y: number, z: number, r: number, g: number, b: number, along: number) => {
+        let p = this.fibreSamples[n];
+        if (!p) this.fibreSamples[n] = p = { x: 0, y: 0, z: 0, r: 1, g: 1, b: 1, along: 0 };
+        p.x = x; p.y = y; p.z = z; p.r = r; p.g = g; p.b = b; p.along = along;
+      };
       for (let s = 0; s < str.segs; s++) {
         const t0 = s / str.segs, t1 = (s + 1) / str.segs;
         const u = this.edgePoint(ax, ay, az, bx, by, bz, t0, str, pull);
         const v = this.edgePoint(ax, ay, az, bx, by, bz, t1, str, pull);
         this.linePos[i] = u[0]; this.linePos[i + 1] = u[1]; this.linePos[i + 2] = u[2];
         this.linePos[i + 3] = v[0]; this.linePos[i + 4] = v[1]; this.linePos[i + 5] = v[2];
+        if (sheathOn && l.visible) {
+          if (s === 0) fibreAt(fibreN++, u[0], u[1], u[2], lr, lg, lb, t0);
+          fibreAt(
+            fibreN++, v[0], v[1], v[2],
+            lr + (rr - lr) * t1, lg + (rg - lg) * t1, lb + (rb - lb) * t1, t1,
+          );
+        }
         const mix0 = t0, mix1 = t1;
         this.lineCol[i] = lr + (rr - lr) * mix0;
         this.lineCol[i + 1] = lg + (rg - lg) * mix0;
@@ -4254,6 +4351,12 @@ export class NetScene implements HostedView, RenderScalePane {
         }
         i += 6;
       }
+      if (fibreN >= 2) {
+        sheathSeg += this.sheath.writeCurve(
+          sheathSeg, this.fibreSamples, fibreN, gab, gba, half,
+          _off.x, _off.y, _off.z,
+        );
+      }
     }
     const pa = this.lines.geometry.getAttribute("position") as THREE.BufferAttribute | undefined;
     const ca = this.lines.geometry.getAttribute("color") as THREE.BufferAttribute | undefined;
@@ -4265,6 +4368,14 @@ export class NetScene implements HostedView, RenderScalePane {
     if (gc) gc.needsUpdate = true;
     this.glowMat.uniforms.uTime.value = wall;
     this.syncGlow();
+    const glowAmt = this.tune?.edgeGlowAmt ?? this.anim.edgeGlowAmt;
+    this.sheath.commit(sheathOn ? sheathSeg : 0, {
+      time: wall,
+      opacity: this.anim.edgeOpacity,
+      speed: this.anim.edgeGlowSpeed,
+      amt: this.anim.edgeGlow === "off" ? 0 : glowAmt,
+      mode: this.anim.edgeGlow === "pulse" ? 1 : 0,
+    });
     const fabricKind = this.fabricKind();
     this.fabric.setKind(fabricKind);
     if (fabricActive(fabricKind)) {
@@ -4273,7 +4384,8 @@ export class NetScene implements HostedView, RenderScalePane {
         time: wall,
         pulse: this.pulseLevel,
         glowMode: this.anim.edgeGlow,
-        glowAmt: (this.tune?.edgeGlowAmt ?? this.anim.edgeGlowAmt) * this.anim.edgeWeight,
+        glowAmt: this.tune?.edgeGlowAmt ?? this.anim.edgeGlowAmt,
+        edgeOpacity: this.anim.edgeOpacity,
         glowSpeed: this.anim.edgeGlowSpeed,
         additive: this.additiveMarks(),
         morph: this.viewMorphT,
@@ -4283,6 +4395,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.syncArrows(str, fabricById);
 
     // particles
+    const th = this.theme.scene;
     if (this.anim.audioParts) this.rebuildParticles();
     const partSpd = this.anim.partSpeed * (this.anim.audioParts ? 1 + 0.6 * this.pulseBass * this.anim.audioSens : 1);
     let k = 0;
@@ -4348,7 +4461,6 @@ export class NetScene implements HostedView, RenderScalePane {
     this.sampleFocus(dt);
     this.frameCamera(dt);
 
-    if (!this.dreaming && !this.controls.autoRotate && ts - this.lastInteraction > 20000 && !this.selected && !this.mode.camera) this.controls.autoRotate = true;
     this.controls.update();
     this.followUserCameraCoast();
     // last writer: OrbitControls.update() rebuilds the camera from its spherical, so the nod has to land after it
@@ -4467,6 +4579,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.viewW = w;
     this.viewH = h;
     this.camera.aspect = w / h;
+    if (!this.stageMeshCam) this.camera.fov = lensFov(this.baseFov, this.camera.aspect);
     if (this.satellite && (firstBox || this.satelliteCameraBroken())) this.recoverSatelliteCamera();
     if (!this.host) {
       if (this.renderer instanceof SoftwareGpu) {
@@ -4503,66 +4616,175 @@ export class NetScene implements HostedView, RenderScalePane {
     this.focus.n = 0;
   }
 
+  /** Camera spherical theta. The figure-8 is expressed in this frame. */
+  private viewYaw(): number {
+    _off.copy(this.camera.position).sub(this.controls.target);
+    if (_off.lengthSq() < 1) return 0;
+    _sph.setFromVector3(_off);
+    return _sph.theta;
+  }
+
   /**
-   * Slide and nod the graph on its own figure-8. The core, the nodes, and the
-   * edge middles are springs, so the cloud accelerates instead of hitching.
-   * Without graph beat detection the springs are slow and a stalled frame
-   * cannot fling them. Mic beat (Audio → nodes) uses the stiffer set and a kick.
-   * Floor, sky, and host meshes stay put.
+   * Slide the whole graph on a figure-8 in the camera frame, and turn it
+   * around the camera look-at. Time advances with the same clamped dt as the
+   * camera, so a hitch cannot shove the cloud ahead of the view. Nodes stay
+   * on the layout. The cloud and its nod are critically damped. Mic beat
+   * (Audio → nodes) is what stiffens that spring and adds a kick. Floor,
+   * sky, and host meshes stay put.
    */
-  private stepGraphDrift(timeSec: number): void {
+  private stepGraphDrift(timeSec: number, frameDt: number): void {
     if (this.stageOnly || !this.nodes.size) {
       this.driftPose = { x: 0, y: 0, z: 0, pitch: 0, yaw: 0 };
-      const still: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
-      this.coreBody = still;
-      this.nodeBody = { ...still };
-      this.edgeBody = { ...still };
+      this.coreBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+      this.edgeSlack = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+      this.edgeTarget = { x: 0, y: 0, z: 0 };
+      this.gravSlack = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+      this.rigOmegaNow = { x: 0, y: 0, z: 0 };
+      this.rigAlpha = { x: 0, y: 0, z: 0 };
+      this.edgeFlexNow = 0;
+      this.cloudSlideVel = { x: 0, y: 0, z: 0 };
+      this.driftPitch = 0;
+      this.driftPitchV = 0;
+      this.driftYaw = 0;
+      this.driftYawV = 0;
       this.driftLive = false;
       this.graphBeatCool = 0;
-      this.nodeLagLocal = { x: 0, y: 0, z: 0 };
-      this.edgeLagLocal = { x: 0, y: 0, z: 0 };
-      this.driftClock = timeSec;
+      this.driftTime = timeSec;
     } else {
       const sphere = !resolveGraphFlatten(this.mode.flatten, this.anim.graphSpace, this.anim.graphLayout);
-      const target = graphDriftPose(timeSec, {
+      const cam = {
         pitchDeg: this.anim.pitchDeg,
         pitchPeriod: this.anim.pitchPeriod,
         yawPeriod: this.anim.yawPeriod,
-      }, this.driftPhase, sphere);
-      const beat = this.anim.audioNodes;
-      const omega = driftOmegas(beat);
-      if (!this.driftLive) {
+      };
+      const dt = Math.min(0.05, Math.max(0, frameDt));
+      const waking = !this.driftLive;
+      if (waking) {
         this.driftLive = true;
-        this.driftClock = timeSec;
+        this.driftTime = timeSec;
       } else {
-        const raw = Math.max(0, timeSec - this.driftClock);
-        const dt = Math.min(beat ? 0.08 : 0.04, raw);
-        this.driftClock = timeSec;
-        if (dt > 0) {
-          if (beat) this.kickGraphBeat(dt, target);
-          this.coreBody = stepSpring(this.coreBody, target, dt, omega.core);
-          this.nodeBody = stepSpring(this.nodeBody, this.coreBody, dt, omega.node);
-          this.edgeBody = stepSpring(this.edgeBody, edgeSpringTarget(this.coreBody, this.nodeBody), dt, omega.edge);
-        }
+        this.driftTime += dt;
       }
-      this.driftPose = { ...target, x: this.coreBody.x, y: this.coreBody.y, z: this.coreBody.z };
-      this.nodeLagLocal = lagIntoLayout({
-        x: this.nodeBody.x - this.coreBody.x,
-        y: this.nodeBody.y - this.coreBody.y,
-        z: this.nodeBody.z - this.coreBody.z,
-      }, this.driftPose);
-      this.edgeLagLocal = lagIntoLayout({
-        x: this.edgeBody.x - this.nodeBody.x,
-        y: this.edgeBody.y - this.nodeBody.y,
-        z: this.edgeBody.z - this.nodeBody.z,
-      }, this.driftPose);
+      const local = graphDriftPose(this.driftTime, cam, this.driftPhase, sphere);
+      const beat = this.anim.audioNodes;
+      const omega = driftOmegas(beat).core;
+      if (waking) {
+        this.coreBody = { x: local.x, y: local.y, z: local.z, vx: 0, vy: 0, vz: 0 };
+        this.driftPitch = local.pitch;
+        this.driftYaw = local.yaw;
+        this.driftPitchV = 0;
+        this.driftYawV = 0;
+      } else if (dt > 0) {
+        if (beat) this.kickGraphBeat(dt, local);
+        this.coreBody = stepSpring(this.coreBody, local, dt, omega);
+        const ang = stepAngles(
+          this.driftPitch, this.driftPitchV, this.driftYaw, this.driftYawV,
+          local.pitch, local.yaw, dt, omega,
+        );
+        this.driftPitch = ang.pitch;
+        this.driftPitchV = ang.pitchV;
+        this.driftYaw = ang.yaw;
+        this.driftYawV = ang.yawV;
+      }
+      this.dragCore = this.liveDragCore();
+      this.stepEdgeSlack(dt, waking, local, beat, cam, sphere);
+      const slide = this.coreBody;
+      this.driftPose = driftInView({
+        x: slide.x, y: slide.y, z: slide.z, pitch: this.driftPitch, yaw: this.driftYaw,
+      }, this.viewYaw());
     }
-    const rig = driftRig(this.driftPose, this.focus);
+    const look = this.controls.target;
+    this.driftCenter = { x: look.x, y: look.y, z: look.z };
+    const rig = driftRig(this.driftPose, this.driftCenter);
     _quatPitch.setFromAxisAngle(_axisX, rig.pitch);
     _quatYaw.setFromAxisAngle(_axisY, rig.yaw);
     this.graphRig.quaternion.multiplyQuaternions(_quatYaw, _quatPitch);
     this.graphRig.position.set(rig.x, rig.y, rig.z);
     this.graphRig.updateMatrix();
+    this.graphRig.updateMatrixWorld(true);
+  }
+
+  /** Layout point the moving cloud is pulled from. */
+  private liveDragCore(): DriftCenter {
+    const nodes: { x: number; y: number; z: number; scale: number }[] = [];
+    for (const n of this.nodes.values()) {
+      if (!n.visible) continue;
+      const x = n.x, y = n.y, z = n.z;
+      if (x === undefined || y === undefined || z === undefined) continue;
+      if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) continue;
+      nodes.push({ x, y, z, scale: n.scale });
+    }
+    const core = pickDragCore(nodes);
+    let reach = 48;
+    for (const n of nodes) {
+      reach = Math.max(reach, Math.hypot(n.x - core.x, n.y - core.y, n.z - core.z));
+    }
+    this.dragReach = reach;
+    return core;
+  }
+
+  /**
+   * Strings lag the cloud. Stiff edges (string down, spring up) stay rods.
+   * Slack edges hang toward the floor and trail both the slide and the rig's
+   * spin. Slide acceleration is the camera-frame motion, so an orbit of the
+   * view does not whip the edges. The first frame seeds velocity and leaves
+   * the strings straight.
+   */
+  private stepEdgeSlack(
+    dt: number,
+    waking: boolean,
+    local: GraphDriftPose,
+    beat: boolean,
+    cam: { pitchDeg: number; pitchPeriod: number; yawPeriod?: number },
+    sphere: boolean,
+  ): void {
+    const flex = edgeFlex(this.anim.stringAmt, this.anim.spring, this.anim.linkSpan);
+    this.edgeFlexNow = flex;
+    const poseAxes = { x: 0, y: 0, z: 0, pitch: local.pitch, yaw: local.yaw };
+    this.gravDown = lagIntoLayout({ x: 0, y: -1, z: 0 }, poseAxes);
+    const omegaHz = edgeYieldOmega(flex, beat);
+    const slide = { x: this.coreBody.x, y: this.coreBody.y, z: this.coreBody.z };
+    if (waking || dt < 1 / 90) {
+      if (waking) {
+        const seedDt = Math.max(dt, 1 / 60);
+        const prev = graphDriftPose(this.driftTime - seedDt, cam, this.driftPhase, sphere);
+        this.dragSample = slide;
+        this.cloudSlideVel = {
+          x: (slide.x - prev.x) / seedDt,
+          y: (slide.y - prev.y) / seedDt,
+          z: (slide.z - prev.z) / seedDt,
+        };
+        this.spinPitch = local.pitch;
+        this.spinYaw = local.yaw;
+        this.rigOmegaNow = rigOmega(local.pitch, (local.pitch - prev.pitch) / seedDt, (local.yaw - prev.yaw) / seedDt);
+        this.rigAlpha = { x: 0, y: 0, z: 0 };
+        this.edgeTarget = { x: 0, y: 0, z: 0 };
+        this.edgeSlack = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+        this.gravSlack = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+      }
+      return;
+    }
+    const step = edgeDragAccel(this.dragSample, this.cloudSlideVel, slide, dt);
+    this.dragSample = slide;
+    this.cloudSlideVel = step.vel;
+    const pitchRate = (local.pitch - this.spinPitch) / dt;
+    const yawRate = (local.yaw - this.spinYaw) / dt;
+    const spin = rigOmega(local.pitch, pitchRate, yawRate);
+    this.rigAlpha = edgeSpinAlpha(this.rigOmegaNow, spin, dt);
+    this.rigOmegaNow = spin;
+    this.spinPitch = local.pitch;
+    this.spinYaw = local.yaw;
+    const world = driftInView(
+      { x: step.accel.x, y: step.accel.y, z: step.accel.z, pitch: 0, yaw: 0 },
+      this.viewYaw(),
+    );
+    const layout = lagIntoLayout(world, poseAxes);
+    const cap = Math.min(110, Math.max(16, this.dragReach * 0.2)) * flex;
+    const inertial = edgeInertiaTarget(layout, cap > 1 ? cap / 6 : 0, cap);
+    this.edgeTarget = inertial;
+    this.edgeSlack = stepSpring(this.edgeSlack, this.edgeTarget, dt, omegaHz);
+    const hang = edgeGravityPerLength(this.gravDown, flex, this.anim.gravity);
+    this.gravSlack = stepSpring(this.gravSlack, hang, dt, omegaHz);
   }
 
   /** A bass transient shoves the cloud along its travel. Only while Audio → nodes is on. */
@@ -4584,24 +4806,14 @@ export class NetScene implements HostedView, RenderScalePane {
     };
   }
 
-  /**
-   * Spring trail for one node. Edges are drawn from this same offset, so the
-   * glyph and its connectors share an end. Neighbouring nodes trail by
-   * slightly different amounts. The edge middle lags further, on its own spring.
-   */
-  private nodeShift(id: string, held: boolean, _scale: number): { x: number; y: number; z: number } {
-    if (held) return { x: 0, y: 0, z: 0 };
-    const k = nodeTravelScale(id);
-    return {
-      x: this.nodeLagLocal.x * k,
-      y: this.nodeLagLocal.y * k,
-      z: this.nodeLagLocal.z * k,
-    };
+  /** Nodes stay on the layout. The rig carries the whole cloud. */
+  private nodeShift(_id: string, _held: boolean, _scale: number): { x: number; y: number; z: number } {
+    return { x: 0, y: 0, z: 0 };
   }
 
   /** Layout point as currently drawn (drifted). */
   private viewOf(x: number, y: number, z: number): { x: number; y: number; z: number } {
-    return applyDriftPoint(x, y, z, this.driftPose, this.focus);
+    return applyDriftPoint(x, y, z, this.driftPose, this.driftCenter);
   }
 
   /** Sit the floor under the live cloud. Camera moves then keep graph and tiles together. */
@@ -4724,6 +4936,7 @@ function sameLayoutParams(a: LayoutParams, b: LayoutParams): boolean {
   if (
     a.spring !== b.spring || a.chargeAmt !== b.chargeAmt || a.linkSpan !== b.linkSpan || a.drag !== b.drag ||
     a.centerPull !== b.centerPull || a.magnetCross !== b.magnetCross || a.magnetRange !== b.magnetRange ||
+    a.magnetTraffic !== b.magnetTraffic ||
     a.gravity !== b.gravity || a.swirl !== b.swirl || a.pulse !== b.pulse || a.spreadX !== b.spreadX ||
     a.spreadZ !== b.spreadZ || a.flatten !== b.flatten || a.moveK !== b.moveK
   ) return false;

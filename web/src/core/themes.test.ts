@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   alignThemeToColor, applyPaneChrome, applyThemeChrome, contrastRatio, effectiveSceneLuminance,
   fadeTowardPole, grayHex, guardLabelMix, hexToHsl, hslHex, LABEL_MAX_MIX, LABEL_MIN_CONTRAST,
-  MUTED_MIN_CONTRAST, preferDarkInk, relativeLuminance, sceneInk, SKY_LUMA_CAP,
+  preferDarkInk, relativeLuminance, sceneInk, SKY_LUMA_CAP, WHITE_BG_LUMA,
   takeTheme, themeById, themePickerGroup, themeSwatch, THEMES, toCssHex,
 } from "./themes";
 
@@ -60,7 +60,7 @@ describe("themes", () => {
     expect(effectiveSceneLuminance(darkFill, { kind: "none" })).toBeLessThan(0.05);
     expect(effectiveSceneLuminance(darkFill, { kind: "fractal", opacity: 1, bright: 2 })).toBeGreaterThan(0.5);
     expect(effectiveSceneLuminance(darkFill, { kind: "fractal", opacity: 1, bright: 2 })).toBeLessThanOrEqual(SKY_LUMA_CAP);
-    expect(sceneInk(grayHex(effectiveSceneLuminance(darkFill, { kind: "fractal", opacity: 1, bright: 2 }))).darkText).toBe(true);
+    expect(sceneInk(grayHex(effectiveSceneLuminance(darkFill, { kind: "fractal", opacity: 1, bright: 2 }))).darkText).toBe(false);
     expect(effectiveSceneLuminance(darkFill, { kind: "space", opacity: 1, bright: 1 })).toBeLessThan(0.3);
     expect(Math.abs(relativeLuminance(grayHex(0.4)) - 0.4)).toBeLessThan(0.02);
     const lime: [number, number, number] = [0.78, 0.88, 0.18];
@@ -71,7 +71,7 @@ describe("themes", () => {
     });
     expect(aiLum).toBeGreaterThan(fallbackAi);
     expect(aiLum).toBeLessThanOrEqual(SKY_LUMA_CAP);
-    expect(sceneInk(grayHex(aiLum)).darkText).toBe(true);
+    expect(sceneInk(grayHex(aiLum)).darkText).toBe(false);
     expect(sceneInk(grayHex(aiLum)).stroke).toBe("#000");
     expect(effectiveSceneLuminance(darkFill, {
       kind: "dynamic", opacity: 1, bright: 2, recipeA: lime, recipeB: violet,
@@ -81,27 +81,28 @@ describe("themes", () => {
     })).toBeGreaterThan(SKY_LUMA_CAP);
   });
 
-  it("meets WCAG AA for label ink on every backdrop grey", () => {
-    for (let i = 0; i <= 40; i++) {
-      const bg = grayHex(i / 40);
-      const ink = sceneInk(bg);
-      expect(contrastRatio(ink.fgHex, bg)).toBeGreaterThanOrEqual(4);
-      const muted = parseInt(ink.muted.slice(1), 16);
-      expect(contrastRatio(muted, bg)).toBeGreaterThanOrEqual(MUTED_MIN_CONTRAST - 0.05);
-    }
+  it("keeps light ink until the backdrop is near white", () => {
+    expect(sceneInk(grayHex(WHITE_BG_LUMA - 0.08)).darkText).toBe(false);
+    expect(sceneInk(grayHex(WHITE_BG_LUMA - 0.08)).fg).toBe("#ffffff");
+    expect(sceneInk(grayHex(0.95)).darkText).toBe(true);
+    expect(contrastRatio(sceneInk(0x0b0e14).fgHex, 0x0b0e14)).toBeGreaterThanOrEqual(LABEL_MIN_CONTRAST);
+    expect(contrastRatio(sceneInk(0xffffff).fgHex, 0xffffff)).toBeGreaterThanOrEqual(LABEL_MIN_CONTRAST);
+    const paper = sceneInk(0xf5f4ef);
+    expect(paper.darkText).toBe(true);
+    expect(contrastRatio(paper.fgHex, 0xf5f4ef)).toBeGreaterThanOrEqual(LABEL_MIN_CONTRAST);
   });
 
-  it("uses dark ink on a bright floor even when the sky estimate is dark", () => {
+  it("keeps light ink on a bright floor and a bright camera when they are not white", () => {
     const fill = 0x021714;
     const withFloor = effectiveSceneLuminance(fill, {
       kind: "none",
       floor: { hex: 0xc8d4e0, opacity: 0.7, bright: 1.2, down: 1 },
     });
-    expect(preferDarkInk(grayHex(withFloor))).toBe(true);
-    expect(sceneInk(grayHex(withFloor)).darkText).toBe(true);
-    expect(contrastRatio(sceneInk(grayHex(withFloor)).fgHex, grayHex(withFloor))).toBeGreaterThanOrEqual(LABEL_MIN_CONTRAST);
+    expect(withFloor).toBeLessThan(WHITE_BG_LUMA);
+    expect(preferDarkInk(grayHex(withFloor))).toBe(false);
+    expect(sceneInk(grayHex(withFloor)).fg).toBe("#ffffff");
     const liveBright = effectiveSceneLuminance(fill, { kind: "live", opacity: 0.7, bright: 1.55, liveLuma: 0.72 });
-    expect(sceneInk(grayHex(liveBright)).darkText).toBe(true);
+    expect(sceneInk(grayHex(liveBright)).darkText).toBe(false);
   });
 
   it("guards label colour mix so ink stays readable", () => {

@@ -9,6 +9,8 @@ import type { RemixPairing } from "../remix/remix-types";
 import { buildRemixPickerModel, mountRemixPicker, type RemixPickerControls } from "../remix/remix-picker";
 import { assignTiles, equalize, leafIds, nextPaneTiles, parseMosaicNode, parseMosaicTiles } from "../graph/mosaic-layout";
 import { AUDIO_DRIVES, DEFAULT_DREAM, DREAM_BOUNDS as B, EDGE_GLOWS, FABRIC_OPTIONS, FOCUS_MODES, GRAPH_LAYOUT_OPTIONS, GRAPH_LINK_OPTIONS, GRAPH_SPACE_OPTIONS, HERO_POS, MOSAIC_SIZES, SKY_CYCLES, THEME_CYCLES, type AudioDrive, type DreamAnim, type EdgeGlow, type FabricKind, type FocusMode, type GraphLayout, type GraphLinks, type GraphSpace, type HeroPos, type MosaicSize, type ThemeCycle } from "../graph/scene";
+import { matchStyleLibrary, resolveStyleLibrary, STYLE_LIBRARY_OPTIONS } from "../graph/style-library";
+import { NODE_SHAPE_OPTIONS, nodeShapePin, type NodeShapePin } from "../graph/node-shapes";
 import { BACKDROP_OPTIONS, SKY_GROUP_TABS, cycleSkyPool, type BackdropKind } from "../graph/backdrop";
 import { invalidateSkyRecipe } from "../graph/sky-ai";
 import { FLOOR_SHAPES, type FloorShape } from "../graph/floor";
@@ -158,18 +160,19 @@ export class Settings {
     sharedSky: Toggle;
     setFocus: (v: FocusMode) => void;
     setGlow: (v: EdgeGlow) => void;
+    setNodeShape: (v: NodeShapePin) => void;
     setFabric: (v: FabricKind) => void;
     setSpace: (v: GraphSpace) => void;
     setLayout: (v: GraphLayout) => void;
     setLinks: (v: GraphLinks) => void;
     setMod: (key: "background" | "sky" | "floor" | "camera" | "nodes" | "skies" | "physics" | "particles", on: boolean) => void;
     skyPulse: Toggle; floorPulse: Toggle; bgPulse: Toggle;
-    labels: Slider; shown: Slider; nodes: Slider; edges: Slider;
+    labels: Slider; shown: Slider; nodes: Slider; edges: Slider; edgeOpacity: Slider;
     glowAmt: Slider; glowSpeed: Slider;
     autoTune: Toggle;
     partAmt: Slider; partBusy: Slider; partQuiet: Slider; partPeak: Slider; partCap: Slider; partSpeed: Slider; partSize: Slider;
     magnetSelf: Slider; magnetGateway: Slider; magnetLan: Slider; magnetLocal: Slider; magnetInternet: Slider; magnetMulticast: Slider;
-    magnetCross: Slider; magnetRange: Slider; gravity: Slider; swirl: Slider; chargeAmt: Slider; spring: Slider; linkSpan: Slider;
+    magnetCross: Slider; magnetRange: Slider; magnetTraffic: Slider; gravity: Slider; swirl: Slider; chargeAmt: Slider; spring: Slider; linkSpan: Slider;
     drag: Slider; centerPull: Slider; stringAmt: Slider;
     physPulse: Toggle; partPulse: Toggle;
   } | null = null;
@@ -1226,16 +1229,39 @@ export class Settings {
       onInput: (v) => { this.anim.nodeWeight = v / 100; this.persistAnim(); },
     });
     const edges = new Slider({
-      label: "edges", title: "link brightness (traffic spark size is under Physics)",
+      label: "thickness", title: "how thick each edge ribbon is. The body stays translucent; the data light runs down the middle",
       min: 30, max: 250, step: 5, value: Math.round(this.anim.edgeWeight * 100),
       format: (v) => `${v}%`,
       onInput: (v) => { this.anim.edgeWeight = v / 100; this.persistAnim(); },
     });
+    const edgeOpacity = new Slider({
+      label: "opacity", title: "how solid the edge body is. 50% leaves the traveling light visible inside the line",
+      min: 5, max: 100, step: 5, value: Math.round(this.anim.edgeOpacity * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.edgeOpacity = v / 100; this.persistAnim(); },
+    });
+    const nodeShape = chips(NODE_SHAPE_OPTIONS, this.anim.nodeShape, (v) => { this.anim.nodeShape = v; this.persistAnim(); });
     const glow = chips(EDGE_GLOWS, this.anim.edgeGlow, (v) => { this.anim.edgeGlow = v; this.persistAnim(); });
-    const fabric = chips(FABRIC_OPTIONS, this.anim.graphFabric, (v) => { this.anim.graphFabric = v; this.persistAnim(); });
-    const space = chips(GRAPH_SPACE_OPTIONS, this.anim.graphSpace, (v) => { this.anim.graphSpace = v; this.persistAnim(); });
-    const layout = chips(GRAPH_LAYOUT_OPTIONS, this.anim.graphLayout, (v) => { this.anim.graphLayout = v; this.persistAnim(); });
-    const links = chips(GRAPH_LINK_OPTIONS, this.anim.graphLinks, (v) => { this.anim.graphLinks = v; this.persistAnim(); });
+    const syncLibrary = () => {
+      library.set(matchStyleLibrary({
+        fabric: this.anim.graphFabric,
+        graphSpace: this.anim.graphSpace,
+        graphLayout: this.anim.graphLayout,
+        graphLinks: this.anim.graphLinks,
+      }) ?? "");
+    };
+    const fabric = chips(FABRIC_OPTIONS, this.anim.graphFabric, (v) => { this.anim.graphFabric = v; this.persistAnim(); syncLibrary(); });
+    const space = chips(GRAPH_SPACE_OPTIONS, this.anim.graphSpace, (v) => { this.anim.graphSpace = v; this.persistAnim(); syncLibrary(); });
+    const layout = chips(GRAPH_LAYOUT_OPTIONS, this.anim.graphLayout, (v) => { this.anim.graphLayout = v; this.persistAnim(); syncLibrary(); });
+    const links = chips(GRAPH_LINK_OPTIONS, this.anim.graphLinks, (v) => { this.anim.graphLinks = v; this.persistAnim(); syncLibrary(); });
+    const library = chips(STYLE_LIBRARY_OPTIONS, matchStyleLibrary(this.anim) ?? "", (id) => {
+      const pins = resolveStyleLibrary(id);
+      if (pins.fabric) { this.anim.graphFabric = pins.fabric; fabric.set(pins.fabric); }
+      if (pins.graphSpace) { this.anim.graphSpace = pins.graphSpace; space.set(pins.graphSpace); }
+      if (pins.graphLayout) { this.anim.graphLayout = pins.graphLayout; layout.set(pins.graphLayout); }
+      if (pins.graphLinks) { this.anim.graphLinks = pins.graphLinks; links.set(pins.graphLinks); }
+      this.persistAnim();
+    });
     const focus = chips(FOCUS_MODES, this.anim.focus, (v) => { this.anim.focus = v; this.persistAnim(); });
     const glowAmt = new Slider({
       label: "glow", title: "how bright the traveling edge highlight is",
@@ -1311,14 +1337,14 @@ export class Settings {
     const graphBits = document.createElement("div");
     graphBits.className = "look-stack";
     graphBits.append(
-      labeled("glow", glow.el), labeled("style", fabric.el), labeled("space", space.el),
+      labeled("shape", nodeShape.el), labeled("glow", glow.el), labeled("library", library.el), labeled("style", fabric.el), labeled("space", space.el),
       labeled("layout", layout.el), labeled("links", links.el),
     );
-    const graphWrap = lookBlock("", graphBits, labels, shown, nodes, edges, glowAmt, glowSpeed);
+    const graphWrap = lookBlock("", graphBits, labels, shown, nodes, edges, edgeOpacity, glowAmt, glowSpeed);
     const lookSec = document.createElement("section");
     lookSec.className = "sec";
     lookSec.innerHTML = `<div class="sec-title">Look</div>
-      <div class="sec-hint">Label size, idle names, node and edge scale, edge glow, and graph style. Style is a 2D or 3D mesh any graph plugin can use (\`style.fabric\` / Look → style). Space forces a flat or volumetric layout. Layout pins tree / globe / bars, animated models, and insight placements: fractals (sierp / hilbert / koch / julia), radio FFT (spectrum / waterfall / carrier / array), and data structures (heap / trie / hash / matrix / queue) that map rate, hops, IPs, and spectrum bins. Links add directional arrows and hub bundling. Dice → graph style rolls style, space, layout, and links. Auto-tune eases labels, sparks, glow, sky, and pixel density if the last 30 seconds average under 10 fps.</div>`;
+      <div class="sec-hint">Label size, idle names, node shape, and edge ribbons. Edges are translucent with a data light running inside; opacity defaults to 50% and thickness is the ribbon width. Shape picks one form or mixed, and auto keeps the view's own shapes (or a form per device type). Library is a named animated or still 3D/2D stack any graph plugin can use as style.library. Auto-tune eases labels, sparks, glow, sky, and pixel density if the last 30 seconds average under 10 fps.</div>`;
     lookSec.append(autoTune.el, graphWrap);
 
     const magFmt = (v: number) => (Math.abs(v) < 3 ? "off" : v > 0 ? `attract ${v}%` : `repel ${-v}%`);
@@ -1356,6 +1382,11 @@ export class Settings {
       label: "cross", title: "attract or repel nodes of different types (LAN vs internet, and so on)",
       min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetCross * 100), format: magFmt,
       onInput: (v) => { this.anim.magnetCross = v / 100; this.persistAnim(); },
+    });
+    const magnetTraffic = new Slider({
+      label: "traffic", title: "highest-traffic nodes attract or repel the nodes linked to them",
+      min: -100, max: 100, step: 5, value: Math.round(this.anim.magnetTraffic * 100), format: magFmt,
+      onInput: (v) => { this.anim.magnetTraffic = v / 100; this.persistAnim(); },
     });
     const magnetRange = new Slider({
       label: "range", title: "how far magnets reach",
@@ -1465,7 +1496,7 @@ export class Settings {
       checked: this.anim.audioParts,
       onChange: (on) => { this.anim.audioParts = on; setMod("particles", on); this.persistAnim(); },
     });
-    const magnetWrap = lookBlock("magnets", null, magnetSelf, magnetGateway, magnetLan, magnetLocal, magnetInternet, magnetMulticast, magnetCross, magnetRange);
+    const magnetWrap = lookBlock("magnets", null, magnetSelf, magnetGateway, magnetLan, magnetLocal, magnetInternet, magnetMulticast, magnetCross, magnetTraffic, magnetRange);
     magnetWrap.querySelector(".look-head")!.appendChild(physPulse.el);
     const fieldWrap = lookBlock("field", null, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt);
     const sparkWrap = lookBlock("sparks", null, partAmt, partBusy, partQuiet, partPeak, partCap, partSpeed, partSize);
@@ -1473,7 +1504,7 @@ export class Settings {
     const physSec = document.createElement("section");
     physSec.className = "sec";
     physSec.innerHTML = `<div class="sec-title">Physics</div>
-      <div class="sec-hint">Cut traffic sparks with density / rate / quiet / peak / cap. Magnets attract or repel each node type. String sags the edges; gravity, swirl, spread, and springs move the cloud. Pulse lives under Audio → modulate too.</div>`;
+      <div class="sec-hint">Cut traffic sparks with density / rate / quiet / peak / cap. Magnets attract or repel each node type. Traffic does the same for the busiest nodes and the nodes linked to them. String sags the edges; gravity, swirl, spread, and springs move the cloud. Pulse lives under Audio → modulate too.</div>`;
     physSec.append(sparkWrap, magnetWrap, fieldWrap);
     this.pane("physics").appendChild(physSec);
 
@@ -1519,14 +1550,14 @@ export class Settings {
     sec.append(row, bgWrap, skyWrap, floorWrap, layoutWrap, grid);
     this.animUi = {
       follow, cycle, randomize, setSky, setShape,
-      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, sharedSky, setFocus: focus.set, setGlow: glow.set, setFabric: fabric.set, setSpace: space.set, setLayout: layout.set, setLinks: links.set, setMod,
+      setDrive: drive.set, setThemeCycle: themeCycle.set, setSkyCycle: skyCycle.set, setMosaic: mosaic.set, setHero: hero.set, syncTiles, sharedTheme, sharedSky, setFocus: focus.set, setGlow: glow.set, setNodeShape: nodeShape.set, setFabric: fabric.set, setSpace: space.set, setLayout: layout.set, setLinks: links.set, setMod,
       skyPulse, floorPulse, bgPulse,
       skyOp, skyBr, skySp, skyEz, skyPhoto, skyAi, gridOp, gridBr, gridSize, gridFollow, gridColor, bgColor, bgOp,
       yaw, pitch, pitchCycle, zoom, zoomCycle, cadence, camAudio, camChange, camGaze, camInertia, camEase, camTheme, sens,
-      labels, shown, nodes, edges, glowAmt, glowSpeed, autoTune,
+      labels, shown, nodes, edges, edgeOpacity, glowAmt, glowSpeed, autoTune,
       partAmt, partBusy, partQuiet, partPeak, partCap, partSpeed, partSize,
       magnetSelf, magnetGateway, magnetLan, magnetLocal, magnetInternet, magnetMulticast,
-      magnetCross, magnetRange, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt,
+      magnetCross, magnetRange, magnetTraffic, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt,
       physPulse, partPulse,
     };
     sec.querySelector(".reset")!.addEventListener("click", () => {
@@ -1685,7 +1716,10 @@ export class Settings {
         this.onInstancesChange?.();
       });
     });
-    sec.append(auth, include.el, list, form, inst, instList);
+    const libraryHost = document.createElement("div");
+    libraryHost.className = "source-list";
+    sec.append(auth, include.el, libraryHost, list, form, inst, instList);
+    void this.mountSourceLibrary(libraryHost);
     const remixHost = document.createElement("div");
     this.remixPickerHost = remixHost;
     sec.append(remixHost);
@@ -1715,6 +1749,94 @@ export class Settings {
       (pairing) => { void this.onRemixSave?.(pairing); },
       () => { this.onRemixClear?.(); },
     );
+  }
+
+  private async mountSourceLibrary(host: HTMLElement): Promise<void> {
+    const title = document.createElement("div");
+    title.className = "sec-title";
+    title.textContent = "Library";
+    const hint = document.createElement("div");
+    hint.className = "sec-hint";
+    hint.textContent = "Third-party feeds. Add one, or several — they land in the registry and stay off the ticker until you enable headlines. Plugins name the same ids as datasource.library and can overlay interval, url, or fields.";
+    host.append(title, hint);
+    try {
+      const r = await apiFetch("/api/sources/library");
+      if (!r.ok) return;
+      const data = await r.json() as { library?: { id: string; label: string; hint?: string; vendor?: string; type?: string; group?: string; featured?: boolean }[] };
+      const rows = data.library ?? [];
+      const jsonlint = rows.filter((row) => row.vendor === "JSONLint");
+      for (const row of rows) {
+        if (row.vendor === "JSONLint") continue;
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "btn";
+        btn.textContent = row.label || row.id;
+        btn.title = [row.vendor, row.type, row.hint].filter(Boolean).join(" · ");
+        btn.addEventListener("click", () => {
+          void apiFetch("/api/sources", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ library: row.id }),
+          }).then(() => this.refreshSources());
+        });
+        host.append(btn);
+      }
+      if (jsonlint.length) this.mountJsonlintPicker(host, jsonlint);
+    } catch {
+      hint.textContent = "Source library unavailable (is the monitor running?)";
+    }
+  }
+
+  private mountJsonlintPicker(
+    host: HTMLElement,
+    rows: { id: string; label: string; hint?: string; group?: string; featured?: boolean }[],
+  ): void {
+    const wrap = document.createElement("div");
+    wrap.className = "source-jsonlint";
+    const label = document.createElement("div");
+    label.className = "sec-hint";
+    const link = document.createElement("a");
+    link.href = "https://jsonlint.com/datasets";
+    link.target = "_blank";
+    link.rel = "noreferrer";
+    link.textContent = "jsonlint.com/datasets";
+    label.append("Datasets from ", link, ". Useful reference sets are listed first; the rest of the catalog is in the groups below.");
+    const row = document.createElement("div");
+    row.className = "row";
+    const select = document.createElement("select");
+    select.name = "jsonlint";
+    const addGroup = (name: string, items: typeof rows) => {
+      if (!items.length) return;
+      const group = document.createElement("optgroup");
+      group.label = name;
+      for (const item of items) {
+        const opt = document.createElement("option");
+        opt.value = item.id;
+        opt.textContent = item.label || item.id;
+        opt.title = item.hint || "";
+        group.append(opt);
+      }
+      select.append(group);
+    };
+    addGroup("Useful", rows.filter((item) => item.featured));
+    const groups = [...new Set(rows.filter((item) => !item.featured).map((item) => item.group || "Other"))];
+    for (const name of groups) addGroup(name, rows.filter((item) => !item.featured && (item.group || "Other") === name));
+    const add = document.createElement("button");
+    add.type = "button";
+    add.className = "btn";
+    add.textContent = "add dataset";
+    add.addEventListener("click", () => {
+      const id = select.value;
+      if (!id) return;
+      void apiFetch("/api/sources", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ library: id }),
+      }).then(() => this.refreshSources());
+    });
+    row.append(select, add);
+    wrap.append(label, row);
+    host.append(wrap);
   }
 
   private async refreshSources(): Promise<void> {
@@ -2361,6 +2483,7 @@ export class Settings {
     ui.sharedSky.checked = a.mosaicUniqueSkies === false;
     ui.setFocus(a.focus);
     ui.setGlow(a.edgeGlow);
+    ui.setNodeShape(a.nodeShape);
     ui.setFabric(a.graphFabric);
     ui.setSpace(a.graphSpace);
     ui.setLayout(a.graphLayout);
@@ -2385,6 +2508,7 @@ export class Settings {
     ui.autoTune.checked = a.autoTune !== false;
     ui.nodes.value = Math.round(a.nodeWeight * 100);
     ui.edges.value = Math.round(a.edgeWeight * 100);
+    ui.edgeOpacity.value = Math.round(a.edgeOpacity * 100);
     ui.glowAmt.value = Math.round(a.edgeGlowAmt * 100);
     ui.glowSpeed.value = Math.round(a.edgeGlowSpeed * 100);
     ui.partAmt.value = Math.round(a.partAmt * 100);
@@ -2402,6 +2526,7 @@ export class Settings {
     ui.magnetMulticast.value = Math.round(a.magnetMulticast * 100);
     ui.magnetCross.value = Math.round(a.magnetCross * 100);
     ui.magnetRange.value = Math.round(a.magnetRange * 100);
+    ui.magnetTraffic.value = Math.round((a.magnetTraffic ?? 0) * 100);
     ui.gravity.value = Math.round(a.gravity * 100);
     ui.swirl.value = Math.round(a.swirl * 100);
     ui.chargeAmt.value = Math.round(a.chargeAmt * 100);
@@ -2461,6 +2586,8 @@ export class Settings {
     localStorage.setItem(`${p}.anim.autoTune`, a.autoTune !== false ? "1" : "0");
     localStorage.setItem(`${p}.anim.nodeWeight`, String(a.nodeWeight));
     localStorage.setItem(`${p}.anim.edgeWeight`, String(a.edgeWeight));
+    localStorage.setItem(`${p}.anim.edgeOpacity`, String(a.edgeOpacity));
+    localStorage.setItem(`${p}.anim.nodeShape`, a.nodeShape);
     localStorage.setItem(`${p}.anim.edgeGlow`, a.edgeGlow);
     localStorage.setItem(`${p}.anim.edgeGlowAmt`, String(a.edgeGlowAmt));
     localStorage.setItem(`${p}.anim.edgeGlowSpeed`, String(a.edgeGlowSpeed));
@@ -2503,6 +2630,7 @@ export class Settings {
     localStorage.setItem(`${p}.anim.magnetMulticast`, String(a.magnetMulticast));
     localStorage.setItem(`${p}.anim.magnetCross`, String(a.magnetCross));
     localStorage.setItem(`${p}.anim.magnetRange`, String(a.magnetRange));
+    localStorage.setItem(`${p}.anim.magnetTraffic`, String(a.magnetTraffic ?? 0));
     localStorage.setItem(`${p}.anim.gravity`, String(a.gravity));
     localStorage.setItem(`${p}.anim.swirl`, String(a.swirl));
     localStorage.setItem(`${p}.anim.chargeAmt`, String(a.chargeAmt));
@@ -2812,6 +2940,8 @@ function loadAnim(prefix: string): DreamAnim {
     autoTune: localStorage.getItem(`${prefix}.anim.autoTune`) !== "0",
     nodeWeight: n("nodeWeight", d.nodeWeight, B.nodeWeight.min, B.nodeWeight.max),
     edgeWeight: n("edgeWeight", d.edgeWeight, B.edgeWeight.min, B.edgeWeight.max),
+    edgeOpacity: n("edgeOpacity", d.edgeOpacity, B.edgeOpacity.min, B.edgeOpacity.max),
+    nodeShape: nodeShapePin(localStorage.getItem(`${prefix}.anim.nodeShape`)),
     edgeGlow: parseGlow(localStorage.getItem(`${prefix}.anim.edgeGlow`)),
     edgeGlowAmt: n("edgeGlowAmt", d.edgeGlowAmt, B.edgeGlowAmt.min, B.edgeGlowAmt.max),
     edgeGlowSpeed: n("edgeGlowSpeed", d.edgeGlowSpeed, B.edgeGlowSpeed.min, B.edgeGlowSpeed.max),
@@ -2844,6 +2974,7 @@ function loadAnim(prefix: string): DreamAnim {
     magnetMulticast: n("magnetMulticast", d.magnetMulticast, B.magnet.min, B.magnet.max),
     magnetCross: n("magnetCross", d.magnetCross, B.magnet.min, B.magnet.max),
     magnetRange: n("magnetRange", d.magnetRange, B.magnetRange.min, B.magnetRange.max),
+    magnetTraffic: n("magnetTraffic", d.magnetTraffic, B.magnet.min, B.magnet.max),
     gravity: n("gravity", d.gravity, B.gravity.min, B.gravity.max),
     swirl: n("swirl", d.swirl, B.swirl.min, B.swirl.max),
     chargeAmt: n("chargeAmt", d.chargeAmt, B.chargeAmt.min, B.chargeAmt.max),

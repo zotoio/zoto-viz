@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  applyTrafficNeighbours,
   clampParticleCap,
   easePhysToward,
+  hottestTrafficKeys,
   MAGNET_FIELDS,
   magnetPair,
   MAX_PARTICLES,
@@ -49,8 +51,8 @@ describe("string path", () => {
   });
 
   it("pins a flexible edge to both nodes and bows with their pull", () => {
-    expect(edgeDrawSegs(0)).toBe(4);
-    expect(edgeDrawSegs(1)).toBe(8);
+    expect(edgeDrawSegs(0)).toBe(14);
+    expect(edgeDrawSegs(1)).toBe(20);
     const ends = organicEdgePoint(0, 0, 0, 10, 0, 0, 0, 0, 4, 0);
     const tail = organicEdgePoint(0, 0, 0, 10, 0, 0, 1, 0, 4, 0);
     expect(ends).toEqual([0, 0, 0]);
@@ -65,6 +67,11 @@ describe("string path", () => {
     expect(away[0]).toBeLessThan(14);
     expect(organicEdgePoint(10, 0, 0, 20, 0, 0, 0, 8, 0, 0)).toEqual([10, 0, 0]);
     expect(organicEdgePoint(10, 0, 0, 20, 0, 0, 1, 8, 0, 0)).toEqual([20, 0, 0]);
+    const towardHub = organicEdgePoint(0, 0, 0, 10, 0, 0, 0.5, 8, 0, 0, 0, 0, 0, 0, 0, 0, 1, 5, 10, 0);
+    expect(towardHub[1]).toBeGreaterThan(1);
+    const sideways = organicEdgePoint(10, 0, 0, 20, 0, 0, 0.5, 0, 40, 0);
+    expect(sideways[0]).toBeCloseTo(15, 1);
+    expect(sideways[1]).toBeGreaterThan(4);
   });
 
   it("pulls the midpoint toward a hub when bundling", () => {
@@ -72,6 +79,38 @@ describe("string path", () => {
     const mid = stringPoint(0, 0, 0, 10, 0, 0, 0.5, 0, 0, 0, 40, 0, 1);
     expect(mid[1]).toBeGreaterThan(10);
     expect(mid[0]).toBeLessThan(4);
+  });
+});
+
+describe("highest-traffic neighbours", () => {
+  const body = (key: number, rate: number, x: number) => ({ key, rate, x, y: 0, z: 0, vx: 0, vy: 0, vz: 0 });
+
+  it("keeps the leader and peers at least half as busy", () => {
+    const keys = hottestTrafficKeys([
+      body(1, 100, 0), body(2, 60, 10), body(3, 40, 20), body(4, 0, 30),
+    ]);
+    expect([...keys].sort()).toEqual([1, 2]);
+  });
+
+  it("attracts a neighbour toward the hot node and ignores a cold edge", () => {
+    const hot = body(1, 100, 0);
+    const near = body(2, 10, 40);
+    const coldA = body(3, 1, 0);
+    const coldB = body(4, 1, 40);
+    const links = [{ source: hot, target: near }, { source: coldA, target: coldB }];
+    applyTrafficNeighbours(links, hottestTrafficKeys([hot, near, coldA, coldB]), 1, 1);
+    expect(near.vx).toBeLessThan(0);
+    expect(hot.vx).toBeGreaterThan(0);
+    expect(coldA.vx).toBe(0);
+    expect(coldB.vx).toBe(0);
+  });
+
+  it("repels the neighbour away from the hot node", () => {
+    const hot = body(1, 100, 0);
+    const near = body(2, 5, 40);
+    applyTrafficNeighbours([{ source: hot, target: near }], new Set([1]), -1, 1);
+    expect(near.vx).toBeGreaterThan(0);
+    expect(hot.vx).toBeLessThan(0);
   });
 });
 
@@ -87,7 +126,7 @@ describe("magnetPair", () => {
 describe("easePhysToward", () => {
   const zero = {
     magnetSelf: 0, magnetGateway: 0, magnetLan: 0, magnetLocal: 0,
-    magnetInternet: 0, magnetMulticast: 0, magnetCross: 0, magnetRange: 1,
+    magnetInternet: 0, magnetMulticast: 0, magnetCross: 0, magnetRange: 1, magnetTraffic: 0,
     gravity: 0, swirl: 0, chargeAmt: 1, spring: 1, linkSpan: 1, drag: 0.4,
     centerPull: 1, stringAmt: 0,
   };

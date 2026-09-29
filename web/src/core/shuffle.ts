@@ -213,6 +213,7 @@ const ANIM_NUM_PHYSICS: [keyof DreamAnim, Bound][] = [
   ["magnetMulticast", DREAM_BOUNDS.magnet],
   ["magnetCross", DREAM_BOUNDS.magnet],
   ["magnetRange", DREAM_BOUNDS.magnetRange],
+  ["magnetTraffic", DREAM_BOUNDS.magnet],
   ["gravity", DREAM_BOUNDS.gravity],
   ["swirl", DREAM_BOUNDS.swirl],
   ["chargeAmt", DREAM_BOUNDS.chargeAmt],

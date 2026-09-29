@@ -206,6 +206,8 @@ export interface FabricSyncOpts {
   additive: boolean;
   /** 0–1 view-morph ease; fades and blends tube / cloth / ribbon. */
   morph?: number;
+  /** Body opacity of edges. The traveling light stays inside that body. */
+  edgeOpacity?: number;
 }
 
 const NODE_LON = 8;
@@ -401,6 +403,8 @@ attribute float aGba;
 attribute float aAlpha;
 varying float vGlow;
 varying float vAlpha;
+varying float vFlow;
+varying float vEdge;
 uniform float uTime;
 uniform float uPulse;
 uniform float uGlowAmt;
@@ -433,6 +437,7 @@ function fabricMaterial(): THREE.MeshStandardMaterial {
     shader.uniforms.uGlowSpeed = { value: 1 };
     shader.uniforms.uGlowMode = { value: 0 };
     shader.uniforms.uKind = { value: 0 };
+    shader.uniforms.uEdgeOpacity = { value: 0.5 };
     (mat.userData as { uniforms?: typeof shader.uniforms }).uniforms = shader.uniforms;
     shader.vertexShader = shader.vertexShader
       .replace("#include <common>", `#include <common>\n${FABRIC_GLSL}`)
@@ -458,12 +463,14 @@ if (aGba > 0.001) {
   cometGlow += aGba * (uGlowMode < 0.5 ? comet(1.0 - aAlong, phase) : pulse(1.0 - aAlong, phase));
 }
 vGlow = aGlow + cometGlow * uGlowAmt;
-vAlpha = aAlpha;`,
+vFlow = cometGlow * uGlowAmt;
+vEdge = aKind > 0.5 ? 1.0 : 0.0;
+vAlpha = vEdge > 0.5 ? aAlpha * uEdgeOpacity : aAlpha;`,
       );
     shader.fragmentShader = shader.fragmentShader
-      .replace("#include <common>", "#include <common>\nvarying float vGlow;\nvarying float vAlpha;")
+      .replace("#include <common>", "#include <common>\nvarying float vGlow;\nvarying float vAlpha;\nvarying float vFlow;\nvarying float vEdge;")
       .replace("#include <color_fragment>", "#include <color_fragment>\ndiffuseColor.rgb *= 0.48;\ndiffuseColor.a *= vAlpha;")
-      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance = vColor.rgb * min(vGlow, 0.35) * 0.06;")
+      .replace("#include <emissivemap_fragment>", "#include <emissivemap_fragment>\ntotalEmissiveRadiance = vEdge > 0.5 ? vColor.rgb * (0.08 + vFlow * 2.2) : vColor.rgb * min(vGlow, 0.35) * 0.06;")
       .replace("#include <opaque_fragment>", "outgoingLight = min(outgoingLight, max(vColor.rgb, vec3(0.04)));\n#include <opaque_fragment>");
   };
   return mat;
@@ -1246,6 +1253,7 @@ export class GraphFabric {
       u.uGlowSpeed.value = opts.glowSpeed;
       u.uGlowMode.value = opts.glowMode === "pulse" ? 1 : 0;
       u.uKind.value = this.kindFromN + (this.kindN - this.kindFromN) * k;
+      if (u.uEdgeOpacity) u.uEdgeOpacity.value = opts.edgeOpacity ?? 0.5;
     }
     this.mat.opacity = 0.22 + 0.78 * k;
     this.mesh.scale.setScalar(0.86 + 0.14 * k);

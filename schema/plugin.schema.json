@@ -204,6 +204,25 @@
           "items": {
             "$ref": "#/$defs/streamRef"
           }
+        },
+        "library": {
+          "description": "Source-library id or list (open-meteo, usgs-quakes, bbc-news). A list combines recipes. Polling starts when Settings or set_source adds the row.",
+          "oneOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            },
+            {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              }
+            }
+          ]
         }
       }
     },
@@ -497,7 +516,7 @@
     "style": {
       "type": "object",
       "additionalProperties": true,
-      "description": "Free-form style map. Keys used today (hints only): nodeColor (role|kind|heat|proto|hash), nodeScale (default|bytes|rate), labels (default|all|none|top), flatten, fabric (true|tubes|cloth|ribbon \u2014 nodes and edges become an animated mesh with the same hover/selection/glow)."
+      "description": "Free-form style map. Keys used today (hints only): nodeColor (role|kind|heat|proto|hash), nodeScale (default|bytes|rate), labels (default|all|none|top), flatten, fabric (true|tubes|cloth|ribbon \u2014 nodes and edges become an animated mesh with the same hover/selection/glow), library (style-library id or list, e.g. orbit-helix or [jelly-bloom, neon-halo]). library combines recipes left to right; fabric/flatten on the same map extend the result. Explicit look.graphLayout / graphSpace / graphLinks still win."
     },
     "layout": {
       "type": "object",
@@ -622,6 +641,31 @@
         },
         "style": {
           "$ref": "#/$defs/style"
+        },
+        "datasource": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Optional library ids this view wants. Same ids as list_source_library.",
+          "properties": {
+            "library": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 64
+                },
+                {
+                  "type": "array",
+                  "maxItems": 8,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 64
+                  }
+                }
+              ]
+            }
+          }
         },
         "layout": {
           "$ref": "#/$defs/layout"

@@ -1065,6 +1065,14 @@ body.mic-off .feed-mic { opacity: 0.45; pointer-events: none; }
 }
 .settings-pop .sec-hint { color: var(--muted); font-size: 11.5px; line-height: 1.4; margin-bottom: 10px; }
 .settings-pop .source-list { display: flex; flex-direction: column; gap: 8px; margin: 10px 0 16px; }
+.settings-pop .source-jsonlint { display: flex; flex-direction: column; gap: 6px; margin-top: 4px; }
+.settings-pop .source-jsonlint .row { display: flex; gap: 8px; align-items: center; }
+.settings-pop .source-jsonlint select {
+  flex: 1; min-width: 0; height: 28px; padding: 0 8px;
+  background: var(--chip); color: var(--fg);
+  border: 1px solid var(--line); border-radius: 6px; font: inherit; font-size: 12px;
+}
+.settings-pop .source-jsonlint a { color: var(--link); }
 .settings-pop .source-block { display: flex; flex-direction: column; gap: 4px; }
 .settings-pop .source-row { display: flex; align-items: center; gap: 10px; }
 .auth-setup { font-size: 12px; line-height: 1.45; color: var(--muted); margin: 6px 0 10px; }

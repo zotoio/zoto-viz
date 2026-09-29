@@ -58,6 +58,7 @@ export function sparksHot(a: Pick<DreamAnim, "partSize" | "partAmt" | "partBusy"
 /** Idempotent. Leaves a calm mix (DEFAULT_DREAM) unchanged. */
 export function guardReadableAnim(anim: DreamAnim): DreamAnim {
   const next = { ...anim };
+  if (!Number.isFinite(next.magnetTraffic)) next.magnetTraffic = 0;
   if (cameraDriven(next)) {
     next.camInertia = floor(next.camInertia, READABLE.camInertia);
     next.moveEase = floor(next.moveEase, READABLE.moveEase);
@@ -78,6 +79,7 @@ export function guardReadableAnim(anim: DreamAnim): DreamAnim {
     next.magnetInternet = clampAbs(next.magnetInternet, READABLE.magnetAbs);
     next.magnetMulticast = clampAbs(next.magnetMulticast, READABLE.magnetAbs);
     next.magnetCross = clampAbs(next.magnetCross, READABLE.magnetAbs);
+    next.magnetTraffic = clampAbs(next.magnetTraffic, READABLE.magnetAbs);
   }
   next.labelWeight = cap(next.labelWeight, READABLE.labelWeight);
   next.labelCount = cap(next.labelCount, READABLE.labelCount);

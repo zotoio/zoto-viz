@@ -340,6 +340,36 @@ describe("visualisation.yml", () => {
     expect(mode.stageOnly).toBe(true);
   });
 
+  it("fills look pins from style.library and keeps an explicit layout", () => {
+    const spec = toPluginView({
+      id: "jelly-view",
+      name: "Jelly view",
+      version: 1,
+      visualisation: {
+        engine: "graph",
+        style: { library: ["jelly-bloom", "neon-halo"] },
+        datasource: { library: "usgs-quakes" },
+      },
+    });
+    expect(spec.sourceLibrary).toEqual(["usgs-quakes"]);
+    expect(spec.style?.fabric).toBe("neon");
+    expect(spec.look?.graphLayout).toBe("halo");
+    expect(spec.look?.graphSpace).toBe("space");
+    const pinned = toPluginView({
+      id: "jelly-view",
+      name: "Jelly view",
+      version: 1,
+      visualisation: {
+        engine: "graph",
+        style: { library: "jelly-bloom" },
+        look: { graphLayout: "tree" },
+      },
+    });
+    expect(pinned.look?.graphLayout).toBe("tree");
+    expect(pinned.look?.graphFabric).toBe("jelly");
+    expect(pinned.style?.fabric).toBe("jelly");
+  });
+
   it("parses a mosaic wall pin and ignores a one-tile look", () => {
     const spec = toPluginView({
       id: "syscon",

@@ -15,7 +15,7 @@
 
 import { forceCenter, forceLink, forceManyBody, forceSimulation, type Simulation } from "d3-force-3d";
 import {
-  ellipseShell, flattenLan, gravityForce, magnetForce, slotRing, swirlForce, type PhysNode,
+  ellipseShell, flattenLan, gravityForce, magnetForce, slotRing, swirlForce, trafficNeighbourForce, type PhysNode,
 } from "./physics";
 import { kernelForce, type ForceKernel } from "./layout-kernels";
 
@@ -58,6 +58,8 @@ export interface LayoutParams {
   magnets: number[];
   magnetCross: number;
   magnetRange: number;
+  /** −1 repel … +1 attract: highest-traffic nodes vs their linked neighbours */
+  magnetTraffic: number;
   gravity: number;
   swirl: number;
   /** audio pulse multiplier on magnets / gravity / swirl */
@@ -71,7 +73,7 @@ export interface LayoutParams {
 
 export const DEFAULT_PARAMS: LayoutParams = {
   spring: 1, chargeAmt: 1, linkSpan: 1, drag: 0.35, centerPull: 1,
-  magnets: ROLES.map(() => 0), magnetCross: 0, magnetRange: 0.5, gravity: 0, swirl: 0, pulse: 1,
+  magnets: ROLES.map(() => 0), magnetCross: 0, magnetRange: 0.5, magnetTraffic: 0, gravity: 0, swirl: 0, pulse: 1,
   spreadX: 1, spreadZ: 1, flatten: true, moveK: 1,
 };
 
@@ -166,6 +168,9 @@ export class LayoutSim {
       .force("slot", slotRing<WNode>((n) => n.shellR, (n) => (n.slotOn ? undefined : 0), (n) => n.theta, (n) => n.rate, () => p().spreadX, () => p().spreadZ))
       .force("flatten", flattenLan<WNode>(0.12, () => p().flatten, (n) => n.relax))
       .force("magnet", this.magnet)
+      .force("traffic", trafficNeighbourForce(
+        () => this.links, () => this.nodes, () => p().magnetTraffic * p().pulse,
+      ))
       .force("gravity", gravityForce(() => p().gravity, () => p().pulse))
       .force("swirl", swirlForce(() => p().swirl, () => p().pulse))
       .stop();

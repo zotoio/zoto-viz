@@ -28,11 +28,12 @@ describe("assessVisibility", () => {
     expect(r.fix.lumaCap).toBe(SKY_LUMA_CAP);
   });
 
-  it("passes a fractal-bright sky that is still under the washout line", () => {
+  it("keeps light labels on a fractal-bright sky under the washout line", () => {
     const luma = 0.4;
+    expect(sceneInk(grayHex(luma)).darkText).toBe(false);
     const r = assessVisibility({ backdropLuma: luma, ...midnight, ...inkAt(luma) });
     expect(luma).toBeLessThan(GRAPH_WASH_LUMA);
-    expect(r.ok).toBe(true);
+    expect(r.graph.ok).toBe(true);
     expect(r.fix.additive).toBe(true);
     expect(r.fix.lumaCap).toBe(SKY_LUMA_CAP);
   });
@@ -64,7 +65,8 @@ describe("assessVisibility", () => {
       additive: bad.fix.additive,
       ...inkAt(luma),
     });
-    expect(r.ok).toBe(true);
+    expect(sceneInk(grayHex(luma)).fg).toBe("#ffffff");
+    expect(r.graph.ok).toBe(true);
     expect(r.graph.additiveVanish).toBe(false);
     expect(r.graph.washout).toBe(false);
   });
