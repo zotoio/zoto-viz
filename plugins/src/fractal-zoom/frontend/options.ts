@@ -115,8 +115,8 @@ export interface FractalOptions {
 }
 
 export const FRACTAL_DEFAULTS: FractalOptions = {
-  type: "mandel2d",
-  preset: "mandel-deep",
+  type: "mandelbulb",
+  preset: "bulb-classic",
   zoomSpeed: 0.55,
   zoomDir: "in",
   autoPilot: true,
@@ -124,7 +124,7 @@ export const FRACTAL_DEFAULTS: FractalOptions = {
   resetCam: false,
   manualOrbit: false,
   maxIter: 32,
-  maxSteps: 32,
+  maxSteps: 48,
   detail: 0.0012,
   ao: 0.55,
   shadow: 0.35,

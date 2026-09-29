@@ -13,6 +13,8 @@ export interface Cruise2 {
   vx: number;
   vy: number;
   heading: number;
+  /** Seconds committed to the current filament so a fork does not flicker. */
+  hold?: number;
 }
 
 export interface JuliaConst {
@@ -71,6 +73,25 @@ export function escape2(
 }
 
 const PROBE = 12;
+
+/** Stable 0/1 from a point, so a fork always takes the same passage. */
+function forkBit(x: number, y: number, z: number): number {
+  let h = 2166136261;
+  const mix = (v: number) => {
+    h = Math.imul(h ^ (Math.floor(v * 997) | 0), 16777619);
+  };
+  mix(x);
+  mix(y);
+  mix(z);
+  return (h >>> 0) & 1;
+}
+
+function dampAngle(cur: number, want: number, dt: number, omega: number): number {
+  let d = want - cur;
+  while (d > Math.PI) d -= Math.PI * 2;
+  while (d < -Math.PI) d += Math.PI * 2;
+  return cur + d * (1 - Math.exp(-Math.max(0.05, omega) * dt));
+}
 
 function dampVel(vel: number, target: number, dt: number, omega: number): number {
   const w = Math.max(0.05, omega);
@@ -133,8 +154,45 @@ export function steerEdge(c: Cruise2, scale: number, dt: number, maxIter: number
   }
   const along = hi - lo < 1.5 ? 0.12 : 0.28;
   const pull = hi - lo < 1.5 ? 0.35 : 0.85;
-  const desiredVx = (tx * along + rx * pull) * scale;
-  const desiredVy = (ty * along + ry * pull) * scale;
+  const baseAng = Math.atan2(ty, tx);
+  const arms = [-0.85, 0, 0.85];
+  let bestAng = baseAng;
+  let forkScore = -1e9;
+  let altAng = baseAng;
+  let forkAlt = -1e9;
+  for (const arm of arms) {
+    const ang = baseAng + arm;
+    const px = c.x + Math.cos(ang) * scale * 0.62;
+    const py = c.y + Math.sin(ang) * scale * 0.62;
+    const e = escape2(px, py, maxIter, julia);
+    const edgeNess = e.escaped ? Math.sin((Math.PI * Math.min(e.n, maxIter)) / maxIter) : 0.12;
+    const qx = px + Math.cos(ang + Math.PI / 2) * scale * 0.2;
+    const qy = py + Math.sin(ang + Math.PI / 2) * scale * 0.2;
+    const q = escape2(qx, qy, maxIter, julia);
+    let score = edgeNess * 5 + Math.abs(e.n - q.n);
+    if ((c.hold ?? 0) > 0) score -= Math.abs(arm) * 1.4;
+    if (score > forkScore) {
+      altAng = bestAng;
+      forkAlt = forkScore;
+      bestAng = ang;
+      forkScore = score;
+    } else if (score > forkAlt) {
+      altAng = ang;
+      forkAlt = score;
+    }
+  }
+  let hold = Math.max(0, (c.hold ?? 0) - dt);
+  let chosen = bestAng;
+  let gap = Math.abs(bestAng - altAng);
+  gap = Math.min(gap, Math.PI * 2 - gap);
+  if (hold <= 0 && forkAlt > 1.1 && gap > 0.35 && forkScore - forkAlt < 1.6) {
+    chosen = forkBit(c.x, c.y, 0) ? bestAng : altAng;
+    hold = 0.85;
+  }
+  const dirx = Math.cos(chosen);
+  const diry = Math.sin(chosen);
+  const desiredVx = (dirx * along + rx * pull) * scale;
+  const desiredVy = (diry * along + ry * pull) * scale;
   let vx = dampVel(c.vx, desiredVx, dt, 3.2);
   let vy = dampVel(c.vy, desiredVy, dt, 3.2);
   const step = Math.hypot(vx, vy) * dt;
@@ -145,7 +203,7 @@ export function steerEdge(c: Cruise2, scale: number, dt: number, maxIter: number
     vy *= k;
   }
   const heading = Math.hypot(vx, vy) > scale * 0.002 ? Math.atan2(vy, vx) : c.heading;
-  return { x: c.x + vx * dt, y: c.y + vy * dt, vx, vy, heading };
+  return { x: c.x + vx * dt, y: c.y + vy * dt, vx, vy, heading, hold };
 }
 
 export function referenceOrbit(
@@ -346,7 +404,7 @@ function bulbDe(x: number, y: number, z: number, power: number): number {
   let zz = z;
   let dr = 1;
   let r = 0;
-  for (let i = 0; i < 14; i++) {
+  for (let i = 0; i < 22; i++) {
     r = Math.hypot(zx, zy, zz);
     if (r > 4 || r < 1e-8) break;
     const theta = Math.acos(Math.min(1, Math.max(-1, zz / r)));
@@ -367,7 +425,7 @@ function boxDe(x: number, y: number, z: number, scale: number, fold: number): nu
   let zy = y;
   let zz = z;
   const s = scale;
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 16; i++) {
     zx = Math.min(1, Math.max(-1, zx)) * 2 - zx;
     zy = Math.min(1, Math.max(-1, zy)) * 2 - zy;
     zz = Math.min(1, Math.max(-1, zz)) * 2 - zz;
@@ -387,7 +445,7 @@ function boxDe(x: number, y: number, z: number, scale: number, fold: number): nu
 function mengerDe(x: number, y: number, z: number): number {
   let d = Math.max(Math.abs(x), Math.abs(y), Math.abs(z)) - 1;
   let s = 1;
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 6; i++) {
     const ax = Math.abs((x * s) % 2 - 1);
     const ay = Math.abs((y * s) % 2 - 1);
     const az = Math.abs((z * s) % 2 - 1);
@@ -427,7 +485,7 @@ function julia4De(x: number, y: number, z: number, p: DeParams): number {
   let zw = 0.2;
   let dr = 1;
   let r = 0;
-  for (let i = 0; i < 12; i++) {
+  for (let i = 0; i < 16; i++) {
     r = Math.hypot(zx, zy, zz, zw);
     if (r > 4) break;
     dr = 2 * r * dr + 1;
@@ -468,6 +526,8 @@ export interface Canyon3 {
   vz: number;
   heading: number;
   near: number;
+  /** Seconds committed to the current fork. */
+  hold?: number;
 }
 
 export const CANYON_HOME: Canyon3 = {
@@ -476,14 +536,19 @@ export const CANYON_HOME: Canyon3 = {
   vx: 0, vy: 0, vz: 0,
   heading: 0.4,
   near: 0,
+  hold: 0,
 };
 
-/** Glide the 3D focus along the surface, staying a short distance off the wall. */
-export function stepCanyon(c: Canyon3, dt: number, kind: number, params: DeParams, zoomLog: number): Canyon3 {
+/**
+ * Fly just off the distance field. Several headings are scored as corridors;
+ * when two of them both hug the surface, the run commits to one branch.
+ */
+export function stepCanyon(c: Canyon3, dt: number, kind: number, params: DeParams, _zoomLog: number): Canyon3 {
   if (!(dt > 0)) return c;
   const dist = de3(kind, c.fx, c.fy, c.fz, params);
   if (!Number.isFinite(dist)) return c;
-  const eps = 0.045;
+  const clearance = 0.04;
+  const eps = 0.012;
   const gx = de3(kind, c.fx + eps, c.fy, c.fz, params) - de3(kind, c.fx - eps, c.fy, c.fz, params);
   const gy = de3(kind, c.fx, c.fy + eps, c.fz, params) - de3(kind, c.fx, c.fy - eps, c.fz, params);
   const gz = de3(kind, c.fx, c.fy, c.fz + eps, params) - de3(kind, c.fx, c.fy, c.fz - eps, params);
@@ -491,9 +556,9 @@ export function stepCanyon(c: Canyon3, dt: number, kind: number, params: DeParam
   const nx = gx / gl;
   const ny = gy / gl;
   const nz = gz / gl;
-  let tx = ny * 0 - nz * 1;
-  let ty = nz * 0 - nx * 0;
-  let tz = nx * 1 - ny * 0;
+  let tx = -nz;
+  let ty = 0;
+  let tz = nx;
   const tl = Math.hypot(tx, ty, tz);
   if (tl < 1e-4) {
     tx = 1; ty = 0; tz = 0;
@@ -503,36 +568,76 @@ export function stepCanyon(c: Canyon3, dt: number, kind: number, params: DeParam
   const sx = ny * tz - nz * ty;
   const sy = nz * tx - nx * tz;
   const sz = nx * ty - ny * tx;
-  const slide = Math.cos(c.heading) * tx + Math.sin(c.heading) * sx;
-  const slideY = Math.cos(c.heading) * ty + Math.sin(c.heading) * sy;
-  const slideZ = Math.cos(c.heading) * tz + Math.sin(c.heading) * sz;
-  const target = Math.max(0.05, 0.22 / (1 + Math.max(0, zoomLog) * 0.35));
-  const push = Math.max(-0.4, Math.min(0.4, target - dist));
-  const speed = 0.42;
-  const dvx = slide * speed + nx * push * 2.2;
-  const dvy = slideY * speed + ny * push * 2.2;
-  const dvz = slideZ * speed + nz * push * 2.2;
-  let vx = dampVel(c.vx, dvx, dt, 2.6);
-  let vy = dampVel(c.vy, dvy, dt, 2.6);
-  let vz = dampVel(c.vz, dvz, dt, 2.6);
+  const look = 0.085;
+  const offsets = [-1.05, -0.48, 0, 0.48, 1.05];
+  const arms: { ang: number; score: number; dx: number; dy: number; dz: number }[] = [];
+  for (const off of offsets) {
+    const ang = c.heading + off;
+    const dx = Math.cos(ang) * tx + Math.sin(ang) * sx;
+    const dy = Math.cos(ang) * ty + Math.sin(ang) * sy;
+    const dz = Math.cos(ang) * tz + Math.sin(ang) * sz;
+    const d = de3(kind, c.fx + dx * look, c.fy + dy * look, c.fz + dz * look, params);
+    if (!Number.isFinite(d)) continue;
+    let score = 1.35 - Math.abs(d - clearance) / clearance;
+    if (d < clearance * 0.22) score -= 2.4;
+    if (d > clearance * 7) score -= 1.7;
+    if ((c.hold ?? 0) > 0) score -= Math.abs(off) * 0.7;
+    arms.push({ ang, score, dx, dy, dz });
+  }
+  arms.sort((a, b) => b.score - a.score);
+  const top = arms.slice(0, 2);
+  for (const arm of top) {
+    const qx = ny * arm.dz - nz * arm.dy;
+    const qy = nz * arm.dx - nx * arm.dz;
+    const qz = nx * arm.dy - ny * arm.dx;
+    const ql = Math.hypot(qx, qy, qz) || 1;
+    const side = 0.065;
+    const px = c.fx + arm.dx * look;
+    const py = c.fy + arm.dy * look;
+    const pz = c.fz + arm.dz * look;
+    const left = de3(kind, px - (qx / ql) * side, py - (qy / ql) * side, pz - (qz / ql) * side, params);
+    const right = de3(kind, px + (qx / ql) * side, py + (qy / ql) * side, pz + (qz / ql) * side, params);
+    const tight = Math.min(left, right);
+    const open = Math.max(left, right);
+    if (Number.isFinite(tight) && Number.isFinite(open) && tight < clearance * 1.4 && open > tight * 1.7) {
+      arm.score += 0.9;
+    }
+  }
+  top.sort((a, b) => b.score - a.score);
+  const best = top[0] ?? { ang: c.heading, score: 0 };
+  const alt = top[1] ?? best;
+  let hold = Math.max(0, (c.hold ?? 0) - dt);
+  let chosen = best.ang;
+  let gap = Math.abs(best.ang - alt.ang);
+  gap = Math.min(gap, Math.PI * 2 - gap);
+  if (hold <= 0 && alt.score > 0.15 && gap > 0.42 && best.score - alt.score < 0.6) {
+    chosen = forkBit(c.fx, c.fy, c.fz) ? best.ang : alt.ang;
+    hold = 1.2;
+  }
+  const heading = dampAngle(c.heading, chosen, dt, 2.2);
+  const slide = Math.cos(heading) * tx + Math.sin(heading) * sx;
+  const slideY = Math.cos(heading) * ty + Math.sin(heading) * sy;
+  const slideZ = Math.cos(heading) * tz + Math.sin(heading) * sz;
+  const push = Math.max(-0.22, Math.min(0.22, clearance - dist));
+  const speed = 0.16;
+  const rad = Math.hypot(c.fx, c.fy, c.fz) || 1;
+  const basin = rad > 1.35 ? (rad - 1.35) * 0.85 : 0;
+  let vx = dampVel(c.vx, slide * speed + nx * push * 2.4 - (c.fx / rad) * basin, dt, 2.8);
+  let vy = dampVel(c.vy, slideY * speed + ny * push * 2.4 - (c.fy / rad) * basin, dt, 2.8);
+  let vz = dampVel(c.vz, slideZ * speed + nz * push * 2.4 - (c.fz / rad) * basin, dt, 2.8);
   const step = Math.hypot(vx, vy, vz) * dt;
-  if (step > 0.045) {
-    const k = 0.045 / step;
+  if (step > 0.016) {
+    const k = 0.016 / step;
     vx *= k; vy *= k; vz *= k;
   }
   const fx = c.fx + vx * dt;
   const fy = c.fy + vy * dt;
   const fz = c.fz + vz * dt;
-  const stand0 = Math.hypot(c.fx - c.cx, c.fy - c.cy, c.fz - c.cz) || 2.2;
-  const stand = Math.max(0.02, Math.min(stand0, Math.max(target * 3.2, dist * 2.4)) / (1 + Math.max(0, zoomLog) * 0.28));
-  const lx = fx - c.cx;
-  const ly = fy - c.cy;
-  const lz = fz - c.cz;
-  const ll = Math.hypot(lx, ly, lz) || 1;
-  const cx = fx - (lx / ll) * stand;
-  const cy = fy - (ly / ll) * stand;
-  const cz = fz - (lz / ll) * stand;
-  const heading = c.heading + dt * 0.15;
-  const near = zoomLog > 0.2 ? stand : 0;
-  return { fx, fy, fz, cx, cy, cz, vx, vy, vz, heading, near };
+  const eye = 0.12;
+  const lift = clearance * 1.15;
+  const cx = fx - slide * eye + nx * lift;
+  const cy = fy - slideY * eye + ny * lift;
+  const cz = fz - slideZ * eye + nz * lift;
+  const near = Math.hypot(fx - cx, fy - cy, fz - cz);
+  return { fx, fy, fz, cx, cy, cz, vx, vy, vz, heading, near, hold };
 }

@@ -1,9 +1,8 @@
 id: fractal-zoom
 name: Fractal Zoom
 version: 1
-hint: Infinite GPU raymarch into Mandelbulb, Mandelbox, Menger, Sierpinski, quaternion Julia, kaleidoscopic IFS, and 2D Mandelbrot/Julia
-  deep zoom. Every knob is in This view.
-description: Stage-only procedural fractal flight. Zoom is exponential and does not stop at a precision wall — past float range the view renormalizes into the next minibrot and keeps full detail. Auto-pilot glides along the boundary (filaments and 3D canyons) with smoothed turns. Palette cycle speed is a colour slider (0 holds the colours). Renders vivid demo imagery on empty boards (golden host idle). Uses only the real
+hint: Infinite GPU raymarch. 3D flies a close branching canyon; 2D deep-zooms the boundary.
+description: Stage-only procedural fractal flight. The 3D autopilot stays a short distance off the surface, scores several headings, and commits to a fork when the corridor splits. 2D zoom is exponential and does not stop at a precision wall — past float range the view renormalizes into the next minibrot and keeps full detail, turning into a filament when the boundary branches. Palette cycle speed is a colour slider (0 holds the colours). Renders vivid demo imagery on empty boards (golden host idle). Uses only the real
   viz.read frame (talkers, packets, sys.failed, headlines, demo) — does not map them to sky regions; no failure tint (honest stage-only look).
   Respects prefers-reduced-motion by defaulting to slow or paused zoom.
 capabilities:
@@ -30,7 +29,7 @@ config:
 - key: preset
   label: preset
   type: select
-  default: mandel-deep
+  default: bulb-classic
   values:
   - - bulb-classic
     - Classic Dive
@@ -157,7 +156,7 @@ config:
 - key: maxSteps
   label: raymarch steps
   type: number
-  default: 32
+  default: 48
   min: 12
   max: 48
   step: 4

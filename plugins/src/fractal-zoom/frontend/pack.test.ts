@@ -272,7 +272,7 @@ describe("fractal-zoom shipped pack", () => {
     const def = parseFractalOptions({});
     expect(def.type).toBe(FRACTAL_DEFAULTS.type);
     expect(def.maxIter).toBe(32);
-    expect(def.maxSteps).toBe(32);
+    expect(def.maxSteps).toBe(48);
     const reduced = parseFractalOptions({}, { reducedMotion: true });
     expect(reduced.paused || reduced.zoomSpeed <= 0.35).toBe(true);
     const preset = parseFractalOptions({ preset: "menger-tunnel" });

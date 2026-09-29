@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   SEAHORSE_X,
   SEAHORSE_Y,
+  de3,
   escape2,
   newtonNucleus,
   perturbEscape,
@@ -67,11 +68,35 @@ describe("fractal cruise", () => {
   it("walks a 3D canyon without leaving the surface", () => {
     let c = { ...CANYON_HOME };
     const params = { power: 8, scale: 2.1, fold: 0.55, sym: 6, jx: -0.7, jy: 0.2, jz: 0.1, jw: 0.05 };
-    for (let i = 0; i < 40; i++) c = stepCanyon(c, 1 / 30, 0, params, 0.4);
+    let path = 0;
+    let prev = c;
+    const early = { x: 0, y: 0, z: 0 };
+    for (let i = 0; i < 160; i++) {
+      c = stepCanyon(c, 1 / 30, 0, params, 0.4);
+      path += Math.hypot(c.fx - prev.fx, c.fy - prev.fy, c.fz - prev.fz);
+      if (i === 24) {
+        early.x = c.fx - CANYON_HOME.fx;
+        early.y = c.fy - CANYON_HOME.fy;
+        early.z = c.fz - CANYON_HOME.fz;
+      }
+      prev = c;
+    }
     const moved = Math.hypot(c.fx - CANYON_HOME.fx, c.fy - CANYON_HOME.fy, c.fz - CANYON_HOME.fz);
     expect(moved).toBeGreaterThan(0.02);
     expect(Number.isFinite(c.fx + c.cx)).toBe(true);
     expect(Math.hypot(c.fx, c.fy, c.fz)).toBeLessThan(4);
+    const eye = Math.hypot(c.fx - c.cx, c.fy - c.cy, c.fz - c.cz);
+    expect(eye).toBeGreaterThan(0.02);
+    expect(eye).toBeLessThan(0.35);
+    expect(de3(0, c.fx, c.fy, c.fz, params)).toBeLessThan(0.2);
+    const lateX = c.fx - (CANYON_HOME.fx + early.x);
+    const lateY = c.fy - (CANYON_HOME.fy + early.y);
+    const lateZ = c.fz - (CANYON_HOME.fz + early.z);
+    const dot = early.x * lateX + early.y * lateY + early.z * lateZ;
+    const el = Math.hypot(early.x, early.y, early.z) * Math.hypot(lateX, lateY, lateZ);
+    const bend = el > 1e-6 ? Math.acos(Math.max(-1, Math.min(1, dot / el))) : 0;
+    expect(bend).toBeGreaterThan(0.25);
+    expect(path).toBeGreaterThan(moved * 1.02);
   });
 
   it("does not clamp the dive, and palette cycle is the slider value", () => {

@@ -249,7 +249,9 @@ void main() {
     ? nearD
     : mix(max(length(focus - cam), 0.35), 0.045, clamp(1.0 - 1.0 / zsc, 0.0, 1.0));
   vec3 ro = focus - fwd * stand;
-  vec3 rd = normalize(fwd + (rt * uv.x + upW * uv.y) * (0.95 / zsc));
+  // 3D keeps a wide canyon. Dividing by zsc pinched the cone into a laser.
+  float cone = (mark > 0.5 && typ < 6.0) ? 0.82 : (0.95 / zsc);
+  vec3 rd = normalize(fwd + (rt * uv.x + upW * uv.y) * cone);
   powr = mark > 0.5 ? powr : 8.0;
   maxIterN = mark > 0.5 ? maxIterN : 0.45;
   maxStepsN = mark > 0.5 ? maxStepsN : 0.5;
@@ -288,7 +290,9 @@ void main() {
   vec3 col = bg;
   float hit = 0.0;
   float closest = 1e9;
-  float eHit = max(1e-6, eps * max(stand, 0.02) / max(zsc, 1.0));
+  float eHit = (mark > 0.5 && typ < 6.0)
+    ? max(1.2e-4, eps * max(stand, 0.008) * 0.55)
+    : max(1e-6, eps * max(stand, 0.02) / max(zsc, 1.0));
   for (int i = 0; i < 48; i++) {
     if (i >= steps) break;
     vec3 p = ro + rd * t;
