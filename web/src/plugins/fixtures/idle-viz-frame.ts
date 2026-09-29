@@ -45,6 +45,46 @@ const DEMO_LINKS: readonly VizLinkSample[] = [
   { src: "10.0.0.17", dst: "10.0.0.42", rate: 12 },
 ];
 
+/** Display names for the demo hosts (the arcade idle feed asks DNS for these and shows them on the board). */
+const DEMO_HOST_NAMES: Readonly<Record<string, string>> = {
+  "10.0.0.42": "zoto-host",
+  "10.0.0.1": "gateway",
+  "8.8.8.8": "dns.google",
+  "10.0.0.17": "laptop",
+};
+
+/** One demo host: a talker of the idle frame, with the hosts it has a demo link to (either direction). */
+export interface IdleVizDemoHost {
+  readonly ip: string;
+  readonly role: "lan" | "gateway" | "internet";
+  readonly name: string;
+  /** link peers, in {@link DEMO_LINKS} order (src → dst links first, then dst ← src) */
+  readonly peers: readonly string[];
+  /** the dst ends of this host's own links (it opens these), in {@link DEMO_LINKS} order */
+  readonly opens: readonly string[];
+}
+
+function demoRole(role: string): IdleVizDemoHost["role"] {
+  return role === "gateway" || role === "internet" ? role : "lan";
+}
+
+/**
+ * The idle fixture's host list: every talker of {@link DEMO_TALKERS} with its {@link DEMO_LINKS} peers. The arcade
+ * idle feed (`web/src/arcade/arcade-idle-feed.ts`) draws every endpoint and name from here, so a board on a quiet
+ * LAN shows the same hosts as the header's demo numbers. Read-only; one list for every consumer.
+ */
+export const IDLE_VIZ_DEMO_HOSTS: readonly IdleVizDemoHost[] = Object.freeze(DEMO_TALKERS.map((t): IdleVizDemoHost => {
+  const opens = DEMO_LINKS.filter((l) => l.src === t.id).map((l) => l.dst);
+  const back = DEMO_LINKS.filter((l) => l.dst === t.id).map((l) => l.src);
+  return Object.freeze({
+    ip: t.id,
+    role: demoRole(t.role),
+    name: DEMO_HOST_NAMES[t.id] ?? t.id,
+    peers: Object.freeze([...new Set([...opens, ...back])]),
+    opens: Object.freeze(opens),
+  });
+}));
+
 const DEMO_HEADLINES: readonly VizHeadline[] = [
   { id: "demo:0", label: "Demo", text: "Zoto viz idle seed", kind: "demo" },
   { id: "demo:1", label: "Demo", text: "Live traffic wins when present", kind: "demo" },
