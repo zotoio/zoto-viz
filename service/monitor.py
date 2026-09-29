@@ -1891,6 +1891,15 @@ async def repo_sync_loop(app: web.Application) -> None:
                     f"repo sync: pulled {(info.get('from') or '')[:7]}.."
                     f"{(info.get('to') or '')[:7]} ({len(info.get('files') or [])} files)"
                 )
+                if info.get("built"):
+                    log(f"repo sync: rebuilt web/dist with {info.get('node') or 'node'}")
+                if info.get("build_error"):
+                    log(
+                        "repo sync: WEB BUILD FAILED, still serving the previous web/dist: "
+                        f"{info['build_error']}"
+                    )
+                if info.get("pip_error"):
+                    log(f"repo sync: PIP INSTALL FAILED: {info['pip_error']}")
             elif action == "error":
                 log(f"repo sync: {info.get('error') or 'pull failed'}")
         except Exception as e:  # noqa: BLE001
