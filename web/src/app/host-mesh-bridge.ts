@@ -34,7 +34,7 @@ export function tryApplyHostMeshBridge(
 }
 
 export type HostMeshBridge = {
-  lane: HostMeshLane;
+  readonly lane: HostMeshLane;
   mountPack: (spec: PluginView | null) => Promise<boolean>;
   applySlotBuffer: (data: number[]) => void;
 };
@@ -124,38 +124,52 @@ function pinKoiContents(lane: HostMeshLane): void {
  * sandboxed pack, its frame must have reached `ready`. Checked before and after the asset
  * await so a slow load never pins fish onto a view that has moved on.
  */
+/**
+ * `target` may be a getter: in a mosaic the sandbox drives one tile, and that tile's
+ * pane has its own NetScene. Meshes go into the scene on screen for the driven tile,
+ * never into the main scene parked in another (possibly hidden) pane.
+ */
 export function createHostMeshBridge(
-  scene: NetScene,
+  target: NetScene | (() => NetScene),
   canPlace: (packId: string) => boolean = () => true,
 ): HostMeshBridge {
-  const lane = scene.hostMeshLane;
+  const sceneOf = typeof target === "function" ? target : () => target;
+  // Resolved lazily: the getter may read state that is set up after the bridge.
+  let current: HostMeshLane | null = null;
+  const laneNow = (): HostMeshLane => (current ??= sceneOf().hostMeshLane);
   let gen = 0;
 
   return {
-    lane,
+    get lane() {
+      return laneNow();
+    },
     async mountPack(spec) {
       const mine = ++gen;
+      current?.clear();
+      current = sceneOf().hostMeshLane;
+      const lane = current;
       lane.clear();
       if (!spec?.assets?.length) return true;
       if (!canPlace(spec.id)) return false;
       const decls = spec.assets as HostMeshAssetDecl[];
-      lane.setAssetOrder(decls.map((d) => d.id));
-      await lane.ensureAssets(spec.id, decls);
-      if (mine !== gen) return false;
+      const into = lane;
+      into.setAssetOrder(decls.map((d) => d.id));
+      await into.ensureAssets(spec.id, decls);
+      if (mine !== gen || into !== current) return false;
       if (!canPlace(spec.id)) {
-        lane.clear();
+        into.clear();
         return false;
       }
       if (spec.id === "aquarium") {
-        lane.setScenery(buildAquariumTank());
-        pinAquariumContents(lane);
+        into.setScenery(buildAquariumTank());
+        pinAquariumContents(into);
       } else if (spec.id === "koi-pond") {
-        pinKoiContents(lane);
+        pinKoiContents(into);
       }
-      return !lane.allAssetsFailed();
+      return !into.allAssetsFailed();
     },
     applySlotBuffer(data) {
-      lane.applySlotBuffer(data);
+      laneNow().applySlotBuffer(data);
     },
   };
 }

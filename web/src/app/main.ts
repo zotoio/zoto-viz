@@ -231,7 +231,8 @@ import { normalizeAgentLook, type AgentLook, type DecoAt } from "../graph/deco";
 import { isNasaStillDeco, isNasaStillUrl } from "../core/nasa-stills";
 import { PluginSandbox, consentHash, tsPluginsAllowed, type PluginHostHandlers } from "../plugins/host";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "../plugins/consent";
-import { captureHud, mergeAgentPatch, packView, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
+import { captureHud, packView } from "../ui/capture";
+import { createApplyAgentPatch } from "./agent-patch";
 import { pluginIdleOf, withGoldenIfIdle, withGoldenSnapshot } from "../plugins/fixtures/golden-state";
 import { applyFeedSlotPaints, paintFeedState } from "./feed-paint";
 import { VizHud, isVizDemoPack, normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
@@ -258,7 +259,7 @@ import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { showPluginSkyConsentNotice, warnPluginSkyConsent } from "./plugin-sky-consent-notice";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
-import { mergePluginConsentLivePatch } from "./plugin-consent-live";
+import { livePatchIsConsentOnly, mergePluginConsentLivePatch } from "./plugin-consent-live";
 import { initPluginConsentSync } from "./plugin-consent-sync";
 import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
@@ -300,7 +301,7 @@ mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 bootRenderScaleGpuTimer(scene, renderHost.gl);
-const hostMeshBridge = createHostMeshBridge(scene, (packId) => hostMeshCanPlace(packId));
+const hostMeshBridge = createHostMeshBridge(() => sandboxDrivenScene(), (packId) => hostMeshCanPlace(packId));
 scene.retargetPanel("main");
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
@@ -628,6 +629,16 @@ scene.afterLook = () => {
   for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
   broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
 };
+/** The mosaic tile the single sandbox drives ("main" outside the mosaic). */
+function sandboxVizTileId(): string {
+  if (!mosaic?.on) return "main";
+  return mosaic.tileIds.includes(modeSel.value) ? modeSel.value : mosaicFocusSlot(mosaic) || "main";
+}
+/** The scene on screen for that tile: in a mosaic each pane has its own NetScene. */
+function sandboxDrivenScene(): NetScene {
+  const tile = sandboxVizTileId();
+  return (tile !== "main" && mosaic?.on ? mosaic.graphScene(tile) : null) ?? scene;
+}
 /** Host meshes only for the current view's pack, and for a sandboxed pack only once its frame is ready. */
 function hostMeshCanPlace(packId: string): boolean {
   const current = pluginSpecForMode(modeSel.value);
@@ -1015,9 +1026,7 @@ async function ensureReviewed(spec: PluginView | null, signal: AbortSignal): Pro
 }
 
 async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promise<void> {
-  const vizTileId = mosaic?.on
-    ? (mosaic.tileIds.includes(modeSel.value) ? modeSel.value : mosaicFocusSlot(mosaic) || "main")
-    : "main";
+  const vizTileId = sandboxVizTileId();
   if (!pluginHasFrontend(spec) || !spec?.hash) {
     sandbox.unload();
     clearVizDrive(vizTileId);
@@ -2670,40 +2679,22 @@ function decoAt(raw: unknown): DecoAt {
   return "internet";
 }
 
-async function applyAgentPatch(patch: Record<string, unknown>): Promise<void> {
-  if (patch.reloadClient === true) {
-    location.reload();
-    return;
-  }
-  if (patch.reloadPlugins === true) {
-    await refreshPluginCatalogAndResume();
-  } else if (mergePluginConsentLivePatch(pluginSpecs, patch) && hasConsentPending()) {
-    await resumeMosaicConsentPending();
-  }
-  const p = pickAgentSettings(patch, allModes().map((m) => m.id));
-  if (p.dice) {
-    const wasOn = settings.diceSettings.on;
-    applySettings(mergeAgentPatch(collectSettings(), { dice: p.dice }));
-    if (p.dice.on === true && !wasOn && !p.shuffle) await rollDice();
-  }
-  if (p.shuffle) {
-    await rollDice();
-    return;
-  }
-  if (p.temper != null || p.weather) agent.syncTemper({ temper: p.temper, weather: p.weather });
-  const lockLayout = !aiMosaicLayoutOn();
-  if (lockLayout && p.anim) p.anim = stripMosaicLayout(p.anim);
-  const cur = collectSettings();
-  if (lockLayout && mosaic?.on && p.mode && !mosaic.tileIds.includes(p.mode)) {
-    const tiles = [...mosaic.tileIds];
-    const at = Math.max(0, tiles.indexOf(mosaic.focusedId));
-    tiles[at] = p.mode;
-    p.anim = { ...p.anim, mosaicTiles: tiles };
-  }
-  const next = mergeAgentPatch(cur, p);
-  applySettings(next, { keepLayout: lockLayout });
-  await profiles?.writeAi(collectSettings(), agent.modelTag);
-}
+const applyAgentPatch = createApplyAgentPatch({
+  reloadClient: () => location.reload(),
+  refreshPluginCatalogAndResume: () => refreshPluginCatalogAndResume(),
+  mergeConsentPatch: (patch) => mergePluginConsentLivePatch(pluginSpecs, patch),
+  hasConsentPending: () => hasConsentPending(),
+  resumeMosaicConsentPending: () => resumeMosaicConsentPending(),
+  modeIds: () => allModes().map((m) => m.id),
+  diceOn: () => settings.diceSettings.on,
+  collectSettings: () => collectSettings(),
+  applySettings: (s, flags) => applySettings(s, flags),
+  rollDice: () => rollDice(),
+  syncTemper: (t) => agent.syncTemper(t as Parameters<typeof agent.syncTemper>[0]),
+  aiMosaicLayoutOn: () => aiMosaicLayoutOn(),
+  mosaicTiles: () => (mosaic?.on ? { tileIds: [...mosaic.tileIds], focusedId: mosaic.focusedId } : null),
+  writeAi: async (s) => { await profiles?.writeAi(s, agent.modelTag); },
+});
 
 async function applyAgentLook(look: AgentLookInput): Promise<void> {
   const cur = collectSettings();

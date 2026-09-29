@@ -16,7 +16,7 @@ import {
   assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, nextPaneTilesForPicker, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
-import { fillViewSelect, lookForMode, mergeLook } from "../plugins/plugin";
+import { fillViewSelect, lookForMode, mergeLook, tileDisplayName } from "../plugins/plugin";
 import { releasePanelView } from "./panel-view-lifecycle";
 import { bindVizDriveElement, clearVizDrive } from "../plugins/viz-drive";
 import { dropMosaicTileWriter } from "./mosaic-viz-feed";
@@ -327,7 +327,8 @@ export class Mosaic {
   }) {}
 
   private fillPanePick(pick: HTMLSelectElement, id: string): void {
-    fillViewSelect(pick, id, this.cfg.pickSuffix);
+    // A maximised pane is the live view, so nothing it can pick is preview-only.
+    fillViewSelect(pick, id, this.maximized === id ? undefined : this.cfg.pickSuffix);
   }
 
   /**
@@ -340,9 +341,19 @@ export class Mosaic {
       const existing = pane.querySelector(".mosaic-pane-preview-caption");
       if (!on) {
         existing?.remove();
+        pane.querySelector(".mosaic-pane-preview-backdrop")?.remove();
         continue;
       }
       if (existing) continue;
+      // Without its sandbox the pack's sky has no data (Koi's comes out near-white), so the
+      // pane shows the theme background and the pack's name behind the chrome and caption.
+      const backdrop = document.createElement("div");
+      backdrop.className = "mosaic-pane-preview-backdrop";
+      const name = document.createElement("span");
+      name.className = "mosaic-pane-preview-name";
+      name.textContent = this.previewName(id);
+      backdrop.appendChild(name);
+      pane.appendChild(backdrop);
       const el = document.createElement("div");
       el.className = "mosaic-pane-preview-caption";
       const label = document.createElement("span");
@@ -361,6 +372,11 @@ export class Mosaic {
       el.append(label, btn);
       pane.appendChild(el);
     }
+  }
+
+  private previewName(id: string): string {
+    const spec = this.cfg?.pluginSpecForMode?.(id);
+    return spec ? tileDisplayName(spec) : mosaicPaneMode(id).label.replace(/^(NET|SYS|ARC)\s+/, "");
   }
 
   private syncPackCoalesce(): void {
@@ -589,6 +605,7 @@ export class Mosaic {
     if (this.maximized) document.body.dataset.mosaicMax = this.maximized;
     else delete document.body.dataset.mosaicMax;
     this.placeTree();
+    this.refreshChrome();
     this.relayoutAll();
     this.emitLayout();
     if (this.maximized) {

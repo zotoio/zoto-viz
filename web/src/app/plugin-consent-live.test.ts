@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { mergePluginConsentLivePatch } from "./plugin-consent-live";
+import { livePatchIsConsentOnly, mergePluginConsentLivePatch } from "./plugin-consent-live";
 import type { PluginView } from "../plugins/plugin";
 
 describe("mergePluginConsentLivePatch", () => {
@@ -18,5 +18,14 @@ describe("mergePluginConsentLivePatch", () => {
     expect(ok).toBe(true);
     expect(specs[0].consent).toBe("reviewed");
     expect(specs[0].sky_available).toBe(true);
+  });
+});
+
+describe("consent live patch never re-applies the mode (QE K4b)", () => {
+  it("classifies consent / catalog-only patches", () => {
+    expect(livePatchIsConsentOnly({ pluginConsent: { id: "koi-pond", kind: "authored" } })).toBe(true);
+    expect(livePatchIsConsentOnly({ reloadPlugins: true })).toBe(true);
+    expect(livePatchIsConsentOnly({ pluginConsent: { id: "k", kind: "authored" }, mode: "topology" })).toBe(false);
+    expect(livePatchIsConsentOnly({})).toBe(false);
   });
 });

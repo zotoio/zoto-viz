@@ -752,7 +752,8 @@ export function fillViewSelect(
     }
     const o = document.createElement("option");
     o.value = m.value;
-    o.textContent = m.label + (suffix?.(m.value) ?? "");
+    // The suffix is for choices in the open list only, never the view this select is running.
+    o.textContent = m.label + (m.value === current ? "" : (suffix?.(m.value) ?? ""));
     if (m.value === current) o.selected = true;
     (groupEl ?? sel).appendChild(o);
   }
