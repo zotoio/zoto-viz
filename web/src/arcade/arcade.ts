@@ -10,7 +10,7 @@ import { frameTsFromRaf } from "../core/time-ms";
 import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
 import { devicePxRatioNumber, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
-import { ArcadeIdleFeed, arcadeDemoLabelText, mountArcadeDemoLabel, type ArcadeIdleShaper } from "./arcade-idle-feed";
+import { ArcadeIdleFeed, arcadeBadgeName, arcadeDemoLabelText, mountArcadeDemoLabel, type ArcadeIdleShaper } from "./arcade-idle-feed";
 
 /**
  * Shared machinery for the arcade views (NetPong's siblings: Invaders, Command, Frogger). Each is a standalone
@@ -369,7 +369,8 @@ export abstract class ArcadeView {
     this.idle = shaper
       ? new ArcadeIdleFeed<Packet>({
         shaper, label: mountArcadeDemoLabel(container), deliver: (rows) => this.ingestIdle(rows),
-        labelText: (me) => arcadeDemoLabelText(me ? this.nameOf(me) : ""),
+        // idleMe() is "" unless the user picked one device (the pickers default to the group)
+        labelText: (me) => arcadeDemoLabelText(!!me, me ? arcadeBadgeName(this.deviceAt(me)) : ""),
         onResume: () => this.clearForIdle(),
       })
       : null;

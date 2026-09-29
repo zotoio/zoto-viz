@@ -1,5 +1,5 @@
 import type { NetScene } from "../graph/scene";
-import { ArcadeIdleFeed, arcadeDemoLabelText, mountArcadeDemoLabel } from "./arcade-idle-feed";
+import { ArcadeIdleFeed, arcadeBadgeName, arcadeDemoLabelText, mountArcadeDemoLabel } from "./arcade-idle-feed";
 import { shapePongIdle, type PongRow } from "./arcade-idle-shapers";
 import { Select, TextField, type SelectOption } from "../ui/ui";
 import { categorize, hashColor } from "../core/modes";
@@ -177,6 +177,8 @@ export class PongView {
   private font = "ui-sans-serif, system-ui, sans-serif";
   /** source pick: a group ("any" / "internet" / "lan" / "match"), "gateway", "self", or an address */
   private srcChoice: string;
+  /** the user chose the source (the selector, a click, a stored pick); false for the default gateway source */
+  private srcExplicit: boolean;
   /** target pick: a group ("any" / "internet" / "lan" / "match") or a peer address */
   private tgtChoice: string;
   /** the matcher pattern lists (source = "match" / target = "match") */
@@ -234,7 +236,7 @@ export class PongView {
     container.appendChild(this.canvas);
     this.idle = new ArcadeIdleFeed<PongRow>({
       shaper: shapePongIdle, label: mountArcadeDemoLabel(container), deliver: (rows) => this.ingestIdle(rows),
-      labelText: (me) => arcadeDemoLabelText(me ? this.nameOf(me) : ""),
+      labelText: (me) => arcadeDemoLabelText(this.srcExplicit && !!me, me ? arcadeBadgeName(this.deviceAt(me)) : ""),
       onResume: () => this.clearForIdle(),
     });
     this.font = getComputedStyle(document.documentElement).fontFamily || this.font;
@@ -244,6 +246,7 @@ export class PongView {
       localStorage.setItem(KEY_SOURCE, localStorage.getItem(KEY_TARGET)!);
       localStorage.removeItem(KEY_TARGET);
     }
+    this.srcExplicit = localStorage.getItem(KEY_SOURCE) !== null;
     this.srcChoice = localStorage.getItem(KEY_SOURCE) ?? "gateway";
     this.tgtChoice = localStorage.getItem(KEY_TARGET) ?? "any";
     this.srcPattern = localStorage.getItem(KEY_SOURCE_PATTERN) ?? "";
@@ -360,6 +363,7 @@ export class PongView {
     if (m && v === m.gateway) v = "gateway";
     else if (m && v === m.local_ip) v = "self";
     this.srcChoice = v;
+    this.srcExplicit = true;
     localStorage.setItem(KEY_SOURCE, v);
     this.srcPatternField.hidden = v !== "match";
     // a single-host target that is the new single-host source itself would show nothing

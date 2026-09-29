@@ -1,4 +1,5 @@
-import type { Device } from "../core/types";
+import { displayName, usefulName, type Device } from "../core/types";
+import { rName } from "../core/redact";
 import { DEMO_DATA_LABEL, DEMO_LABEL_CLASS } from "../core/demo-source";
 import { IDLE_VIZ_DEMO_HOSTS, IDLE_VIZ_DEMO_SEED, type IdleVizDemoHost } from "../plugins/fixtures/idle-viz-frame";
 
@@ -56,7 +57,7 @@ export interface ArcadeIdleFeedOptions<P extends TimedRow> {
   clock?: () => number;
   /** the demo label element: gets `is-visible` while the demo is on screen */
   label?: HTMLElement | null;
-  /** the label's text for a pick (`me`, "" for a group): default {@link arcadeDemoLabelText} with no name */
+  /** the label's text (`me` is the pick, "" for a group); build it with {@link arcadeDemoLabelText}. Default: DEMO_DATA_LABEL */
   labelText?: (me: string) => string;
   /** the feed comes back on after live traffic: clear the board (live rows must not sit under the demo label) */
   onResume?: () => void;
@@ -82,9 +83,29 @@ export function arcadeIdleRng(seed: number, key: number): () => number {
   };
 }
 
-/** Badge text: plain {@link DEMO_DATA_LABEL} for a group, "Demo traffic around <device>" for a picked device. */
-export function arcadeDemoLabelText(deviceName: string): string {
-  return deviceName ? `Demo traffic around ${deviceName}` : DEMO_DATA_LABEL;
+/** What the badge calls a picked device that has no name (never its address). */
+export const ARCADE_DEMO_UNNAMED_PICK = "the selected device";
+
+/** An IPv4 dotted quad or an IPv6-looking token: never shown in the badge. */
+const ADDRESS_LIKE = /\b\d{1,3}(?:\.\d{1,3}){3}\b|[0-9a-f]{0,4}:[0-9a-f]{0,4}:[0-9a-f:]*/i;
+
+/** A device's known (golden / DNS / mDNS) name for the badge, redacted like the rest of the view; "" when it has none. */
+export function arcadeBadgeName(d: Device | undefined): string {
+  if (!d) return "";
+  const n = displayName(d).trim();
+  if (!n || n === d.ip || !usefulName(n) || ADDRESS_LIKE.test(n)) return "";
+  const r = rName(n);
+  return ADDRESS_LIKE.test(r) ? "" : r;
+}
+
+/**
+ * Badge text. Only an explicit user pick changes the wording: "Demo traffic around <name>", or
+ * "Demo traffic around the selected device" when the pick has no known name. No explicit pick (a group, or
+ * netpong's default gateway source): plain {@link DEMO_DATA_LABEL}.
+ */
+export function arcadeDemoLabelText(explicitPick: boolean, deviceName = ""): string {
+  if (!explicitPick) return DEMO_DATA_LABEL;
+  return `Demo traffic around ${deviceName || ARCADE_DEMO_UNNAMED_PICK}`;
 }
 
 /** The demo label element (same class and text as Tetris's), hidden until the feed shows demo rows. */
