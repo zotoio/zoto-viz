@@ -65,6 +65,7 @@ const rest = [];
 for (let i = 0; i < argv.length; i++) {
   const a = argv[i];
   if (a === "--dev-mode") extra.devMode = true;
+  else if (a === "--rescore") extra.rescore = argv[++i];
   else if (a === "--mosaic") extra.mosaic = argv[++i];
   else if (a === "--mosaic-sky-override") {
     const [k, v] = String(argv[++i]).split("=");
@@ -92,6 +93,18 @@ function gitSha() {
   try {
     return execFileSync("git", ["-C", scriptDir, "rev-parse", "--short=8", "HEAD"], { encoding: "utf8" }).trim();
   } catch { return "unknown"; }
+}
+
+if (extra.rescore) {
+  // Re-apply the post-sweep rules to a saved pickall.json (no browser), then rewrite json + md.
+  const res = JSON.parse(readFileSync(extra.rescore, "utf8"));
+  const n = postRules(res);
+  res.counts = countStates(res.views);
+  res.meta.rescored = { at: new Date().toISOString(), rowsChanged: n, script: gitSha() };
+  writeFileSync(extra.rescore, JSON.stringify(res, null, 1));
+  writeFileSync(path.join(path.dirname(extra.rescore), "pickall.md"), markdown(res));
+  console.log(`rescored ${extra.rescore}: ${n} row(s) changed; counts ${JSON.stringify(res.counts)}`);
+  process.exit(0);
 }
 
 const sha = opts.sha || gitSha();
@@ -245,6 +258,8 @@ function pageState() {
       }));
     })(),
     sceneViewId: document.querySelector("#scene")?.dataset.viewId ?? null,
+    brandText: txt(document.querySelector("#bar .brand")),
+    twoD: /\b2D\b/.test(txt(document.querySelector("#bar .brand"))),
     notShowing: [...document.querySelectorAll("body *")].filter((e) => e.children.length <= 2 && /running but not showing anything/i.test(e.textContent || "") && vis(e)).map(txt)[0] ?? null,
     dialogs,
     actionButtons,
@@ -401,30 +416,55 @@ async function main() {
   }
 
   /** Real mouse clicks: open the header picker, click the option. Returns the option label. */
-  async function pickInHeader(id) {
-    const btn = page.locator("#mode .field-btn");
-    await btn.click();
-    const menuId = await btn.getAttribute("aria-controls");
-    const li = page.locator(`[id="${menuId}"] li[role="option"][data-value="${id}"]`);
-    if (!(await li.count())) {
-      await page.keyboard.press("Escape");
-      return { found: false };
-    }
-    const target = li.last(); // the group entry; RECENT holds a second copy of recent picks
-    const label = ((await target.locator(".txt").textContent()) ?? "").trim();
-    try {
-      await target.scrollIntoViewIfNeeded({ timeout: 8000 });
-      await target.click({ timeout: 8000 });
-      return { found: true, label };
-    } catch (e) {
-      // The page is not painting (rAF starved), so actionability never settles. Still a real
-      // mouse click at the option's box, recorded on the row.
-      await target.evaluate((el) => el.scrollIntoView({ block: "center" }));
-      const bb = await target.boundingBox();
+  /** Real click; when the page is not producing frames, fall back to a mouse click at its box. */
+  async function realClick(loc, timeout = 10_000) {
+    try { await loc.click({ timeout }); return null; } catch (e) {
+      const bb = await loc.boundingBox();
       if (!bb) throw e;
       await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
-      return { found: true, label, forcedClick: String(e.message ?? e).split("\n")[0].slice(0, 120) };
+      await page.waitForTimeout(500);
+      return String(e.message ?? e).split("\n")[0].slice(0, 120);
     }
+  }
+
+  async function pickInHeader(id) {
+    const btn = page.locator("#mode .field-btn");
+    let lastErr = null;
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const forcedOpen = await realClick(btn).catch((e) => `open failed: ${String(e.message ?? e).split("\n")[0].slice(0, 80)}`);
+      const menuId = await btn.getAttribute("aria-controls");
+      const li = page.locator(`[id="${menuId}"] li[role="option"][data-value="${id}"]`);
+      if (!(await li.count())) {
+        await page.keyboard.press("Escape");
+        return { found: false };
+      }
+      const target = li.last(); // the group entry; RECENT holds a second copy of recent picks
+      const label = ((await target.locator(".txt").textContent()) ?? "").trim();
+      if (attempt === 3) {
+        // Last try: narrow the list with the picker's own filter box, like a person typing.
+        const filter = page.locator(`[id="${menuId}"]`).locator("xpath=..").locator("input").first();
+        if (await filter.count()) { await filter.fill(label).catch(() => {}); await page.waitForTimeout(500); }
+      }
+      try {
+        await target.scrollIntoViewIfNeeded({ timeout: 8000 });
+        await target.click({ timeout: 8000 });
+        const extra2 = [forcedOpen && `menu open: ${forcedOpen}`, attempt > 1 && `attempt ${attempt}`].filter(Boolean).join("; ");
+        return extra2 ? { found: true, label, forcedClick: extra2 } : { found: true, label };
+      } catch (e) {
+        // The page is not painting (rAF starved), so actionability never settles. Still a real
+        // mouse click at the option's box, recorded on the row.
+        await target.evaluate((el) => el.scrollIntoView({ block: "center" })).catch(() => {});
+        const bb = await target.boundingBox().catch(() => null);
+        if (bb) {
+          await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2);
+          return { found: true, label, forcedClick: `${String(e.message ?? e).split("\n")[0].slice(0, 100)}; attempt ${attempt}` };
+        }
+        lastErr = e;
+        await page.keyboard.press("Escape").catch(() => {});
+        await page.waitForTimeout(1500);
+      }
+    }
+    return { found: false, error: `option never got a box after 3 tries: ${String(lastErr?.message ?? lastErr).split("\n")[0].slice(0, 100)}` };
   }
 
   async function pickerOptions() {
@@ -662,6 +702,12 @@ async function main() {
     row.frameCreates = ev.frameCreates.length - idx.frameCreates;
     row.upstream5xx = ev.upstream5xx.slice(idx.upstream5xx).map((x) => `${x.status} ${x.url}`);
     row.previewPanes = endSt.previewPanes;
+    row.brandText = endSt.brandText;
+    row.twoD = endSt.twoD;
+    if (endSt.twoD && !results.twoDFirst) {
+      results.twoDFirst = { view: v.id, n };
+      results.flags.push(`render host in 2D fallback ("${endSt.brandText}"), first seen at the end of #${n} ${v.id}`);
+    }
     row.glLost = endSt.glLost;
     if (endSt.glLost) results.glLostAt = [...(results.glLostAt ?? []), `#${n} ${v.id} (after ${row.from})`];
     if (endSt.glLost && !results.glLostFirst) {
@@ -735,6 +781,10 @@ async function main() {
       if (v.ownSky && !skyMatches(v, row.pluginSkyId)) fails.push(`pluginSkyId=${JSON.stringify(row.pluginSkyId)} (expected ${v.packId})${h.skyEver ? " (matched earlier in hold)" : ""}`);
       if (fallback) fails.push(`tile-heal fallback-pack: ${row.tileHeal.find((l) => /fallback-pack/.test(l))}`);
       if (endSt.glLost) fails.push("main WebGL context lost");
+      // In the 2D fallback the host cannot draw a pack's own sky or a 3D stage; the screen shows a
+      // host stand-in (matrix rain seen on Kefrens Bars) or "WebGL unavailable — 3D stage idle".
+      if (endSt.twoD && v.ownSky) fails.push(`render host in 2D fallback ("${endSt.brandText}"): own sky cannot show; host stand-in on screen`);
+
       let dark = null;
       if (row.screenshotError) fails.push(row.screenshotError);
       else if (!row.wall) fails.push("no wall region to sample");
@@ -805,6 +855,7 @@ async function main() {
       else if (row.upstream5xx.length) row.reason = `${row.reason}; sample-pictures line ${row.upstreamSampleLine}`;
     }
     const warn = [];
+    if (row.twoD) warn.push(`render host in 2D fallback ("${row.brandText}")`);
     if (row.glWarnings.length) warn.push(`${row.glWarnings.length} WebGL warning line(s): ${row.glWarnings[0]}`);
     if (row.pack4xxPage.length || row.pack4xxBackendLog.length) warn.push(`/pack-assets 4xx: ${[...row.pack4xxPage, ...row.pack4xxBackendLog].slice(0, 3).join(", ")}`);
     if (row.profileWriteErrors.length) warn.push(`profile writes: ${[...new Set(row.profileWriteErrors)].join(", ")}`);
@@ -1153,11 +1204,11 @@ async function main() {
     const row = {};
     await declineConsentModal(); await dismissMediaAsk();
     const btn = page.locator("#profile .field-btn");
-    await btn.click();
+    await realClick(btn);
     const menuId = await btn.getAttribute("aria-controls");
     const li = page.locator(`[id="${menuId}"] li[role="option"][data-value="zoto-viz"]`);
     if (!(await li.count())) { await page.keyboard.press("Escape"); return { state: "FAIL", reason: "no zoto viz entry in the profile picker" }; }
-    await li.first().click();
+    await realClick(li.first());
     await page.waitForTimeout(4000);
     await dismissMediaAsk(); // not closing chat/feed here: that edit would autosave into "user"
     const s1 = await st();
@@ -1196,8 +1247,8 @@ async function main() {
   }
 
   // ---- totals ----
-  const counts = { Ready: 0, "Needs you": 0, "Couldn't start": 0, "FAIL-silent": 0, "FAIL-other": 0 };
-  for (const r of results.views) counts[r.state] = (counts[r.state] ?? 0) + 1;
+  postRules(results);
+  const counts = countStates(results.views);
   results.counts = counts;
   results.reloadCounts = results.reloadRows.reduce((a, r) => { a[r.state] = (a[r.state] ?? 0) + 1; return a; }, {});
   results.meta.finished = new Date().toISOString();
@@ -1253,6 +1304,36 @@ function readPaneSkies() {
     });
   }
   return out;
+}
+
+function countStates(views) {
+  const counts = { Ready: 0, "Needs you": 0, "Couldn't start": 0, "FAIL-silent": 0, "FAIL-other": 0 };
+  for (const r of views) counts[r.state] = (counts[r.state] ?? 0) + 1;
+  return counts;
+}
+
+/**
+ * Rules applied after the sweep (also via --rescore). A Retry / Review / "not showing" notice must
+ * name the picked view: on 20fa18a7 the previous view's notice carries over to the next pick
+ * (Aquarium showing "Ant Colony is running but not showing anything").
+ */
+function postRules(res) {
+  let changed = 0;
+  const norm = (x) => String(x ?? "").toLowerCase().replace(/^(air|bt|cpu|net|src|sys|arc)\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
+  for (const r of res.views ?? []) {
+    if (!["Couldn't start", "Needs you"].includes(r.state) || r.staleNotice) continue;
+    const text = r.prompt?.text ?? r.notShowing?.text ?? "";
+    const m = /^(?:Review\s+[“"])?(.+?)(?:[”"]\s+before activating|\s+is running but not showing anything|\s+couldn't start|\s+needs (?:your OK|you))/i.exec(text.trim());
+    if (!m) continue;
+    const named = norm(m[1]);
+    const mine = [norm(r.name), norm(r.label)].filter(Boolean);
+    if (mine.some((x) => x === named || x.includes(named) || named.includes(x))) continue;
+    r.staleNotice = m[1];
+    r.reason = `notice names "${m[1]}", not the picked view (${r.label}); was ${r.state}: ${r.reason}`;
+    r.state = "FAIL-other";
+    changed++;
+  }
+  return changed;
 }
 
 function listenerTypes() {
