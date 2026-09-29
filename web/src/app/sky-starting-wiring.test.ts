@@ -12,13 +12,13 @@ describe("main.ts wires the sky wait (Starting… then couldn't start)", () => {
     expect(begin).toBeGreaterThan(0);
     expect(begin).toBeLessThan(body.indexOf("fetchSkyOnce("));
     expect(body).toContain("landWhenDrawn(skyWaits, waitKey");
-    expect(body).toMatch(/catch \(e\) \{\s*if \(waitKey\) skyWaits\.cancel\(waitKey\);/);
+    expect(body).toMatch(/catch \(e\) \{\s*const owner = ctl\.signal\(\);\s*if \(waitKey && ctl\.current\(\)\) skyWaits\.cancelOwned\(waitKey, owner\);/);
   });
 
   it("mosaic sync begins every waiting pack-sky pane before the sequential loads", () => {
     const body = between("async function syncPluginSky(", "function teardownMosaicPanelView(");
-    expect(body.indexOf("beginSkyWait(id, target, pane, id)")).toBeGreaterThan(0);
-    expect(body.indexOf("beginSkyWait(id, target, pane, id)")).toBeLessThan(body.indexOf("await loadPluginSkyOnto("));
+    expect(body.indexOf("beginSkyWait(id, target, pane, id, signal)")).toBeGreaterThan(0);
+    expect(body.indexOf("beginSkyWait(id, target, pane, id, signal)")).toBeLessThan(body.indexOf("await loadPluginSkyOnto("));
   });
 
   it("tile health skips a tile that is starting or timed out", () => {

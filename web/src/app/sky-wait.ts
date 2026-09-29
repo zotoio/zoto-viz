@@ -33,6 +33,9 @@ export class SkyWaits {
     { state: SkyWaitState; timer: ReturnType<typeof setTimeout> | null; due: number }
   >();
 
+  /** Which load (its signal) owns each tile's wait: only the owner's abort may end it. */
+  private readonly owners = new Map<string, AbortSignal>();
+
   constructor(private readonly host: SkyWaitHost, private readonly deadlineMs = SKY_WAIT_DEADLINE_MS) {}
 
   state(key: string): SkyWaitState | null {
@@ -45,7 +48,8 @@ export class SkyWaits {
   }
 
   /** Idempotent while starting; from failed:timeout (Retry) it clears the notice and restarts the countdown. */
-  begin(key: string): void {
+  begin(key: string, owner?: AbortSignal): void {
+    if (owner) this.owners.set(key, owner);
     const cur = this.waits.get(key);
     if (cur?.state === "starting") return;
     if (cur) this.clearFailed(key);
@@ -71,6 +75,21 @@ export class SkyWaits {
     this.drop(key);
     if (cur.state === "failed:timeout") this.clearFailed(key);
     else hideSkyStartingCard(this.host.hostEl(key), true);
+  }
+
+  /** The newest sync for this tile takes the wait over (a no-op when the tile isn't waiting). */
+  own(key: string, owner: AbortSignal): void {
+    if (this.waits.has(key)) this.owners.set(key, owner);
+  }
+
+  /**
+   * A load was aborted or failed: end the wait only if that load owns it. A superseded sync's
+   * abort never removes the card or the deadline a newer sync armed.
+   */
+  cancelOwned(key: string, owner: AbortSignal): void {
+    const cur = this.owners.get(key);
+    if (cur && cur !== owner) return;
+    this.cancel(key);
   }
 
   /** Not waiting any more for another reason (view switched away, consent wait, compile error). */
@@ -123,6 +142,7 @@ export class SkyWaits {
   }
 
   private drop(key: string): void {
+    this.owners.delete(key);
     const cur = this.waits.get(key);
     if (cur?.timer) clearTimeout(cur.timer);
     this.waits.delete(key);
@@ -151,25 +171,41 @@ export function landWhenDrawn(waits: SkyWaits, key: string, target: SkyDrawnSour
 
 type SkyLoad = { packKey: string; signal: AbortSignal; p: Promise<void>; token: object };
 
+/** What a shared load checks: still the tile's newest load, and the newest caller's signal. */
+export interface SkyLoadCtl {
+  current(): boolean;
+  signal(): AbortSignal;
+}
+
 /**
  * One sky request per tile: concurrent syncs for the same sky (mode apply, pane mount, refresh)
- * share the in-flight load. `forget` (Retry) lets the next call start fresh, and the stale load
- * sees `current()` false and does not install.
+ * share the in-flight load. The newest live caller owns it: a sync that joins takes over the
+ * signal, so an older, superseded sync's abort can no longer cancel the load, the card or the
+ * wait. `forget` (Retry) lets the next call start fresh, and the stale load sees `current()`
+ * false and does not install.
  */
 export class SkyLoads<T extends object> {
   private readonly loads = new WeakMap<T, SkyLoad>();
 
-  share(target: T, packKey: string, signal: AbortSignal, start: (current: () => boolean) => Promise<void>): Promise<void> {
+  share(target: T, packKey: string, signal: AbortSignal, start: (ctl: SkyLoadCtl) => Promise<void>): Promise<void> {
     const cur = this.loads.get(target);
-    if (cur && cur.packKey === packKey && !cur.signal.aborted) return cur.p;
+    if (cur && cur.packKey === packKey && !signal.aborted) {
+      cur.signal = signal;
+      return cur.p;
+    }
     const token = {};
-    const p = start(() => this.loads.get(target)?.token === token);
-    this.loads.set(target, { packKey, signal, p, token });
+    const entry: SkyLoad = { packKey, signal, p: Promise.resolve(), token };
+    this.loads.set(target, entry);
+    const ctl: SkyLoadCtl = {
+      current: () => this.loads.get(target)?.token === token,
+      signal: () => entry.signal,
+    };
+    entry.p = start(ctl);
     const clear = () => {
       if (this.loads.get(target)?.token === token) this.loads.delete(target);
     };
-    p.then(clear, clear);
-    return p;
+    entry.p.then(clear, clear);
+    return entry.p;
   }
 
   forget(target: T): void {

@@ -214,7 +214,7 @@ import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycl
 import { addPresentListener } from "../core/fps";
 import { bindTileHealthPresentTick } from "./tile-health-present";
 import { paintLiveBlankNotice } from "./live-blank-notice";
-import { SkyLoads, SkyWaits, landWhenDrawn } from "./sky-wait";
+import { SkyLoads, SkyWaits, landWhenDrawn, type SkyLoadCtl } from "./sky-wait";
 import { createProductionTileHealthMonitor } from "./tile-health-boot";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
@@ -1236,6 +1236,8 @@ async function loadPluginSkyOnto(
   signal: AbortSignal,
   paneId?: string,
 ): Promise<void> {
+  // A superseded sync never touches this tile's sky, card or wait; the newest sync decides.
+  if (signal.aborted) return;
   const lookOpts = spec ? (lookForMode(pluginViewId(spec.id, spec.instanceId)) ?? spec.look) : undefined;
   const want = pinPlugin && !!spec && lookOpts?.backdrop === "plugin" && (spec.has_sky_shader === true || !!spec.shader_sha256);
   const packKey = want && spec ? `${spec.id}:${spec.shader_sha256 || ""}` : "";
@@ -1265,8 +1267,11 @@ async function loadPluginSkyOnto(
   // Already on this tile: nothing to fetch or compile again.
   if (skyInstalled.get(target) === packKey && target.pluginSkyId === spec.id) return;
   // One request per tile per sky: concurrent syncs (mode apply, pane mount, refresh) share it.
-  return skyLoads.share(target, packKey, signal, (current) =>
-    installPluginSky(target, spec, packKey, lookOpts, signal, current, paneId));
+  // The newest caller owns the load and the tile's wait from here on.
+  const waitKey = skyWaitKey(target, paneId);
+  if (waitKey) skyWaits.own(waitKey, signal);
+  return skyLoads.share(target, packKey, signal, (ctl) =>
+    installPluginSky(target, spec, packKey, lookOpts, ctl, paneId));
 }
 
 /**
@@ -1298,13 +1303,15 @@ async function installPluginSky(
   spec: PluginView,
   packKey: string,
   lookOpts: Parameters<typeof recordPluginSkyLoad>[0]["look"],
-  signal: AbortSignal,
-  current: () => boolean,
+  ctl: SkyLoadCtl,
   paneId?: string,
 ): Promise<void> {
+  const signal = ctl.signal();
   const waitKey = skyWaitKey(target, paneId);
-  if (target.pluginSkyDrawn !== spec.id) beginSkyWait(waitKey, target, spec, paneId);
+  if (target.pluginSkyDrawn !== spec.id) beginSkyWait(waitKey, target, spec, paneId, signal);
   const disposeSky = () => {
+    // A newer sync took this load over; its own abort (not this one) decides.
+    if (ctl.signal() !== signal || !ctl.current()) return;
     target.setPluginShader(null);
     skyInstalled.delete(target);
     if (target === scene) skyLoaded = "";
@@ -1313,9 +1320,9 @@ async function installPluginSky(
   try {
     recordPluginSkyLoad({ packId: spec.id, packKey: packKey, isShaderPack: true, look: lookOpts });
     const source = await fetchSkyOnce(spec.id, spec.shader_sha256);
-    throwIfAborted(signal);
+    throwIfAborted(ctl.signal());
     // A Retry started a newer load for this tile; that one installs the sky.
-    if (!current()) return;
+    if (!ctl.current()) return;
     const err = target.setPluginShader({ id: spec.id, source });
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
@@ -1330,8 +1337,9 @@ async function installPluginSky(
     // The card stays until a frame with the sky is actually drawn (first-use compile included).
     if (waitKey) landWhenDrawn(skyWaits, waitKey, target, spec.id);
   } catch (e) {
-    if (waitKey) skyWaits.cancel(waitKey);
-    if (signal.aborted) return;
+    const owner = ctl.signal();
+    if (waitKey && ctl.current()) skyWaits.cancelOwned(waitKey, owner);
+    if (owner.aborted) return;
     console.warn("zoto-viz plugin sky:", e);
     removeModeSwitchAbortListener(signal, disposeSky);
     throw e;
@@ -1376,10 +1384,10 @@ function skyWaitHostEl(key: string): HTMLElement | null {
   return key === "main" ? $("scene") : null;
 }
 
-function beginSkyWait(key: string, target: NetScene, spec: PluginView, paneId?: string): void {
+function beginSkyWait(key: string, target: NetScene, spec: PluginView, paneId: string | undefined, owner: AbortSignal): void {
   if (!key) return;
   skyWaitTiles.set(key, { target, spec, paneId });
-  skyWaits.begin(key);
+  skyWaits.begin(key, owner);
 }
 
 function cancelSkyWait(target: NetScene, paneId?: string): void {
@@ -1403,7 +1411,7 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
         if (!mosaicPluginSkyPaneView(id, mosaic.paneSky(id), lookForMode).wantPlugin) continue;
         if (pluginNeedsReview(pane) && !pane.consent) continue;
         if (!(pane.has_sky_shader === true || !!pane.shader_sha256)) continue;
-        beginSkyWait(id, target, pane, id);
+        beginSkyWait(id, target, pane, id, signal);
       }
       for (const id of mosaic.tileIds) {
         throwIfAborted(signal);
@@ -1416,7 +1424,8 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
       }
     } finally {
       // A switched-away sync never leaves a pane on "Starting…"; the next sync begins its own wait.
-      if (signal.aborted) for (const id of mosaic.tileIds) if (skyWaits.state(id) === "starting") skyWaits.cancel(id);
+      // Only this sync's own waits: a newer sync may already have begun the pane's card and deadline.
+      if (signal.aborted) for (const id of mosaic.tileIds) if (skyWaits.state(id) === "starting") skyWaits.cancelOwned(id, signal);
       mosaic.settlePanes();
     }
     return;

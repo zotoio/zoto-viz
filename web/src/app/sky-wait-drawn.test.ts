@@ -75,7 +75,7 @@ describe("SkyLoads: one sky request per tile", () => {
     await a;
   });
 
-  it("another tile, another sky, or an aborted load starts its own request", () => {
+  it("another tile or another sky starts its own request; a live sync joins an aborted one's load", () => {
     const loads = new SkyLoads<object>();
     const t1 = {}, t2 = {};
     const ac = new AbortController();
@@ -85,8 +85,9 @@ describe("SkyLoads: one sky request per tile", () => {
     loads.share(t2, "backrooms:abc", ac.signal, start);
     loads.share(t1, "nixie:def", ac.signal, start);
     ac.abort();
+    // The superseded sync's load is taken over by the newest one, not repeated.
     loads.share(t1, "nixie:def", new AbortController().signal, start);
-    expect(requests).toBe(4);
+    expect(requests).toBe(3);
   });
 
   it("Retry (forget) starts 1 fresh request and the stuck one no longer installs", () => {
@@ -94,7 +95,7 @@ describe("SkyLoads: one sky request per tile", () => {
     const tile = {};
     const sig = new AbortController().signal;
     const currents: (() => boolean)[] = [];
-    const start = (current: () => boolean) => { currents.push(current); return new Promise<void>(() => {}); };
+    const start = (ctl: { current(): boolean }) => { currents.push(() => ctl.current()); return new Promise<void>(() => {}); };
     loads.share(tile, "backrooms:abc", sig, start);
     loads.forget(tile);
     loads.share(tile, "backrooms:abc", sig, start);
