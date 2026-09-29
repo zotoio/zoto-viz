@@ -89,6 +89,11 @@ export type ApplyModeHost = {
   tileSkyStarting?: (tileId: string) => boolean;
   /** Take the previous view's pack runtime and sky off the solo wall (Needs you shows the theme background). */
   stopPackRuntime?: (signal: AbortSignal) => void;
+  /**
+   * Auto-consent will grant this pick on its own (on, eligible, not an incomplete record): the
+   * tile shows starting while it does, and no Needs you or consent text is ever written.
+   */
+  willAutoConsent?: (spec: PluginView) => boolean;
 };
 
 /** Solo wall tile id in the per-tile ViewState map. */
@@ -343,5 +348,7 @@ export function applyModeImpl(
 function gateUntilOk(host: ApplyModeHost, m: ViewMode, spec: PluginView, signal: AbortSignal): void {
   host.syncModeHud(m, spec);
   if (!host.mosaic?.on || (m.pluginId && m.standalone)) host.stopPackRuntime?.(signal);
-  showPickNeedsYou(host, m, spec);
+  // Auto-consent resolves before any notice is written: starting now, the view once it grants.
+  if (host.willAutoConsent?.(spec)) setViewState(tileFor(host, m), m.id, { kind: "starting" });
+  else showPickNeedsYou(host, m, spec);
 }

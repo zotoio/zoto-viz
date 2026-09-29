@@ -5,7 +5,7 @@ import { clearConsentPendingForPane, registerConsentPending } from "./consent-pe
 
 export type SwitchPaneViewResult =
   | { ok: true; paneId: string; viewId: string }
-  | { ok: false; reason: string };
+  | { ok: false; reason: string; needsYou?: true };
 
 export type SwitchPaneViewHost = Pick<
   Mosaic,
@@ -119,7 +119,7 @@ export async function switchPaneView(
         pluginId: pid,
       });
     }
-    return { ok: false, reason: msg };
+    return opts.onNeedsYou ? { ok: false, reason: msg, needsYou: true } : { ok: false, reason: msg };
   }
 
   if (paneSwitchStale(slot.paneId, token)) {

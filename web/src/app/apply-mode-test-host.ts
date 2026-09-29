@@ -24,6 +24,12 @@ type ApplyModeTestBindings = {
   setModeSelValue: (id: string) => void;
   refreshModeOptions: () => void;
   reattachModeSelect: () => void;
+  /** The solo wall's NetScene. */
+  scene: () => import("../graph/scene").NetScene;
+  /** Fire the real Settings `onPluginChange` callback (a plugin-settings write). */
+  firePluginChange: (storeId: string, values: Record<string, string>) => void;
+  /** Re-run the mosaic missing-view check (normally part of every mosaic sky sync). */
+  flagMissingMosaicViews: () => void;
 };
 
 let bindings: ApplyModeTestBindings | null = null;
@@ -61,4 +67,19 @@ export function configureApplyModeForTests(cfg: ApplyModeTestConfig): void {
 export async function refreshCatalogForTests(): Promise<void> {
   if (!bindings) throw new Error("apply-mode test bindings not registered");
   await bindings.refreshCatalog();
+}
+
+export function sceneForTests(): import("../graph/scene").NetScene {
+  if (!bindings) throw new Error("apply-mode test bindings not registered");
+  return bindings.scene();
+}
+
+export function firePluginChangeForTests(storeId: string, values: Record<string, string>): void {
+  if (!bindings) throw new Error("apply-mode test bindings not registered");
+  bindings.firePluginChange(storeId, values);
+}
+
+export function flagMissingMosaicViewsForTests(): void {
+  if (!bindings) throw new Error("apply-mode test bindings not registered");
+  bindings.flagMissingMosaicViews();
 }

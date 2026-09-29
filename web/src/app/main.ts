@@ -1,6 +1,7 @@
 import { AUDIO_DRIVES, NetScene, escapeHtml, type DreamAnim, type Filters } from "../graph/scene";
 import { Panel } from "../ui/panel";
-import { allModes, arcadeSlotFor, defaultCatalogMode, defaultOpts, graphModes, modeById, type ViewMode } from "../core/modes";
+import { allModes, arcadeSlotFor, defaultCatalogMode, defaultOpts, hostEngine, modeById, type ViewMode } from "../core/modes";
+import { flagMissingLayoutViews } from "./layout-missing-views";
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";
 import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
@@ -166,7 +167,7 @@ import { applyMosaicLayoutFromAnim } from "./mosaic-layout-settings-wiring";
 import { wirePluginFrontendAttach } from "./wire-settings-host";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
-import { vizContractFor } from "../plugins/plugin";
+import { dreamCycleModes, vizContractFor } from "../plugins/plugin";
 import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract,
   type VizDataFrame,
@@ -857,8 +858,8 @@ function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
   }
   nestCams.setLook(opts);
   if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
-  if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
-  else scene.setMode(m, opts);
+  if (mosaic?.on && !(m.pluginId && m.standalone)) setSceneMode(mosaic.graphScene(m.id), m, opts);
+  else setSceneMode(scene, m, opts);
   renderLegend(m, opts);
   const spec = pluginSpecForMode(m.id);
   if (!flags.skipSandboxPush && spec && pluginHasFrontend(spec)) {
@@ -875,7 +876,7 @@ function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
     for (const tileId of mosaic.tileIds) {
       if (configStoreIdForMode(tileId) !== store) continue;
       const pm = hostModeById(tileId);
-      mosaic.graphScene(tileId)?.setMode(pm, optsFor(pm));
+      setSceneMode(mosaic.graphScene(tileId), pm, optsFor(pm));
     }
   }
   syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
@@ -996,6 +997,14 @@ type EnsureReviewedOpts = {
  * No modal: the operator answers on the tile (Needs you → Review). The review wait also ends when
  * the pack is granted elsewhere (Settings, live patch), so the view starts in place either way.
  */
+/**
+ * Auto-consent grants this pack without asking: on, eligible origin, and (option (a)) never an
+ * incomplete record, which stays Needs you ("needs your OK again") until the operator reviews it.
+ */
+function willAutoConsent(spec: PluginView): boolean {
+  return autoconsentEnabled() && autoconsentEligible(spec) && consentStateOf(spec) !== "stale";
+}
+
 async function ensureReviewedImpl(
   spec: PluginView | null,
   signal: AbortSignal,
@@ -1005,7 +1014,7 @@ async function ensureReviewedImpl(
   if (consentGranted(spec)) return "ok";
   if (!shouldPromptPluginReview(spec, catalogReady)) return "aborted";
   const packId = spec.id;
-  const auto = autoconsentEnabled() && autoconsentEligible(spec);
+  const auto = willAutoConsent(spec);
   if (!auto && opts.wait === false && !reviewOverride && !hasKeptTileAnswer(packId)) return "declined";
   const out = await requestConsent(spec, async (reviewSignal) => {
     let kind: "reviewed" | "authored" | null;
@@ -1271,6 +1280,9 @@ function markPluginNeedsReview(spec: PluginView): void {
  * there starts the view in place once approved (no reload, never another view).
  */
 function paintPluginNeedsReviewNotice(spec: PluginView, paneId?: string): void {
+  // Auto-consent resolves before any notice is written (UX Pro): while a switch is picking this
+  // pack, its own review path grants it and then loads it, so nothing may paint Needs you here.
+  if (willAutoConsent(spec) && getActiveModeSwitchSignal()) return;
   if (mosaic?.on) {
     const pane = paneId && mosaic.tileIds.includes(paneId) ? paneId : mosaicFocusSlot(mosaic);
     if (!pane) return;
@@ -1464,8 +1476,21 @@ function tileSkyStarting(tileId: string): boolean {
   return skyWaits.exempt(key);
 }
 
+/** A saved layout naming a view that is gone gets a plain notice, never a stand-in view. */
+function flagMissingMosaicViews(): void {
+  if (!mosaic?.on || !catalogReady) return;
+  const m = mosaic;
+  flagMissingLayoutViews({
+    tileIds: m.tileIds,
+    isKnownView: (viewId) => allModes().some((row) => row.id === viewId)
+      || !!hostEngine(viewId) || !!hostEngine(viewId.replace(/^plugin:/, "")),
+    paneScene: (tileId) => m.graphScene(tileId),
+  });
+}
+
 async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   if (mosaic?.on) {
+    flagMissingMosaicViews();
     mosaic.markSkyPending();
     try {
       for (const id of mosaic.tileIds) {
@@ -1512,8 +1537,7 @@ async function mountMosaicPanelView(viewId: string): Promise<void> {
   const o = optsFor(pm);
   const target = mosaic.graphScene(viewId);
   const skyStage = !pm.standalone && !!(pm.stageOnly || (lookForMode(viewId) ?? spec?.look)?.stageOnly);
-  target?.setMode(pm, o);
-  target?.setStageOnly(skyStage);
+  setSceneMode(target, pm, o, skyStage);
   const paneSpec = skySpecForMode(viewId, spec);
   if (pm.standalone || arcadeSlotFor(pm) !== "carousel") {
     void syncPluginSky(paneSpec, refreshPluginSignal.signal).catch(() => {});
@@ -1530,6 +1554,7 @@ async function runMosaicPaneSwitch(
   toViewId: string,
   fromViewId?: string,
   signal: AbortSignal = refreshPluginSignal.signal,
+  restart?: () => void,
 ): Promise<SwitchPaneViewResult> {
   if (!mosaic?.on) return { ok: false, reason: "Mosaic is off." };
   const pm = modeById(toViewId);
@@ -1545,7 +1570,7 @@ async function runMosaicPaneSwitch(
         tileId: paneId,
         viewId: mosaicTileViewId(toViewId),
         spec,
-        restart: () => { void runMosaicPaneSwitch(toViewId, fromViewId ?? paneId); },
+        restart: restart ?? (() => { void runMosaicPaneSwitch(toViewId, fromViewId ?? paneId); }),
       })
       : undefined,
     teardownView: teardownMosaicPanelView,
@@ -1592,6 +1617,29 @@ initPluginConsentSync({
 
 function computeSkyStage(m: ViewMode, spec: PluginView | null): boolean {
   return !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
+}
+
+/**
+ * The one stage-only rule (graph hidden, sky and floor stay): an arcade view on the solo wall, a
+ * solo pick still waiting on its OK, or the view's own stage look. #183: NetScene.setMode resets
+ * stage-only to the mode's own flag, so every setMode goes through {@link setSceneMode}.
+ */
+function stageOnlyRule(target: NetScene, m: ViewMode, spec: PluginView | null): boolean {
+  const solo = target === scene && !mosaic?.on;
+  if (solo && (arcadeSlotFor(m) !== null || packNeedsConsent(spec))) return true;
+  return computeSkyStage(m, spec);
+}
+
+/** setMode, then stage-only by {@link stageOnlyRule} (or the caller's already-computed value). */
+function setSceneMode(
+  target: NetScene | null | undefined,
+  m: ViewMode,
+  opts: Record<string, string>,
+  stage?: boolean,
+): void {
+  if (!target) return;
+  target.setMode(m, opts);
+  target.setStageOnly(stage ?? stageOnlyRule(target, m, pluginSpecForMode(m.id)));
 }
 
 function applyModeFeedExtras(m: ViewMode, opts: Record<string, string>): void {
@@ -1644,25 +1692,21 @@ function applyMosaicModeVisuals(m: ViewMode, opts: Record<string, string>, spec:
   const focusId = mosaic!.tileIds.includes(m.id) ? m.id : mosaic!.tileIds[0] ?? m.id;
   mosaic!.focus(focusId);
   const target = mosaic!.graphScene(focusId);
-  if (target) {
-    target.setMode(m, opts);
-    target.setStageOnly(skyStage);
-  }
+  setSceneMode(target, m, opts, skyStage);
   document.body.classList.remove("arcade");
   scene.setActive(true);
   morphViewChrome(m, opts, spec, skyStage, false);
 }
 
 function applySoloModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
-  scene.setMode(m, opts);
   const next = arcadeSlotFor(m);
+  setSceneMode(scene, m, opts, next !== null || skyStage);
   document.body.classList.toggle("arcade", next !== null);
   unbindTetrisStandaloneHost(scene);
   if (next === "tetris") {
     bindTetrisStandaloneHost(scene, arcade.tetris.view as TetrisView);
   } else {
     scene.setActive(true);
-    scene.setStageOnly(next !== null || skyStage);
   }
   if (activeArcade && activeArcade !== next) { arcade[activeArcade].view.stop(); arcade[activeArcade].el.hidden = true; }
   if (next && activeArcade !== next) { arcade[next].el.hidden = false; arcade[next].view.start(selectedIp); }
@@ -1752,6 +1796,7 @@ function buildApplyModeHost(): ApplyModeHost {
     },
     focusModePicker: () => { modeSel.focusWithRing(); },
     tileSkyStarting,
+    willAutoConsent,
     stopPackRuntime: (signal) => {
       void loadTsPlugin(null, signal).catch(() => {});
       void loadPluginSkyOnto(scene, null, false, signal).catch(() => {});
@@ -1764,9 +1809,16 @@ async function applyMosaicModeAsync(m: ViewMode, flags: ApplyModeFlags, signal: 
   const opts = optsFor(m);
   const prevMode = liveMode;
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  const sw = await runMosaicPaneSwitch(m.id, undefined, signal);
+  const sw = await runMosaicPaneSwitch(m.id, undefined, signal, () => applyMode(m.id));
   if (signal.aborted) {
     settleConsentAndDrainAuto("aborted");
+    return;
+  }
+  if (!sw.ok && sw.needsYou) {
+    // The pick is the view: the header keeps naming it while its pane shows Needs you; Review
+    // there re-applies it. Never snap the header back to the previous view.
+    modeSel.value = m.id;
+    settleConsentAndDrainAuto("declined", m.id);
     return;
   }
   if (!sw.ok) {
@@ -1852,6 +1904,9 @@ export function applyMode(
 registerAutoSwitchRunner(runAutoSwitch);
 registerDreamPulseReset(() => scene.resetDreamCyclePulse());
 registerApplyModeTestBindings({
+  scene: () => scene,
+  firePluginChange: (storeId, values) => { settings.onPluginChange?.(storeId, values); },
+  flagMissingMosaicViews: () => flagMissingMosaicViews(),
   setEnsureReviewedOverride: (fn) => { ensureReviewedOverride = fn; },
   setReviewOverride: (fn) => { reviewOverride = fn; },
   refreshCatalog: () => refreshPluginCatalogAndResume(),
@@ -2263,7 +2318,7 @@ async function healTile(tileId: string, step: HealStep): Promise<void> {
     case "restart-pack": {
       const m = modeById(modeId);
       const sc = tileId === "main" ? scene : mosaic?.graphScene(tileId) ?? null;
-      if (sc) sc.setMode(m, optsFor(m));
+      if (sc) setSceneMode(sc, m, optsFor(m));
       if (spec && modeSel.value === m.id) await loadTsPlugin(spec, refreshPluginSignal.signal);
       else void syncPluginSky(spec, refreshPluginSignal.signal);
       sc?.refresh();
@@ -2655,7 +2710,7 @@ scene.onDreamPulse = () => {
   quiet(() => {
     const a = settings.animSettings;
     if (a.cycle && !mosaic?.on) {
-      const graphs = graphModes();
+      const graphs = dreamCycleModes();
       if (graphs.length) {
         const i = Math.max(0, graphs.findIndex((m) => m.id === modeSel.value));
         applyMode(graphs[(i + 1) % graphs.length].id, {}, { channel: "automatic", auto: "dream-cycle" });
