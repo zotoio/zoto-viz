@@ -10,6 +10,7 @@ import { frameTsFromRaf } from "../core/time-ms";
 import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
 import { devicePxRatioNumber, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
+import { ArcadeIdleFeed, mountArcadeDemoLabel, type ArcadeIdleShaper } from "./arcade-idle-feed";
 
 /**
  * Shared machinery for the arcade views (NetPong's siblings: Invaders, Command, Frogger). Each is a standalone
@@ -355,6 +356,8 @@ export abstract class ArcadeView {
   private readonly look: LookStage;
   private readonly paneFps: PaneFps;
   private readonly picture = new CanvasChangeProbe();
+  /** #181 demo rows while the LAN is quiet (views with an {@link idleShaper}); null for the others */
+  protected readonly idle: ArcadeIdleFeed<Packet> | null;
 
   constructor(protected readonly container: HTMLElement, protected readonly scene: NetScene) {
     this.paneFps = new PaneFps(container);
@@ -362,6 +365,10 @@ export abstract class ArcadeView {
     this.canvas = document.createElement("canvas");
     this.g = this.canvas.getContext("2d")!;
     container.appendChild(this.canvas);
+    const shaper = this.idleShaper();
+    this.idle = shaper
+      ? new ArcadeIdleFeed<Packet>({ shaper, label: mountArcadeDemoLabel(container), deliver: (rows) => this.ingestIdle(rows) })
+      : null;
     this.font = getComputedStyle(document.documentElement).fontFamily || this.font;
     this.canvas.addEventListener("pointermove", (e) => {
       const r = this.canvas.getBoundingClientRect();
@@ -382,6 +389,7 @@ export abstract class ArcadeView {
     this.lastFrame = 0;
     this.resync();
     this.onSnapshot();
+    this.idle?.start();
     if (this.useTraffic()) {
       if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
       void this.poll();
@@ -392,6 +400,7 @@ export abstract class ArcadeView {
 
   stop(): void {
     this.running = false;
+    this.idle?.stop();
     cancelAnimationFrame(this.raf);
     if (this.timer !== null) { clearInterval(this.timer); this.timer = null; }
     this.look.detach();
@@ -416,6 +425,15 @@ export abstract class ArcadeView {
   protected abstract ingest(fresh: Packet[], first: number, newest: number): void;
   protected abstract step(now: number, dt: number): void;
   protected abstract draw(now: number): void;
+  /**
+   * #181: this engine's idle shaper (demo rows of its own packet type, fed through its real `ingest` on empty polls).
+   * Called from the base constructor: return a module-level shaper, not something built from subclass fields.
+   */
+  protected idleShaper(): ArcadeIdleShaper<Packet> | null { return null; }
+  /** The single-device pick the idle rows are shaped for ("" for the group). */
+  protected idleMe(): string { return ""; }
+  /** Demo rows are on screen: the idle text says so instead of "waiting for packets…". */
+  protected get idleShowing(): boolean { return this.idle?.showing ?? false; }
   /** Called before the run starts, with the graph's selection. */
   protected onStart(_preferIp: string | null): void {}
   /** Every snapshot while running: refresh menus. */
@@ -456,11 +474,14 @@ export abstract class ArcadeView {
       if (q.peer) url += `&peer=${encodeURIComponent(q.peer)}`;
       if (this.lastT) url += `&since=${this.lastT}`;
       const r = await fetch(url);
-      if (!r.ok) return;
+      // an error answer (unknown device …) carries no traffic either: the idle feed takes it as an empty poll
+      if (!r.ok) { if (gen === this.gen) this.idle?.pollEmpty(this.idleMe()); return; }
       const m = (await r.json()) as TrafficMsg;
       if (gen !== this.gen) return; // the query changed meanwhile: this is the old run's traffic
       const pk = m.packets.slice().reverse(); // oldest first
-      if (!pk.length) { this.pps *= 0.6; return; }
+      if (!pk.length) { this.pps *= 0.6; this.idle?.pollEmpty(this.idleMe()); return; }
+      // live traffic: the demo stops at once, and its rows leave the board before the live ones go in
+      if (this.idle?.pollLive()) this.reset();
       const newest = pk[pk.length - 1][0];
       if (this.lastT === 0) this.lastT = newest - REPLAY_S;
       const fresh = pk.filter((p) => p[0] > this.lastT);
@@ -475,6 +496,12 @@ export abstract class ArcadeView {
     } finally {
       if (gen === this.gen) this.inflight = false;
     }
+  }
+
+  /** One idle batch, through the engine's real ingest (the poll cursor is left to live traffic). */
+  private ingestIdle(rows: Packet[]): void {
+    this.fit();
+    this.ingest(rows, rows[0][0], rows[rows.length - 1][0]);
   }
 
   // ---- frame
@@ -521,7 +548,7 @@ export abstract class ArcadeView {
 
   // ---- helpers
 
-  protected deviceAt(ip: string): Device | undefined { return this.scene.deviceOf(ip) ?? this.msg?.devices.find((d) => d.ip === ip); }
+  protected deviceAt(ip: string): Device | undefined { return this.scene.deviceOf(ip) ?? this.msg?.devices.find((d) => d.ip === ip) ?? this.idle?.device(ip); }
 
   protected nameOf(ip: string): string {
     const d = this.deviceAt(ip);

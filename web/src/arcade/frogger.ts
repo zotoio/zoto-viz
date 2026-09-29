@@ -4,6 +4,8 @@ import { categorize, hashColor, orgOf } from "../core/modes";
 import { rName } from "../core/redact";
 import { type Device, type Packet } from "../core/types";
 import { ArcadeView, DevicePicker, FadeLog, MISS_RED, OK_GREEN, ROW_TTL_S, clamp, css, fade, fitText, isKnown, roundRect, sprite } from "./arcade";
+import type { ArcadeIdleShaper } from "./arcade-idle-feed";
+import { shapeFroggerIdle } from "./arcade-idle-shapers";
 
 /**
  * Frogger: do connections get established, and where do they die.
@@ -125,6 +127,9 @@ export class FroggerView extends ArcadeView {
     if (!this.hover?.ip) return;
     if (this.hover.col) this.picker.set(this.picker.isGroup || e.shiftKey ? this.hover.ip : "lan");
   }
+
+  protected override idleShaper(): ArcadeIdleShaper<Packet> { return shapeFroggerIdle; }
+  protected override idleMe(): string { return this.picker.isGroup ? "" : this.picker.ip(); }
 
   protected query(): { ip: string } | null {
     const ip = this.picker.token();
@@ -605,8 +610,9 @@ export class FroggerView extends ArcadeView {
     });
     if (!this.cols.size) g.fillStyle = u.muted, g.textAlign = "left", g.font = `10px ${this.font}`, g.fillText("BANK · devices opening connections", 20, bankY);
 
-    if (!this.frogs.length && this.lastT) this.drawIdle(now, `no new connections from ${this.picker.label((ip) => this.nameOf(ip))} in the last few seconds`, this.W / 2, laneY.connect);
-    else if (!this.lastT) this.drawIdle(now, "waiting for packets…", this.W / 2, laneY.connect);
+    const seen = this.lastT || this.idleShowing;
+    if (!this.frogs.length && seen) this.drawIdle(now, `no new connections from ${this.picker.label((ip) => this.nameOf(ip))} in the last few seconds`, this.W / 2, laneY.connect);
+    else if (!seen) this.drawIdle(now, "waiting for packets…", this.W / 2, laneY.connect);
 
     this.log.draw(g, u, this.font, 16, bottom, this.W - 30, now);
 

@@ -1,4 +1,6 @@
 import type { NetScene } from "../graph/scene";
+import { ArcadeIdleFeed, mountArcadeDemoLabel } from "./arcade-idle-feed";
+import { shapePongIdle, type PongRow } from "./arcade-idle-shapers";
 import { Select, TextField, type SelectOption } from "../ui/ui";
 import { categorize, hashColor } from "../core/modes";
 import { rIp, rName, rText } from "../core/redact";
@@ -219,6 +221,10 @@ export class PongView {
   private readonly look: LookStage;
   private readonly paneFps: PaneFps;
   private readonly picture = new CanvasChangeProbe();
+  /** #181 demo rows while the LAN is quiet, through {@link ingest} on empty polls */
+  private readonly idle: ArcadeIdleFeed<PongRow>;
+  /** the demo rows' own `since` cursor, so the live poll cursor ({@link lastT}) is left to live traffic */
+  private idleT = 0;
 
   constructor(private readonly container: HTMLElement, private readonly scene: NetScene) {
     this.paneFps = new PaneFps(container);
@@ -226,6 +232,7 @@ export class PongView {
     this.canvas = document.createElement("canvas");
     this.g = this.canvas.getContext("2d")!;
     container.appendChild(this.canvas);
+    this.idle = new ArcadeIdleFeed<PongRow>({ shaper: shapePongIdle, label: mountArcadeDemoLabel(container), deliver: (rows) => this.ingestIdle(rows) });
     this.font = getComputedStyle(document.documentElement).fontFamily || this.font;
 
     // the pick that used to live under the "target" key was the focal host: it is the source now
@@ -310,6 +317,7 @@ export class PongView {
     this.lastFrame = 0;
     this.rebuildOptions();
     this.resync();
+    this.idle.start();
     if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
     void this.poll();
     cancelAnimationFrame(this.raf);
@@ -318,6 +326,7 @@ export class PongView {
 
   stop(): void {
     this.running = false;
+    this.idle.stop();
     cancelAnimationFrame(this.raf);
     if (this.timer !== null) { clearInterval(this.timer); this.timer = null; }
     this.look.detach();
@@ -504,6 +513,7 @@ export class PongView {
     this.pending.clear();
     this.stats = { hits: 0, misses: 0, other: 0, pps: 0 };
     this.lastT = 0;
+    this.idleT = 0;
     this.paddle = { y: -1, vy: 0, glow: 0 };
     this.laneOverflow = 0;
     this.inflight = false;
@@ -574,7 +584,7 @@ export class PongView {
 
   private get speed(): number { return Number(this.speedSel.value) || 1; }
 
-  private deviceAt(ip: string): Device | undefined { return this.scene.deviceOf(ip) ?? this.msg?.devices.find((d) => d.ip === ip); }
+  private deviceAt(ip: string): Device | undefined { return this.scene.deviceOf(ip) ?? this.msg?.devices.find((d) => d.ip === ip) ?? this.idle.device(ip); }
 
   /** the source device for a single-host source; undefined for a group */
   private sourceDevice(): Device | undefined { return this.srcIsGroup ? undefined : this.deviceAt(this.srcIp); }
@@ -590,7 +600,7 @@ export class PongView {
   }
 
   private nameOf(ip: string): string {
-    const d = this.scene.deviceOf(ip);
+    const d = this.scene.deviceOf(ip) ?? this.idle.device(ip);
     const n = d ? displayName(d) : ip;
     return n === ip ? rIp(ip) : rName(n);
   }
@@ -609,13 +619,34 @@ export class PongView {
       // after the first poll only ask for what is new: cheap for the server even when the source is every device
       if (this.lastT) url += `&since=${this.lastT}`;
       const r = await fetch(url);
-      if (!r.ok) return;
+      // an error answer (unknown device …) carries no traffic either: the idle feed takes it as an empty poll
+      if (!r.ok) { if (gen === this.gen) this.idleStep(); return; }
       const m = (await r.json()) as TrafficMsg;
-      if (gen === this.gen) this.ingest(m); // source / target changed meanwhile: this is the old run's traffic
+      if (gen !== this.gen) return; // source / target changed meanwhile: this is the old run's traffic
+      if (!m.packets.length) { this.idleStep(); return; }
+      // live traffic: the demo stops at once, and its rows leave the board before the live ones go in
+      if (this.idle.pollLive()) this.reset();
+      this.ingest(m);
     } catch {
       // server away; the next tick retries
     } finally {
       if (gen === this.gen) this.inflight = false;
+    }
+  }
+
+  private idleStep(): void {
+    this.idle.pollEmpty(this.srcIsGroup ? "" : this.srcIp, this.srcIsGroup ? this.srcChoice : "");
+  }
+
+  /** One idle batch through the real {@link ingest}, on the demo's own cursor. */
+  private ingestIdle(rows: PongRow[]): void {
+    const live = this.lastT;
+    this.lastT = this.idleT;
+    try {
+      this.ingest({ ip: this.srcIp, peer: null, ts: rows[rows.length - 1][0], packets: rows.slice().reverse(), window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] } });
+    } finally {
+      this.idleT = this.lastT;
+      this.lastT = live;
     }
   }
 
@@ -1077,7 +1108,7 @@ export class PongView {
     if (!this.balls.length && (this.srcIp || this.srcChoice === "match")) {
       const idle = !this.srcIp
         ? "no device matches the source pattern"
-        : this.lastT
+        : this.lastT || this.idle.showing
           ? `no packets between ${this.sourceLabel()} and ${this.targetLabel()} in the last few seconds`
           : "waiting for packets…";
       g.textAlign = "center"; g.font = `12px ${this.font}`; g.fillStyle = u.muted; g.globalAlpha = 0.6 + 0.3 * Math.sin(now * 2);
