@@ -1,0 +1,50 @@
+{
+  "demo": true,
+  "source": "nasa",
+  "label": "DEMO SNAPSHOT — sample NASA image of the day pictures, not live",
+  "note": "Bundled demo data. Served only when the live feed fails or has no stills. Every image is on this source's own host.",
+  "items": [
+    {
+      "title": "Space Station View of Earth at Night",
+      "summary": "This nighttime view of the United States, dotted with city lights looking toward New York City (center), was taken at approximately 3:40 a.m. local time from the International Space Station as it orbited 259 miles above Earth.",
+      "link": "https://www.nasa.gov/image-detail/gmt251_08_43_jessica-meir_northern-aurora-cupola-14mm/",
+      "published": "Mon, 28 Sep 2026 15:22 GMT",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55534901810-95d2f06788-o.jpg"
+    },
+    {
+      "title": "Hubble Spots Chaotic Secret in Galaxy",
+      "summary": "Though the spiral galaxy in this ESA/Hubble Picture of the Month seems serene, it hides a chaotic secret.",
+      "link": "https://www.nasa.gov/image-detail/a-galaxy-spinning-out-of-sync/",
+      "published": "Fri, 25 Sep 2026 15:54 GMT",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55534741297-34e5a9d414-o.jpg"
+    },
+    {
+      "title": "Practicing for Safe Landings on the Moon and Beyond",
+      "summary": "An Alta-X drone flies an advanced guidance and navigation system known as the Safe and Precise Landing – Integrated Capabilities Evolution (SPLICE) experiment near NASA’s Armstrong Flight Research Center in Edwards, California, on Thursday, Aug. 27, 2026.",
+      "link": "https://www.nasa.gov/image-detail/nasa-navigation-experiment-shows-promise-for-landing-on-other-planets/",
+      "published": "Thu, 24 Sep 2026 16:36 GMT",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/afrc2026-0179-18orig.jpg"
+    },
+    {
+      "title": "NASA's Hubble Telescope Reaches Milestone, Looks for Elusive Supernova",
+      "summary": "An image from NASA's Hubble Space Telescope of galaxy cluster MACS J0417 is part of repeated observations to monitor for the reappearance of supernova Athena, which can help astronomers measure the expansion rate of the universe.",
+      "link": "https://www.nasa.gov/image-detail/stsci-h-p26023a-m-2000x1207/",
+      "published": "Wed, 23 Sep 2026 18:45 GMT",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/stsci-h-p26023a-m-2000x1207-1.jpg"
+    },
+    {
+      "title": "NASA Astronaut Reid Wiseman Attends Ravens vs. Saints Game",
+      "summary": "NASA astronaut and commander of the agency’s Artemis II mission, Reid Wiseman, a Baltimore native, takes a selfie with fans at an NFL game between the New Orleans Saints and the Baltimore Ravens at M&T Bank Stadium, Sunday, Sept. 20, 2026, in Baltimore.",
+      "link": "https://www.nasa.gov/image-detail/nasas-inspiration-tour-at-mt-bank-stadium/",
+      "published": "Mon, 21 Sep 2026 18:46 GMT",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/55540215826-eb77fe7409-o.jpg"
+    },
+    {
+      "title": "COSI Telescope Comes Together",
+      "summary": "UC Berkeley engineers and managers watch as the COSI (Compton Spectrometer and Imager) detector assembly is slowly raised from a table in this July 8, 2026, image.",
+      "link": "https://www.nasa.gov/image-detail/cosi-2026july-01/",
+      "published": "Fri, 18 Sep 2026 15:46 GMT",
+      "image": "https://www.nasa.gov/wp-content/uploads/2026/09/cosi-2026july-01.jpg"
+    }
+  ]
+}

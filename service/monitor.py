@@ -1902,6 +1902,8 @@ async def repo_sync_loop(app: web.Application) -> None:
                     log(f"repo sync: PIP INSTALL FAILED: {info['pip_error']}")
             elif action == "error":
                 log(f"repo sync: {info.get('error') or 'pull failed'}")
+            elif action == "busy":
+                log(f"repo sync: skipped, {info.get('reason') or 'another sync is running'}")
         except Exception as e:  # noqa: BLE001
             log(f"repo sync: {e}")
         wait = repo_sync.interval_s()
