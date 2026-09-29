@@ -185,10 +185,17 @@ vec3 soilColor(vec2 uv, float strata) {
 }
 
 void main() {
+  // vDir is the camera-local ray (the host parents plugin skies to the camera and
+  // levels the stage-only camera), so the view looks down -z. Map the screen plane
+  // onto the cutaway (0.9 fits the host 55 degree view top to bottom); a world-dome
+  // dir.xz / |dir.y| mapping would put the whole view off the formicarium.
   vec3 dir = normalize(vDir);
-  vec2 uv = vec2(dir.x, dir.z) / (0.42 + abs(dir.y) * 0.35) + 0.5;
-  vec2 cam = vec2(slot(0), slot(1));
-  float zoom = slot(2);
+  vec2 uv = dir.xy / max(-dir.z, 0.18) * 0.9 + 0.5;
+  // Before the first frame the meta slots are zero: use the static cutaway camera
+  // (colony.ts packSlots defaults) instead of dividing by a zero zoom.
+  bool meta = slot(2) > 0.0;
+  vec2 cam = meta ? vec2(slot(0), slot(1)) : vec2(0.5, 0.45);
+  float zoom = meta ? slot(2) : 1.1;
   uv = (uv - 0.5) / zoom + cam;
 
   float day = slot(3);
