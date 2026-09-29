@@ -15,6 +15,7 @@
 import * as THREE from "three";
 import { expect } from "vitest";
 import { Backdrop } from "../graph/backdrop";
+import { lensFov } from "../graph/lens-fov";
 
 /** scene.ts default graph camera sits at (0, 820, 820) looking at the origin. */
 export const HOST_DEFAULT_PITCH_DEG = 45;
@@ -56,10 +57,26 @@ export function worldDomeSkyRay(pitchDeg: number): SkyRay {
   return new THREE.Matrix3().setFromMatrix4(rotationOf(hostCameraAtPitch(pitchDeg))).toArray();
 }
 
+/** Camera-local ray half-spans (tan of half the horizontal / vertical fov) the smoke draw covers. */
+export type SkySpan = readonly [x: number, y: number];
+
+/** Raw baseFov 55 at 16:10, before scene.ts clamps it with lensFov (the default here). */
+export const BASE_FOV_SKY_SPAN: SkySpan = [0.83, 0.52];
+
+/**
+ * What the app's camera actually spans at `aspect`: scene.ts sets camera.fov =
+ * lensFov(baseFov 55, aspect) every frame (:2616, :4598), which caps the horizontal fov at
+ * MAX_H_FOV 64 degrees, so a 1280 x 800 window draws 64 x 42.7 degrees, not 79.6 x 55.
+ */
+export function appLensSkySpan(aspect = 1280 / 800): SkySpan {
+  const v = THREE.MathUtils.degToRad(lensFov(55, aspect)) / 2;
+  return [Math.tan(v) * aspect, Math.tan(v)];
+}
+
 /** Rewrite the pack's `normalize(vDir)` to the host-camera ray through `ray` (column-major). */
-export function atHostCamera(skySource: string, ray: SkyRay = IDENTITY_SKY_RAY): string {
+export function atHostCamera(skySource: string, ray: SkyRay = IDENTITY_SKY_RAY, span: SkySpan = BASE_FOV_SKY_SPAN): string {
   const hits = skySource.match(/normalize\(vDir\)/g)?.length ?? 0;
   expect(hits, "pack sky reads vDir through normalize(vDir) exactly once").toBe(1);
   const m = `mat3(${ray.map((v) => v.toFixed(7)).join(", ")})`;
-  return skySource.replace("normalize(vDir)", `normalize(${m} * (vDir * vec3(0.83, 0.52, 1.0)))`);
+  return skySource.replace("normalize(vDir)", `normalize(${m} * (vDir * vec3(${span[0].toFixed(7)}, ${span[1].toFixed(7)}, 1.0)))`);
 }

@@ -1,3 +1,5 @@
+import { mkdirSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import { chromium, type Browser, type LaunchOptions } from "playwright";
 
 export type PluginSkySmokeUniforms = {
@@ -60,18 +62,27 @@ async function browser(): Promise<Browser> {
   return sharedBrowser;
 }
 
+/**
+ * Where a row may save its 128 px draw as a PNG: `$PLUGIN_SKY_PNG_DIR/<name>.png` when that
+ * env var is set, else undefined (no file).
+ */
+export function pluginSkySmokePngPath(name: string): string | undefined {
+  const dir = process.env.PLUGIN_SKY_PNG_DIR;
+  return dir ? path.join(dir, `${name}.png`) : undefined;
+}
+
 /** One full-screen plugin-sky draw; asserts non-black via median luma + channel variance. */
 export async function smokeRenderPluginSky(
   wrappedFrag: string,
   ubo: Float32Array,
   uniforms: PluginSkySmokeUniforms,
-  opts: { keepLuma?: boolean } = {},
+  opts: { keepLuma?: boolean; pngPath?: string } = {},
 ): Promise<PluginSkySmokeResult> {
   const b = await browser();
   const page = await b.newPage();
   try {
     const result = await page.evaluate(
-      ({ frag, slots, uni, vert, keepLuma }) => {
+      ({ frag, slots, uni, vert, keepLuma, wantPng }) => {
         const canvas = document.createElement("canvas");
         canvas.width = 128;
         canvas.height = 128;
@@ -167,7 +178,8 @@ export async function smokeRenderPluginSky(
         const variance = lumas.reduce((a, v) => a + (v - mean) ** 2, 0) / lumas.length;
         const litPixelFraction = lit / nPix;
 
-        return { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, qePatches, luma };
+        const png = wantPng ? canvas.toDataURL("image/png") : undefined;
+        return { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, qePatches, luma, png };
       },
       {
         frag: wrappedFrag,
@@ -175,6 +187,7 @@ export async function smokeRenderPluginSky(
         uni: uniforms,
         vert: VERT,
         keepLuma: opts.keepLuma === true,
+        wantPng: !!opts.pngPath,
       },
     );
 
@@ -182,7 +195,11 @@ export async function smokeRenderPluginSky(
       throw new Error(result.error);
     }
 
-    const { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, qePatches, luma } = result;
+    const { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, qePatches, luma, png } = result;
+    if (opts.pngPath && png) {
+      mkdirSync(path.dirname(opts.pngPath), { recursive: true });
+      writeFileSync(opts.pngPath, Buffer.from(png.slice(png.indexOf(",") + 1), "base64"));
+    }
     const assertion =
       `medianLuma=${medianLuma.toFixed(4)} litFrac=${litPixelFraction.toFixed(3)} maxChannel=${maxChannel} variance=${variance.toFixed(6)} checksum=${pixelChecksum}`;
     return { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, qePatches, luma, assertion };
