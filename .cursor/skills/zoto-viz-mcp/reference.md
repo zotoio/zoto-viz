@@ -1,6 +1,8 @@
 # zoto-viz MCP reference
 
-Server: `zoto-viz-plugins` v3. Endpoint: `POST http://127.0.0.1:7020/mcp` (Streamable HTTP JSON-RPC 2.0). `GET /mcp` returns tool names.
+Server: `zoto-viz-plugins` v4. Endpoint: `POST http://127.0.0.1:7020/mcp` (Streamable HTTP JSON-RPC 2.0). `GET /mcp` returns tool names.
+
+Each tool `description` is the how-to: when to call it, the argument shape, and what not to do. `annotations.readOnlyHint` / `destructiveHint` mark reads and deletes. `list_features` returns a `how` list. `list_plugins` returns `errors` and `blocked` — an empty `plugins` array with an error means the header view menu was refused (often a slug collision).
 
 ## JSON-RPC
 
@@ -46,6 +48,7 @@ Mutating REST (`PUT /api/plugins/{id}/consent`, `PUT /api/ai/control`) needs `X-
 | `get_traffic` | `ip` (addr, `@lan`, `@internet`, `@any`, or comma list), `peer?`, `since?` |
 | `get_rf_watch` | — |
 | `set_rf_watch` | `ssids`, `other?`, `dwell?`, `rotate?` |
+| `get_logs` | `after?` (seq). Monitor log ring, same as `GET /api/logs` |
 
 ### Plugins
 
@@ -70,7 +73,8 @@ Consent kinds: **authored** = this agent/operator wrote it; **reviewed** = sourc
 | --- | --- |
 | `list_memories` / `add_memory` | `text` on add |
 | `delete_memory` | `id?` (omit = clear all) |
-| `list_sources` / `set_source` / `delete_source` | source `type`: rss \| http \| file \| journal \| kmsg |
+| `list_source_library` | no args. Public recipes (weather, quakes, news). Not polled until `set_source` |
+| `list_sources` / `set_source` / `delete_source` | `type`: rss \| http \| file \| journal \| kmsg, or `library` id / list from `list_source_library` |
 | `get_sdm` / `list_cameras` / `set_sdm` | Nest Device Access; `set_sdm` writes secrets to `~/.zoto-viz/sdm.yml` |
 
 Remote source URLs must be public HTTPS. File paths stay under `$HOME`.

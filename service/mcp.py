@@ -39,18 +39,45 @@ from . import profiles
 
 PROTOCOL = "2025-03-26"
 SERVER_NAME = "zoto-viz-plugins"
-SERVER_VERSION = "3"
+SERVER_VERSION = "4"
+
+# Read-only tools. Everything else writes or queues a live patch.
+_READ_ONLY = frozenset({
+    "list_features", "get_settings", "list_plugins", "get_state", "get_pack_perf",
+    "get_traffic", "get_rf_watch", "list_profiles", "list_memories", "list_sources",
+    "list_source_library",
+    "list_plugin_instances", "get_sdm", "list_cameras", "get_logs",
+})
+_DESTRUCTIVE = frozenset({
+    "delete_memory", "delete_source", "delete_plugin_instance",
+})
+_NON_IDEMPOTENT = frozenset({"roll_dice", "add_memory"})
+
+
+def _with_annotations(tool: dict[str, Any]) -> dict[str, Any]:
+    name = str(tool.get("name") or "")
+    return {
+        **tool,
+        "annotations": {
+            "readOnlyHint": name in _READ_ONLY,
+            "destructiveHint": name in _DESTRUCTIVE,
+            "idempotentHint": name not in _NON_IDEMPOTENT,
+            "openWorldHint": False,
+        },
+    }
 
 PUBLISH_LOCAL_TOOL: dict[str, Any] = {
     "name": "publish_local_plugin",
     "description": (
-        "Create or replace a plugin zip in the user-local drop zone "
-        "(~/.zoto-viz/plugins/local/<id>.zip), unpack it, and activate the view when "
-        "the zip contract + schema pass and the plugin is YAML-only (or already consented). "
-        "Accepts a packed zip (zip_b64), a files tree, or a text description (mints a "
-        "graph/topology overlay). Does not write into the git checkout. Colliding ids "
-        "are reminted (id-2, …) instead of overwriting a shipped src tree or another zip. "
-        "Loopback only."
+        "Write a plugin that is not part of the git checkout. Use when experimenting "
+        "without touching plugins/src. Pass exactly one of zip_b64, files "
+        "(path → text, plugin.yml required), or description. Optional id, name, engine, "
+        "base, overwrite, activate (default true). Writes ~/.zoto-viz/plugins/local/<id>.zip, "
+        "unpacks it, and switches the open view when the zip is YAML-only or already consented. "
+        "Code-bearing zips return consent-required — then consent_plugin and set_view. "
+        "A taken id is reminted to <id>-2 unless overwrite updates that same local zip. "
+        "Do not use this for a shipped tree (draft_plugin) or a contrib zip in the repo "
+        "(install_plugin_zip). Does not git-add."
     ),
     "inputSchema": {
         "type": "object",
@@ -100,14 +127,13 @@ PUBLISH_LOCAL_TOOL: dict[str, Any] = {
 INSTALL_TOOL: dict[str, Any] = {
     "name": "install_plugin_zip",
     "description": (
-        "Write a zoto-viz plugin zip into the contrib drop zone at plugins/<id>.zip and "
-        "unpack it into plugins/.runtime/<id>/. Loopback only. A colliding id (shipped "
-        "src tree or an existing zip) is reminted to <id>-2, … unless overwrite updates "
-        "that same contrib zip. Never writes over plugins/src/<id>/. "
-        "Refuses a dirty working tree on plugins/src/<id>/ unless force is true. "
-        "Does not git-add or commit — return the written path and let the "
-        "operator promote. Emits consent-required when TypeScript, Python, or GLSL is "
-        "present and the current consent stamp does not cover the new hashes."
+        "Drop a contrib plugin zip into the checkout. Use when the operator wants "
+        "plugins/<id>.zip (gitignored), not a shipped src tree and not a home-dir experiment. "
+        "Pass {zip_b64}. overwrite replaces that same contrib zip when the sha256 differs. "
+        "force writes even if plugins/src/<id>/ has uncommitted edits; it still will not "
+        "replace a shipped src tree (the id is reminted to <id>-2). Returns path, id, and "
+        "consent-required when TypeScript, Python, or GLSL needs consent_plugin before it runs. "
+        "Do not git-add. For ~/.zoto-viz/plugins/local use publish_local_plugin."
     ),
     "inputSchema": {
         "type": "object",
@@ -140,9 +166,11 @@ INSTALL_TOOL: dict[str, Any] = {
 LIST_FEATURES_TOOL: dict[str, Any] = {
     "name": "list_features",
     "description": (
-        "Catalog of every MCP-settable zoto-viz key: theme, view, feed, show, filters, "
-        "anim (motion/physics/mosaic/sky/audio), plugins, agent look, dice, temper/weather, "
-        "sound, plus state, RF watch, consent, draft, profiles, memories, sources, and Nest cameras."
+        "Map of every settable key and which tool writes it. Use when you do not yet know "
+        "whether to call set_settings, set_view, set_plugin, or something else. No arguments. "
+        "Returns theme/chrome/feed/anim enums (including graphFabric, graphSpace, graphLayout, "
+        "backdrop), dice, and a how-to that names the tool for views, knobs, consent, sources, "
+        "and LAN. Call this before inventing a settings key. Camera and microphone are absent on purpose."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -150,8 +178,11 @@ LIST_FEATURES_TOOL: dict[str, Any] = {
 GET_SETTINGS_TOOL: dict[str, Any] = {
     "name": "get_settings",
     "description": (
-        "Current agent temper/weather, queued live patch, and the startup profile's "
-        "settings (theme, view, plugins, motion). Live UI may differ until a patch applies."
+        "Read the startup profile plus the queued live patch. Use when you need the last "
+        "settings this server was asked to apply (theme, mode, anim, plugins, temper). "
+        "No arguments. Returns profile, agent, live, settings, aiControl. This is not the "
+        "live canvas: a queued mode can differ from the picture on screen until the open tab "
+        "applies the patch. Do not treat it as proof a sky or view rendered."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -252,11 +283,15 @@ def _settings_schema() -> dict[str, Any]:
 SET_SETTINGS_TOOL: dict[str, Any] = {
     "name": "set_settings",
     "description": (
-        "Patch the open live UI. Same whitelist as an agent ```settings``` fence: theme, dream, "
-        "mode, chrome, redact, merge, autoconsent, sound (speaker output; starts off), feed, show, filters, anim (motion, physics, "
-        "mosaic / mosaicTiles / mosaicTree, sky, audio), modeOptions, arcade, plugins, agent look (shader/photos/SVG), "
-        "dice (on / periodMin / include groups + ceilings), shuffle (one-shot dice), plus temper, weather, control, model. "
-        "Camera and microphone are operator-only (Settings → Privacy)."
+        "Patch the open monitor. Use for theme, motion, mosaic, sky, feed, dice repeat, sound, "
+        "and agent look — not for switching a view (set_view) or one plugin's knobs (set_plugin). "
+        "Pass only whitelist keys from list_features: theme, dream, mode, chrome, redact, merge, "
+        "autoconsent, sound (speakers; starts off), feed, show, filters, anim, modeOptions, arcade, "
+        "plugins, agent {clear, shader, shaderPhoto, decos}, dice {on, periodMin, include}, shuffle, "
+        "temper, weather, control, model. anim.audioNodes true follows the mic beat; false keeps "
+        "graph motion eased. anim.skyAudio false unless a pulse fade is intended. Do not write "
+        "uBright. Camera and microphone are operator-only and are rejected. Queues a live patch; "
+        "wait about a second, then look at the open UI."
     ),
     "inputSchema": _settings_schema(),
 }
@@ -264,8 +299,13 @@ SET_SETTINGS_TOOL: dict[str, Any] = {
 LIST_PLUGINS_TOOL: dict[str, Any] = {
     "name": "list_plugins",
     "description": (
-        "Catalog views with options, config, and the per-view prompt field. "
-        "Values come from the startup profile when present."
+        "List views the header menu can show. Use before set_view or set_plugin, and whenever "
+        "the view dropdown is empty. Omit id for every row; pass a bare id (topology, not "
+        "plugin:topology) for one. Each row has mode (pass that string to set_view), knobs "
+        "(keys for set_plugin), and saved values. Also returns errors and blocked. plugins:[] "
+        "plus an errors entry means the catalog scan refused the menu (often two plugin "
+        "directories whose names slug to the same id). Values are the startup profile, not "
+        "unsaved live knob edits."
     ),
     "inputSchema": {
         "type": "object",
@@ -279,9 +319,11 @@ LIST_PLUGINS_TOOL: dict[str, Any] = {
 SET_PLUGIN_TOOL: dict[str, Any] = {
     "name": "set_plugin",
     "description": (
-        "Set one catalog view's options/config/prompt on the live UI. "
-        "Keys must exist on that plugin (including reserved prompt). "
-        "Also writes modeOptions for plugin:<id>."
+        "Set one view's knobs. Use after list_plugins shows that id's knob keys. "
+        "Pass {id, values}. id is bare (cypher-cic, not plugin:cypher-cic). values is an object "
+        "of knob key → string; booleans are \"1\" or \"0\". Unknown keys error. The reserved "
+        "prompt key is the AI Dynamic brief for that view. Also queues modeOptions for "
+        "plugin:<id>. Does not switch the view — call set_view for that. Does not consent code."
     ),
     "inputSchema": {
         "type": "object",
@@ -300,7 +342,15 @@ SET_PLUGIN_TOOL: dict[str, Any] = {
 
 SET_VIEW_TOOL: dict[str, Any] = {
     "name": "set_view",
-    "description": "Switch the live view. mode is a catalog id (plugin:<id> for zip views).",
+    "description": (
+        "Switch the open monitor's VIEW. Use when the user wants a different picture. "
+        "Pass {mode} copied from list_plugins (the mode field), e.g. plugin:topology or "
+        "plugin:fluid-dyn. Do not invent ids and do not strip or add plugin: yourself if "
+        "list_plugins already returned mode. Queues a live patch the open tab applies within "
+        "about a second; a tab that loaded while the catalog was empty must be reloaded. "
+        "get_settings showing the mode is not proof the canvas changed. Sky stays near-black "
+        "(about 5,10,22) until consent_plugin if the pack has TypeScript or GLSL."
+    ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
@@ -312,9 +362,11 @@ SET_VIEW_TOOL: dict[str, Any] = {
 SET_AGENT_TOOL: dict[str, Any] = {
     "name": "set_agent",
     "description": (
-        "Agent temper (0–100, system-prompt prefix + Ollama temperature), "
-        "weather (AI Dynamic rebuild probability bands: hush/drift/pulse/storm), "
-        "and AI Control."
+        "Set the in-monitor agent's temper, weather, or AI Control. Use for the chat agent "
+        "inside zoto-viz, not for theme or view. Pass any of temper (integer 0–100), "
+        "weather (hush, drift, pulse, or storm), control (boolean). temper also scales "
+        "Ollama temperature. weather is how often AI Dynamic rebuilds. control must be on "
+        "before draft_plugin can write plugins/src. Empty arguments error."
     ),
     "inputSchema": {
         "type": "object",
@@ -330,25 +382,32 @@ SET_AGENT_TOOL: dict[str, Any] = {
 ROLL_DICE_TOOL: dict[str, Any] = {
     "name": "roll_dice",
     "description": (
-        "One-shot roll of the groups left on in Settings → Dice "
-        "(theme, view, mosaic, feed, motion, physics, knobs by default). Does not toggle the header dice repeat switch. "
-        "Chrome, camera, and microphone stay. Privacy filters and prompts stay. "
-        "Dream cycling + AI Control follow the dice settings. A roll does not start a chat or think turn."
+        "Roll the dice once. Use for a single reshuffle of the groups left on in Settings → Dice "
+        "(theme, view, mosaic, feed, motion, physics, knobs by default). No arguments. "
+        "Does not flip the header repeat switch — that is set_settings {dice:{on, periodMin}}. "
+        "Chrome, camera, and microphone stay. Filters and prompts stay. Does not start a chat turn."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
 
 GET_STATE_TOOL: dict[str, Any] = {
     "name": "get_state",
-    "description": "Live LAN snapshot (devices, flows, radio) — same as GET /api/state.",
+    "description": (
+        "Read the live LAN snapshot. Use when you need devices, flows, services, or radio "
+        "as the monitor sees them now. No arguments. Same payload as GET /api/state. "
+        "Fails if this MCP call has no monitor process attached. Not a settings read — "
+        "use get_settings for theme and view."
+    ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
 
 GET_PACK_PERF_TOOL: dict[str, Any] = {
     "name": "get_pack_perf",
     "description": (
-        "Latest browser-reported pack frame instrumentation (POST /api/pack-perf). "
-        "Enable in the UI with ?packPerf=1 or localStorage zoto-viz.packPerf=1."
+        "Read the latest pack frame timings the browser posted. Use when a view is slow "
+        "or you need pack-level frame numbers, not the HUD fps. No arguments. The page "
+        "must have been opened with ?packPerf=1 or localStorage zoto-viz.packPerf=1 or "
+        "the buffer stays empty. Does not change settings."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -356,8 +415,9 @@ GET_PACK_PERF_TOOL: dict[str, Any] = {
 GET_TRAFFIC_TOOL: dict[str, Any] = {
     "name": "get_traffic",
     "description": (
-        "Recent packets for a device or group. ip is an address, @lan, @internet, @any, or a comma list. "
-        "Optional peer and since (unix seconds)."
+        "Read recent packets. Use after get_state when you need flows for one address or a group. "
+        "Pass ip: a host address, @lan, @internet, @any, or a comma list. Optional peer and "
+        "since (unix seconds). Unknown ip returns an error. Does not change capture."
     ),
     "inputSchema": {
         "type": "object",
@@ -373,13 +433,21 @@ GET_TRAFFIC_TOOL: dict[str, Any] = {
 
 GET_RF_WATCH_TOOL: dict[str, Any] = {
     "name": "get_rf_watch",
-    "description": "Wi-Fi SSID watch list, channel plan, and current radio tune.",
+    "description": (
+        "Read the Wi-Fi watch list. Use before set_rf_watch, or to see the channel plan and "
+        "current tune. No arguments. Returns ssids, dwell, rotate, and what the radio is doing."
+    ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
 
 SET_RF_WATCH_TOOL: dict[str, Any] = {
     "name": "set_rf_watch",
-    "description": "Adopt a Wi-Fi SSID watch list (Air SSIDs cog). Persists and rewrites the hopper plan.",
+    "description": (
+        "Replace the Wi-Fi SSID watch list. Use when Air SSIDs should follow specific names. "
+        "Pass ssids (string list or comma-separated), and optionally other (boolean), dwell "
+        "(seconds), rotate (boolean). At least one of those keys is required. Persists and "
+        "rewrites the hopper plan. Read first with get_rf_watch."
+    ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
@@ -394,7 +462,14 @@ SET_RF_WATCH_TOOL: dict[str, Any] = {
 
 CONSENT_PLUGIN_TOOL: dict[str, Any] = {
     "name": "consent_plugin",
-    "description": "Grant source-review consent so TypeScript / Python / GLSL for a catalog plugin can run.",
+    "description": (
+        "Allow one plugin's TypeScript, Python, or GLSL to run. Use after you change "
+        "frontend/, backend/, datasource/, or sky/, or when a plugin sky stays near-black "
+        "(about 5,10,22). Pass {id, kind}. id is bare. kind authored means you wrote it; "
+        "reviewed means you only read the source. Then set_view. YAML-only plugins return "
+        "needed:false. A hash change invalidates the old stamp — consent again. "
+        "autoconsent via set_settings covers shipped src and local zips only, not contrib zips."
+    ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
@@ -409,8 +484,11 @@ CONSENT_PLUGIN_TOOL: dict[str, Any] = {
 DRAFT_PLUGIN_TOOL: dict[str, Any] = {
     "name": "draft_plugin",
     "description": (
-        "Validate a plugin-src tree ({files} or legacy yaml). With AI Control on and install true, "
-        "writes plugins/src/<id>/. Never packs or git-commits."
+        "Validate a shipped plugin tree, and optionally write it. Use when the plugin belongs "
+        "in plugins/src/<id>/ (the git catalog). Pass files (relative path → text, plugin.yml "
+        "required) or legacy yaml. install true writes the tree only when AI Control is already "
+        "on (set_agent {control:true}); otherwise it validates and does not write. Never packs "
+        "a zip and does not git-add. For a home-dir experiment use publish_local_plugin."
     ),
     "inputSchema": {
         "type": "object",
@@ -425,13 +503,22 @@ DRAFT_PLUGIN_TOOL: dict[str, Any] = {
 
 LIST_PROFILES_TOOL: dict[str, Any] = {
     "name": "list_profiles",
-    "description": "Saved UI profiles (id, label, shipped, default).",
+    "description": (
+        "List saved UI profiles. Use before apply_profile. No arguments. "
+        "Each row has id, label, shipped, and whether it is the default. "
+        "Does not change the open view."
+    ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
 
 APPLY_PROFILE_TOOL: dict[str, Any] = {
     "name": "apply_profile",
-    "description": "Load a saved profile onto the open live UI (same patch path as set_settings).",
+    "description": (
+        "Load a saved profile onto the open UI. Use when the user names a profile from "
+        "list_profiles. Pass {id}. Same whitelist as set_settings, so camera and microphone "
+        "in a profile are dropped. Unknown id errors. Queues a live patch; wait, then look "
+        "at the canvas. Does not set the profile as the startup default."
+    ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
@@ -442,13 +529,21 @@ APPLY_PROFILE_TOOL: dict[str, Any] = {
 
 LIST_MEMORIES_TOOL: dict[str, Any] = {
     "name": "list_memories",
-    "description": "Curated agent memories injected into later chat turns.",
+    "description": (
+        "List curated memories the in-monitor chat agent sees on later turns. "
+        "Use before add_memory or delete_memory. No arguments. Returns memories "
+        "with id and text. Not LAN state and not the view prompt (that is set_plugin prompt)."
+    ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
 
 ADD_MEMORY_TOOL: dict[str, Any] = {
     "name": "add_memory",
-    "description": "Store a curated memory for later lookup.",
+    "description": (
+        "Store one memory for later in-monitor chat turns. Use when the user asks to remember "
+        "a fact. Pass {text}. Empty text errors. Returns the new row and the full list. "
+        "Each call adds another row; it does not update by id."
+    ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
@@ -457,11 +552,25 @@ ADD_MEMORY_TOOL: dict[str, Any] = {
     },
 }
 
+LIST_SOURCE_LIBRARY_TOOL: dict[str, Any] = {
+    "name": "list_source_library",
+    "description": (
+        "List third-party datasource recipes that are not polled yet. Use when a plugin or "
+        "view should consume a public feed (weather, quakes, news, prices) instead of inventing "
+        "a URL. No arguments. Returns id, label, vendor, type, hint, and extends. "
+        "Then set_source {library: id} or {library: [id, id], feed: true} to combine and enable. "
+        "Plugins name the same ids under visualisation.yml datasource.library."
+    ),
+    "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
+}
+
 LIST_SOURCES_TOOL: dict[str, Any] = {
     "name": "list_sources",
     "description": (
-        "Host data sources (RSS, public HTTPS, local files, user journal, kernel ring). "
-        "Returns the registry plus the last poll. Headlines also ride GET /api/state as sources."
+        "List host headline sources. Use before set_source or delete_source. No arguments. "
+        "Returns the registry in ~/.zoto-viz/sources.yml plus the last poll. Kinds: rss, http, "
+        "file, journal, kmsg. Headlines also appear on GET /api/state. feed:true on a source "
+        "is what puts it on the on-screen ticker (set_settings feed.on still has to be true)."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -469,15 +578,26 @@ LIST_SOURCES_TOOL: dict[str, Any] = {
 SET_SOURCE_TOOL: dict[str, Any] = {
     "name": "set_source",
     "description": (
-        "Create or update one host source. type is rss, http, file, journal, or kmsg. "
-        "Remote urls must be public HTTPS. File paths must stay under the home directory. "
-        "journal is journalctl --user; optional unit filters to one user unit. kmsg reads /dev/kmsg."
+        "Create or update headline sources. Use after list_sources, or pass library from "
+        "list_source_library to add a third-party feed. library is one id or a list to combine "
+        "(usgs-quakes, bbc-news). interval, feed, url, and fields overlay every chosen recipe. "
+        "Otherwise pass type rss, http, file, journal, or kmsg. rss/http need a public https url. "
+        "file needs a path under the home directory. journal is journalctl --user. "
+        "kmsg reads /dev/kmsg. Same id updates that row. Library rows stay off the ticker "
+        "until feed is true."
     ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
         "properties": {
             "id": {"type": "string"},
+            "library": {
+                "description": "Source-library id, or a list of ids to combine. See list_source_library.",
+                "oneOf": [
+                    {"type": "string"},
+                    {"type": "array", "items": {"type": "string"}},
+                ],
+            },
             "type": {"type": "string", "enum": ["rss", "http", "file", "journal", "kmsg"]},
             "label": {"type": "string"},
             "url": {"type": "string", "description": "Public HTTPS URL for rss / http"},
@@ -498,8 +618,10 @@ SET_SOURCE_TOOL: dict[str, Any] = {
 LIST_PLUGIN_INSTANCES_TOOL: dict[str, Any] = {
     "name": "list_plugin_instances",
     "description": (
-        "Operator plugin instances (~/.zoto-viz/plugin-instances.yml). "
-        "Each row reuses a shipped plugin tree with a source id and field picks."
+        "List extra catalog rows that reuse a shipped plugin. Use before set_plugin_instance. "
+        "No arguments. Each row is plugin + instance id with a source and field picks "
+        "(~/.zoto-viz/plugin-instances.yml). The view id on screen is plugin:<plugin>:<id>. "
+        "Does not copy the plugin tree."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -507,9 +629,12 @@ LIST_PLUGIN_INSTANCES_TOOL: dict[str, Any] = {
 SET_PLUGIN_INSTANCE_TOOL: dict[str, Any] = {
     "name": "set_plugin_instance",
     "description": (
-        "Create or update a plugin instance. plugin is a catalog id (carousel, hn-rain, hn-term). "
-        "id is the instance slug. Optional source / title / caption / image / link / filter "
-        "become This-view defaults. Does not duplicate the plugin tree."
+        "Add or update an extra row on a shipped plugin. Use when one pack should appear twice "
+        "with a different source (carousel, hn-rain, hn-term), not when you need a new plugin. "
+        "Pass plugin (bare catalog id) and id (instance slug). Optional name, hint, source, "
+        "title, caption, image, link, filter become that row's defaults. Open it with set_view "
+        "{mode:\"plugin:<plugin>:<id>\"}. Does not duplicate files. Shipped rows stay if you "
+        "only meant to change knobs — that is set_plugin."
     ),
     "inputSchema": {
         "type": "object",
@@ -532,7 +657,11 @@ SET_PLUGIN_INSTANCE_TOOL: dict[str, Any] = {
 
 DELETE_PLUGIN_INSTANCE_TOOL: dict[str, Any] = {
     "name": "delete_plugin_instance",
-    "description": "Remove one operator plugin instance. Shipped instances stay.",
+    "description": (
+        "Remove one operator-added plugin instance. Use after list_plugin_instances. "
+        "Pass {plugin, id}. Shipped instances that came with the pack stay. "
+        "Does not delete the plugin tree or a headline source."
+    ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
@@ -546,7 +675,11 @@ DELETE_PLUGIN_INSTANCE_TOOL: dict[str, Any] = {
 
 DELETE_SOURCE_TOOL: dict[str, Any] = {
     "name": "delete_source",
-    "description": "Remove one host source by id.",
+    "description": (
+        "Remove one headline source from ~/.zoto-viz/sources.yml. Use after list_sources, "
+        "when that feed should stop polling. Pass {id}. Unknown id errors. Does not delete "
+        "a plugin, a plugin instance, or the on-screen feed toggle (that is set_settings)."
+    ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
@@ -558,25 +691,32 @@ DELETE_SOURCE_TOOL: dict[str, Any] = {
 GET_SDM_TOOL: dict[str, Any] = {
     "name": "get_sdm",
     "description": (
-        "Google Nest Device Access status (no secrets). Includes PCM URL, linked flag, "
-        "devices, and recent Pub/Sub events. Config is ~/.zoto-viz/sdm.yml."
+        "Read Nest Device Access status without secrets. Use before set_sdm or list_cameras. "
+        "No arguments. Returns the PCM URL, linked flag, devices, and recent Pub/Sub events. "
+        "Config file is ~/.zoto-viz/sdm.yml. linked false means set_sdm still needs a code."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
 
 LIST_CAMERAS_TOOL: dict[str, Any] = {
     "name": "list_cameras",
-    "description": "List Nest cameras/doorbells from the last SDM devices.list poll.",
+    "description": (
+        "List Nest cameras and doorbells from the last devices poll. Use when the user asks "
+        "what cameras are linked. No arguments. Empty devices with linked false means OAuth "
+        "is not finished — get_sdm then set_sdm. Does not start a live stream."
+    ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
 
 SET_SDM_TOOL: dict[str, Any] = {
     "name": "set_sdm",
     "description": (
-        "Write Device Access config and/or exchange a PCM authorization code. "
-        "enterprise_id is the Device Access UUID (not the GCP project id). "
-        "client_id/client_secret must be a Web OAuth client with redirect https://www.google.com. "
-        "Pass code after PCM redirects to google.com?code=..."
+        "Save Nest Device Access config and/or queue an OAuth code. Use after get_sdm shows "
+        "what is missing. Pass any of enterprise_id (Device Access project UUID, not the GCP "
+        "project id), gcp_project, client_id, client_secret, redirect_uri, topic, subscription, "
+        "code. client_id and client_secret must be a Web OAuth client whose redirect is "
+        "https://www.google.com. Pass code only after the PCM page redirects to "
+        "google.com?code=... Secrets stay in ~/.zoto-viz/sdm.yml and are not echoed back."
     ),
     "inputSchema": {
         "type": "object",
@@ -594,9 +734,35 @@ SET_SDM_TOOL: dict[str, Any] = {
     },
 }
 
+GET_LOGS_TOOL: dict[str, Any] = {
+    "name": "get_logs",
+    "description": (
+        "Read the monitor's in-process log ring. Use when a view is black, a plugin failed "
+        "to load, or the catalog looks wrong and list_plugins errors are not enough. "
+        "Pass {after: seq} to fetch lines newer than that seq, or omit after for the buffer. "
+        "Returns {seq, lines:[{seq, t, text}]}. Same data as GET /api/logs. "
+        "Does not include packet payloads."
+    ),
+    "inputSchema": {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "after": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Return lines with seq greater than this. Omit for the whole ring.",
+            },
+        },
+    },
+}
+
 DELETE_MEMORY_TOOL: dict[str, Any] = {
     "name": "delete_memory",
-    "description": "Delete one memory by id, or all memories when id is omitted.",
+    "description": (
+        "Delete curated chat memories. Use after list_memories, when the user wants one "
+        "fact or the whole list gone. Pass {id} to remove that row. Omit id to clear every "
+        "memory. Returns the list that remains. Does not touch the view prompt or LAN state."
+    ),
     "inputSchema": {
         "type": "object",
         "additionalProperties": False,
@@ -606,7 +772,7 @@ DELETE_MEMORY_TOOL: dict[str, Any] = {
 
 
 def active_tools() -> list[dict[str, Any]]:
-    return [
+    return [_with_annotations(tool) for tool in (
         LIST_FEATURES_TOOL,
         GET_SETTINGS_TOOL,
         SET_SETTINGS_TOOL,
@@ -628,6 +794,7 @@ def active_tools() -> list[dict[str, Any]]:
         ADD_MEMORY_TOOL,
         DELETE_MEMORY_TOOL,
         LIST_SOURCES_TOOL,
+        LIST_SOURCE_LIBRARY_TOOL,
         SET_SOURCE_TOOL,
         DELETE_SOURCE_TOOL,
         LIST_PLUGIN_INSTANCES_TOOL,
@@ -636,9 +803,10 @@ def active_tools() -> list[dict[str, Any]]:
         GET_SDM_TOOL,
         LIST_CAMERAS_TOOL,
         SET_SDM_TOOL,
+        GET_LOGS_TOOL,
         INSTALL_TOOL,
         PUBLISH_LOCAL_TOOL,
-    ]
+    )]
 
 
 # tests and GET /mcp historically imported TOOLS
@@ -925,10 +1093,17 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             return _tool_text({"ok": True, "applied": patch, "live": snap, "aiControl": agent.ai_control_on()})
         if name == "list_plugins":
             want = str(args.get("id") or "").strip() or None
+            scan = plugins.scan()
             rows = _plugin_rows(want)
+            errors = [dict(e) for e in (scan.get("errors") or []) if isinstance(e, dict)]
+            blocked = [dict(b) for b in (scan.get("blocked") or []) if isinstance(b, dict)]
             if want and not rows:
-                raise ValueError(f"unknown plugin {want!r}")
-            return _tool_text({"ok": True, "plugins": rows})
+                extra = ""
+                if errors and not (scan.get("plugins") or []):
+                    msg = str(errors[0].get("error") or "catalog error")
+                    extra = f"; catalog empty: {msg}"
+                raise ValueError(f"unknown plugin {want!r}{extra}")
+            return _tool_text({"ok": True, "plugins": rows, "errors": errors, "blocked": blocked})
         if name == "set_plugin":
             vals = args.get("values")
             if not isinstance(vals, dict):
@@ -952,6 +1127,9 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
         if name == "roll_dice":
             snap = live.queue_patch({"shuffle": True})
             return _tool_text({"ok": True, "shuffle": True, "live": snap})
+        if name == "list_source_library":
+            from . import source_library
+            return _tool_text({"ok": True, "library": source_library.catalog()})
         if name == "list_sources":
             from . import sources
             return _tool_text({"ok": True, **sources.config_payload()})
@@ -1004,6 +1182,10 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             if args.get("code"):
                 st = {**st, "code_queued": True}
             return _tool_text({"ok": True, **st})
+        if name == "get_logs":
+            from . import logbuf
+            after = args.get("after") if isinstance(args.get("after"), (int, float)) else 0
+            return _tool_text({"ok": True, **logbuf.since(int(after))})
         if name == "get_state":
             from .monitor import publish_state
             return _tool_text({"ok": True, **publish_state(_require_state(app))})
@@ -1111,18 +1293,30 @@ def handle_rpc(msg: dict[str, Any], app: web.Application | None = None) -> dict[
             "capabilities": {"tools": {"listChanged": True}},
             "serverInfo": {"name": SERVER_NAME, "version": SERVER_VERSION},
             "instructions": (
-                "Control a running zoto-viz monitor. list_features names every settable key "
-                "(theme, view, feed, show, filters, anim/physics/mosaic, plugins, agent look, dice). "
-                "get_settings / set_settings / set_view / set_plugin / set_agent / roll_dice patch the open UI. "
-                "get_state and get_traffic read the LAN. get_rf_watch / set_rf_watch tune Wi-Fi. "
-                "consent_plugin, draft_plugin, publish_local_plugin, and install_plugin_zip manage plugins "
-                "(plugin.yml at the zip or src root; optional visualisation.yml, frontend/, backend/, datasource/, sky/). "
-                "publish_local_plugin writes ~/.zoto-viz/plugins/local/<id>.zip and hot-activates when safe. "
-                "list_profiles / apply_profile load saved looks. list_memories / add_memory / delete_memory "
-                "curate chat memories. list_sources / set_source / delete_source manage RSS, HTTPS JSON (optional field maps), "
-                "local-file, user-journal, and kernel-ring feeds (~/.zoto-viz/sources.yml). get_sdm / list_cameras / set_sdm manage Nest "
-                "Device Access (OAuth, Pub/Sub, WebRTC; secrets in ~/.zoto-viz/sdm.yml). "
-                "Repo zip install does not git-add; the operator promotes."
+                "Drive the running zoto-viz monitor. Patches ride the 1 Hz live socket; wait about "
+                "a second and look at the open canvas. get_settings is the startup profile plus the "
+                "queued patch, not proof of pixels. Read each tool description before calling it.\n"
+                "Pick a tool: list_features when you do not know the key. list_plugins then set_view "
+                "{mode from the row} to switch VIEW. set_settings for theme, anim, mosaic, sky, feed, "
+                "dice repeat, and sound. set_plugin {id, values} for one view's knobs (id is bare; "
+                "values are strings). Empty view menu: list_plugins errors — a slug collision returns "
+                "plugins:[]. consent_plugin {id, kind:authored|reviewed} after frontend or sky edits, "
+                "then set_view. Near-black (about 5,10,22) means the sky failed. "
+                "publish_local_plugin writes ~/.zoto-viz/plugins/local/<id>.zip (not git). "
+                "install_plugin_zip writes plugins/<id>.zip in the checkout. draft_plugin writes "
+                "plugins/src only when AI Control is on. plugin.yml is required at the zip or src root. "
+                "Never git-add from these tools. get_state / get_traffic read the LAN. "
+                "get_rf_watch / set_rf_watch tune Wi-Fi. roll_dice is one shot; header repeat is "
+                "set_settings {dice:{on, periodMin}}. list_source_library then set_source {library} "
+                "adds a public feed (quakes, weather, news) without inventing a URL. "
+                "list_sources / set_source / delete_source manage RSS, HTTPS JSON, local-file, "
+                "user-journal, and kernel-ring feeds. Graph styles: visualisation.yml style.library "
+                "(orbit-helix, jelly-bloom) combines fabric, space, layout, and links. "
+                "list_plugin_instances / set_plugin_instance add a row without copying the tree. "
+                "list_memories / add_memory / delete_memory curate chat memories. "
+                "list_profiles / apply_profile load a saved look. get_sdm / list_cameras / set_sdm "
+                "manage Nest Device Access (secrets in ~/.zoto-viz/sdm.yml). get_logs reads the "
+                "monitor log ring. Camera and microphone are operator-only."
             ),
         })
     if method == "ping":

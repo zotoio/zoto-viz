@@ -195,10 +195,12 @@ def test_mcp_tools_include_live_and_install(tmp_path: Path, monkeypatch: pytest.
         "list_plugins", "set_plugin", "set_view", "set_agent",
         "roll_dice", "get_state", "get_traffic", "get_rf_watch", "set_rf_watch",
         "consent_plugin", "draft_plugin", "list_profiles", "apply_profile",
-        "list_memories", "add_memory", "delete_memory",         "list_sources",
+        "list_memories", "add_memory", "delete_memory", "list_sources",
+        "list_source_library",
         "set_source", "delete_source",
         "list_plugin_instances", "set_plugin_instance", "delete_plugin_instance",
         "get_sdm", "list_cameras", "set_sdm",
+        "get_logs",
         "install_plugin_zip",
         "publish_local_plugin",
     } <= names
@@ -280,6 +282,7 @@ def test_list_plugins_includes_prompt_knob(tmp_path: Path, monkeypatch: pytest.M
     listed = json.loads(plugin_mcp.call_tool("list_plugins", {"id": "sample"})["content"][0]["text"])
     keys = {k["key"] for k in listed["plugins"][0]["knobs"]}
     assert "prompt" in keys
+    assert "errors" in listed and "blocked" in listed
     setp = json.loads(plugin_mcp.call_tool("set_plugin", {"id": "sample", "values": {"prompt": "harbour dusk"}})["content"][0]["text"])
     assert setp["values"]["prompt"] == "harbour dusk"
     bad = json.loads(plugin_mcp.call_tool("set_plugin", {"id": "sample", "values": {"nope": "1"}})["content"][0]["text"])
@@ -323,6 +326,29 @@ def test_mcp_description_has_no_plugin_install() -> None:
     assert "plugin install" not in blob
     src = Path(plugin_mcp.__file__).read_text(encoding="utf-8")
     assert "plugin install" not in src
+
+
+def test_mcp_tool_descriptions_tell_agents_how() -> None:
+    tools = plugin_mcp.active_tools()
+    by = {t["name"]: t for t in tools}
+    assert "get_logs" in by
+    for tool in tools:
+        desc = tool["description"]
+        assert "Use " in desc, tool["name"]
+        assert len(desc) >= 140, tool["name"]
+        ann = tool["annotations"]
+        assert ann["openWorldHint"] is False
+        assert ann["readOnlyHint"] is (tool["name"] in plugin_mcp._READ_ONLY)
+    assert "list_plugins" in by["set_view"]["description"]
+    assert "not the live canvas" in by["get_settings"]["description"]
+    assert by["get_state"]["annotations"]["readOnlyHint"] is True
+    assert by["delete_source"]["annotations"]["destructiveHint"] is True
+    assert by["roll_dice"]["annotations"]["idempotentHint"] is False
+    logs = json.loads(plugin_mcp.call_tool("get_logs", {})["content"][0]["text"])
+    assert logs["ok"] is True
+    assert isinstance(logs["lines"], list)
+    feat = json.loads(plugin_mcp.call_tool("list_features", {})["content"][0]["text"])
+    assert any("set_view" in line for line in feat["how"])
 
 
 class McpHttpTests(AioHTTPTestCase):

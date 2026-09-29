@@ -35,7 +35,9 @@ If curl fails, start the backend (`scripts/dev.sh start backend` or `systemctl -
 
 | Goal | Do this |
 | --- | --- |
-| Switch VIEW | `set_view` `{ "mode": "plugin:<id>" }` |
+| Switch VIEW | `list_plugins` then `set_view` `{ "mode": "<row.mode>" }` |
+| Empty view menu | `list_plugins` `errors` (a slug collision returns `plugins: []`) |
+| Monitor log ring | `get_logs` `{ "after": seq }` |
 | Theme, mosaic, feed, motion, sky | `list_features` → `set_settings` (whitelist only) |
 | One view's knobs / prompt | `list_plugins` `{id}` → `set_plugin` `{id, values}` |
 | Temper / weather / AI Control | `set_agent` |
@@ -46,6 +48,8 @@ If curl fails, start the backend (`scripts/dev.sh start backend` or `systemctl -
 | **Contrib zip in checkout** | `install_plugin_zip` `{zip_b64}` → gitignored `plugins/<id>.zip` |
 | TS / GLSL / Python will not run | `consent_plugin` `{id, kind: "authored"\|"reviewed"}` — or `set_settings` `{autoconsent: true}` for dogfood (src + local only; see [viz-test](../zoto/viz-test/SKILL.md)) |
 | RSS / file / journal headlines | `list_sources` / `set_source` |
+| Public feed recipe (quakes, weather, news) | `list_source_library` then `set_source` `{library}` — stays off the ticker until `feed: true` |
+| Named graph style (animated / 3D) | Look → library, or `visualisation.yml` `style.library` (`jelly-bloom`, or a list to combine). A local `look.graphLayout` still wins |
 | Extra catalog row on a shipped plugin | `set_plugin_instance` (do not copy the tree) |
 
 Never use MCP to `git add` / `git commit`. Camera and microphone are operator-only (Settings → Privacy) — do not patch them.
