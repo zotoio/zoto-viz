@@ -315,7 +315,7 @@ async function main() {
   const browser = await chromium.launch({
     headless: false,
     executablePath: opts.chrome,
-    args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--window-size=1300,900", "--js-flags=--expose-gc", "--autoplay-policy=no-user-gesture-required"],
+    args: ["--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--window-size=1300,900", "--js-flags=--expose-gc", "--autoplay-policy=no-user-gesture-required", ...(process.env.PICKALL_EXTRA_CHROME_ARGS || "").split(/\s+/).filter(Boolean)],
   });
   const ctx = await browser.newContext({ viewport: { width: 1280, height: 800 }, storageState: { cookies: [], origins: [] } });
   await ctx.addInitScript(qeInstrument);
