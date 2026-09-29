@@ -207,7 +207,7 @@ void main() {
   vec3 col = soilColor(uv, soil);
   col = mix(col, mix(col, FAIL_COL, 0.35 + fail * 0.25), failWash * 0.55);
   float cut = smoothstep(0.02, 0.0, abs(dir.y + 0.15));
-  col = mix(col * 0.35, col, cut);
+  col = mix(col * 0.7, col, cut);
 
   float ph = pheroAt(uv);
   col += uAccent * ph * (0.35 + uAudio * 0.2);

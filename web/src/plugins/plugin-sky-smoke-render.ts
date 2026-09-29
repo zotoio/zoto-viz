@@ -15,6 +15,14 @@ export type PluginSkySmokeResult = {
   variance: number;
   litPixelFraction: number;
   pixelChecksum: number;
+  /**
+   * QE pick-every-view five-patch sample (the headed pick-every-view harness,
+   * `fivePatchSample`): centre + four quarter points, 6x6 px each on this 128 px draw,
+   * read top-down like a screenshot. Luma on the 0-255 scale.
+   */
+  qePatches: { lum: number; sd: number }[];
+  /** Per-pixel luma 0-255 in readPixels order, only with `{ keepLuma: true }` (frame-vs-frame diffs). */
+  luma?: number[];
   assertion: string;
 };
 
@@ -57,12 +65,13 @@ export async function smokeRenderPluginSky(
   wrappedFrag: string,
   ubo: Float32Array,
   uniforms: PluginSkySmokeUniforms,
+  opts: { keepLuma?: boolean } = {},
 ): Promise<PluginSkySmokeResult> {
   const b = await browser();
   const page = await b.newPage();
   try {
     const result = await page.evaluate(
-      ({ frag, slots, uni, vert }) => {
+      ({ frag, slots, uni, vert, keepLuma }) => {
         const canvas = document.createElement("canvas");
         canvas.width = 128;
         canvas.height = 128;
@@ -139,19 +148,33 @@ export async function smokeRenderPluginSky(
           if (luma > 0.12) lit++;
           pixelChecksum = (pixelChecksum + r + g * 3 + b * 7) % 1_000_000_007;
         }
+        const qePatches: { lum: number; sd: number }[] = [];
+        for (const [fx, fy] of [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]] as const) {
+          const x0 = Math.round(128 * fx) - 3;
+          const yTop = Math.round(128 * fy) - 3;
+          const vals: number[] = [];
+          for (let y = yTop; y < yTop + 6; y++) {
+            for (let x = x0; x < x0 + 6; x++) vals.push(lumas[(127 - y) * 128 + x]! * 255);
+          }
+          const m = vals.reduce((a, v) => a + v, 0) / vals.length;
+          const sd = Math.sqrt(vals.reduce((a, v) => a + (v - m) ** 2, 0) / vals.length);
+          qePatches.push({ lum: m, sd });
+        }
+        const luma = keepLuma ? lumas.map((l) => l * 255) : undefined;
         lumas.sort((a, b) => a - b);
         const medianLuma = lumas[lumas.length >> 1] ?? 0;
         const mean = lumas.reduce((a, v) => a + v, 0) / lumas.length;
         const variance = lumas.reduce((a, v) => a + (v - mean) ** 2, 0) / lumas.length;
         const litPixelFraction = lit / nPix;
 
-        return { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum };
+        return { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, qePatches, luma };
       },
       {
         frag: wrappedFrag,
         slots: Array.from(ubo),
         uni: uniforms,
         vert: VERT,
+        keepLuma: opts.keepLuma === true,
       },
     );
 
@@ -159,10 +182,10 @@ export async function smokeRenderPluginSky(
       throw new Error(result.error);
     }
 
-    const { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum } = result;
+    const { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, qePatches, luma } = result;
     const assertion =
       `medianLuma=${medianLuma.toFixed(4)} litFrac=${litPixelFraction.toFixed(3)} maxChannel=${maxChannel} variance=${variance.toFixed(6)} checksum=${pixelChecksum}`;
-    return { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, assertion };
+    return { medianLuma, maxChannel, variance, litPixelFraction, pixelChecksum, qePatches, luma, assertion };
   } finally {
     await page.close();
   }

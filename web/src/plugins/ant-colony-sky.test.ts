@@ -111,19 +111,45 @@ function withoutNest(s: Float32Array): Float32Array {
   return out;
 }
 
+/** Share of pixels whose luma moved by at least `step` (0-255) between two renders. */
+function changedShare(a: PluginSkySmokeResult, b: PluginSkySmokeResult, step = 2): number {
+  const la = a.luma!;
+  const lb = b.luma!;
+  expect(la.length).toBe(lb.length);
+  let n = 0;
+  for (let i = 0; i < la.length; i++) if (Math.abs(la[i]! - lb[i]!) >= step) n++;
+  return n / la.length;
+}
+
 async function expectNestInView(out: PackOut): Promise<void> {
   const frag = wrappedSky();
-  const withNest = await smokeRenderPluginSky(frag, out.slots, out.uniforms);
-  const bare = await smokeRenderPluginSky(frag, withoutNest(out.slots), out.uniforms);
-  const why = `with nest: ${withNest.assertion} / without: ${bare.assertion}`;
+  const withNest = await smokeRenderPluginSky(frag, out.slots, out.uniforms, { keepLuma: true });
+  const bare = await smokeRenderPluginSky(frag, withoutNest(out.slots), out.uniforms, { keepLuma: true });
+  const share = changedShare(withNest, bare);
+  const why = `with nest: ${withNest.assertion} / without: ${bare.assertion} / changed share ${share.toFixed(4)}`;
   expect(withNest.pixelChecksum, `chambers and tunnels must change the host view (${why})`).not.toBe(bare.pixelChecksum);
-  // The authored mapping leaves the frame bit-identical without the nest; require a visible share, not one pixel.
-  expect(Math.abs(withNest.medianLuma - bare.medianLuma), why).toBeGreaterThan(0.001);
+  // The authored mapping leaves the frame bit-identical without the nest; require a visible share, not one pixel:
+  // at least 2% of the view moves by 2/255 luma or more (the nest covers about 4-5% of it).
+  expect(share, why).toBeGreaterThan(0.02);
 }
 
 function sameLook(a: PluginSkySmokeResult, b: PluginSkySmokeResult, label: string): void {
   expect(Math.abs(a.medianLuma - b.medianLuma), `${label}: ${a.assertion} vs ${b.assertion}`).toBeLessThan(0.004);
   expect(Math.abs(a.litPixelFraction - b.litPixelFraction), `${label}: ${a.assertion} vs ${b.assertion}`).toBeLessThan(0.01);
+}
+
+/**
+ * QE pick-every-view blank rule (the headed pick-every-view harness, `fivePatchSample`):
+ * the wall is black when at least 4 of the 5 patches have mean luma < 24 (0-255) and sd < 4.
+ */
+const QE_BLACK_LUM = 24;
+const QE_BLACK_SD = 4;
+const QE_BLACK_MIN_PATCHES = 4;
+
+function qeWall(r: PluginSkySmokeResult): { black: boolean; why: string } {
+  const dark = r.qePatches.filter((p) => p.lum < QE_BLACK_LUM && p.sd < QE_BLACK_SD).length;
+  const patches = r.qePatches.map((p) => `${p.lum.toFixed(0)}/sd${p.sd.toFixed(1)}`).join(" ");
+  return { black: dark >= QE_BLACK_MIN_PATCHES, why: `${dark}/5 dark patches (${patches}) ${r.assertion}` };
 }
 
 describe("ant-colony sky frames the formicarium on the host camera", () => {
@@ -146,6 +172,12 @@ describe("ant-colony sky frames the formicarium on the host camera", () => {
   it("shows the nest in the host view on host idle-fixture frames (pack onFrame)", async () => {
     const frames = Array.from({ length: 10 }, (_, i) => mergeVizIdleFrame({ ...EMPTY, t: 1 + i * 0.1 }, { fixture: "host" }));
     await expectNestInView(runPack(frames));
+  }, 60_000);
+
+  it("keeps the wall off QE's black rule on host idle-fixture frames (soil dimmed to 0.7 outside the cut)", async () => {
+    const out = runPack(Array.from({ length: 10 }, (_, i) => mergeVizIdleFrame({ ...EMPTY, t: 1 + i * 0.1 }, { fixture: "host" })));
+    const wall = qeWall(await smokeRenderPluginSky(wrappedSky(), out.slots, out.uniforms));
+    expect(wall.black, `idle wall is black under QE's five-patch rule: ${wall.why}`).toBe(false);
   }, 60_000);
 
   it("looks the same when the camera sits level (stage-only) or orbits to 15 and 75 degrees", async () => {
