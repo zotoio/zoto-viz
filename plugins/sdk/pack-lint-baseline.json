@@ -26,6 +26,16 @@
       "target": "parent."
     },
     {
+      "file": "plugins/src/fluid-dyn/frontend/fluid.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/fractal-zoom/frontend/cruise.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
       "file": "plugins/src/koi-pond/frontend/index.test.ts",
       "rule": "host-import",
       "target": "vitest"

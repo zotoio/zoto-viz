@@ -41,8 +41,13 @@ def test_voxel_world_osd_strip_bottom_edge_only() -> None:
     """OSD bar must not use vDir.y offset that paints the whole viewport at host FOV."""
     glsl = (SRC / "sky" / "fragment.glsl").read_text(encoding="utf-8")
     assert VOXEL_OSD_FULLSCREEN_BUG not in glsl
-    assert "-0.49-uv.y" in glsl.replace(" ", "")
-    assert "vDir.xy / max(-vDir.z" in glsl
+    # Intent, not spelling: osdY is -0.49 minus the y of a screen-space (perspective-divided) view ray.
+    osd = re.search(r"float\s+osdY\s*=\s*-0\.49\s*-\s*(hud|uv)\.y\s*;", glsl)
+    assert osd, "osdY must be -0.49 - <hud|uv>.y (bottom-edge strip)"
+    div = re.search(rf"vec2\s+{osd.group(1)}\s*=\s*(\w+)\.xy\s*/\s*max\(\s*-\s*\1\.z\b", glsl)
+    assert div, f"{osd.group(1)} must be <ray>.xy / max(-<ray>.z, ...)"
+    ray = div.group(1)
+    assert ray == "vDir" or re.search(rf"vec3\s+{ray}\s*=\s*normalize\(\s*vDir\s*\)", glsl), ray
 
 
 def test_voxel_world_osd_revert_row_would_fail_gate() -> None:

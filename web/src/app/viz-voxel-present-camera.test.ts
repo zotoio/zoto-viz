@@ -18,7 +18,7 @@ import { setVoxConfig, tickVoxelWorld } from "../../../plugins/src/voxel-world/f
 import { VOX_SLOT } from "../../../plugins/src/voxel-world/frontend/slots";
 
 const VOXEL_FLY_CFG = {
-  preset: "classic",
+  preset: "custom",
   camera: "fly",
   cameraSpeed: "1",
   reducedMotion: "0",

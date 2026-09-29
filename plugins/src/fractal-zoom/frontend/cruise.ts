@@ -585,8 +585,8 @@ export function stepCanyon(c: Canyon3, dt: number, kind: number, params: DeParam
     arms.push({ ang, score, dx, dy, dz });
   }
   arms.sort((a, b) => b.score - a.score);
-  const top = arms.slice(0, 2);
-  for (const arm of top) {
+  const topN = arms.slice(0, 2);
+  for (const arm of topN) {
     const qx = ny * arm.dz - nz * arm.dy;
     const qy = nz * arm.dx - nx * arm.dz;
     const qz = nx * arm.dy - ny * arm.dx;
@@ -603,9 +603,9 @@ export function stepCanyon(c: Canyon3, dt: number, kind: number, params: DeParam
       arm.score += 0.9;
     }
   }
-  top.sort((a, b) => b.score - a.score);
-  const best = top[0] ?? { ang: c.heading, score: 0 };
-  const alt = top[1] ?? best;
+  topN.sort((a, b) => b.score - a.score);
+  const best = topN[0] ?? { ang: c.heading, score: 0 };
+  const alt = topN[1] ?? best;
   let hold = Math.max(0, (c.hold ?? 0) - dt);
   let chosen = best.ang;
   let gap = Math.abs(best.ang - alt.ang);

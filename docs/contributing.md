@@ -6,6 +6,7 @@
 - `pnpm pull:watch` (`scripts/pull-watch.sh`) does the same once a minute as a sidecar: `git pull --ff-only`, full `web/` rebuild, restart monitor + Vite, wait 10s, hard-reload the Chrome tab (CDP on 9222 or xdotool), then autoconsent and load plugin views that landed in the pull. Dirty trees are skipped. `--once` is one pass. Set `ZOTO_VIZ_NO_AUTO_PULL=1` on the monitor if this script should be the only puller.
 - `cd web && pnpm test && pnpm build`
 - `.venv/bin/python3 -m pytest tests -q -o addopts=`
+- Optional pre-push guard (GitHub Actions is not running): `ln -sf ../../scripts/pre-push-quick.sh .git/hooks/pre-push`. It runs the pack slug / plugin id collision tests, the pinned shipped-id and sky lists, and pack-lint in well under a minute; `git push --no-verify` skips it once.
 - Do not commit `.venv`, `web/dist`, `data/`, pcaps, wifi-keys, `sys-config.yml`, `plugins/.runtime/`, `plugins/*.zip`, or `dist/`
 - Plugins must pass `./zoto-viz plugin validate`
 - Python lives in `service/` (`python -m service.monitor`). Plugin Python is `backend/service.py` inside a plugin source tree; it is hot-loaded only when `ZOTO_VIZ_PLUGIN_SERVICE=1` and the operator has consented, and is not imported during `plugin validate`

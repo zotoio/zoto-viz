@@ -18,6 +18,7 @@ PINNED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = (
     "disk",
     "doom",
     "drone-show",
+    "fluid-dyn",
     "fractal-zoom",
     "frogger",
     "gpu",

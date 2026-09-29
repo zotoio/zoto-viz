@@ -7,6 +7,7 @@
 import assert from "node:assert/strict";
 import { PNG } from "pngjs";
 import { chromium } from "playwright";
+import { seedSmokeProfile, smokeProfileSettings } from "./smoke-profile-util.mjs";
 
 const base = process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/";
 const PRESENT_FRAMES = 30;
@@ -126,6 +127,8 @@ async function waitPresentedFrames(page, target) {
 }
 
 async function run() {
+  // The startup profile load would otherwise replace the localStorage view with topology.
+  await seedSmokeProfile(base, smokeProfileSettings("plugin:backrooms", { feed: { on: true }, chat: { on: true } }));
   const browser = await chromium.launch({ headless: true });
   const webglConsole = [];
   const ctx = await browser.newContext({

@@ -14,6 +14,7 @@ import {
   packAssetNullOriginGetHeaders,
   packAssetUrl,
 } from "./pack-asset-smoke-util.mjs";
+import { seedSmokeProfile, smokeProfileSettings } from "./smoke-profile-util.mjs";
 
 const base = (process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/").replace(/\/?$/, "/");
 const WAIT_MS = 120_000;
@@ -70,7 +71,8 @@ function nearBlack(rgb) {
 }
 
 async function sampleScene(page) {
-  const canvas = page.locator("#scene canvas").first();
+  // The render canvas is mounted in #wall (canvas.render-host); #scene only holds overlays now.
+  const canvas = page.locator("#wall canvas.render-host, #scene canvas").first();
   await canvas.waitFor({ state: "visible", timeout: WAIT_MS });
   const png = PNG.sync.read(await canvas.screenshot({ type: "png" }));
   const w = png.width;
@@ -79,6 +81,17 @@ async function sampleScene(page) {
     center: avgBlock(png.data, w, h, w / 2, h / 2),
     side: avgBlock(png.data, w, h, Math.floor(w * 0.2), Math.floor(h * 0.35)),
   };
+}
+
+/** The pack itself must be the live view: a topology fallback also paints a non-black canvas. */
+async function waitSandboxReady(page, mode) {
+  await page.waitForFunction(
+    (m) => localStorage.getItem("zoto-viz.mode") === m
+      && !!document.querySelector('iframe[src*="plugin-sandbox.html"]')
+      && (window.__zotoSandboxBoot ?? []).includes("ready"),
+    mode,
+    { timeout: WAIT_MS },
+  );
 }
 
 async function waitForDraw(page, label) {
@@ -142,16 +155,23 @@ async function main() {
   });
 
   for (const pack of PACKS) {
+    // Leave the previous page first so its profile autosave cannot race the seed below.
+    await page.goto("about:blank");
+    // The startup profile load would otherwise replace the localStorage view with topology.
+    await seedSmokeProfile(base, smokeProfileSettings(pack.mode));
     await page.goto(base, { waitUntil: "domcontentloaded", timeout: WAIT_MS });
     await page.evaluate(installProfile, pack.mode);
     await page.reload({ waitUntil: "networkidle", timeout: WAIT_MS });
     try {
+      await waitSandboxReady(page, pack.mode);
       await waitForDraw(page, pack.label);
       if (pack.multiFile) {
         assert.equal(diag.pack403.length, 0, JSON.stringify(diag.pack403));
       }
     } catch (err) {
       diag.cspViolations = await page.evaluate(() => window.__zotoCspViolations ?? []);
+      diag.boot = await page.evaluate(() => window.__zotoSandboxBoot ?? []);
+      diag.mode = await page.evaluate(() => localStorage.getItem("zoto-viz.mode"));
       diag.moduleJsStatus = moduleJsStatus;
       const srcdoc = diag.cspViolations.filter((v) => String(v.blockedURI || "").includes("srcdoc"));
       console.error("sandbox-draws-smoke: FAIL", JSON.stringify({

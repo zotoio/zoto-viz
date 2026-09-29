@@ -11,6 +11,7 @@ const PINNED_SHIPPED_PACK_SKY_IDS = [
   "backrooms",
   "blob-mesh",
   "cypher-cic",
+  "fluid-dyn",
   "fractal-zoom",
   "hn-rain",
   "hn-term",

@@ -63,6 +63,17 @@ export default defineConfig({
         },
       },
       {
+        // Pack-local tests under plugins/src (each pack also has its own vitest.config for solo runs).
+        extends: true,
+        test: {
+          name: "packs",
+          dir: path.join(repoRoot, "plugins/src"),
+          environment: "happy-dom",
+          setupFiles: ["src/test/setup.ts"],
+          include: ["**/*.test.ts"],
+        },
+      },
+      {
         extends: true,
         test: {
           name: "tz-sydney",
