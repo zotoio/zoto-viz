@@ -112,9 +112,14 @@ export const shapeInvadersIdle: ArcadeIdleShaper<InvadersRow> = (ctx) => {
 // ------------------------------------------------------------------ netpong
 
 /** The service a demo peer answers on: the gateway resolves names, everything else serves HTTPS. */
-function service(h: IdleVizDemoHost): { proto: string; tag: string; svc: number; ask: (id: number, name: string) => string; reply: (id: number, name: string, ip: string) => string } {
-  if (h.role === "gateway") return { proto: "DNS", tag: "udp/53", svc: 53, ask: (id, n) => `Standard query ${hex(id)} A ${n}`, reply: (id, n, ip) => `Standard query response ${hex(id)} A ${n} A ${ip}` };
-  return { proto: "TLSv1.3", tag: "tcp/443", svc: 443, ask: (_id, n) => `Client Hello (SNI=${n})`, reply: () => "Server Hello, Change Cipher Spec" };
+function service(h: IdleVizDemoHost): { proto: string; tag: string; svc: number; dns: boolean } {
+  return h.role === "gateway" ? { proto: "DNS", tag: "udp/53", svc: 53, dns: true } : { proto: "TLSv1.3", tag: "tcp/443", svc: 443, dns: false };
+}
+
+/** A name a host would look up: another demo host's (never its own, never the resolver's). */
+function lookupName(hosts: readonly IdleVizDemoHost[], asker: string, resolver: string, n: number): IdleVizDemoHost {
+  const pool = hosts.filter((h) => h.ip !== asker && h.ip !== resolver);
+  return pool.length ? pool[n % pool.length] : hosts[n % hosts.length];
 }
 
 /**
@@ -125,14 +130,22 @@ function service(h: IdleVizDemoHost): { proto: string; tag: string; svc: number;
  */
 export const shapePongIdle: ArcadeIdleShaper<PongRow> = (ctx) => {
   const rows: PongRow[] = [];
+  const exchange = (asker: IdleVizDemoHost, server: IdleVizDemoHost | null, s: ReturnType<typeof service>, r: () => number, n: number) => {
+    const id = Math.floor(r() * 0xffff);
+    if (!s.dns) return { ask: server ? `Client Hello (SNI=${server.name})` : "Client Hello", reply: "Server Hello, Change Cipher Spec" };
+    const q = lookupName(ctx.hosts, asker.ip, server?.ip ?? "", n);
+    return { ask: `Standard query ${hex(id)} A ${q.name}`, reply: `Standard query response ${hex(id)} A ${q.name} A ${q.ip}` };
+  };
   if (ctx.me) {
+    // one device picked (it serves): the demo LAN hosts ask it for names and HTTPS; its own name is the pick's
     const askers = ctx.hosts.filter((h) => h.role === "lan");
     askers.forEach((h, i) => {
       for (const s of [service({ ...h, role: "gateway" }), service(h)]) {
         const r = ctx.rng(ctx.step * 64 + i * 2 + s.svc);
-        const port = eph(r), id = Math.floor(r() * 0xffff), t = ctx.t0 + 0.05 + r() * 0.7;
-        rows.push([t, "in", h.ip, s.proto, s.tag, between(r, 70, 520), IFACE, s.ask(id, h.name), `${port}→${s.svc}`]);
-        if (r() >= 0.12) rows.push([t + 0.04 + r() * 0.3, "out", h.ip, s.proto, s.tag, between(r, 90, 1400), IFACE, s.reply(id, h.name, h.ip), `${s.svc}→${port}`]);
+        const port = eph(r), t = ctx.t0 + 0.05 + r() * 0.7;
+        const { ask, reply } = exchange(h, null, s, r, ctx.step + i);
+        rows.push([t, "in", h.ip, s.proto, s.tag, between(r, 70, 520), IFACE, ask, `${port}→${s.svc}`]);
+        if (r() >= 0.12) rows.push([t + 0.04 + r() * 0.3, "out", h.ip, s.proto, s.tag, between(r, 90, 1400), IFACE, reply, `${s.svc}→${port}`]);
       }
     });
     return rows;
@@ -142,9 +155,9 @@ export const shapePongIdle: ArcadeIdleShaper<PongRow> = (ctx) => {
   linksOf(ctx.hosts).forEach(({ dev, dst }, i) => {
     const s = service(dst);
     const r = ctx.rng(ctx.step * 64 + i);
-    const port = eph(r), id = Math.floor(r() * 0xffff), t = ctx.t0 + 0.05 + r() * 0.7, ta = t + 0.04 + r() * 0.3;
+    const port = eph(r), t = ctx.t0 + 0.05 + r() * 0.7, ta = t + 0.04 + r() * 0.3;
     const answered = r() >= 0.12;
-    const ask = s.ask(id, dst.name), reply = s.reply(id, dst.name, dst.ip);
+    const { ask, reply } = exchange(dev, dst, s, r, ctx.step + i);
     const qs = between(r, 70, 520), as = between(r, 90, 1400);
     if (inScope(dev)) {
       rows.push([t, "out", dst.ip, s.proto, s.tag, qs, IFACE, ask, `${port}→${s.svc}`, dev.ip]);
