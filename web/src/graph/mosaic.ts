@@ -892,7 +892,7 @@ export class Mosaic {
       return;
     }
     if (phase === "bind" && fault !== "unbound") return;
-    const plan = paneRecovery(fault);
+    const plan = paneRecovery(fault, lookForTile(id)?.backdrop === "plugin");
     if (plan.flush) this.flushSync();
     if (!inspectPaneStartup(this.paneSnap(id))) {
       pane.classList.remove("warming");
@@ -937,6 +937,8 @@ export class Mosaic {
   }
 
   private fallbackHostSky(id: string): void {
+    // A pack-sky pane waits on the theme background; a built-in here is the "matrix on Backrooms" bug.
+    if (lookForTile(id)?.backdrop === "plugin") return;
     const used = [...this.tileSkies.values()].filter((k) => k !== "plugin");
     const sky = nextHostSky(used, cycleSkyPool(), this.cfg.sync().anim.backdrop);
     this.recoveredSkies.set(id, sky);

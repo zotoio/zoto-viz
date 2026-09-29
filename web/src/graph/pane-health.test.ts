@@ -60,6 +60,11 @@ describe("paneRecovery", () => {
     expect(paneRecovery("no-sky")).toEqual({ rematch: false, hostSky: true, flush: false });
     expect(paneRecovery("no-data")).toEqual({ rematch: false, hostSky: true, flush: true });
   });
+
+  it("never gives a pack-sky pane a built-in stand-in", () => {
+    expect(paneRecovery("no-sky", true)).toEqual({ rematch: false, hostSky: false, flush: false });
+    expect(paneRecovery("no-data", true)).toEqual({ rematch: false, hostSky: false, flush: true });
+  });
 });
 
 describe("nextGraphTile / nextHostSky", () => {

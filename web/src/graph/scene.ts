@@ -1984,6 +1984,8 @@ export class NetScene implements HostedView, RenderScalePane {
   get currentMode(): ViewMode { return this.mode; }
   get nodeCount(): number { return this.nodes.size; }
   get pluginSkyId(): string | null { return this.backdrop.pluginSkyId(); }
+  /** Built-in sky actually drawn, or null (theme background, pack sky, photo). */
+  get builtInSkyShown(): string | null { return this.backdrop.builtInSkyShown(); }
 
   /** Pause / resume rendering and layout ticks (the data model keeps updating either way). */
   setActive(on: boolean): void {

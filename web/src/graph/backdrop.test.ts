@@ -161,7 +161,8 @@ describe("plugin sky contract", () => {
     expect(sky.pluginSkyId()).toBe("aurora");
     sky.setPluginShader(null);
     expect(sky.pluginSkyId()).toBeNull();
-    expect(PLUGIN_SKY_FALLBACK).toBe("space");
+    expect(PLUGIN_SKY_FALLBACK).toBe("none");
+    expect(sky.builtInSkyShown()).toBeNull();
   });
 
   it("does not paint another tile's plugin shader on a pane that has none", () => {

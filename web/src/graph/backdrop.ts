@@ -774,7 +774,8 @@ export {
   probePluginSkyVertCompile,
   wrapPluginSky,
 } from "../plugins/plugin-sky-probe";
-export const PLUGIN_SKY_FALLBACK: BackdropKind = "space";
+/** A pack sky that is not loaded (yet) shows the theme background, never a built-in sky. */
+export const PLUGIN_SKY_FALLBACK: BackdropKind = "none";
 
 let pluginSkyMaterialsCreated = 0;
 let pluginSkyMaterialsDisposed = 0;
@@ -972,10 +973,10 @@ export class Backdrop {
     if (kind !== prev) this.beginSkyMorph();
     this.kind = kind;
     const photo = isPhotoSky(kind);
-    this.mesh.visible = kind !== "none" && kind !== "live" && !photo;
+    const modeKind = kind === "plugin" && !this.pluginMat ? PLUGIN_SKY_FALLBACK : kind;
+    this.mesh.visible = modeKind !== "none" && kind !== "live" && !photo;
     this.liveMesh.visible = kind === "live";
     this.photoMesh.visible = photo;
-    const modeKind = kind === "plugin" && !this.pluginMat ? PLUGIN_SKY_FALLBACK : kind;
     this.mat.uniforms.uMode.value = MODE_NUM[modeKind] ?? 0;
     if (kind === "dynamic") this.setRecipe(currentSkyRecipe());
     if (kind === "live" && liveCam.texture) {
@@ -1355,6 +1356,12 @@ export class Backdrop {
   }
 
   /** Plugin id currently bound to the sphere, or null when the shipped program is showing. */
+  /** The built-in sky being drawn, or null for the theme background / a pack or photo sky. */
+  builtInSkyShown(): BackdropKind | null {
+    if (!this.mesh.visible || this.pluginMat || this.kind === "custom") return null;
+    return this.kind === "plugin" ? PLUGIN_SKY_FALLBACK : this.kind;
+  }
+
   pluginSkyId(): string | null {
     return this.pluginMat && this.mesh.material === this.pluginMat ? this.pluginId : null;
   }

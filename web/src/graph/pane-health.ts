@@ -36,10 +36,14 @@ export function inspectPaneStartup(s: PaneStartupSnap): PaneFault | null {
   return null;
 }
 
-export function paneRecovery(fault: PaneFault): PaneRecovery {
+/**
+ * ``packSky``: the pane's view draws its own sky (``look.backdrop: plugin``). That pane never
+ * gets a built-in stand-in; it keeps the theme background until its own sky is ready.
+ */
+export function paneRecovery(fault: PaneFault, packSky = false): PaneRecovery {
   if (fault === "unbound") return { rematch: true, hostSky: false, flush: false };
-  if (fault === "no-sky") return { rematch: false, hostSky: true, flush: false };
-  return { rematch: false, hostSky: true, flush: true };
+  if (fault === "no-sky") return { rematch: false, hostSky: !packSky, flush: false };
+  return { rematch: false, hostSky: !packSky, flush: true };
 }
 
 /** Next unused graph catalog id so a dead arcade / chrome-only tile becomes a scene. */
