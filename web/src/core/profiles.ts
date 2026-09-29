@@ -7,6 +7,7 @@ import { DEFAULT_THEME } from "./themes";
 import { EMPTY_LOOK, normalizeAgentLook, type AgentLook } from "../graph/deco";
 import { DEFAULT_DICE, normalizeDice, type DiceConfig } from "./shuffle";
 import { apiFetch } from "./http";
+import { mergeMediaAccept, setMediaAcceptSink } from "../ui/media-ask";
 import { remapSavedViewId } from "./saved-view-id";
 import { normalizeRecentViews } from "../plugins/recent-views";
 import type { RemixPairing } from "../remix/remix-types";
@@ -254,6 +255,34 @@ export function normalizeAi(raw: unknown): ProfileAi {
   };
 }
 
+/** Shared across profiles in ~/.zoto-viz/profiles.yml (`global`). */
+export interface HomeGlobal {
+  ai: ProfileAi;
+  media: { mic: boolean; cam: boolean };
+}
+
+export function emptyHomeGlobal(): HomeGlobal {
+  return { ai: emptyAi(), media: { mic: false, cam: false } };
+}
+
+export function normalizeHomeGlobal(raw: unknown): HomeGlobal {
+  const s = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
+  const media = s.media && typeof s.media === "object" ? s.media as Record<string, unknown> : {};
+  return {
+    ai: normalizeAi(s.ai),
+    media: { mic: media.mic === true, cam: media.cam === true },
+  };
+}
+
+/** True when the home block has a model choice worth keeping over a profile blob. */
+export function homeAiActive(ai: ProfileAi | undefined): boolean {
+  if (!ai) return false;
+  return ai.backend === "cursor" || ai.backend === "ollama"
+    || ai.model.trim() !== ""
+    || ai.cursorModel.trim() !== ""
+    || ai.cycle === true;
+}
+
 export function normalizeSettings(raw: unknown): ProfileSettings {
   const d = shippedSettings();
   const s = raw && typeof raw === "object" ? raw as Record<string, unknown> : {};
@@ -404,6 +433,8 @@ export class ProfileStore {
   dirty = false;
   available = false;
   file = "";
+  /** Model choice and mic / camera acceptance. Shared by every profile. */
+  homeGlobal: HomeGlobal = emptyHomeGlobal();
   /** writable profiles always write as settings change */
   autosave = true;
   private saveTimer = 0;
@@ -445,6 +476,7 @@ export class ProfileStore {
     this.deleteBtn.classList.add("warn");
     tools.append(this.defaultBtn, this.deleteBtn);
 
+    setMediaAcceptSink((media) => { void this.saveHome({ media }); });
     this.saveBtn.addEventListener("click", () => void this.confirmSave());
     this.discardBtn.addEventListener("click", () => void this.discard());
     this.saveAsBtn.addEventListener("click", () => void this.saveAsNew(true));
@@ -521,7 +553,46 @@ export class ProfileStore {
     this.clearRecoverTimer();
     data = await this.ensureCatalog(data);
     this.ingest(data);
+    await this.loadHome();
     return data;
+  }
+
+  /** Pull `global` and fold a browser-only mic accept into the home file. */
+  private async loadHome(): Promise<void> {
+    try {
+      this.homeGlobal = normalizeHomeGlobal(await api("/api/profiles/global"));
+      const merged = mergeMediaAccept(this.homeGlobal.media);
+      if (merged.mic !== this.homeGlobal.media.mic || merged.cam !== this.homeGlobal.media.cam) {
+        await this.saveHome({ media: merged });
+      }
+    } catch (e) {
+      console.warn("zoto-viz home global:", e);
+    }
+  }
+
+  /** Keep a real model choice in the home block. An empty profile blob must not wipe it. */
+  private keepHomeAi(ai: ProfileAi): void {
+    if (homeAiActive(ai) || !homeAiActive(this.homeGlobal.ai)) void this.saveHome({ ai });
+  }
+
+  /** Merge model details or media acceptance into the home file. */
+  async saveHome(patch: { ai?: ProfileAi; media?: { mic: boolean; cam: boolean } }): Promise<void> {
+    if (!this.available) return;
+    if (patch.ai) this.homeGlobal = { ...this.homeGlobal, ai: normalizeAi(patch.ai) };
+    if (patch.media) {
+      this.homeGlobal = {
+        ...this.homeGlobal,
+        media: { mic: patch.media.mic === true, cam: patch.media.cam === true },
+      };
+    }
+    try {
+      this.homeGlobal = normalizeHomeGlobal(await api("/api/profiles/global", {
+        method: "PUT",
+        body: JSON.stringify(patch),
+      }));
+    } catch (e) {
+      console.warn("zoto-viz home global:", e);
+    }
   }
 
   /** Best-effort factory + user rows. A write failure must not flip available off. */
@@ -800,6 +871,7 @@ export class ProfileStore {
     quiet(() => this.host.apply(settings));
     this.adoptAutosave(true);
     this.syncChrome();
+    this.keepHomeAi(settings.ai);
     return "live";
   }
 
@@ -820,6 +892,7 @@ export class ProfileStore {
     if (tag) body.model = tag;
     else if (this.meta(id)?.model) body.model = this.meta(id)!.model;
     await api(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    this.keepHomeAi(next.ai);
     if (this.current === id) {
       this.dirty = false;
       this.adoptAutosave(true);
@@ -866,11 +939,13 @@ export class ProfileStore {
   private async writeNow(): Promise<boolean> {
     if (this.shipped || !this.current || !this.available) return false;
     const gen = ++this.saveGen;
+    const settings = this.host.collect();
     try {
       await api(`/api/profiles/${this.current}`, {
         method: "PUT",
-        body: JSON.stringify({ settings: this.host.collect() }),
+        body: JSON.stringify({ settings }),
       });
+      this.keepHomeAi(settings.ai);
       if (gen !== this.saveGen) return true;
       this.dirty = false;
       this.syncChrome();

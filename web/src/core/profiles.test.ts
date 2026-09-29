@@ -1,5 +1,5 @@
 import { describe, expect, it, afterEach } from "vitest";
-import { AI_ID, LEGACY_SHIPPED_ID, ProfileStore, SHIPPED_ID, SHIPPED_LABEL, USER_ID, agentProfileId, aiCycleSettings, headerBrandProfile, isAgentProfile, isQuiet, isShippedId, normalizeSettings, quiet, shippedSettings, suggestId, workingProfileId, type ProfileList } from "./profiles";
+import { AI_ID, LEGACY_SHIPPED_ID, ProfileStore, SHIPPED_ID, SHIPPED_LABEL, USER_ID, agentProfileId, aiCycleSettings, headerBrandProfile, homeAiActive, isAgentProfile, isQuiet, isShippedId, normalizeHomeGlobal, normalizeSettings, quiet, shippedSettings, suggestId, workingProfileId, type ProfileList } from "./profiles";
 import { setPluginModes, topology } from "./modes";
 
 afterEach(() => setPluginModes([]));
@@ -60,6 +60,12 @@ describe("profiles", () => {
       anim: { follow: true, audioCamera: true, camInertia: 0.05, gravity: 1.9, partCap: 2420, partSize: 2.4, labelWeight: 2 },
     }).anim).toMatchObject({ camInertia: 0.45, gravity: 1, partCap: 800, labelWeight: 1.2 });
     expect(normalizeSettings(null).theme).toBe(shippedSettings().theme);
+    expect(homeAiActive(normalizeHomeGlobal({
+      ai: { backend: "cursor", cursorModel: "grok-4.7", cycle: false },
+      media: { mic: true },
+    }).ai)).toBe(true);
+    expect(normalizeHomeGlobal({ media: { mic: true, cam: "yes" } }).media).toEqual({ mic: true, cam: false });
+    expect(homeAiActive(normalizeHomeGlobal({}).ai)).toBe(false);
     expect(normalizeSettings({ ai: { backend: "cursor", cursorModel: "grok-4.6", cycle: true } }).ai).toEqual({
       backend: "cursor", model: "", cursorModel: "grok-4.6", cycle: true,
     });

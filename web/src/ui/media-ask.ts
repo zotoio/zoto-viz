@@ -51,7 +51,9 @@ function persistDismissed(): void {
 
 loadDismissed();
 
-function readAccept(): Record<MediaAskKind, boolean> {
+export type MediaAccept = { mic: boolean; cam: boolean };
+
+function readAccept(): MediaAccept {
   try {
     const raw = localStorage.getItem(ACCEPT_KEY);
     if (!raw) return { mic: false, cam: false };
@@ -62,11 +64,41 @@ function readAccept(): Record<MediaAskKind, boolean> {
   }
 }
 
+let acceptSink: ((media: MediaAccept) => void) | null = null;
+
+/** Home config writes the accept. The browser copy stays so a blip does not re-prompt. */
+export function setMediaAcceptSink(fn: ((media: MediaAccept) => void) | null): void {
+  acceptSink = fn;
+}
+
+function publishAccept(next: MediaAccept): void {
+  acceptSink?.(next);
+}
+
+/**
+ * Union of this browser's accept and the home file.
+ * A local Allow is kept until the home file has stored it.
+ */
+export function mergeMediaAccept(remote: { mic?: boolean; cam?: boolean } | null | undefined): MediaAccept {
+  const local = readAccept();
+  const next = {
+    mic: local.mic || remote?.mic === true,
+    cam: local.cam || remote?.cam === true,
+  };
+  if (next.mic) granted.mic = true;
+  if (next.cam) granted.cam = true;
+  if (next.mic || next.cam) {
+    try { localStorage.setItem(ACCEPT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
+  }
+  return next;
+}
+
 function writeAccept(kind: MediaAskKind): void {
   const next = readAccept();
   next[kind] = true;
   try { localStorage.setItem(ACCEPT_KEY, JSON.stringify(next)); } catch { /* ignore */ }
   granted[kind] = true;
+  publishAccept(next);
 }
 
 function accepted(kind: MediaAskKind): boolean {
@@ -145,6 +177,7 @@ export function resetMediaAsk(): void {
     localStorage.removeItem(ACCEPT_KEY);
     sessionStorage.removeItem(DISMISS_KEY);
   } catch { /* ignore */ }
+  publishAccept({ mic: false, cam: false });
 }
 
 /** Settings / header toggles call this so Not now can be asked again. */

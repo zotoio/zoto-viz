@@ -52,7 +52,7 @@ If curl fails, start the backend (`scripts/dev.sh start backend` or `systemctl -
 | Named graph style (animated / 3D) | Look → library, or `visualisation.yml` `style.library` (`jelly-bloom`, or a list to combine). A local `look.graphLayout` still wins |
 | Extra catalog row on a shipped plugin | `set_plugin_instance` (do not copy the tree) |
 
-Never use MCP to `git add` / `git commit`. Camera and microphone are operator-only (Settings → Privacy) — do not patch them.
+Never use MCP to `git add` / `git commit`. Camera and microphone are operator-only (Settings → Privacy) — do not patch them. Acceptance of the microphone or camera, and the model choice, live in `~/.zoto-viz/profiles.yml` under `global` (`global.media`, `global.ai`). That block is not a `set_settings` key.
 
 ## Live UI patches
 

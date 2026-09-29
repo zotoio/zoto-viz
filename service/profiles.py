@@ -4,6 +4,11 @@
 contains it, the UI treats it as read-only, and each boot refreshes its
 settings blob from the frontend. A leftover `netviz` id is migrated on
 read. Other profiles (starting with `user`) are writable.
+
+`global` sits beside the profiles. It is the same for every look: the
+agent model choice, and whether the operator has accepted the microphone
+or camera. It is not a profile id and it is not in the agent settings
+whitelist.
 """
 from __future__ import annotations
 
@@ -27,17 +32,90 @@ HEADER = (
     "# zoto-viz UI profiles.\n"
     "# `zoto-viz` is the shipped default: the UI will not overwrite it.\n"
     "# `default` is the profile loaded on startup.\n"
+    "# `global` is shared across profiles: model choice, and mic / camera acceptance.\n"
 )
+RESERVED_IDS = frozenset({SHIPPED_ID, LEGACY_SHIPPED_ID, "global"})
 
 
 def _empty(fresh: bool = False) -> dict[str, Any]:
     return {
         "default": "user",
+        "global": _empty_global(),
         "profiles": {
             SHIPPED_ID: {"shipped": True, "label": SHIPPED_LABEL, "settings": {}},
         },
         "fresh": fresh,
     }
+
+
+def _empty_global() -> dict[str, Any]:
+    return {"ai": {}, "media": {}}
+
+
+def _normalize_ai(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    backend = raw.get("backend")
+    if backend in ("cursor", "ollama", ""):
+        out["backend"] = backend
+    model = raw.get("model")
+    if isinstance(model, str):
+        out["model"] = model.strip()[:64]
+    cursor = raw.get("cursorModel")
+    if isinstance(cursor, str):
+        out["cursorModel"] = cursor.strip()[:64]
+    if "cycle" in raw:
+        out["cycle"] = raw.get("cycle") is True
+    return out
+
+
+def _normalize_media(raw: Any) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, Any] = {}
+    if raw.get("mic") is True:
+        out["mic"] = True
+    if raw.get("cam") is True:
+        out["cam"] = True
+    return out
+
+
+def _normalize_global(raw: Any) -> dict[str, Any]:
+    src = raw if isinstance(raw, dict) else {}
+    return {"ai": _normalize_ai(src.get("ai")), "media": _normalize_media(src.get("media"))}
+
+
+def _ai_meaningful(ai: dict[str, Any]) -> bool:
+    if ai.get("backend") in ("cursor", "ollama"):
+        return True
+    if str(ai.get("model") or "").strip() or str(ai.get("cursorModel") or "").strip():
+        return True
+    return ai.get("cycle") is True
+
+
+def _seed_ai(profiles: dict[str, Any], default_id: str) -> dict[str, Any]:
+    seen: set[str] = set()
+    for pid in (default_id, *profiles.keys()):
+        if pid in seen:
+            continue
+        seen.add(pid)
+        body = profiles.get(pid)
+        settings = body.get("settings") if isinstance(body, dict) else None
+        ai = _normalize_ai(settings.get("ai") if isinstance(settings, dict) else None)
+        if _ai_meaningful(ai):
+            return ai
+    return {}
+
+
+def _merge_global(cur: Any, patch: dict[str, Any]) -> dict[str, Any]:
+    base = _normalize_global(cur)
+    out = {"ai": dict(base["ai"]), "media": dict(base["media"])}
+    if "ai" in patch:
+        out["ai"] = _normalize_ai(patch.get("ai"))
+    if "media" in patch:
+        out["media"] = _normalize_media(patch.get("media"))
+    return out
 
 
 def _is_shipped(pid: str) -> bool:
@@ -57,6 +135,7 @@ def _read() -> dict[str, Any]:
         raise ValueError(f"could not read {FILE}: {e}") from e
     if not isinstance(raw, dict):
         raise ValueError(f"{FILE} must be a mapping")
+    had_global = "global" in raw
     profiles: dict[str, Any] = {}
     src = raw.get("profiles") or {}
     if not isinstance(src, dict):
@@ -91,7 +170,13 @@ def _read() -> dict[str, Any]:
     default = _canon_id(str(raw.get("default") or SHIPPED_ID))
     if default not in profiles:
         default = SHIPPED_ID
-    doc = {"default": default, "profiles": profiles, "fresh": False}
+    global_block = _normalize_global(raw.get("global"))
+    if not had_global:
+        seeded = _seed_ai(profiles, default)
+        if seeded:
+            global_block = {"ai": seeded, "media": global_block["media"]}
+        migrated = True
+    doc = {"default": default, "global": global_block, "profiles": profiles, "fresh": False}
     if migrated:
         try:
             _write(doc)
@@ -104,6 +189,7 @@ def _write(doc: dict[str, Any]) -> None:
     DIR.mkdir(mode=0o700, exist_ok=True)
     out = {
         "default": doc["default"],
+        "global": _normalize_global(doc.get("global")),
         "profiles": {
             pid: _body_out(pid, p)
             for pid, p in doc["profiles"].items()
@@ -211,6 +297,33 @@ def profile_entry(pid: str) -> dict[str, Any] | None:
     return {"id": pid, "default": doc["default"], **_body_out(pid, p)}
 
 
+async def api_global_get(_request: web.Request) -> web.Response:
+    try:
+        doc = _read()
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=500)
+    return web.json_response(_normalize_global(doc.get("global")))
+
+
+async def api_global_put(request: web.Request) -> web.Response:
+    try:
+        body = await request.json()
+    except Exception:
+        return web.json_response({"error": "json body required"}, status=400)
+    if not isinstance(body, dict) or not any(k in body for k in ("ai", "media")):
+        return web.json_response({"error": "ai or media object required"}, status=400)
+    try:
+        doc = _read()
+    except ValueError as e:
+        return web.json_response({"error": str(e)}, status=500)
+    doc["global"] = _merge_global(doc.get("global"), body)
+    try:
+        _write(doc)
+    except OSError as e:
+        return web.json_response({"error": str(e)}, status=500)
+    return web.json_response(doc["global"])
+
+
 async def api_list(_request: web.Request) -> web.Response:
     try:
         doc = _read()
@@ -278,8 +391,8 @@ async def api_create(request: web.Request) -> web.Response:
     except Exception:
         return web.json_response({"error": "json body required"}, status=400)
     pid = _canon_id(_id(str(body.get("id") or "")))
-    if _is_shipped(pid):
-        return web.json_response({"error": "zoto-viz is reserved for the shipped default"}, status=403)
+    if pid in RESERVED_IDS:
+        return web.json_response({"error": "that id is reserved"}, status=403)
     settings = _settings(body)
     try:
         doc = _read()
@@ -357,6 +470,8 @@ async def api_delete(request: web.Request) -> web.Response:
         doc = _read()
     except ValueError as e:
         return web.json_response({"error": str(e)}, status=500)
+    if pid == "global":
+        return web.json_response({"error": "that id is reserved"}, status=403)
     p = doc["profiles"].get(pid)
     if not p:
         return web.json_response({"error": "unknown profile"}, status=404)

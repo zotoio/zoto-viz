@@ -60,7 +60,7 @@ import {
   flashModeLoadFailed,
   initModeSwitchStatusStrip,
 } from "./mode-switch-message";
-import { ProfileStore, aiCycleSettings, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
+import { ProfileStore, aiCycleSettings, homeAiActive, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import {
   loadVizGovernorSetting,
   setVizGovernorSetting,
@@ -2493,7 +2493,7 @@ settings.prependSection(
 );
 settings.prependSection(
   "Profile",
-  "The header profile menu loads this profile's last saved settings: view, theme, motion, mosaic, feed, chat, plugins, camera, and agent. Saved in ~/.zoto-viz/profiles.yml. Choosing one makes it the startup profile. zoto viz is the shipped default. The Cursor key stays in ~/.zoto-viz/cursor-key.",
+  "The header profile menu loads this profile's last saved settings: view, theme, motion, mosaic, feed, chat, plugins, camera, and agent. Saved in ~/.zoto-viz/profiles.yml. Model choice and microphone / camera acceptance are shared across profiles in that file. Choosing one makes it the startup profile. zoto viz is the shipped default. The Cursor key stays in ~/.zoto-viz/cursor-key.",
   profileHost,
 );
 uiReady = true;
@@ -2802,6 +2802,8 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   settings.applyChat(s.chat ?? settings.chatSettings);
   settings.applyDice(s.dice ?? settings.diceSettings);
   agent.applyAi(s.ai);
+  const homeAi = profiles?.homeGlobal.ai;
+  if (homeAi && homeAiActive(homeAi)) agent.applyAi(homeAi);
   if (s.operatorSaved) {
     agent.applyOperator(s.operator);
     tileHealErrorsOn = s.operator.tileHealErrors;
@@ -2862,9 +2864,11 @@ async function setAiCycle(on: boolean): Promise<void> {
     }
     applyViewLook();
     persistLive();
+    void profiles.saveHome({ ai: agent.aiPrefs() });
   } catch (e) {
     console.warn("zoto-viz AI cycle:", e);
     agent.setCycleChecked(false);
+    void profiles?.saveHome({ ai: agent.aiPrefs() });
   } finally {
     aiBusy = false;
   }

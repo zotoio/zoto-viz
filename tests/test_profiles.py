@@ -144,6 +144,47 @@ def test_api_list_get_create_put_default_delete(tmp_path, monkeypatch) -> None:
     asyncio.run(run())
 
 
+def test_global_seeds_model_and_stores_mic_accept(tmp_path, monkeypatch) -> None:
+    _iso(tmp_path, monkeypatch)
+    profiles.FILE.write_text(
+        "default: user\n"
+        "profiles:\n"
+        "  zoto-viz: {shipped: true, label: zoto viz, settings: {}}\n"
+        "  user:\n"
+        "    shipped: false\n"
+        "    label: user\n"
+        "    settings:\n"
+        "      ai: {backend: cursor, model: gemma4, cursorModel: grok-4.7, cycle: false}\n",
+        encoding="utf-8",
+    )
+
+    async def run() -> None:
+        got = await profiles.api_global_get(Req())
+        assert got.status == 200
+        body = json.loads(got.body)
+        assert body["ai"]["cursorModel"] == "grok-4.7"
+        assert body["ai"]["backend"] == "cursor"
+        assert body["media"] == {}
+        disk = yaml.safe_load(profiles.FILE.read_text(encoding="utf-8"))
+        assert disk["global"]["ai"]["model"] == "gemma4"
+        put = await profiles.api_global_put(Req({"media": {"mic": True, "cam": False}}))
+        assert put.status == 200
+        stored = json.loads(put.body)
+        assert stored["media"] == {"mic": True}
+        assert stored["ai"]["cursorModel"] == "grok-4.7"
+        cleared = await profiles.api_global_put(Req({"ai": {"backend": "ollama", "model": "gemma4"}}))
+        assert json.loads(cleared.body)["media"] == {"mic": True}
+        assert json.loads(cleared.body)["ai"]["backend"] == "ollama"
+        reserved = await profiles.api_create(Req({"id": "global", "settings": {}}))
+        assert reserved.status == 403
+        still = yaml.safe_load(profiles.FILE.read_text(encoding="utf-8"))
+        assert still["global"]["media"]["mic"] is True
+        assert still["global"]["ai"]["model"] == "gemma4"
+        assert "global" not in still["profiles"]
+
+    asyncio.run(run())
+
+
 def test_agent_model_meta(tmp_path, monkeypatch) -> None:
     _iso(tmp_path, monkeypatch)
 

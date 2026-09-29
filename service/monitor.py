@@ -2171,6 +2171,8 @@ def make_app(
     app.router.add_get("/api/forensics", api_forensics)
     app.router.add_post("/api/forensics", api_forensics)
     app.router.add_get("/api/profiles", profiles.api_list)
+    app.router.add_get("/api/profiles/global", profiles.api_global_get)
+    app.router.add_put("/api/profiles/global", profiles.api_global_put)
     app.router.add_put("/api/profiles/default", profiles.api_default)
     app.router.add_post("/api/profiles/shipped", profiles.api_shipped)
     app.router.add_post("/api/profiles", profiles.api_create)

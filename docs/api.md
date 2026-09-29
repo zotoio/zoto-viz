@@ -24,6 +24,7 @@ Other hosts get `400` with a fixed plain-text message (the rejected name is logg
 | `GET/PUT /api/rf/watch` | Wi-Fi SSID watch list |
 | `POST /api/forensics?ip=` | deep analysis |
 | `/api/profiles*` | settings profiles |
+| `GET/PUT /api/profiles/global` | Shared home block in `profiles.yml`: `ai` (backend, model, cursorModel, cycle) and `media` (`mic` / `cam` acceptance). Same for every profile. Not settable through agent settings |
 | `GET /api/plugins` | merged catalog (src trees + non-colliding contrib zips): `plugins`, `errors`, `pythonService`, plus per-row `origin` / `hash` / `service` / `consent` / `parts` / `sha256` / `zip` / sky flags |
 | `PUT /api/plugins/{id}/consent` | `{kind: "reviewed" \| "authored"}` after source review |
 | `GET /api/plugins/{id}/module.js` | compiled TypeScript (`?h=` cache-bust; 404 if missing). CSP locked down. Consent is a UI/sandbox gate, not HTTP 403 |

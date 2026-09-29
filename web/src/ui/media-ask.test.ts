@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { liveMic } from "../audio/want";
 import { liveCam } from "../camera/livecam";
-import { askUserMedia, clearMediaDismiss, dropMediaAsk, resetMediaAsk } from "./media-ask";
+import { askUserMedia, clearMediaDismiss, dropMediaAsk, mediaAskGranted, mergeMediaAccept, resetMediaAsk } from "./media-ask";
 
 function fakeTrack() {
   return {
@@ -122,6 +122,14 @@ describe("askUserMedia", () => {
     [...document.querySelectorAll("button")].find((b) => b.textContent === "Not now")!.click();
     await expect(pending).resolves.toBeNull();
     localStorage.removeItem("zoto-viz.mediaAccept");
+  });
+
+  it("keeps a local microphone accept when the home file has not stored it yet", () => {
+    localStorage.setItem("zoto-viz.mediaAccept", JSON.stringify({ mic: true, cam: false }));
+    expect(mergeMediaAccept({ cam: true })).toEqual({ mic: true, cam: true });
+    expect(mediaAskGranted("mic")).toBe(true);
+    expect(mediaAskGranted("cam")).toBe(true);
+    expect(JSON.parse(localStorage.getItem("zoto-viz.mediaAccept") || "{}")).toEqual({ mic: true, cam: true });
   });
 
   it("still asks in-page when the Permissions API already says granted", async () => {
