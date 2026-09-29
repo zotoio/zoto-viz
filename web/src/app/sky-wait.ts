@@ -1,6 +1,5 @@
 import { hideSkyStartingCard, showSkyStartingCard } from "../graph/sky-starting-card";
-import { paintPackAssetPaneNotice } from "../plugins/pack-asset-pane-notice";
-import { packSkyTimedOut } from "../plugins/plugin-copy";
+import { clearViewState, showViewState, setViewState, viewStateOf } from "./view-state";
 
 /** How long a view may show "Starting…" before it becomes "couldn't start". */
 export const SKY_WAIT_DEADLINE_MS = 45_000;
@@ -14,6 +13,10 @@ export interface SkyWaitHost {
   /** Element that carries the tile's card and notice (mosaic pane, or the solo scene). */
   hostEl: (key: string) => HTMLElement | null;
   name: (key: string) => string;
+  /** View id stamped on the tile (`data-view-id`); defaults to the key. */
+  viewId?: (key: string) => string;
+  /** Pack whose sky the tile waits on (for Couldn't start). */
+  packId?: (key: string) => string;
   /** The tile's own sky is on screen. */
   skyReady: (key: string) => boolean;
   /** Reload only this tile's sky (Retry). */
@@ -55,7 +58,12 @@ export class SkyWaits {
     if (cur) this.clearFailed(key);
     const el = this.host.hostEl(key);
     showSkyStartingCard(el, this.host.name(key));
+    setViewState(key, this.viewId(key), { kind: "starting" }, el);
     this.arm(key);
+  }
+
+  private viewId(key: string): string {
+    return this.host.viewId?.(key) ?? key;
   }
 
   private now(): number {
@@ -75,6 +83,11 @@ export class SkyWaits {
     this.drop(key);
     if (cur.state === "failed:timeout") this.clearFailed(key);
     else hideSkyStartingCard(this.host.hostEl(key), true);
+    // Only this wait's own states turn ready: a tile another step put on Needs you or
+    // Couldn't start (its code failed to load) keeps that, even if the sky still draws.
+    const now = viewStateOf(key);
+    if (now && now.kind !== "starting" && !(now.kind === "couldnt-start" && now.reason === "timeout")) return;
+    setViewState(key, this.viewId(key), { kind: "ready" }, this.host.hostEl(key));
   }
 
   /** The newest sync for this tile takes the wait over (a no-op when the tile isn't waiting). */
@@ -99,6 +112,9 @@ export class SkyWaits {
     this.drop(key);
     hideSkyStartingCard(this.host.hostEl(key), false);
     if (cur.state === "failed:timeout") this.clearFailed(key);
+    // The wait wrote starting / couldn't start; whoever takes the tile next writes its own state.
+    const vs = viewStateOf(key);
+    if (vs?.kind === "starting" || (vs?.kind === "couldnt-start" && vs.reason === "timeout")) clearViewState(key);
   }
 
   keys(): string[] {
@@ -122,23 +138,27 @@ export class SkyWaits {
     const el = this.host.hostEl(key);
     if (!el) {
       this.drop(key);
+      clearViewState(key);
       return;
     }
     hideSkyStartingCard(el, false);
     this.waits.set(key, { state: "failed:timeout", timer: null, due: cur.due });
     console.info(`[zoto-viz sky] tile=${key} step=notice reason=sky-timeout`);
-    paintPackAssetPaneNotice(el, packSkyTimedOut(this.host.name(key)), "fail", {
-      showRetry: true,
-      onRetry: () => this.host.retry(key),
-    });
-    const notice = el.querySelector<HTMLElement>(".mosaic-pane-notice");
-    if (notice) notice.dataset.viewState = "failed:timeout";
+    showViewState(
+      key,
+      this.viewId(key),
+      this.host.name(key),
+      { kind: "couldnt-start", reason: "timeout", packId: this.host.packId?.(key) ?? key },
+      { onRetry: () => this.host.retry(key) },
+      el,
+    );
   }
 
   private clearFailed(key: string): void {
+    const vs = viewStateOf(key);
+    if (vs?.kind !== "couldnt-start" || vs.reason !== "timeout") return;
     const el = this.host.hostEl(key);
-    const notice = el?.querySelector<HTMLElement>(".mosaic-pane-notice");
-    if (notice?.dataset.viewState === "failed:timeout") notice.remove();
+    el?.querySelector<HTMLElement>(":scope > .mosaic-pane-notice[data-view-state]")?.remove();
   }
 
   private drop(key: string): void {
