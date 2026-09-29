@@ -30,6 +30,10 @@ import {
   UXPRO_MAX_DARK,
 } from "./pack-sky-lan-frame-test-helper";
 import { normalizeVizDemoPackId } from "../ui/viz-hud";
+import { markFrame, resetFps } from "../core/fps";
+import { notePerfChange, perfOverlay, perfStress, resetPerf, tickPerf, type PerfSrc } from "../core/perf";
+import type { FrameTs } from "../core/time-ms";
+import { skyLookFor } from "../graph/stage-sky-look";
 
 /**
  * Ant Colony wall black (QE pick-every-view on 20fa18a7, row 27). The pack is
@@ -274,5 +278,80 @@ describe("ant-colony on the app's production path (live LAN frame, host look uni
 
   it("still shows the nest on that frame (chambers and tunnels move >= 2% of the view)", async () => {
     await expectNestInView({ slots: appSlots(), uniforms: APP_LOOK }, wrappedSky(parentedSkyRay("ant-colony", rawSky, 0), appLensSkySpan()));
+  }, 60_000);
+
+  /**
+   * The same wall 35 s and 60 s after the pick, drawn with the sky look the app actually uses
+   * then. UX Pro's headed run at fd97fbdb: lit at 35 s, black by area at 60 s; the v5 sweep
+   * (Ant picked after other packs) black at 35 s. Under SwiftShader the app runs ~5-6 fps, so
+   * core/perf.ts auto-tune leans once the 30 s window reads < 10 fps, and perfOverlay eases the
+   * look's skyBright to 0.4 and skyOpacity to 0.45. scene.ts applyLook takes the sky sliders
+   * from that overlay (skyLookFor): the stage-only sky is the whole picture, drawn at 0.4 / 1.05
+   * of its brightness and 45% over the ember clear.
+   * Timeline: the real fps.ts trail + tickPerf at APP_FPS from boot, notePerfChange at each pick
+   * (scene.ts:1996), then the real perfOverlay + skyLookFor. The draw is composited like the
+   * app's transparent sky over the clear (0x1a1412 on the default framebuffer): with a
+   * premultiplied-free SRC_ALPHA blend, out = sky * uOpacity + clear * (1 - uOpacity) per byte,
+   * so the luma composites the same way. Pass lines are the app's own: UX Pro five-patch
+   * (<= 2 of 5 below 24) and QE v5 area (>= 1% of the view at luma >= 40).
+   */
+  const ANT_LOOK_SLIDERS = { skyBright: 1.05, skyOpacity: 1 };
+  const APP_FPS = 6;
+  const APP_CLEAR_LUMA = 0.2126 * 0x1a + 0.7152 * 0x14 + 0.0722 * 0x12;
+  const PERF_SRC: PerfSrc = {
+    labelCount: 20, partAmt: 1, partCap: 400, partPeak: 24, partSize: 1, edgeGlowAmt: 1, skySpeed: 0.35,
+    ...ANT_LOOK_SLIDERS,
+  };
+
+  /** Sky sliders at `atS` s after boot with Ant picked at `picks.at(-1)` s (earlier picks = other packs). */
+  function appSkyLookAt(picks: number[], atS: number) {
+    resetFps();
+    resetPerf();
+    const step = 1000 / APP_FPS;
+    let next = 0;
+    for (let t = 0; t <= atS * 1000; t += step) {
+      while (next < picks.length && t >= picks[next]! * 1000) { notePerfChange(t); next++; }
+      markFrame(t as FrameTs);
+      tickPerf(t, true, 0.45);
+    }
+    const stress = perfStress();
+    const look = skyLookFor(ANT_LOOK_SLIDERS, perfOverlay(PERF_SRC, stress), true);
+    resetFps();
+    resetPerf();
+    return { ...look, stress };
+  }
+
+  async function appWallAt(picks: number[], afterPickS: number, png: string) {
+    const at = picks.at(-1)! + afterPickS;
+    const look = appSkyLookAt(picks, at);
+    const uniforms = { ...APP_LOOK, uBright: look.bright, uOpacity: look.opacity };
+    const frag = wrappedSky(parentedSkyRay("ant-colony", rawSky, 0), appLensSkySpan());
+    const r = await smokeRenderPluginSky(frag, appSlots(), uniforms, { keepLuma: true, pngPath: pluginSkySmokePngPath(png) });
+    const luma = r.luma!.map((v) => v * look.opacity + APP_CLEAR_LUMA * (1 - look.opacity));
+    const five = fivePatchSummary(appFivePatches(luma));
+    const lit40 = luma.filter((v) => v >= 40).length / luma.length;
+    const sorted = [...luma].sort((a, b) => a - b);
+    const bg = sorted[Math.floor(sorted.length * 0.01)]!;
+    const litBg = luma.filter((v) => v > bg + 10).length / luma.length;
+    const why = `t=${at}s (pick ${picks.at(-1)}s +${afterPickS}s, ${APP_FPS} fps) perf stress ${look.stress.toFixed(3)} -> uBright ${look.bright.toFixed(3)} uOpacity ${look.opacity.toFixed(3)}; composited app-region ${five.text}; lit(>=40) ${(lit40 * 100).toFixed(2)}%; lit(>bg ${bg.toFixed(1)}+10) ${(litBg * 100).toFixed(2)}%`;
+    noteRowNumbers(png, why);
+    expect(five.dark, why).toBeLessThanOrEqual(UXPRO_MAX_DARK);
+    expect(lit40, `black by area (QE v5: < 1% at luma >= 40): ${why}`).toBeGreaterThanOrEqual(0.01);
+  }
+
+  it("stays lit 35 s after Ant is the first pick after boot (app perf lean at SwiftShader fps)", async () => {
+    await appWallAt([10], 35, "ant-colony-prod-lan-first-pick-35s");
+  }, 60_000);
+
+  it("stays lit 60 s after Ant is the first pick after boot (app perf lean at SwiftShader fps)", async () => {
+    await appWallAt([10], 60, "ant-colony-prod-lan-first-pick-60s");
+  }, 60_000);
+
+  it("stays lit 35 s after Ant is picked after Blob Mesh in the same session", async () => {
+    await appWallAt([10, 40], 35, "ant-colony-prod-lan-after-blob-35s");
+  }, 60_000);
+
+  it("stays lit 60 s after Ant is picked after Blob Mesh in the same session", async () => {
+    await appWallAt([10, 40], 60, "ant-colony-prod-lan-after-blob-60s");
   }, 60_000);
 });

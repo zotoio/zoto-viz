@@ -81,6 +81,7 @@ import {
 } from "./render-host-device-px-ratio";
 import { observeResize } from "../core/resize";
 import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
+import { skyLookFor } from "./stage-sky-look";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
 import { PINCH_HOLD_MS, mouseWheelTick, pinchWheel, pointerCentroid, threeFingerZoomDelta, wheelCamMotion } from "./wheel-cam";
 import { decoHtml, EMPTY_LOOK, type AgentLook, type DecoAt } from "./deco";
@@ -2608,8 +2609,9 @@ export class NetScene implements HostedView, RenderScalePane {
     const floorP = a.gridAudio ? this.pulseLevel : 0;
     const skyB = a.skyAudio ? this.pulseBass : 0;
     const floorB = a.gridAudio ? this.pulseBass : 0;
-    const skyOp = this.tune?.skyOpacity ?? a.skyOpacity;
-    const skyBr = (this.tune?.skyBright ?? a.skyBright) * this.thermalSkyK();
+    const skyLook = skyLookFor(a, this.tune, this.stageOnly);
+    const skyOp = skyLook.opacity;
+    const skyBr = skyLook.bright * this.thermalSkyK();
     const skySp = this.tune?.skySpeed ?? a.skySpeed;
     this.paintClear();
     this.easeVisibility(dt);
