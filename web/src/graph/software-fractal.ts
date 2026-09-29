@@ -13,8 +13,8 @@ import {
   steerEdge,
   stepCanyon,
   windowScale,
-} from "./cruise";
-import { FZ_SLOT } from "./drive";
+} from "../../../plugins/sdk/fractal-cruise";
+import { FZ_SLOT } from "../../../plugins/sdk/fractal-slot";
 
 export interface SoftRect {
   x: number;

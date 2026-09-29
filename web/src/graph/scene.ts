@@ -17,7 +17,7 @@ import { hostRenderScaleGovernorEnabled } from "../plugins/render-scale-governor
 import { getSurfaceLetterboxFill, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { SoftwareGpu } from "./render-host";
 import { paintSoftwareGraph, paintSoftwarePluginRain, cssHex, type SoftMesh, type SoftRect } from "./software-draw";
-import { paintSoftwareFractal } from "../../../plugins/src/fractal-zoom/frontend/software-paint";
+import { paintSoftwareFractal } from "./software-fractal";
 import { paintSoftwareFluid } from "./software-fluid";
 import { disposeOwnedWebGLRenderer, probeWebGL } from "./webgl";
 import type { MosaicNode } from "./mosaic-layout";

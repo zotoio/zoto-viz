@@ -25,6 +25,7 @@ import {
   parseFractalOptions,
 } from "./options";
 import type { FractalPointerState } from "./interaction";
+import { FZ_SLOT, FZ_SLOT0_FLOATS } from "../../../sdk/fractal-slot";
 
 /** Host render-scale governor will replace this (see plugin.yml render.scale follow-up). */
 export function fractalRenderScale(): number {
@@ -39,61 +40,7 @@ export function fractalRenderScale(): number {
 export const FRACTAL_ITER_CEIL = 96;
 export const FRACTAL_STEPS_CEIL = 48;
 
-/** Slot 0 layout — must match `sky/fragment.glsl`. */
-export const FZ_SLOT = {
-  camX: 0,
-  camY: 1,
-  camZ: 2,
-  dirX: 3,
-  dirY: 4,
-  dirZ: 5,
-  roll: 6,
-  zoomLog: 7,
-  fractalType: 8,
-  power: 9,
-  scale: 10,
-  fold: 11,
-  maxIterN: 12,
-  maxStepsN: 13,
-  detail: 14,
-  ao: 15,
-  shadow: 16,
-  glow: 17,
-  fog: 18,
-  dof: 19,
-  palette: 20,
-  paletteCycle: 21,
-  orbitTrap: 22,
-  hue: 23,
-  sat: 24,
-  bgR: 25,
-  bgG: 26,
-  bgB: 27,
-  morphT: 28,
-  morphAmt: 29,
-  renderScale: 30,
-  juliaCr: 31,
-  juliaCi: 32,
-  quatC2: 33,
-  quatC3: 34,
-  audioDrv: 35,
-  pingPhase: 36,
-  kaleidoSym: 37,
-  mandelCx: 38,
-  mandelCy: 39,
-  mandelScale: 40,
-  frameMs: 41,
-  mark: 42,
-  precisionClamp: 43,
-  focusX: 44,
-  focusY: 45,
-  focusZ: 46,
-  nearDist: 47,
-  orbitLen: 48,
-  generation: 49,
-} as const;
-
-export const FZ_SLOT0_FLOATS = 50;
+export { FZ_SLOT, FZ_SLOT0_FLOATS } from "../../../sdk/fractal-slot";
 
 export let fractalHudCaption = "Mandelbrot 2D · Seahorse Valley";
 
