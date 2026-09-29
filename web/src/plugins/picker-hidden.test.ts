@@ -99,11 +99,12 @@ describe("picker: hidden — the 7 fixture packs", () => {
       const pane = pickPaneDiceView("plugin:topology", ["plugin:topology"], pickerIds, () => false, rnd);
       const wall = pool[Math.floor(rnd() * pool.length)]!;
       const cruise = cycle[i % cycle.length]!;
-      for (const id of [dice, pane, wall, cruise]) if (id && isPickerHidden(id)) hits.push(id);
+      for (const id of [dice, pane, wall, cruise]) if (id && HIDDEN.includes(packOf(id))) hits.push(id);
     }
     expect(hits).toEqual([]);
-    expect(pool.some((id) => isPickerHidden(id)), "new-wall pool").toBe(false);
-    expect(cycle.some((id) => isPickerHidden(id)), "dream cycle").toBe(false);
+    expect(pool.length > 0 && cycle.length > 0 && pickerIds.length > 0, "the pools are not empty").toBe(true);
+    expect(pool.filter((id) => HIDDEN.includes(packOf(id))), "new-wall pool").toEqual([]);
+    expect(cycle.filter((id) => HIDDEN.includes(packOf(id))), "dream cycle").toEqual([]);
   });
 
   it("(d) a hidden pack still opens by id, and a select running it names it", () => {
