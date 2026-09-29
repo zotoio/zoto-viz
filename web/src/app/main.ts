@@ -215,6 +215,7 @@ import { addPresentListener } from "../core/fps";
 import { bindTileHealthPresentTick } from "./tile-health-present";
 import { paintLiveBlankNotice } from "./live-blank-notice";
 import { SkyLoads, SkyWaits, landWhenDrawn, type SkyLoadCtl } from "./sky-wait";
+import { loadTilesSettlingEach } from "./sky-sync-tiles";
 import { createProductionTileHealthMonitor } from "./tile-health-boot";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
@@ -1419,21 +1420,14 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
       // Each tile loads on its own and settles its own pane when its own load ends, so one held
       // sky (Backrooms first in the list) never keeps the other panes covered by the warming state.
       const m = mosaic;
-      const loads = [...m.tileIds].map(async (id) => {
-        throwIfAborted(signal);
+      await loadTilesSettlingEach(m.tileIds, signal, async (id) => {
         const target = m.graphScene(id);
-        try {
-          if (!target) return;
-          const tileSky = m.paneSky(id);
-          const pane = pluginSpecForMode(id);
-          const wantPlugin = mosaicPluginSkyPaneView(id, tileSky, lookForMode).wantPlugin;
-          await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
-        } finally {
-          if (!signal.aborted && m.on) m.settlePane(id);
-        }
-      });
-      const failed = (await Promise.allSettled(loads)).find((r) => r.status === "rejected");
-      if (failed) throw (failed as PromiseRejectedResult).reason;
+        if (!target) return;
+        const tileSky = m.paneSky(id);
+        const pane = pluginSpecForMode(id);
+        const wantPlugin = mosaicPluginSkyPaneView(id, tileSky, lookForMode).wantPlugin;
+        await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
+      }, (id) => { if (m.on) m.settlePane(id); });
     } finally {
       // A switched-away sync never leaves a pane on "Starting…"; the next sync begins its own wait.
       // Only this sync's own waits: a newer sync may already have begun the pane's card and deadline.
