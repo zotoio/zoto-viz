@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import io
+import os
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -367,6 +369,55 @@ def test_create_venv_and_pip(tmp_path: Path) -> None:
     assert any("pip" in c for c in calls)
 
 
+def _executable_venv_python(host: inst.Host) -> Path:
+    py = host.root / ".venv" / "bin" / "python"
+    py.parent.mkdir(parents=True)
+    py.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    py.chmod(0o755)
+    return py
+
+
+def test_reexec_into_venv_after_pip(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    host = _host(tmp_path)
+    py = _executable_venv_python(host)
+    monkeypatch.delenv("ZOTO_VIZ_INSTALL_REEXEC", raising=False)
+    monkeypatch.delenv("ZOTO_VIZ_NO_REEXEC", raising=False)
+    monkeypatch.setattr(inst.sys, "argv", ["zoto-viz", "install", "--no-system"])
+    notes: list[str] = []
+    execd: list[list[str]] = []
+
+    def fake_run(cmd, cwd, capture_output, timeout):
+        assert cmd == [str(py), "-c", "import aiohttp"]
+        assert cwd == str(host.root)
+        return subprocess.CompletedProcess(cmd, 0)
+
+    def fake_execv(path, argv):
+        execd.append([path, *argv])
+
+    monkeypatch.setattr(inst.subprocess, "run", fake_run)
+    monkeypatch.setattr(inst.os, "execv", fake_execv)
+    inst.continue_install_in_venv(host, emit=notes.append)
+    assert notes == [f"   continuing with {py}"]
+    assert execd == [[str(py), str(py), str(host.root / "zoto-viz"), "install", "--no-system"]]
+    assert os.environ["ZOTO_VIZ_INSTALL_REEXEC"] == "1"
+
+
+def test_reexec_skipped_when_probe_fails_or_disabled(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    host = _host(tmp_path)
+    _executable_venv_python(host)
+    monkeypatch.delenv("ZOTO_VIZ_INSTALL_REEXEC", raising=False)
+    monkeypatch.setattr(inst.os, "execv", lambda *a: (_ for _ in ()).throw(AssertionError("exec")))
+
+    def fail_probe(cmd, cwd, capture_output, timeout):
+        return subprocess.CompletedProcess(cmd, 1, "", "No module named aiohttp")
+
+    monkeypatch.setattr(inst.subprocess, "run", fail_probe)
+    inst.continue_install_in_venv(host)
+    monkeypatch.setenv("ZOTO_VIZ_NO_REEXEC", "1")
+    monkeypatch.setattr(inst.subprocess, "run", lambda *a, **k: subprocess.CompletedProcess([], 0))
+    inst.continue_install_in_venv(host)
+
+
 def test_apply_local_steps_noninteractive(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     def which(name: str):
         mapping = {
@@ -396,6 +447,8 @@ def test_apply_local_steps_noninteractive(tmp_path: Path, monkeypatch: pytest.Mo
     monkeypatch.setattr(inst, "write_sysconfig", lambda: None)
     monkeypatch.setattr(inst, "install_systemd_user", lambda h: None)
     monkeypatch.setattr(inst, "hopper_notes", lambda h: ["sudo hopper"])
+    reexec: list[Path] = []
+    monkeypatch.setattr(inst, "continue_install_in_venv", lambda host, *, emit: reexec.append(host.root))
     buf = io.StringIO()
     code = inst.cli_install(dry_run=False, yes=False, no_system=True, host=host, run=run, stdin=io.StringIO(""), stdout=buf)
     assert code == 0
@@ -404,6 +457,7 @@ def test_apply_local_steps_noninteractive(tmp_path: Path, monkeypatch: pytest.Mo
     assert (host.home / ".local" / "bin" / "zoto-viz").is_file()
     assert any("pip" in x for c in calls for x in c)
     assert any("pnpm" in x for c in calls for x in c)
+    assert reexec == [host.root]
     assert "sudo hopper" in out
     assert not any("apt-get" in x for c in calls for x in c)
 

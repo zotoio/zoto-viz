@@ -26,6 +26,8 @@ python zoto-viz install --yes
 
 `install` always prints a prerequisite table. Missing tools get copy-pasteable manual commands (`apt` / `dnf` / `pacman` / `brew` / `winget`, or a download URL). System steps (package installs, `usermod -aG wireshark`, `brew install --cask wireshark-chmodbpf`) are skipped unless you pass `--yes` or type `y` at the risk prompt. `--no-system` never runs them.
 
+The shebang uses `PATH` `python3`, which usually does not have this checkout's packages. After `pip install` into `.venv`, install replaces itself with that virtualenv's interpreter and continues, so `sys-config.yml` and the systemd drop-in can import them (`aiohttp` and the rest of `requirements.txt`). You do not need to launch `.venv/bin/python zoto-viz install` yourself. `ZOTO_VIZ_NO_REEXEC=1` stays on the current interpreter (the config step then fails with `No module named 'aiohttp'`). A non-interactive shell applies the local steps without a prompt. `--dry-run` changes nothing.
+
 ### Bootstrap / doctor
 
 For interactive, consent-gated fixes (GitHub CLI, `gh auth login`, capture
@@ -38,13 +40,14 @@ tools, venv, pnpm, screensaver backends):
 ./zoto-viz bootstrap -y        # accept all install prompts (use after reading the plan)
 ```
 
-Never silent-installs: each step asks unless `--yes` or non-interactive dry-run.
+OS packages are never installed silently: those steps run only with `--yes` or a yes at the prompt. A non-interactive shell still applies the local steps.
+
 Private plugin catalog access needs `gh auth login` (device flow) when using
 `auth: gh`. Packet capture needs `tshark` / Wireshark CLI.
 
 Local steps (idempotent):
 
-1. `.venv` + `pip install -r requirements.txt`
+1. `.venv` + `pip install -r requirements.txt`, then continue in that interpreter
 2. `corepack` → pnpm, then `web/` install + build, and `service/cursor-bridge/` `pnpm install` (Cursor SDK harness for pytest)
 3. PATH shim (`~/.local/bin/zoto-viz` or `%LOCALAPPDATA%\zoto-viz\bin\zoto-viz.cmd`). On macOS the installer also appends that dir to `~/.zprofile` / `~/.zshrc`.
 4. `~/.zoto-viz/sys-config.yml` (existing keys kept)

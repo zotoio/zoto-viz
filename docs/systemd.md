@@ -6,6 +6,7 @@ User unit: `systemd/zoto-viz-monitor.service`
 mkdir -p ~/.config/systemd/user
 cp systemd/zoto-viz-monitor.service ~/.config/systemd/user/
 ./zoto-viz install          # sys-config.yml + override.conf (ZOTO_VIZ_ROOT + ZOTO_VIZ_REPO_ROOT)
+# After pip, install continues as .venv/bin/python so this step can import aiohttp.
 systemctl --user daemon-reload
 systemctl --user enable --now zoto-viz-monitor
 ```

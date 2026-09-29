@@ -1,8 +1,10 @@
 """Checkout bootstrap: prereqs, dry-run plan, PATH shim, venv, frontend build.
 
 Stdlib-only so ``./zoto-viz install`` works before ``requirements.txt``.
-YAML / sysconfig load after pip. System package steps are opt-in (``--yes``
-or an explicit risk prompt); missing tools always print manual instructions.
+After pip, the process replaces itself with the checkout venv so YAML /
+sysconfig can import those packages. System package steps are opt-in
+(``--yes`` or an explicit risk prompt); missing tools always print manual
+instructions.
 """
 from __future__ import annotations
 
@@ -174,6 +176,45 @@ def venv_python(host: Host) -> Path:
 
 def cli_path(host: Host) -> Path:
     return host.root / CLI_NAME
+
+
+def venv_interpreter_for_reexec(host: Host) -> Path | None:
+    """Checkout venv interpreter when this process cannot import install deps.
+
+    ``./zoto-viz install`` starts on PATH ``python3`` so it can create the venv.
+    Later steps import ``service.sysconfig`` (aiohttp and the rest of
+    ``requirements.txt``). Those imports only succeed in the venv.
+    """
+    if os.environ.get("ZOTO_VIZ_NO_REEXEC") == "1":
+        return None
+    if os.environ.get("ZOTO_VIZ_INSTALL_REEXEC") == "1":
+        return None
+    py = venv_python(host)
+    if not py.is_file() or not os.access(py, os.X_OK):
+        return None
+    if os.path.normpath(sys.executable) == os.path.normpath(str(py)):
+        return None
+    probe = subprocess.run(
+        [str(py), "-c", "import aiohttp"],
+        cwd=str(host.root),
+        capture_output=True,
+        timeout=30,
+    )
+    if probe.returncode != 0:
+        return None
+    return py
+
+
+def continue_install_in_venv(host: Host, *, emit: Callable[[str], None] | None = None) -> None:
+    """Replace this process with the venv interpreter, or return if that is unnecessary."""
+    py = venv_interpreter_for_reexec(host)
+    if py is None:
+        return
+    if emit is not None:
+        emit(f"   continuing with {py}")
+    os.environ["ZOTO_VIZ_INSTALL_REEXEC"] = "1"
+    script = cli_path(host)
+    os.execv(str(py), [str(py), str(script), *sys.argv[1:]])
 
 
 def path_bin_dir(host: Host) -> Path:
@@ -1241,6 +1282,8 @@ def cli_install(
         try:
             result = apply_step(step, host, run)
             emit(f"   {result}")
+            if step.id == "pip":
+                continue_install_in_venv(host, emit=emit)
         except Exception as exc:
             msg = str(exc).strip() or step.id
             emit(f"   FAILED: {msg}")
