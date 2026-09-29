@@ -56,6 +56,10 @@ export interface ArcadeIdleFeedOptions<P extends TimedRow> {
   clock?: () => number;
   /** the demo label element: gets `is-visible` while the demo is on screen */
   label?: HTMLElement | null;
+  /** the label's text for a pick (`me`, "" for a group): default {@link arcadeDemoLabelText} with no name */
+  labelText?: (me: string) => string;
+  /** the feed comes back on after live traffic: clear the board (live rows must not sit under the demo label) */
+  onResume?: () => void;
   hosts?: readonly IdleVizDemoHost[];
 }
 
@@ -78,6 +82,11 @@ export function arcadeIdleRng(seed: number, key: number): () => number {
   };
 }
 
+/** Badge text: plain {@link DEMO_DATA_LABEL} for a group, "Demo traffic around <device>" for a picked device. */
+export function arcadeDemoLabelText(deviceName: string): string {
+  return deviceName ? `Demo traffic around ${deviceName}` : DEMO_DATA_LABEL;
+}
+
 /** The demo label element (same class and text as Tetris's), hidden until the feed shows demo rows. */
 export function mountArcadeDemoLabel(container: HTMLElement): HTMLElement {
   const el = document.createElement("span");
@@ -93,6 +102,9 @@ export class ArcadeIdleFeed<P extends TimedRow> {
   private readonly seed: number;
   private readonly clock: () => number;
   private readonly label: HTMLElement | null;
+  private readonly labelText: (me: string) => string;
+  private readonly onResume: (() => void) | null;
+  private me = "";
   private readonly hosts: readonly IdleVizDemoHost[];
   private readonly demoDevices = new Map<string, Device>();
   private isOn = true;
@@ -108,6 +120,8 @@ export class ArcadeIdleFeed<P extends TimedRow> {
     this.seed = (o.seed ?? ARCADE_IDLE_DEFAULT_SEED) >>> 0;
     this.clock = o.clock ?? (() => Date.now() / 1000);
     this.label = o.label ?? null;
+    this.labelText = o.labelText ?? (() => DEMO_DATA_LABEL);
+    this.onResume = o.onResume ?? null;
     this.hosts = o.hosts ?? IDLE_VIZ_DEMO_HOSTS;
     for (const h of this.hosts) this.demoDevices.set(h.ip, demoDevice(h));
   }
@@ -119,8 +133,14 @@ export class ArcadeIdleFeed<P extends TimedRow> {
   /** Batches delivered since construction (a count, for rows). */
   get delivered(): number { return this.deliveries; }
 
-  /** The view is running: empty polls may deliver. */
-  start(): void { this.active = true; }
+  /**
+   * The view is running: empty polls may deliver. `fresh` (the view's live cursor is 0: nothing live on this board)
+   * turns the feed on at once, so a restarted view on a quiet LAN does not wait three polls for the demo.
+   */
+  start(fresh = false): void {
+    this.active = true;
+    if (fresh && !this.isOn) { this.isOn = true; this.shown = 0; this.empties = 0; }
+  }
   /** The view stopped: an empty-poll callback that lands afterwards (an in-flight poll) delivers nothing. */
   stop(): void { this.active = false; }
 
@@ -132,7 +152,9 @@ export class ArcadeIdleFeed<P extends TimedRow> {
       if (this.empties < ARCADE_IDLE_RESUME_EMPTY_POLLS) return;
       this.isOn = true;
       this.shown = 0;
+      this.onResume?.(); // live rows leave before the first demo batch goes in
     }
+    this.me = me;
     const rows = this.shape(this.stepNo, me, this.clock(), scope);
     this.stepNo++;
     if (!rows.length) return;
@@ -165,7 +187,11 @@ export class ArcadeIdleFeed<P extends TimedRow> {
     return rows.slice(0, ARCADE_IDLE_MAX_ROWS_PER_STEP).sort((a, b) => a[0] - b[0]);
   }
 
-  private syncLabel(): void { this.label?.classList.toggle("is-visible", this.showing); }
+  private syncLabel(): void {
+    if (!this.label) return;
+    this.label.classList.toggle("is-visible", this.showing);
+    if (this.showing) this.label.textContent = this.labelText(this.me);
+  }
 }
 
 function demoDevice(h: IdleVizDemoHost): Device {

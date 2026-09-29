@@ -1,5 +1,5 @@
 import type { NetScene } from "../graph/scene";
-import { ArcadeIdleFeed, mountArcadeDemoLabel } from "./arcade-idle-feed";
+import { ArcadeIdleFeed, arcadeDemoLabelText, mountArcadeDemoLabel } from "./arcade-idle-feed";
 import { shapePongIdle, type PongRow } from "./arcade-idle-shapers";
 import { Select, TextField, type SelectOption } from "../ui/ui";
 import { categorize, hashColor } from "../core/modes";
@@ -232,7 +232,11 @@ export class PongView {
     this.canvas = document.createElement("canvas");
     this.g = this.canvas.getContext("2d")!;
     container.appendChild(this.canvas);
-    this.idle = new ArcadeIdleFeed<PongRow>({ shaper: shapePongIdle, label: mountArcadeDemoLabel(container), deliver: (rows) => this.ingestIdle(rows) });
+    this.idle = new ArcadeIdleFeed<PongRow>({
+      shaper: shapePongIdle, label: mountArcadeDemoLabel(container), deliver: (rows) => this.ingestIdle(rows),
+      labelText: (me) => arcadeDemoLabelText(me ? this.nameOf(me) : ""),
+      onResume: () => this.clearForIdle(),
+    });
     this.font = getComputedStyle(document.documentElement).fontFamily || this.font;
 
     // the pick that used to live under the "target" key was the focal host: it is the source now
@@ -317,7 +321,7 @@ export class PongView {
     this.lastFrame = 0;
     this.rebuildOptions();
     this.resync();
-    this.idle.start();
+    this.idle.start(this.lastT === 0);
     if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
     void this.poll();
     cancelAnimationFrame(this.raf);
@@ -632,6 +636,13 @@ export class PongView {
     } finally {
       if (gen === this.gen) this.inflight = false;
     }
+  }
+
+  /** The demo is back after live traffic: drop the board, keep the live poll cursor (no replay of old packets). */
+  private clearForIdle(): void {
+    const cursor = this.lastT;
+    this.reset();
+    this.lastT = cursor;
   }
 
   private idleStep(): void {

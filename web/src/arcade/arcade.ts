@@ -10,7 +10,7 @@ import { frameTsFromRaf } from "../core/time-ms";
 import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
 import { devicePxRatioNumber, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
-import { ArcadeIdleFeed, mountArcadeDemoLabel, type ArcadeIdleShaper } from "./arcade-idle-feed";
+import { ArcadeIdleFeed, arcadeDemoLabelText, mountArcadeDemoLabel, type ArcadeIdleShaper } from "./arcade-idle-feed";
 
 /**
  * Shared machinery for the arcade views (NetPong's siblings: Invaders, Command, Frogger). Each is a standalone
@@ -367,7 +367,11 @@ export abstract class ArcadeView {
     container.appendChild(this.canvas);
     const shaper = this.idleShaper();
     this.idle = shaper
-      ? new ArcadeIdleFeed<Packet>({ shaper, label: mountArcadeDemoLabel(container), deliver: (rows) => this.ingestIdle(rows) })
+      ? new ArcadeIdleFeed<Packet>({
+        shaper, label: mountArcadeDemoLabel(container), deliver: (rows) => this.ingestIdle(rows),
+        labelText: (me) => arcadeDemoLabelText(me ? this.nameOf(me) : ""),
+        onResume: () => this.clearForIdle(),
+      })
       : null;
     this.font = getComputedStyle(document.documentElement).fontFamily || this.font;
     this.canvas.addEventListener("pointermove", (e) => {
@@ -389,7 +393,7 @@ export abstract class ArcadeView {
     this.lastFrame = 0;
     this.resync();
     this.onSnapshot();
-    this.idle?.start();
+    this.idle?.start(this.lastT === 0);
     if (this.useTraffic()) {
       if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
       void this.poll();
@@ -496,6 +500,13 @@ export abstract class ArcadeView {
     } finally {
       if (gen === this.gen) this.inflight = false;
     }
+  }
+
+  /** The demo is back after live traffic: drop the board, keep the live poll cursor (no replay of old packets). */
+  private clearForIdle(): void {
+    const cursor = this.lastT;
+    this.reset();
+    this.lastT = cursor;
   }
 
   /** One idle batch, through the engine's real ingest (the poll cursor is left to live traffic). */
