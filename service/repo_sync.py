@@ -9,6 +9,14 @@ client reload, and detaches ``service.monitor_reload --force`` so systemd or
 
 Skip with ``ZOTO_VIZ_NO_AUTO_PULL=1`` or ``ZOTO_VIZ_PULL_S=0``. Dirty trees,
 detached HEAD, and missing upstream are no-ops (never reset).
+
+This is the only updater for a checkout. A pass fetches just the upstream
+branch into its remote-tracking ref and ``merge --ff-only``s that ref (never a
+bare ``git pull``, which merges whatever ``FETCH_HEAD`` holds). It holds an
+exclusive ``flock`` on ``<git dir>/zoto-viz-sync.lock`` from the fetch through
+the restart: the detached restart inherits the lock, so a second pass that
+starts before the bounce finishes reports ``busy`` instead of pulling or
+building again. One manual pass: ``python -m service.repo_sync``.
 """
 from __future__ import annotations
 
@@ -22,6 +30,11 @@ import time
 from pathlib import Path
 from typing import Any
 
+try:
+    import fcntl
+except ImportError:  # Windows: no flock; a single monitor process is the only puller there.
+    fcntl = None  # type: ignore[assignment]
+
 from . import live
 from . import monitor_reload
 from . import paths
@@ -33,6 +46,7 @@ STARTUP_DELAY_S = 45.0
 PULL_TIMEOUT_S = 60.0
 BUILD_TIMEOUT_S = 240.0
 RESTART_DELAY_S = 2.0
+LOCK_NAME = "zoto-viz-sync.lock"
 
 
 def interval_s() -> float:
@@ -103,12 +117,52 @@ def _merging(root: Path) -> bool:
     return (root / ".git" / "MERGE_HEAD").is_file()
 
 
-def _upstream(root: Path) -> str:
+def _upstream_parts(root: Path) -> tuple[str, str, str]:
+    """(remote, branch, tracking ref) for HEAD's upstream, e.g. ("origin", "main", "refs/remotes/origin/main").
+
+    Empty strings when HEAD is detached, the upstream is local (``.``), or anything is missing.
+    """
     try:
-        r = _git(root, "rev-parse", "--abbrev-ref", "@{upstream}")
+        cur = _git(root, "symbolic-ref", "--quiet", "--short", "HEAD")
+        if cur.returncode != 0 or not cur.stdout.strip():
+            return "", "", ""
+        branch = cur.stdout.strip()
+        remote = _git(root, "config", f"branch.{branch}.remote").stdout.strip()
+        merge = _git(root, "config", f"branch.{branch}.merge").stdout.strip()
+        tracking = _git(root, "rev-parse", "--symbolic-full-name", "@{upstream}")
     except (OSError, subprocess.TimeoutExpired):
-        return ""
-    return r.stdout.strip() if r.returncode == 0 else ""
+        return "", "", ""
+    ref = tracking.stdout.strip() if tracking.returncode == 0 else ""
+    if not remote or remote == "." or not merge.startswith("refs/heads/") or not ref.startswith("refs/remotes/"):
+        return "", "", ""
+    return remote, merge[len("refs/heads/"):], ref
+
+
+def lock_path(root: Path) -> Path | None:
+    """``<git dir>/zoto-viz-sync.lock`` (works for worktrees, where ``.git`` is a file). None off a checkout."""
+    try:
+        r = _git(root, "rev-parse", "--absolute-git-dir")
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    d = r.stdout.strip()
+    return Path(d) / LOCK_NAME if r.returncode == 0 and d else None
+
+
+def acquire_lock(root: Path) -> tuple[int | None, bool]:
+    """(fd, ok). ok=False means another pass holds the lock. fd is None when locking isn't possible here."""
+    path = lock_path(root)
+    if path is None or fcntl is None:
+        return None, True
+    try:
+        fd = os.open(str(path), os.O_RDWR | os.O_CREAT, 0o644)
+    except OSError:
+        return None, True
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError:
+        os.close(fd)
+        return None, False
+    return fd, True
 
 
 def _changed_files(root: Path, old: str, new: str) -> list[str]:
@@ -301,21 +355,26 @@ def apply_updates(root: Path, files: list[str]) -> dict[str, Any]:
     return out
 
 
-def schedule_restart(root: Path, delay_s: float = RESTART_DELAY_S) -> dict[str, Any]:
-    """Detach a forced monitor bounce so this process can flush the reload patch."""
+def _restart_script(delay_s: float) -> str:
+    return f"sleep {max(0.2, float(delay_s))}; {sys.executable} -m service.monitor_reload --force"
+
+
+def schedule_restart(root: Path, delay_s: float = RESTART_DELAY_S, *, hold_fd: int | None = None) -> dict[str, Any]:
+    """Detach a forced monitor bounce so this process can flush the reload patch.
+
+    ``hold_fd`` is the sync lock: the detached bounce inherits it, so the lock stays held until the
+    restart has run, not just until this pass returns.
+    """
     env = os.environ.copy()
-    script = (
-        f"sleep {max(0.2, float(delay_s))}; "
-        f"{sys.executable} -m service.monitor_reload --force"
-    )
     try:
         subprocess.Popen(
-            ["bash", "-c", script],
+            ["bash", "-c", _restart_script(delay_s)],
             cwd=str(root),
             start_new_session=True,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             env=env,
+            pass_fds=(hold_fd,) if hold_fd is not None else (),
         )
     except OSError as e:
         return {"restart": "error", "error": str(e)}
@@ -323,7 +382,11 @@ def schedule_restart(root: Path, delay_s: float = RESTART_DELAY_S) -> dict[str, 
 
 
 def pull(root: Path | None = None) -> dict[str, Any]:
-    """Fast-forward the install checkout. Never resets or merges."""
+    """Fast-forward the install checkout to its upstream. Never resets, never makes a merge commit.
+
+    Fetches only the upstream branch into its remote-tracking ref, then ``merge --ff-only`` of that ref,
+    so a ``FETCH_HEAD`` written by anything else can't be merged ("cannot fast-forward to multiple branches").
+    """
     root = (root or paths.repo_root()).resolve()
     info: dict[str, Any] = {"root": str(root), "action": "noop"}
     if disabled():
@@ -339,27 +402,32 @@ def pull(root: Path | None = None) -> dict[str, Any]:
     if _dirty(root):
         info["reason"] = "dirty worktree"
         return info
-    upstream = _upstream(root)
-    if not upstream:
+    remote, branch, tracking = _upstream_parts(root)
+    if not tracking:
         info["reason"] = "no upstream"
         return info
     before = head(root)
     info["from"] = before
-    info["upstream"] = upstream
-    try:
-        r = _git(root, "pull", "--ff-only", timeout=PULL_TIMEOUT_S)
-    except subprocess.TimeoutExpired:
-        info["action"] = "error"
-        info["error"] = "git pull timed out"
-        return info
-    except OSError as e:
-        info["action"] = "error"
-        info["error"] = str(e)
-        return info
-    if r.returncode != 0:
-        info["action"] = "error"
-        info["error"] = (r.stderr or r.stdout or "").strip() or f"exit {r.returncode}"
-        return info
+    info["upstream"] = tracking[len("refs/remotes/"):]
+    steps = (
+        ("fetch", ["fetch", "--quiet", "--no-tags", remote, f"+refs/heads/{branch}:{tracking}"]),
+        ("merge", ["merge", "--ff-only", "--quiet", tracking]),
+    )
+    for name, args in steps:
+        try:
+            r = _git(root, *args, timeout=PULL_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            info["action"] = "error"
+            info["error"] = f"git {name} timed out"
+            return info
+        except OSError as e:
+            info["action"] = "error"
+            info["error"] = str(e)
+            return info
+        if r.returncode != 0:
+            info["action"] = "error"
+            info["error"] = f"git {name}: " + ((r.stderr or r.stdout or "").strip() or f"exit {r.returncode}")
+            return info
     after = head(root)
     info["to"] = after
     if not after or after == before:
@@ -392,18 +460,29 @@ def write_status(info: dict[str, Any]) -> None:
 
 
 def tick(root: Path | None = None, *, apply: bool = True) -> dict[str, Any]:
-    """One pull pass. On a fast-forward: rebuild if needed, reload UI, restart."""
+    """One pass under the sync lock. On a fast-forward: rebuild if needed, reload UI, restart.
+
+    Another pass holding the lock (including a restart still pending from one) makes this return
+    ``busy`` without touching git.
+    """
     root = (root or paths.repo_root()).resolve()
-    info = pull(root)
-    if info.get("action") != "pulled" or not apply:
+    fd, ok = acquire_lock(root)
+    if not ok:
+        return {"root": str(root), "action": "busy", "reason": f"another repo sync holds {LOCK_NAME}"}
+    try:
+        info = pull(root)
+        if info.get("action") != "pulled" or not apply:
+            return info
+        files = list(info.get("files") or [])
+        info.update(apply_updates(root, files))
+        write_status(info)
+        live.queue_patch({"reloadClient": True})
+        info["reloadClient"] = True
+        info.update(schedule_restart(root, hold_fd=fd))
         return info
-    files = list(info.get("files") or [])
-    info.update(apply_updates(root, files))
-    write_status(info)
-    live.queue_patch({"reloadClient": True})
-    info["reloadClient"] = True
-    info.update(schedule_restart(root))
-    return info
+    finally:
+        if fd is not None:
+            os.close(fd)
 
 
 def repo_rev() -> str:
@@ -419,3 +498,7 @@ def repo_rev() -> str:
 
 _rev = ""
 _rev_at = 0.0
+
+
+if __name__ == "__main__":
+    print(json.dumps(tick(), indent=2, default=str))

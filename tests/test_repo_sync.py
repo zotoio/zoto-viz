@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import subprocess
+import threading
+import time
 from pathlib import Path
 
 from service import live
@@ -67,7 +70,7 @@ def test_tick_reloads_and_schedules_restart(monkeypatch, tmp_path: Path) -> None
     })
     monkeypatch.setattr(rs, "apply_updates", lambda root, files: {"built": False, "pip": False})
     scheduled: list[Path] = []
-    monkeypatch.setattr(rs, "schedule_restart", lambda root, delay_s=rs.RESTART_DELAY_S: (
+    monkeypatch.setattr(rs, "schedule_restart", lambda root, delay_s=rs.RESTART_DELAY_S, hold_fd=None: (
         scheduled.append(root) or {"restart": "scheduled", "delay_s": delay_s}
     ))
     info = rs.tick(tmp_path)
@@ -200,9 +203,174 @@ def test_tick_records_failed_build_in_status_file(monkeypatch, tmp_path: Path) -
     monkeypatch.setattr(rs.paths, "user_dir", lambda: tmp_path / "home")
     monkeypatch.setattr(rs, "pull", lambda root=None: {"action": "pulled", "from": "a" * 40, "to": "b" * 40, "files": ["web/x.ts"]})
     monkeypatch.setattr(rs, "apply_updates", lambda root, files: {"built": False, "pip": False, "build_error": "build exit 1: boom"})
-    monkeypatch.setattr(rs, "schedule_restart", lambda root, delay_s=rs.RESTART_DELAY_S: {"restart": "scheduled"})
+    monkeypatch.setattr(rs, "schedule_restart", lambda root, delay_s=rs.RESTART_DELAY_S, hold_fd=None: {"restart": "scheduled"})
     monkeypatch.setattr(rs.live, "queue_patch", lambda patch: patch)
     info = rs.tick(tmp_path)
     assert info["build_error"] == "build exit 1: boom"
     status = json.loads((tmp_path / "home" / "repo-sync.json").read_text())
     assert status["ok"] is False and status["build_error"] == "build exit 1: boom" and status["to"] == "b" * 40
+
+
+# --- single updater: fetch + merge --ff-only under a .git flock ---------------------------------
+
+
+def _g(cwd: Path, *args: str) -> str:
+    r = subprocess.run(["git", *args], cwd=str(cwd), capture_output=True, text=True, check=True)
+    return r.stdout.strip()
+
+
+def _origin_and_install(tmp_path: Path) -> tuple[Path, Path]:
+    """A bare origin, an install clone tracking origin/main, and one new origin commit touching web/."""
+    origin = tmp_path / "origin.git"
+    seed = tmp_path / "seed"
+    install = tmp_path / "install"
+    _g(tmp_path, "init", "-q", "--bare", "-b", "main", str(origin))
+    _g(tmp_path, "clone", "-q", str(origin), str(seed))
+    for repo in (seed,):
+        _g(repo, "config", "user.email", "t@example.invalid")
+        _g(repo, "config", "user.name", "t")
+    (seed / "web").mkdir()
+    (seed / "web" / "a.ts").write_text("1\n", encoding="utf-8")
+    _g(seed, "add", "-A")
+    _g(seed, "commit", "-q", "-m", "one")
+    _g(seed, "push", "-q", "origin", "HEAD:main")
+    _g(tmp_path, "clone", "-q", "-b", "main", str(origin), str(install))
+    (seed / "web" / "a.ts").write_text("2\n", encoding="utf-8")
+    _g(seed, "commit", "-q", "-am", "two")
+    _g(seed, "push", "-q", "origin", "HEAD:main")
+    return origin, install
+
+
+def _quiet_side_effects(monkeypatch, tmp_path: Path, builds: list[str], restarts: list[int | None]) -> None:
+    monkeypatch.delenv(rs.SKIP_ENV, raising=False)
+    monkeypatch.delenv(rs.INTERVAL_ENV, raising=False)
+    monkeypatch.setattr(rs.paths, "user_dir", lambda: tmp_path / "home")
+    monkeypatch.setattr(rs.live, "queue_patch", lambda patch: patch)
+    monkeypatch.setattr(rs, "build_web", lambda root, install=False: builds.append(str(root)) or {"built": True})
+    monkeypatch.setattr(rs, "schedule_restart", lambda root, delay_s=rs.RESTART_DELAY_S, hold_fd=None: (
+        restarts.append(hold_fd) or {"restart": "scheduled"}
+    ))
+
+
+def test_two_updaters_within_one_second_build_once_and_land_origin_main(monkeypatch, tmp_path: Path) -> None:
+    """Row: two passes fire together. 0 git errors, 1 rebuild, HEAD == origin/main, no bare pull.
+
+    The first pass is held inside its merge until the second pass has finished, so without the
+    lock the second fast-forwards and builds too (2 builds), and the first then reports a second
+    "pulled" for the same range.
+    """
+    origin, install = _origin_and_install(tmp_path)
+    builds: list[str] = []
+    restarts: list[int | None] = []
+    _quiet_side_effects(monkeypatch, tmp_path, builds, restarts)
+    real_git = rs._git
+    calls: list[tuple[str, ...]] = []
+    second_done = threading.Event()
+    holder: dict[str, threading.Thread] = {}
+
+    def git(root: Path, *args: str, timeout: float = 12.0):
+        calls.append(args)
+        if args[:1] == ("merge",) and threading.current_thread() is holder.get("first"):
+            second_done.wait(5)
+        return real_git(root, *args, timeout=timeout)
+
+    monkeypatch.setattr(rs, "_git", git)
+    results: dict[str, dict] = {}
+
+    def run(name: str) -> None:
+        results[name] = rs.tick(install)
+        if name == "second":
+            second_done.set()
+
+    t1 = threading.Thread(target=run, args=("first",))
+    holder["first"] = t1
+    t1.start()
+    deadline = time.monotonic() + 10
+    while not any(a[:1] == ("merge",) for a in calls) and time.monotonic() < deadline:
+        time.sleep(0.01)
+    assert any(a[:1] == ("merge",) for a in calls), f"first pass never reached merge --ff-only: {calls}"
+    t2 = threading.Thread(target=run, args=("second",))
+    t2.start()
+    t1.join(10)
+    t2.join(10)
+
+    actions = sorted(r["action"] for r in results.values())
+    assert actions == ["busy", "pulled"], results
+    assert not [r for r in results.values() if r["action"] == "error"]
+    assert len(builds) == 1
+    assert _g(install, "rev-parse", "HEAD") == _g(origin, "rev-parse", "main")
+    assert not [a for a in calls if a[:1] == ("pull",)]
+    assert ("merge", "--ff-only", "--quiet", "refs/remotes/origin/main") in calls
+    assert len(restarts) == 1 and restarts[0] is not None
+
+
+def test_pull_uses_fetch_then_ff_only_merge_of_tracking_ref(monkeypatch, tmp_path: Path) -> None:
+    origin, install = _origin_and_install(tmp_path)
+    monkeypatch.delenv(rs.SKIP_ENV, raising=False)
+    monkeypatch.delenv(rs.INTERVAL_ENV, raising=False)
+    real_git = rs._git
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(rs, "_git", lambda root, *a, timeout=12.0: calls.append(a) or real_git(root, *a, timeout=timeout))
+    # A stray multi-branch FETCH_HEAD (what a sidecar `git fetch origin` leaves) must not be merged.
+    (install / ".git" / "FETCH_HEAD").write_text(
+        "1111111111111111111111111111111111111111\t\tbranch 'main' of x\n"
+        "2222222222222222222222222222222222222222\t\tbranch 'other' of x\n",
+        encoding="utf-8",
+    )
+    info = rs.pull(install)
+    assert info["action"] == "pulled" and info["upstream"] == "origin/main", info
+    assert info["files"] == ["web/a.ts"]
+    net = [a[0] for a in calls if a[:1] in (("fetch",), ("merge",), ("pull",))]
+    assert net == ["fetch", "merge"]
+    assert calls[[a[0] for a in calls].index("fetch")] == (
+        "fetch", "--quiet", "--no-tags", "origin", "+refs/heads/main:refs/remotes/origin/main",
+    )
+    assert _g(install, "rev-parse", "HEAD") == _g(origin, "rev-parse", "main")
+
+
+def test_lock_held_makes_pass_do_nothing(monkeypatch, tmp_path: Path) -> None:
+    _, install = _origin_and_install(tmp_path)
+    builds: list[str] = []
+    restarts: list[int | None] = []
+    _quiet_side_effects(monkeypatch, tmp_path, builds, restarts)
+    fd, ok = rs.acquire_lock(install)
+    assert ok and fd is not None
+    assert rs.lock_path(install) == (install / ".git" / rs.LOCK_NAME).resolve()
+    real_git = rs._git
+    calls: list[tuple[str, ...]] = []
+    monkeypatch.setattr(rs, "_git", lambda root, *a, timeout=12.0: calls.append(a) or real_git(root, *a, timeout=timeout))
+    try:
+        info = rs.tick(install)
+    finally:
+        import os
+        os.close(fd)
+    assert info["action"] == "busy"
+    assert not [a for a in calls if a[:1] in (("fetch",), ("merge",), ("pull",))]
+    assert builds == [] and restarts == []
+    after = rs.tick(install)
+    assert after["action"] == "pulled" and len(builds) == 1
+
+
+def test_lock_stays_held_until_detached_restart_has_run(monkeypatch, tmp_path: Path) -> None:
+    """The bounce inherits the lock: a pass started before the restart finishes is busy, after it is fresh."""
+    _, install = _origin_and_install(tmp_path)
+    monkeypatch.delenv(rs.SKIP_ENV, raising=False)
+    monkeypatch.delenv(rs.INTERVAL_ENV, raising=False)
+    monkeypatch.setattr(rs.paths, "user_dir", lambda: tmp_path / "home")
+    monkeypatch.setattr(rs.live, "queue_patch", lambda patch: patch)
+    monkeypatch.setattr(rs, "build_web", lambda root, install=False: {"built": True})
+    marker = tmp_path / "restarted"
+    monkeypatch.setattr(rs, "_restart_script", lambda delay_s: f"sleep 1; touch {marker}")
+    info = rs.tick(install)
+    assert info["action"] == "pulled" and info["restart"] == "scheduled"
+    assert rs.tick(install)["action"] == "busy"
+    deadline = time.monotonic() + 10
+    while not marker.exists() and time.monotonic() < deadline:
+        time.sleep(0.05)
+    assert marker.exists()
+    for _ in range(100):
+        again = rs.tick(install)
+        if again["action"] != "busy":
+            break
+        time.sleep(0.05)
+    assert again["action"] == "fresh"
