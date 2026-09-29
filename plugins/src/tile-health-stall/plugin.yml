@@ -1,6 +1,7 @@
 id: tile-health-stall
 name: Tile health — stall
 version: 1
+picker: hidden
 hint: Host dogfood pack — stops viz writes after 40 frames.
 capabilities:
   - viz.read

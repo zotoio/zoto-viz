@@ -3,6 +3,7 @@ import {
   ARCADE_ENGINES,
   categorize,
   GRAPH_BASES,
+  graphModes,
   heat,
   hashColor,
   hostEngine,
@@ -205,6 +206,8 @@ export interface PluginView {
   name: string;
   version: number;
   hint?: string;
+  /** plugin.yml `picker: hidden`: test / fixture pack, never offered in a picker or random pick. */
+  picker?: "hidden";
   /** Catalog row when this spec was expanded from plugin.yml instances. */
   instanceId?: string;
   /** Short label for mosaic tiles when distinct from {@link name}. */
@@ -273,6 +276,18 @@ const LOOK_ANIM_KEYS = [
 ] as const satisfies readonly (keyof PluginLook)[];
 
 let looks = new Map<string, PluginLook>();
+/** View ids of `picker: hidden` packs: still creatable by id, never offered. */
+let pickerHidden = new Set<string>();
+
+/** True for a `picker: hidden` view: no picker row, no dice / dream-cycle / new-wall pick. */
+export function isPickerHidden(viewId: string): boolean {
+  return pickerHidden.has(viewId);
+}
+
+/** Graph views the dream cycle steps through (never a `picker: hidden` test pack). */
+export function dreamCycleModes(): ViewMode[] {
+  return graphModes().filter((m) => !isPickerHidden(m.id));
+}
 
 /** Host wrap-target ids (graph bases + arcade engines), not live menu ids. */
 export const shippedModeIds = (): Set<string> =>
@@ -760,11 +775,14 @@ export function fillViewSelect(
     (groupEl ?? sel).appendChild(o);
   }
   if (current && !modes.some((m) => m.value === current)) {
+    // A view opened by id (hidden test pack, saved layout): name it, it is not offered.
+    const known = allModes().find((m) => m.id === current);
     const o = document.createElement("option");
     o.value = current;
-    o.textContent = current;
+    o.textContent = known ? viewCaption(known) : current;
     o.selected = true;
     sel.appendChild(o);
+    sel.value = current;
   }
 }
 
@@ -775,7 +793,7 @@ export function fillViewSelect(
 export function viewSelectOptions(
   suffixFor?: (viewId: string) => string | null,
 ): { value: string; label: string; hint: string; group: string }[] {
-  const rows = allModes().map((m) => ({
+  const rows = allModes().filter((m) => !isPickerHidden(m.id)).map((m) => ({
     value: m.id,
     label: viewCaption(m),
     group: m.kind === "arcade" ? "arcade" : m.kind === "demo" ? "demo" : "graph",
@@ -827,6 +845,7 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
   const { rows, overlays } = partitionCatalog(specs);
   const nextLooks = new Map<string, PluginLook>();
   const modes: ViewMode[] = [];
+  const nextHidden = new Set<string>();
   for (const spec of rows) {
     const extra = overlays.get(spec.id);
     const merged = extra ? mergeOverlayPins(spec, extra) : spec;
@@ -834,13 +853,16 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
       if (view.look) nextLooks.set(pluginViewId(view.id, view.instanceId), view.look);
       if (!view.engine) continue;
       try {
-        modes.push(compilePlugin(view));
+        const mode = compilePlugin(view);
+        modes.push(mode);
+        if (merged.picker === "hidden") nextHidden.add(mode.id);
       } catch (e) {
         console.warn("zoto-viz plugin:", view.file || view.id, e);
       }
     }
   }
   looks = nextLooks;
+  pickerHidden = nextHidden;
   setPluginModes(modes);
   return modes;
 }

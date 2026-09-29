@@ -91,6 +91,7 @@ export type CatalogRow = {
   assets?: unknown;
   assets_sha256?: unknown;
   consent_state?: unknown;
+  picker?: unknown;
 };
 
 function asRecord(raw: unknown): Record<string, unknown> | null {
@@ -537,6 +538,7 @@ export function toPluginView(raw: unknown): PluginView {
     spec.consent_state = row.consent_state;
   }
   if (row.origin === "src" || row.origin === "zip" || row.origin === "local") spec.origin = row.origin;
+  if (row.picker === "hidden") spec.picker = "hidden";
   if (typeof row.has_frontend === "boolean") spec.has_frontend = row.has_frontend;
   if (typeof row.has_sky === "boolean") spec.has_sky = row.has_sky;
   if (typeof row.has_sky_shader === "boolean") spec.has_sky_shader = row.has_sky_shader;
