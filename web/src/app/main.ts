@@ -214,6 +214,7 @@ import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycl
 import { addPresentListener } from "../core/fps";
 import { bindTileHealthPresentTick } from "./tile-health-present";
 import { paintLiveBlankNotice } from "./live-blank-notice";
+import { SkyWaits } from "./sky-wait";
 import { createProductionTileHealthMonitor } from "./tile-health-boot";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
@@ -1240,6 +1241,7 @@ async function loadPluginSkyOnto(
   const packKey = want && spec ? `${spec.id}:${spec.shader_sha256 || ""}` : "";
   if (target === scene && packKey && packKey === skyLoaded) return;
   if (!want || !spec) {
+    cancelSkyWait(target, paneId);
     if (target === scene) showPluginSkyConsentNotice($("scene"), false);
     if (target === scene && skyLoaded) {
       scene.setPluginShader(null);
@@ -1250,6 +1252,7 @@ async function loadPluginSkyOnto(
     return;
   }
   if (pluginNeedsReview(spec) && !spec.consent) {
+    cancelSkyWait(target, paneId);
     warnPluginSkyConsent(spec.id);
     showPluginSkyConsentNotice(target === scene ? $("scene") : null, true);
     markPluginNeedsReview(spec);
@@ -1259,6 +1262,8 @@ async function loadPluginSkyOnto(
     return;
   }
   showPluginSkyConsentNotice(target === scene ? $("scene") : null, false);
+  const waitKey = skyWaitKey(target, paneId);
+  if (target.pluginSkyId !== spec.id) beginSkyWait(waitKey, target, spec, paneId);
   const disposeSky = () => {
     target.setPluginShader(null);
     if (target === scene) skyLoaded = "";
@@ -1278,7 +1283,9 @@ async function loadPluginSkyOnto(
     spec.sky_available = true;
     delete spec.sky_error;
     if (target === scene) skyLoaded = packKey;
+    if (waitKey) skyWaits.landed(waitKey);
   } catch (e) {
+    if (waitKey) skyWaits.cancel(waitKey);
     if (signal.aborted) return;
     console.warn("zoto-viz plugin sky:", e);
     removeModeSwitchAbortListener(signal, disposeSky);
@@ -1286,10 +1293,71 @@ async function loadPluginSkyOnto(
   }
 }
 
+/**
+ * Tiles waiting on their own view's sky: "Starting…" card, then "couldn't start. Retry" at the
+ * deadline. The heal ladder skips them (tile-health `skyStarting`), so a slow or stuck pack sky
+ * never becomes a stand-in or another pack.
+ */
+const skyWaitTiles = new Map<string, { target: NetScene; spec: PluginView; paneId?: string }>();
+const skyWaits = new SkyWaits({
+  hostEl: (key) => skyWaitHostEl(key),
+  name: (key) => {
+    const w = skyWaitTiles.get(key);
+    return w ? w.spec.name || w.spec.id : "";
+  },
+  skyReady: (key) => {
+    const w = skyWaitTiles.get(key);
+    return !!w && w.target.pluginSkyId === w.spec.id;
+  },
+  retry: (key) => {
+    const w = skyWaitTiles.get(key);
+    if (!w) return;
+    console.info(`[zoto-viz sky] tile=${key} step=retry`);
+    void loadPluginSkyOnto(w.target, w.spec, true, getActiveModeSwitchSignal() ?? refreshPluginSignal.signal, w.paneId).catch(() => {});
+    skyWaits.begin(key);
+  },
+});
+
+/** Tile key for a sky load: the mosaic pane id, or "main" for the solo wall. */
+function skyWaitKey(target: NetScene, paneId?: string): string {
+  if (mosaic?.on) return paneId ?? (target === scene ? mosaic.mainTileId : "");
+  return target === scene ? "main" : "";
+}
+
+function skyWaitHostEl(key: string): HTMLElement | null {
+  if (mosaic?.on) return document.querySelector<HTMLElement>(`.mosaic-pane[data-mode="${CSS.escape(key)}"]`);
+  return key === "main" ? $("scene") : null;
+}
+
+function beginSkyWait(key: string, target: NetScene, spec: PluginView, paneId?: string): void {
+  if (!key) return;
+  skyWaitTiles.set(key, { target, spec, paneId });
+  skyWaits.begin(key);
+}
+
+function cancelSkyWait(target: NetScene, paneId?: string): void {
+  const key = skyWaitKey(target, paneId);
+  if (key) skyWaits.cancel(key);
+}
+
+function tileSkyStarting(tileId: string): boolean {
+  const key = mosaic?.on && tileId === "main" ? mosaic.mainTileId : tileId;
+  return skyWaits.exempt(key);
+}
+
 async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   if (mosaic?.on) {
     mosaic.markSkyPending();
     try {
+      for (const id of mosaic.tileIds) {
+        const target = mosaic.graphScene(id);
+        const pane = pluginSpecForMode(id);
+        if (!target || !pane || target.pluginSkyId === pane.id) continue;
+        if (!mosaicPluginSkyPaneView(id, mosaic.paneSky(id), lookForMode).wantPlugin) continue;
+        if (pluginNeedsReview(pane) && !pane.consent) continue;
+        if (!(pane.has_sky_shader === true || !!pane.shader_sha256)) continue;
+        beginSkyWait(id, target, pane, id);
+      }
       for (const id of mosaic.tileIds) {
         throwIfAborted(signal);
         const target = mosaic.graphScene(id);
@@ -1300,6 +1368,8 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
         await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
       }
     } finally {
+      // A switched-away sync never leaves a pane on "Starting…"; the next sync begins its own wait.
+      if (signal.aborted) for (const id of mosaic.tileIds) if (skyWaits.state(id) === "starting") skyWaits.cancel(id);
       mosaic.settlePanes();
     }
     return;
@@ -2094,6 +2164,7 @@ tileHealth = createProductionTileHealthMonitor({
   onHeal: (tileId, step) => healTile(tileId, step),
   packLive: (id, packId) => (id === "main" || id === modeSel.value) && sandbox.readyPack === packId,
   previewOnly: (id) => mosaicPanePreviewOnly(id),
+  skyStarting: (id) => tileSkyStarting(id),
   onLiveBlank: (id, packId, blank) => onLiveBlank(id, packId, blank),
 });
 function onLiveBlank(tileId: string, packId: string, blank: boolean): void {

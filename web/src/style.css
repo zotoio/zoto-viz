@@ -540,6 +540,16 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
   position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; padding: 16px;
   background: var(--scene-bg, var(--bg)); pointer-events: none;
 }
+.sky-starting-card {
+  position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; padding: 16px;
+  background: var(--scene-bg, var(--bg)); pointer-events: none;
+  opacity: 1; transition: opacity 400ms ease;
+}
+.sky-starting-card.fading { opacity: 0; }
+.sky-starting-name {
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: color-mix(in srgb, var(--fg) 45%, transparent); font: 600 22px/1.2 inherit; letter-spacing: 0.04em;
+}
 .mosaic-pane-preview-name {
   max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   color: color-mix(in srgb, var(--fg) 45%, transparent); font: 600 22px/1.2 inherit; letter-spacing: 0.04em;
