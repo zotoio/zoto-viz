@@ -756,6 +756,9 @@ async function main() {
     // Spec rev 2: anything that samples black/uniform (and Blob Mesh always) is held 35s before
     // scoring, watching for "running but not showing anything"; the health sampler reads ~10s apart.
     // A blank content area or carousel image counts too (slow stills get the extra 15s to load).
+    // A five-patch black/uniform still holds the view even when the content area overrules it: the
+    // 35s shot is what gets scored, so a view that goes dark during the hold (Nixie Clock and Packet
+    // Tunnel in the 20fa18a7 shipped sweep, "Couldn't start") is still caught.
     row.notShowing = h.notShowing ?? null;
     const flatFirst = ws && ws.score.ok === false && ws.score.what !== "white";
     if (out.kind === "ready" && (v.id === "plugin:blob-mesh" || (sample && (sample.black || sample.uniform)) || flatFirst)) {
@@ -909,13 +912,14 @@ async function main() {
       if (row.screenshotError) fails.push(row.screenshotError);
       else if (!row.wall) fails.push("no wall region to sample");
       else {
-        // Flat if the five-patch sample (whole tile) or the content area (overlays masked) says so.
+        // Flat per the wall score: the content area decides when >= 40% of the tile is judged, else
+        // the five-patch sample (whole tile) and the content area both count.
         const sc = row.wallScore;
         const by = (sc ? sc.by ?? "" : row.wall.ok ? "" : "five-patch").split("+").filter((b) => b && b !== "carousel-image");
         if (by.length) {
           const what = sc?.what ?? (row.wall.black ? "black" : row.wall.white ? "white" : "uniform");
           const c = row.content;
-          const detail = [by.includes("five-patch") && row.wall.patches.join(" "), by.includes("content") && c && `content ${c.verdict}: contentLit ${c.contentLit}, varied ${c.varied}, ${Math.round(c.maskedFraction * 100)}% masked`].filter(Boolean).join("; ");
+          const detail = [by.includes("five-patch") && row.wall.patches.join(" "), by.includes("content") && c && `content ${c.verdict}: contentLit ${c.contentLit}, varied ${c.varied}, ${Math.round(c.maskedFraction * 100)}% masked`, sc?.overruled, sc?.decidedBy && `decided by ${sc.decidedBy}`].filter(Boolean).join("; ");
           if (row.longHold && what !== "white") dark = `wall ${what} after 35s (${detail})`;
           else fails.push(`wall ${what} (${detail})`);
         }
@@ -1510,7 +1514,9 @@ function contentCell(r) {
   const lit = r.contentLit == null ? "–" : `${(r.contentLit * 100).toFixed(r.contentLit < 0.1 ? 1 : 0)}%`;
   const parts = [`${r.content.verdict} · lit ${lit} · masked ${Math.round((r.maskedFraction ?? 0) * 100)}%`];
   if (r.imgLoaded !== null && r.imgLoaded !== undefined) parts.push(`img ${r.imgLoaded ? "loaded" : "NOT loaded"}${r.carouselImage?.sample ? ` ${r.carouselImage.sample.verdict}` : ""}`);
-  if (five && five !== r.content.verdict) parts.push(`[five-patch ${five}]`);
+  const ws = r.wallScore;
+  if (ws?.decidedBy) parts.push(`by ${ws.decidedBy}`);
+  if (five && (ws ? ws.disagree : five !== r.content.verdict)) parts.push(`[five-patch ${five}${ws?.decidedBy === "area" ? (/^kept/.test(ws.overruled ?? "") ? " kept: area not lit" : " overruled") : ""}]`);
   return parts.join(" · ");
 }
 
@@ -1523,7 +1529,7 @@ function markdown(res) {
   if (res.counts) L.push("", `**Counts:** ${Object.entries(res.counts).map(([k, v]) => `${k} ${v}`).join(" · ")}`);
   if (res.boot) L.push("", `Boot: ${res.boot.mode} "${res.boot.header}" profile ${res.boot.profile} in ${Math.round(res.boot.ms / 1000)}s; backdrop ${res.boot.backdrop}; dice ${res.boot.dice}`);
   if (res.pickerCheck) L.push("", `Picker: ${res.pickerCheck.pass === false ? "**FAIL** — " : ""}${res.pickerCheck.options} options; fixtures in picker: ${res.pickerCheck.fixturesInPicker.join(", ") || "none"} (${res.pickerCheck.fixtureRule}); catalog views missing from picker: ${res.pickerCheck.viewsMissingFromPicker.join(", ") || "none"}`);
-  L.push("", "**Wall rule:** a row fails as flat if EITHER the five-patch sample (5 × 24px patches over the whole tile, overlays included; the old rule, kept as `wall` in the JSON) OR the content area says black / white / uniform. Content area = the tile with the rects of the caption, title, notices, HUD, fps badge, header, feed/chat panels and every other DOM text over it masked out (`maskedFraction`); black = median lum < 24 with < 1% of content pixels lit (lum ≥ 40, `contentLit`) and < 1% off the median; uniform = ≥ 95% flat cells and < 1% off the median. Overlay text alone never passes a dark tile. Under 40% of the tile left after masking is a harness warning (⚠ harness). Carousel views also need the visible image loaded (`imgLoaded`: naturalWidth > 0, no error event) and its area (overlays masked) lit and not flat, else FAIL-silent even with caption text on screen (FAIL-other when a notice names another view). Column *content*: content verdict · contentLit · masked share · carousel image (loaded / not) — five-patch verdict in brackets when it differs.");
+  L.push("", "**Wall rule (v5):** when at least 40% of the tile is left after masking overlays, the content area decides (ok / black / white / uniform); the five-patch sample (5 × 24px patches over the whole tile, overlays included; kept as `wall` in the JSON) only keeps a black when under 1% of the content area is lit. With 5–40% left, EITHER sample fails the row (the v4 rule) and the row carries a harness warning; under 5% the area is not judged, the five-patch verdict decides and the row carries a harness warning. Both verdicts are in `wallScore` (`patchVerdict`, `areaVerdict`, `decidedBy`, `disagree`). Content area = the tile with the rects of the caption, title, notices, HUD, fps badge, header, feed/chat panels and every other DOM text over it masked out (`maskedFraction`); black = median lum < 24 with < 1% of content pixels lit (lum ≥ 40, `contentLit`) and < 1% off the median; uniform = ≥ 95% flat cells and < 1% off the median. Overlay text alone never passes a dark tile. Carousel views also need the visible image loaded (`imgLoaded`: naturalWidth > 0, no error event) and its area (overlays masked) lit and not flat, else FAIL-silent even with caption text on screen (FAIL-other when a notice names another view). Column *content*: content verdict · contentLit · masked share · carousel image (loaded / not) · decided by — five-patch verdict in brackets when it disagrees (overruled / kept).");
   L.push("", "| # | id | group | state | reason | content | pluginSkyId | anim.backdrop | dice | consent | screenshot |", "|---|---|---|---|---|---|---|---|---|---|---|");
   for (const r of res.views) {
     L.push(`| ${r.n} | ${mdCell(r.id)} | ${r.group} | ${r.state} | ${mdCell(r.reason)}${r.warnings?.length ? ` ⚠ ${mdCell(r.warnings.join("; "))}` : ""} | ${mdCell(contentCell(r))} | ${mdCell(r.pluginSkyId)} | ${mdCell(r.animBackdrop)} | ${mdCell(r.dice?.toggle)} | ${mdCell(r.consent)} | ${mdCell(path.basename(r.screenshot ?? ""))} |`);

@@ -170,9 +170,9 @@ export function fivePatchSample(pngBuf, region, size = 24) {
 
 /** Luminance at or above this counts as a lit pixel (the carousel still backdrop #07090f is ~9). */
 export const LIT_LUM = 40;
-/** Below this share of the tile left after masking overlays, the row carries a harness warning. */
+/** From this share of the tile left after masking overlays, the content area decides; below it the row carries a harness warning. */
 export const MIN_UNMASKED = 0.4;
-/** Below this share there is too little content area to judge; the five-patch verdict stands. */
+/** Below this share there is too little content area to judge; the five-patch verdict stands (harness warning). */
 export const MIN_JUDGED = 0.05;
 
 function clipRect(r, region) {
@@ -300,27 +300,57 @@ export function carouselContentVerdict(image, imgSample) {
 }
 
 /**
- * Wall score for a row. The five-patch sample is kept as it was (legacyOk); the content-area sample
- * can only add a failure (overlay text no longer passes a dark wall), and for carousel views the
- * visible image must be loaded and lit (carouselContentVerdict).
+ * A dark tile the patch check calls black needs this share of content pixels lit (lum >= LIT_LUM)
+ * before the content area may clear it: dim structure alone (Ant Colony at 0.7, Blob Mesh's floor,
+ * nothing at lum 40 or above) does not overrule a black patch verdict. Same 1% as the area black rule.
+ */
+export const LIT_TO_CLEAR_BLACK = 0.01;
+
+/**
+ * Wall score for a row. The content-area sample decides when it is trustworthy; the five-patch sample
+ * is the fallback.
  *   five:     fivePatchSample over the region (whole tile, overlays included)
  *   content:  maskedWallSample over the region with overlay rects masked
  *   carousel: { image, imgSample } for carousel views, else null
- * Returns { ok, what, by, legacyOk, contentOk, contentVerdict, carousel, warnings, note }.
+ * decidedBy:
+ *   "area"        at least MIN_UNMASKED (40%) of the tile left after masking: the area verdict (ok,
+ *                 black, white or uniform) decides. One exception: when the patch check says black
+ *                 and the area says ok with less than LIT_TO_CLEAR_BLACK of it lit, it stays black.
+ *   "patch+area"  MIN_JUDGED (5%) to 40% left: either sample can fail it (the v4 rule); harness warning.
+ *   "patch"       under 5% left (or no content sample): the area is not judged, the five-patch verdict
+ *                 stands; harness warning.
+ * The carousel image rule (carouselContentVerdict) applies on top, unchanged.
+ * Returns { ok, what, by, decidedBy, patchVerdict, areaVerdict, disagree, overruled, legacyOk,
+ * contentOk, contentVerdict, remaining, carousel, warnings, note }.
  */
 export function scoreWall({ five = null, content = null, carousel = null } = {}) {
   const legacyOk = five ? five.ok : null;
+  const patchVerdict = sampleVerdict(five);
+  const areaVerdict = sampleVerdict(content);
+  const judged = !!content && content.ok !== null && content.ok !== undefined;
+  const remaining = content ? (content.remaining ?? +(1 - (content.maskedFraction ?? 0)).toFixed(3)) : null;
+  const decidedBy = judged && remaining >= MIN_UNMASKED ? "area" : judged ? "patch+area" : five ? "patch" : "none";
   let ok = !!(five || content);
-  let what = null; const by = [];
-  if (five && !five.ok) { ok = false; what = five.black ? "black" : five.white ? "white" : "uniform"; by.push("five-patch"); }
-  if (content && content.ok === false) { ok = false; what ??= sampleVerdict(content); by.push("content"); }
+  let what = null; const by = []; let overruled = null;
+  if (decidedBy === "area") {
+    if (content.ok === false) { ok = false; what = areaVerdict; by.push("content"); }
+    else if (five && five.black && !(content.contentLit >= LIT_TO_CLEAR_BLACK)) {
+      ok = false; what = "black"; by.push("five-patch");
+      overruled = `kept five-patch black: area ok but only ${(content.contentLit * 100).toFixed(2)}% lit (< ${LIT_TO_CLEAR_BLACK * 100}% at lum >= ${LIT_LUM})`;
+    } else if (five && !five.ok) overruled = `five-patch ${patchVerdict} overruled by the content area (${Math.round(remaining * 100)}% of the tile judged)`;
+  } else {
+    if (five && !five.ok) { ok = false; what = patchVerdict; by.push("five-patch"); }
+    if (judged && content.ok === false) { ok = false; what ??= areaVerdict; by.push("content"); }
+  }
   const car = carousel ? carouselContentVerdict(carousel.image, carousel.imgSample) : null;
   if (car?.blank) { ok = false; what ??= "blank"; by.push("carousel-image"); }
   const warnings = [];
-  if (content?.lowCoverage) warnings.push(`only ${Math.round((content.remaining ?? 0) * 100)}% of the tile left after masking ${content.masks ?? 0} overlay rect(s)${content.ok === null ? " (content not judged)" : ""}`);
+  if (content && !judged) warnings.push(`only ${Math.round((remaining ?? 0) * 100)}% of the tile left after masking ${content.masks ?? 0} overlay rect(s): content not judged, five-patch verdict decides`);
+  else if (content?.lowCoverage) warnings.push(`only ${Math.round((remaining ?? 0) * 100)}% of the tile left after masking ${content.masks ?? 0} overlay rect(s): five-patch and content both count`);
   if (carousel?.imgSample?.lowCoverage) warnings.push(`only ${Math.round((carousel.imgSample.remaining ?? 0) * 100)}% of the carousel image left after masking overlays`);
-  const note = five && content && five.ok === false && content.ok === true ? `five-patch ${what} but content area has structure (contentLit ${content.contentLit}, varied ${content.varied})` : null;
-  return { ok, what, by: by.join("+") || null, legacyOk, contentOk: content ? content.ok : null, contentVerdict: sampleVerdict(content), carousel: car, warnings, note };
+  const disagree = !!five && judged && five.ok !== content.ok;
+  const note = disagree ? `five-patch ${patchVerdict}, content ${areaVerdict} (contentLit ${content.contentLit}, varied ${content.varied}, ${Math.round(remaining * 100)}% judged); decided by ${decidedBy}${overruled ? `: ${overruled}` : ""}` : null;
+  return { ok, what, by: by.join("+") || null, decidedBy, patchVerdict, areaVerdict, disagree, overruled, legacyOk, contentOk: content ? content.ok : null, contentVerdict: areaVerdict, remaining, carousel: car, warnings, note };
 }
 
 const normName = (x) => String(x ?? "").toLowerCase().replace(/^(air|bt|cpu|net|src|sys|arc)\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();
