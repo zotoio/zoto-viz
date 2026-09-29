@@ -553,8 +553,8 @@ export class Settings {
     // Profile restore calls this with the policy that is already live. Re-entering "auto"
     // used to clear the dismiss latch and arm watchword again, so the allow sheet returned
     // on every settings apply.
+    // It must not touch the Not now latch either: that is how Not now came back on every reload.
     if (p === liveMic.micPolicy) {
-      if (p === "auto") clearMediaDismiss("mic");
       if (this.deviceUi) this.deviceUi.mic.checked = p === "auto";
       document.body.classList.toggle("mic-off", p === "off");
       return;

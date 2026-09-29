@@ -258,11 +258,12 @@ export function normalizeAi(raw: unknown): ProfileAi {
 /** Shared across profiles in ~/.zoto-viz/profiles.yml (`global`). */
 export interface HomeGlobal {
   ai: ProfileAi;
-  media: { mic: boolean; cam: boolean };
+  /** mic / cam: Allow was pressed. micOff: the user said Not now or switched the mic Off. */
+  media: { mic: boolean; cam: boolean; micOff: boolean };
 }
 
 export function emptyHomeGlobal(): HomeGlobal {
-  return { ai: emptyAi(), media: { mic: false, cam: false } };
+  return { ai: emptyAi(), media: { mic: false, cam: false, micOff: false } };
 }
 
 export function normalizeHomeGlobal(raw: unknown): HomeGlobal {
@@ -270,7 +271,7 @@ export function normalizeHomeGlobal(raw: unknown): HomeGlobal {
   const media = s.media && typeof s.media === "object" ? s.media as Record<string, unknown> : {};
   return {
     ai: normalizeAi(s.ai),
-    media: { mic: media.mic === true, cam: media.cam === true },
+    media: { mic: media.mic === true, cam: media.cam === true, micOff: media.micOff === true },
   };
 }
 
@@ -565,6 +566,7 @@ export class ProfileStore {
       if (merged.mic !== this.homeGlobal.media.mic || merged.cam !== this.homeGlobal.media.cam) {
         await this.saveHome({ media: merged });
       }
+      if (this.homeGlobal.media.micOff) this.onHomeMicOff?.();
     } catch (e) {
       console.warn("zoto-viz home global:", e);
     }
@@ -575,20 +577,37 @@ export class ProfileStore {
     if (homeAiActive(ai) || !homeAiActive(this.homeGlobal.ai)) void this.saveHome({ ai });
   }
 
+  /**
+   * Called once the home file says the mic was declined, so a new browser starts with it Off.
+   * The app points this at the header toggle.
+   */
+  onHomeMicOff?: () => void;
+
+  /** Keep the mic On / Off decision in the home file so every browser and session shares it. */
+  saveMicOff(off: boolean): void {
+    if (this.homeGlobal.media.micOff === off) return;
+    void this.saveHome({ media: { ...this.homeGlobal.media, micOff: off } });
+  }
+
   /** Merge model details or media acceptance into the home file. */
-  async saveHome(patch: { ai?: ProfileAi; media?: { mic: boolean; cam: boolean } }): Promise<void> {
+  async saveHome(patch: { ai?: ProfileAi; media?: { mic: boolean; cam: boolean; micOff?: boolean } }): Promise<void> {
     if (!this.available) return;
     if (patch.ai) this.homeGlobal = { ...this.homeGlobal, ai: normalizeAi(patch.ai) };
+    let body: typeof patch = patch;
     if (patch.media) {
-      this.homeGlobal = {
-        ...this.homeGlobal,
-        media: { mic: patch.media.mic === true, cam: patch.media.cam === true },
+      // The server replaces the whole media block, so always send every field.
+      const media = {
+        mic: patch.media.mic === true,
+        cam: patch.media.cam === true,
+        micOff: patch.media.micOff ?? this.homeGlobal.media.micOff,
       };
+      this.homeGlobal = { ...this.homeGlobal, media };
+      body = { ...patch, media };
     }
     try {
       this.homeGlobal = normalizeHomeGlobal(await api("/api/profiles/global", {
         method: "PUT",
-        body: JSON.stringify(patch),
+        body: JSON.stringify(body),
       }));
     } catch (e) {
       console.warn("zoto-viz home global:", e);

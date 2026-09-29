@@ -65,6 +65,15 @@ function readAccept(): MediaAccept {
 }
 
 let acceptSink: ((media: MediaAccept) => void) | null = null;
+let declineSink: ((kinds: MediaAskKind[]) => void) | null = null;
+
+/**
+ * Not now is a decision, not a snooze. The app wires this to the header toggle so a declined
+ * mic shows Off, is saved like any other Off, and nothing asks again until the user turns it on.
+ */
+export function setMediaDeclineSink(fn: ((kinds: MediaAskKind[]) => void) | null): void {
+  declineSink = fn;
+}
 
 /** Home config writes the accept. The browser copy stays so a blip does not re-prompt. */
 export function setMediaAcceptSink(fn: ((media: MediaAccept) => void) | null): void {
@@ -327,6 +336,7 @@ function finalizeMediaAskClose(host: MediaAskHost): void {
   const kind = rv === "stuck" ? "stuck" : rv === "blocked" ? "blocked" : "dismiss";
   recordDismiss(host, kind);
   host.waiters.forEach((w) => w.resolve(null));
+  if (kind === "dismiss") declineSink?.(kindsOf(host));
 }
 
 function paintCopy(host: NonNullable<typeof open>, extra?: string): void {
@@ -453,6 +463,18 @@ async function flush(): Promise<void> {
       w.resolve(null);
       continue;
     }
+    // The user already pressed Allow here (this browser or the home file). Never show the
+    // in-page sheet again: open the device, and the browser asks only if it forgot its own grant.
+    if (kinds.every((k) => accepted(k))) {
+      const stream = await captureOne({ audio: w.audio, video: w.video });
+      if (stream && !waiterAllowed(w)) {
+        for (const t of stream.getTracks()) t.stop();
+        w.resolve(null);
+        continue;
+      }
+      w.resolve(stream);
+      continue;
+    }
     if (w.audio && (await queryMicPermissionState()) === "granted") {
       // Pulse re-open after reload: browser permission is enough; skip the in-page sheet.
       // Watchword / agent paths still show the sheet — embeds can report "granted" with no dialog.
@@ -469,22 +491,8 @@ async function flush(): Promise<void> {
       needAsk.push(w);
       continue;
     }
-    if (w.audio && (await queryMicPermissionState()) === "prompt") {
-      needAsk.push(w);
-      continue;
-    }
     // Permissions API "granted" is not an accept — Cursor Simple Browser
     // and other embeds auto-grant at the OS (indicator on) with no dialog.
-    if (kinds.every((k) => accepted(k))) {
-      const stream = await captureOne({ audio: w.audio, video: w.video });
-      if (stream && !waiterAllowed(w)) {
-        for (const t of stream.getTracks()) t.stop();
-        w.resolve(null);
-        continue;
-      }
-      w.resolve(stream);
-      continue;
-    }
     needAsk.push(w);
   }
   if (needAsk.length) {

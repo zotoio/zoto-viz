@@ -1,4 +1,4 @@
-import { describe, expect, it, afterEach } from "vitest";
+import { describe, expect, it, afterEach, vi } from "vitest";
 import { AI_ID, LEGACY_SHIPPED_ID, ProfileStore, SHIPPED_ID, SHIPPED_LABEL, USER_ID, agentProfileId, aiCycleSettings, headerBrandProfile, homeAiActive, isAgentProfile, isQuiet, isShippedId, normalizeHomeGlobal, normalizeSettings, quiet, shippedSettings, suggestId, workingProfileId, type ProfileList } from "./profiles";
 import { setPluginModes, topology } from "./modes";
 
@@ -64,7 +64,8 @@ describe("profiles", () => {
       ai: { backend: "cursor", cursorModel: "grok-4.7", cycle: false },
       media: { mic: true },
     }).ai)).toBe(true);
-    expect(normalizeHomeGlobal({ media: { mic: true, cam: "yes" } }).media).toEqual({ mic: true, cam: false });
+    expect(normalizeHomeGlobal({ media: { mic: true, cam: "yes" } }).media).toEqual({ mic: true, cam: false, micOff: false });
+    expect(normalizeHomeGlobal({ media: { micOff: true } }).media).toEqual({ mic: false, cam: false, micOff: true });
     expect(homeAiActive(normalizeHomeGlobal({}).ai)).toBe(false);
     expect(normalizeSettings({ ai: { backend: "cursor", cursorModel: "grok-4.6", cycle: true } }).ai).toEqual({
       backend: "cursor", model: "", cursorModel: "grok-4.6", cycle: true,
@@ -244,6 +245,46 @@ describe("profiles availability", () => {
 
   afterEach(() => {
     globalThis.fetch = origFetch;
+  });
+
+  it("keeps a declined mic in the home file for every browser and tells the app at boot", async () => {
+    const globalPuts: unknown[] = [];
+    let home: Record<string, unknown> = { ai: {}, media: { mic: true, micOff: true } };
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      const method = (init?.method || "GET").toUpperCase();
+      if (path.includes("/api/profiles/global")) {
+        if (method === "PUT") {
+          const body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+          globalPuts.push(body);
+          home = { ...home, ...body };
+        }
+        return jsonOk(home);
+      }
+      return mockProfilesFetch()(url, init);
+    }) as unknown as typeof fetch;
+    const store = new ProfileStore(
+      { collect: shippedSettings, apply: () => {} },
+      { value: "", el: document.createElement("div"), setOptions() {} },
+      document.createElement("div"),
+      document.createElement("div"),
+    );
+    const declined = vi.fn();
+    store.onHomeMicOff = declined;
+    await store.boot();
+    expect(declined).toHaveBeenCalledTimes(1);
+
+    store.saveMicOff(false);
+    await vi.waitFor(() => expect(globalPuts.length).toBeGreaterThan(0));
+    // The server replaces the whole media block, so the Allow must travel with the change.
+    expect(globalPuts.at(-1)).toEqual({ media: { mic: true, cam: false, micOff: false } });
+    expect(store.homeGlobal.media).toEqual({ mic: true, cam: false, micOff: false });
+
+    const before = globalPuts.length;
+    store.saveMicOff(false);
+    await new Promise((r) => setTimeout(r, 20));
+    expect(globalPuts.length).toBe(before);
+    localStorage.removeItem("zoto-viz.mediaAccept");
   });
 
   it("stays available when the shipped write fails after a good list", async () => {

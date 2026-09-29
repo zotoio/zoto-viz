@@ -214,3 +214,23 @@ def test_agent_model_meta(tmp_path, monkeypatch) -> None:
         assert doc["profiles"]["gemma4-latest"]["label"] == "gemma4"
 
     asyncio.run(run())
+
+
+def test_global_stores_mic_declined_for_every_browser(tmp_path, monkeypatch) -> None:
+    """Not now on the mic sheet is kept in the home file, like Allow, and survives other writes."""
+    _iso(tmp_path, monkeypatch)
+
+    async def run() -> None:
+        put = await profiles.api_global_put(Req({"media": {"mic": True, "cam": False, "micOff": True}}))
+        assert put.status == 200
+        assert json.loads(put.body)["media"] == {"mic": True, "micOff": True}
+        other = await profiles.api_global_put(Req({"ai": {"backend": "ollama", "model": "gemma4"}}))
+        assert json.loads(other.body)["media"] == {"mic": True, "micOff": True}
+        disk = yaml.safe_load(profiles.FILE.read_text(encoding="utf-8"))
+        assert disk["global"]["media"]["micOff"] is True
+        back_on = await profiles.api_global_put(Req({"media": {"mic": True, "cam": False, "micOff": False}}))
+        assert json.loads(back_on.body)["media"] == {"mic": True}
+        junk = await profiles.api_global_put(Req({"media": {"micOff": "yes"}}))
+        assert json.loads(junk.body)["media"] == {}
+
+    asyncio.run(run())

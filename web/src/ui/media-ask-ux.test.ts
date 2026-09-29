@@ -62,7 +62,7 @@ describe("media ask UX", () => {
     await waitForDialog();
   });
 
-    it("reopens the mic ask after Settings setMicPolicy auto and a reload", async () => {
+    it("keeps Not now when Settings re-applies the same auto policy (profile restore) and reloads", async () => {
     expect.hasAssertions();
     mockCapture(vi.fn(async () => ({ getTracks: () => [] })));
     const pending = askUserMedia({ audio: true, video: false }, "watchword listening");
@@ -71,6 +71,25 @@ describe("media ask UX", () => {
     await expect(pending).resolves.toBeNull();
 
     const settings = new Settings({ storePrefix: "zoto-viz-media-ask-ux", onChange: () => {} });
+    settings.setMicPolicy("auto");
+    expect(sessionStorage.getItem("zoto-viz.mediaDismiss")).toBe('{"mic":true}');
+
+    const reloaded = await reloadMediaAsk();
+    mockCapture(vi.fn(async () => ({ getTracks: () => [] })));
+    await expect(reloaded.askUserMedia({ audio: true, video: false }, "pulse microphone")).resolves.toBeNull();
+    expect(document.querySelector("[data-media-ask]")).toBeNull();
+  });
+
+    it("reopens the mic ask after the user turns the mic off and on again", async () => {
+    expect.hasAssertions();
+    mockCapture(vi.fn(async () => ({ getTracks: () => [] })));
+    const pending = askUserMedia({ audio: true, video: false }, "watchword listening");
+    await waitForDialog();
+    document.querySelector<HTMLButtonElement>("[data-media-ask] .btn:not(.primary)")!.click();
+    await expect(pending).resolves.toBeNull();
+
+    const settings = new Settings({ storePrefix: "zoto-viz-media-ask-ux", onChange: () => {} });
+    settings.setMicPolicy("off");
     settings.setMicPolicy("auto");
 
     const reloaded = await reloadMediaAsk();

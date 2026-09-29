@@ -78,6 +78,9 @@ def _normalize_media(raw: Any) -> dict[str, Any]:
         out["mic"] = True
     if raw.get("cam") is True:
         out["cam"] = True
+    # Not now on the mic sheet (or the header mic toggle Off), kept for every browser.
+    if raw.get("micOff") is True:
+        out["micOff"] = True
     return out
 
 

@@ -21,6 +21,7 @@ import { ChatPanel } from "../ui/chat";
 import { DebugLog, readDebugOn } from "../ui/debug-log";
 import { liveCam } from "../camera/livecam";
 import { liveMic } from "../audio/want";
+import { setMediaDeclineSink } from "../ui/media-ask";
 import { liveSound } from "../audio/sound";
 import { PluginSfx, setBackroomsSampleRev } from "../audio/plugin-sfx";
 import { backroomsSlots } from "../../../plugins/src/backrooms/frontend/director";
@@ -2229,11 +2230,17 @@ const micToggle = new Toggle({
 });
 settings.onMicPolicy = (p) => {
   micToggle.checked = p === "auto";
+  profiles?.saveMicOff(p === "off");
   scene.syncPulse();
   if (p === "off") agent.releaseMic();
   else agent.armWake();
 };
 $("micBox").appendChild(micToggle.el);
+// Not now on the allow sheet turns the mic Off, so the toggle shows the real state and the
+// choice survives reloads like any other Off. Turning the toggle back on is how to undo it.
+setMediaDeclineSink((kinds) => {
+  if (kinds.includes("mic")) settings.setMicPolicy("off");
+});
 const soundToggle = new Toggle({
   id: "sound",
   label: "sound",
@@ -2481,6 +2488,8 @@ profiles = new ProfileStore(
   profileBar,
   profileTools,
 );
+// A mic declined in another browser or session starts Off here too, with no sheet.
+profiles.onHomeMicOff = () => settings.setMicPolicy("off");
 settings.prependSection(
   "Theme",
   "Colour theme. A plugin look can pin this; the chips on This view explain why.",
@@ -2823,7 +2832,9 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   }
   refreshViewMenus();
   if (s.camera) settings.setCamPolicy(s.camera);
-  if (s.mic) settings.setMicPolicy(s.mic);
+  // The mic decision is global (header toggle, Allow / Not now), not per profile. Every profile
+  // carries mic: "auto" by default, so restoring it here switched a declined mic back on and
+  // brought the allow sheet back on each profile or view load.
   settings.setSoundOn(!!s.sound);
   applyHostRenderScaleGovernor(s.vizGovernor === true, renderScaleGovernorHost);
   vizGovernorToggle.checked = s.vizGovernor === true;

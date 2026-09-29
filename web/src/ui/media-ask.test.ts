@@ -110,17 +110,15 @@ describe("askUserMedia", () => {
     expect(getUserMedia).toHaveBeenCalledTimes(2);
   });
 
-  it("does not auto-open the mic when mediaAccept is set but permission is still prompt", async () => {
+  it("opens the mic without the in-page sheet when mediaAccept is set and permission is still prompt", async () => {
+    // Allow is asked once. After that the browser's own prompt (if it forgot) is the only ask.
     localStorage.setItem("zoto-viz.mediaAccept", JSON.stringify({ mic: true, cam: false }));
-    const getUserMedia = vi.fn(async () => fakeStream());
+    const stream = fakeStream();
+    const getUserMedia = vi.fn(async () => stream);
     mockCapture(getUserMedia);
-    const pending = askUserMedia({ audio: true, video: false }, "pulse microphone");
-    await vi.waitFor(() => {
-      expect(document.querySelector("[data-media-ask]")).toBeTruthy();
-    });
-    expect(getUserMedia).not.toHaveBeenCalled();
-    [...document.querySelectorAll("button")].find((b) => b.textContent === "Not now")!.click();
-    await expect(pending).resolves.toBeNull();
+    await expect(askUserMedia({ audio: true, video: false }, "pulse microphone")).resolves.toBe(stream);
+    expect(getUserMedia).toHaveBeenCalledTimes(1);
+    expect(document.querySelector("[data-media-ask]")).toBeNull();
     localStorage.removeItem("zoto-viz.mediaAccept");
   });
 
