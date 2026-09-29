@@ -42,13 +42,14 @@ class PackAssets4xxLogTests(AioHTTPTestCase):
         assert "dead-frame-token-xyz" not in log
         assert access.SANDBOX_TOKEN_REDACT in log
 
-    async def test_unconsented_pack_logs_403_forbidden_origin_without_token(self) -> None:
+    async def test_unconsented_pack_logs_403_consent_required_without_token(self) -> None:
         with patch.object(plugins, "_plugin_row", lambda pid: {"id": pid, "has_frontend": True}):
-            with patch.object(plugins, "consented", lambda _doc: False):
+            with patch.object(plugins, "consented", lambda _doc: False), \
+                    patch.object(plugins, "consent_state", lambda _doc: "none"):
                 url = pack_url("koi-pond", "module.js")
                 status, log = await self._get(url)
         assert status == 403
-        assert "-> 403 error=forbidden origin" in log
+        assert "-> 403 error=consent required" in log
         token = url.split("/pack-assets/", 1)[1].split("/", 1)[0]
         assert token not in log
 
