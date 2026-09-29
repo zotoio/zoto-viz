@@ -198,8 +198,7 @@ export function requestConsent(
 
 /** Pane / header wording for a pack that is waiting on the operator's OK. */
 export function consentWaitMessage(name: string, state: ConsentState): string {
-  if (state === "changed") return `${name} has changed since you approved it.`;
-  if (state === "stale") return `${name} needs a fresh OK after an update.`;
+  if (state === "changed" || state === "stale") return `${name} needs your OK again.`;
   return `${name} needs your OK to run.`;
 }
 

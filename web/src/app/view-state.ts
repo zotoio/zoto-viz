@@ -12,11 +12,16 @@ import { paintPackAssetPaneNotice } from "../plugins/pack-asset-pane-notice";
 import { packSkyTimedOut } from "../plugins/plugin-copy";
 import type { ConsentState } from "./consent-store";
 
-/** Why a view waits on the operator. */
-export type NeedsYouReason = "consent" | "consent-changed" | "consent-stale";
+/**
+ * Why a view waits on the operator: never approved (`consent`), or an earlier OK went stale —
+ * the pack's content no longer matches it (`changed`), or the record predates a hash the pack
+ * now has, such as assets_sha256 (`incomplete`). Both stale reasons read the same to the
+ * operator ("needs your OK again"); the word "changed" is never shown.
+ */
+export type NeedsYouReason = "consent" | "changed" | "incomplete";
 
-/** Why a view could not start. */
-export type CouldntStartReason = "timeout" | "load-failed" | "grant-failed";
+/** Why a view could not start. `missing`: a saved layout names a view that is not installed. */
+export type CouldntStartReason = "timeout" | "load-failed" | "grant-failed" | "missing";
 
 export type ViewState =
   | { kind: "starting" }
@@ -39,10 +44,9 @@ function needsYouText(name: string, reason: NeedsYouReason): string {
   switch (reason) {
     case "consent":
       return `${name} needs your OK to run.`;
-    case "consent-changed":
-      return `${name} has changed since you approved it.`;
-    case "consent-stale":
-      return `${name} needs a fresh OK after an update.`;
+    case "changed":
+    case "incomplete":
+      return `${name} needs your OK again.`;
     default:
       return assertNever(reason);
   }
@@ -55,6 +59,8 @@ function couldntStartText(name: string, reason: CouldntStartReason): string {
     case "load-failed":
     case "grant-failed":
       return `${name} couldn't start.`;
+    case "missing":
+      return `${name} isn't installed. Pick another view for this tile.`;
     default:
       return assertNever(reason);
   }
@@ -71,6 +77,8 @@ export function viewStateCopy(state: ViewState, viewName: string): ViewStateCopy
     case "needs-you":
       return { text: needsYouText(name, state.reason), action: "review", button: "Review" };
     case "couldnt-start":
+      // Retry cannot bring back a view that is not installed: the notice has no button then.
+      if (state.reason === "missing") return { text: couldntStartText(name, state.reason), action: null, button: null };
       return { text: couldntStartText(name, state.reason), action: "retry", button: "Retry" };
     default:
       return assertNever(state);
@@ -101,9 +109,9 @@ export function viewStateAttr(state: ViewState): ViewStateKind {
 export function needsYouReasonFor(state: ConsentState): NeedsYouReason {
   switch (state) {
     case "changed":
-      return "consent-changed";
+      return "changed";
     case "stale":
-      return "consent-stale";
+      return "incomplete";
     case "none":
     case "granted":
       return "consent";

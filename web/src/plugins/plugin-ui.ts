@@ -667,8 +667,8 @@ export function renderPackReview(
     const p0 = document.createElement("p");
     p0.textContent =
       opts.state === "changed"
-        ? "Its code, shader or assets differ from what you approved, so it stays off until you OK this version."
-        : "It now ships content (such as meshes or textures) that your earlier OK did not cover, so it stays off until you OK this version.";
+        ? "This version is not the one you approved, so it stays off until you OK it again."
+        : "Your earlier OK did not cover everything it ships now (such as meshes or textures), so it stays off until you OK it again.";
     body.append(p0);
   }
   const p1 = document.createElement("p");

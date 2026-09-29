@@ -514,6 +514,21 @@ def consent_state(doc: dict[str, Any]) -> ConsentState:
     return "stale" if missing else "granted"
 
 
+_STALE_REASON = {"changed": "changed", "stale": "incomplete"}
+
+
+def consent_stale_reason(doc: dict[str, Any]) -> str | None:
+    """Why an earlier OK no longer covers ``doc``, for the Needs you notice; None otherwise.
+
+    - ``changed``: the pack's content (stamp or a hash the record holds, e.g. assets_sha256)
+      no longer matches the record (:func:`consent_state` ``changed``).
+    - ``incomplete``: the record matches what it holds but lacks a hash the pack now has, e.g.
+      no assets_sha256 because it predates the key (:func:`consent_state` ``stale``). Option (a):
+      never auto-consented (:func:`maybe_autoconsent`); the operator reviews it again.
+    """
+    return _STALE_REASON.get(consent_state(doc))
+
+
 def consent_kind(doc: dict[str, Any]) -> str | None:
     """Label only: which kind of grant covers ``doc`` (``reviewed``/``authored``), else None.
 
@@ -545,10 +560,19 @@ def autoconsent_kind(doc: dict[str, Any]) -> str:
 
 
 def maybe_autoconsent(doc: dict[str, Any]) -> bool:
-    """Grant consent for eligible catalog rows when auto-consent is on. Returns True when granted."""
+    """Grant consent for eligible catalog rows when auto-consent is on. Returns True when granted.
+
+    Option (a), the default: a record that is incomplete (it lacks a hash the pack now has, such
+    as assets_sha256) is never auto-consented, even with auto-consent on. It stays ``stale`` with
+    reason ``incomplete`` until the operator reviews it. A new pack (``none``) and a complete
+    record whose content moved on (``changed``) are auto-consented as before.
+    """
     if not needs_review(doc) or not autoconsent_enabled() or not autoconsent_eligible(doc):
         return False
-    if consent_state(doc) == "granted":
+    state = consent_state(doc)
+    if state == "granted":
+        return False
+    if state == "stale":
         return False
     grant_consent(doc, autoconsent_kind(doc))
     return True
@@ -1742,7 +1766,12 @@ def _catalog_row(
     kind = consent_kind(merged) if allowed else None
     sky = psky.catalog(merged, home, allowed=allowed)
     row = _attach_visualisation(
-        {**merged, "consent": kind, "consent_state": state, **sky}, home, errors, rel, blocked,
+        {
+            **merged, "consent": kind, "consent_state": state,
+            **({"consent_reason": _STALE_REASON[state]} if state in _STALE_REASON else {}),
+            **sky,
+        },
+        home, errors, rel, blocked,
     )
     if row is None:
         return None

@@ -22,11 +22,12 @@ describe("viewStateCopy: one switch, plain words, at most one button", () => {
     [{ kind: "starting" }, "Backrooms · Starting…", null],
     [{ kind: "ready" }, "", null],
     [{ kind: "needs-you", reason: "consent", packId: "backrooms" }, "Backrooms needs your OK to run.", "Review"],
-    [{ kind: "needs-you", reason: "consent-changed", packId: "backrooms" }, "Backrooms has changed since you approved it.", "Review"],
-    [{ kind: "needs-you", reason: "consent-stale", packId: "backrooms" }, "Backrooms needs a fresh OK after an update.", "Review"],
+    [{ kind: "needs-you", reason: "changed", packId: "backrooms" }, "Backrooms needs your OK again.", "Review"],
+    [{ kind: "needs-you", reason: "incomplete", packId: "backrooms" }, "Backrooms needs your OK again.", "Review"],
     [{ kind: "couldnt-start", reason: "timeout", packId: "backrooms" }, "Backrooms couldn't start.", "Retry"],
     [{ kind: "couldnt-start", reason: "load-failed", packId: "backrooms", log: "403" }, "Backrooms couldn't start.", "Retry"],
     [{ kind: "couldnt-start", reason: "grant-failed", packId: "backrooms" }, "Backrooms couldn't start.", "Retry"],
+    [{ kind: "couldnt-start", reason: "missing", packId: "backrooms" }, "Backrooms isn't installed. Pick another view for this tile.", null],
   ];
   for (const [state, text, button] of rows) {
     it(`${state.kind}${"reason" in state ? `/${state.reason}` : ""}`, () => {
@@ -46,8 +47,8 @@ describe("viewStateCopy: one switch, plain words, at most one button", () => {
     expect(viewStatePickerSuffix({ kind: "ready" })).toBeNull();
     expect(viewStatePickerSuffix({ kind: "starting" })).toBeNull();
     expect(needsYouReasonFor("none")).toBe("consent");
-    expect(needsYouReasonFor("changed")).toBe("consent-changed");
-    expect(needsYouReasonFor("stale")).toBe("consent-stale");
+    expect(needsYouReasonFor("changed")).toBe("changed");
+    expect(needsYouReasonFor("stale")).toBe("incomplete");
   });
 });
 

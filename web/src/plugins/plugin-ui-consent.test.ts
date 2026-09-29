@@ -41,9 +41,12 @@ describe("renderPackReview (Needs you → Review, inline, never a modal)", () =>
   it("changed / stale wording says why the earlier OK does not cover it", () => {
     const notice = document.createElement("div");
     renderPackReview(notice, spec, { state: "changed", onChoice: () => {} });
-    expect(notice.textContent).toMatch(/differ from what you approved/);
+    expect(notice.textContent).toMatch(/not the one you approved/);
     const stale = document.createElement("div");
     renderPackReview(stale, spec, { state: "stale", onChoice: () => {} });
     expect(stale.textContent).toMatch(/earlier OK did not cover/);
+    // Stage 2: user-facing consent copy never says "changed" for either stale reason.
+    expect(notice.textContent).not.toMatch(/changed/i);
+    expect(stale.textContent).not.toMatch(/changed/i);
   });
 });

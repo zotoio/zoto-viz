@@ -223,19 +223,25 @@ def test_autoconsent_server_path_records_assets_hash(writes: list[dict[str, Any]
         assert _row(pid)["consent_state"] == "granted", pid
 
 
-def test_autoconsent_repairs_pre_key_records(writes: list[dict[str, Any]]) -> None:
+def test_autoconsent_leaves_pre_key_records_incomplete(writes: list[dict[str, Any]]) -> None:
+    """Option (a), the default: auto-consent never repairs an incomplete record (no assets_sha256).
+
+    It stays ``stale`` with reason ``incomplete`` (Needs you: "needs your OK again") until the
+    operator reviews it; the review path then records the hash (``test_regrant_after_stale``).
+    """
     for pid in ZOTO_PRE_KEY:
         _save_pre_key_record(pid)
-    prior = writes[-1]
     writes.clear()
     live.set_autoconsent(True)
     for pid in ZOTO_PRE_KEY:
         row = _row(pid)
         assert row["consent_state"] == "stale", pid
-        assert plugins.maybe_autoconsent(row) is True, pid
-    _assert_every_write_has_assets_hash(writes, prior)
+        assert row["consent_reason"] == "incomplete", pid
+        assert plugins.maybe_autoconsent(row) is False, pid
+    assert writes == []
     for pid in ZOTO_PRE_KEY:
-        assert _row(pid)["consent_state"] == "granted", pid
+        assert _row(pid)["consent_state"] == "stale", pid
+        assert "assets_sha256" not in (_record(pid) or {}), pid
 
 
 class AutoconsentClientPathTests(AioHTTPTestCase):
