@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import {
   ARCADE_ENGINES, GRAPH_BASES, BT_MAX_NODES, BT_MAX_NODES_CEILING, allModes, arcadeSlotFor, bluetooth, capBluetoothDevices, categorize, CPU_RED, cpuHeat, cpuThermalHeat, defaultCatalogMode, defaultOpts, graphModes, hashColor, heat,
-  droneFormationPoint, droneShow, droneShowLive, layersInternetLive, modeById, nasaStillView, orgOf, paneLabelCap, parseWatchList, pluginMenuRows, setPluginModes, sources, topology, viewCaption, viewSource, wifi,
+  droneFormationPoint, droneShow, droneShowLive, layersInternetLive, modeById, nasaStillView, orgOf, paneLabelCap, parseWatchList, pluginMenuRows, services, setPluginModes, sources, topology, viewCaption, viewSource, wifi,
   memory, disk, gpu, sockets, cgroups, units, udev, bridge,
 } from "./modes";
 import type { Device } from "./types";
@@ -239,5 +239,47 @@ describe("modes", () => {
     memory.force?.([hub, proc] as never, 1, ctx as never);
     expect(proc.vy).toBeLessThan(0);
     expect(Math.hypot(proc.vx, proc.vz)).toBeGreaterThan(0);
+  });
+});
+
+describe("orgOf / services organisations (#181)", () => {
+  const dev = (ip: string, names: string[], extra: Partial<Device> = {}) =>
+    ({ ip, names, hostnames: [], role: "internet", bytes_in: 1000, bytes_out: 500, ...extra }) as unknown as Device;
+
+  it("a useful one-word name (no dot) is its own organisation", () => {
+    expect(orgOf(dev("1.1.1.1", ["cloudflare"]))).toBe("cloudflare");
+    expect(orgOf(dev("104.16.0.1", ["cdn"]))).toBe("cdn");
+    expect(orgOf(dev("10.0.0.51", ["Phone"], { role: "lan" }))).toBe("phone");
+    expect(orgOf(dev("8.8.8.8", ["dns.google"]))).toBe("dns.google"); // dotted names are unchanged
+  });
+
+  it(".local names and names that fail usefulName still fall through to \"unnamed a.b.x.x\"", () => {
+    expect(orgOf(dev("10.0.0.9", ["printer.local"], { role: "lan" }))).toBe("unnamed 10.0.x.x");
+    expect(orgOf(dev("203.0.113.9", ["203.0.113.9"]))).toBe("unnamed 203.0.x.x");
+    expect(orgOf(dev("203.0.113.9", ["9.113.0.203.in-addr.arpa"]))).toBe("unnamed 203.0.x.x");
+    expect(orgOf(dev("203.0.113.9", ["*"]))).toBe("unnamed 203.0.x.x");
+    expect(orgOf(dev("203.0.113.9", ["_http._tcp.local"]))).toBe("unnamed 203.0.x.x");
+    expect(orgOf(dev("203.0.113.9", []))).toBe("unnamed 203.0.x.x");
+    expect(orgOf(dev("203.0.113.9", ["unnamed"]))).toBe("unnamed 203.0.x.x");
+    expect(orgOf(dev("2001:db8::1", []))).toBe("unnamed IPv6");
+  });
+
+  it("pool=pool: lone singletons \"cloudflare\" and \"cdn\" stay their own groups (not folded into \"other\"); a lone unnamed singleton still pools", () => {
+    const node = (d: Device) => ({ id: d.ip, device: d, visible: true, rate: 0, x: 10, y: 0, z: 10, vx: 0, vy: 0, vz: 0 });
+    const nodes = [
+      node(dev("1.1.1.1", ["cloudflare"])),
+      node(dev("104.16.0.1", ["cdn"])),
+      node(dev("203.0.113.9", [])),
+      node(dev("142.250.1.1", ["www.google.com"])),
+      node(dev("142.250.1.2", ["api.google.com"])),
+    ];
+    const groups = (pool: string) => {
+      const ctx = { nodes: new Map(nodes.map((n) => [n.id, n])), links: new Map(), opts: { pool, sort: "name" }, now: 0, spreadX: 1, spreadZ: 1, labelCount: 10 };
+      services.prepare?.(ctx as never);
+      const out = services.overlays?.(ctx as never) ?? [];
+      return Object.fromEntries(out.map((o) => [o.id, Number(/(\d+) host/.exec(o.html ?? "")?.[1])]));
+    };
+    expect(groups("pool")).toEqual({ cloudflare: 1, cdn: 1, "google.com": 2, other: 1 });
+    expect(groups("keep")).toEqual({ cloudflare: 1, cdn: 1, "google.com": 2, "unnamed 203.0.x.x": 1 });
   });
 });
