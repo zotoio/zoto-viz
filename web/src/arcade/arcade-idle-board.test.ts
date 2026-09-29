@@ -62,6 +62,13 @@ function cleanHomeState(): StateMsg {
   return { ...g, local_ip: self.ip, gateway: gw.ip, devices: [self, gw], flows: [] };
 }
 
+/** An off-fixture internet host that live traffic talks to (TEST-NET-1). */
+const OFF_HOST = "192.0.2.7";
+function cleanHomeWithOffHost(): StateMsg {
+  const m = cleanHomeState();
+  return { ...m, devices: [...m.devices, { ...m.devices[0], ip: OFF_HOST, role: "internet", names: ["off.example.net"] }] };
+}
+
 const protoOf = (engine: Engine): Proto =>
   (engine === "frogger" ? FroggerView.prototype : engine === "invaders" ? InvadersView.prototype : PongView.prototype) as unknown as Proto;
 
@@ -79,7 +86,17 @@ function entities(engine: Engine, view: unknown): number {
   return v.rows!.size;
 }
 
-/** Every host the board holds as an entity (not the view's own single-device pick). */
+/** The view's own single-device pick: the one host the board may show besides the demo list (none for a group). */
+function pickedOf(engine: Engine, view: unknown): string[] {
+  if (engine === "netpong") { const v = view as { srcIsGroup: boolean; srcIp: string }; return v.srcIsGroup ? [] : [v.srcIp]; }
+  const v = view as { picker: { isGroup: boolean; ip(): string } };
+  return v.picker.isGroup ? [] : [v.picker.ip()];
+}
+/** Allowed hosts on a demo board: IDLE_VIZ_DEMO_HOSTS plus the picked device, and nothing else. */
+const allowedFor = (engine: Engine, view: unknown) => new Set([...(IDLE_VIZ_DEMO_HOSTS ?? []).map((h) => h.ip), ...pickedOf(engine, view)]);
+const PICK_KEY: Record<Engine, string> = { frogger: "zoto-viz.frogger.devices", invaders: "zoto-viz.invaders.cannons", netpong: "zoto-viz.pong.source" };
+
+/** Every host the board holds as an entity (the view's own pick included where the engine draws it). */
 function boardHosts(engine: Engine, view: unknown): string[] {
   if (engine === "frogger") {
     const v = view as { cols: Map<string, unknown>; frogs: { dev: string; peer: string }[] };
@@ -90,7 +107,7 @@ function boardHosts(engine: Engine, view: unknown): string[] {
     return [...v.cannons.keys(), ...[...v.rows.values()].flatMap((r) => [...r.aliens.keys()])];
   }
   const v = view as { sources: { rows: Map<string, unknown> }; lanes: { rows: Map<string, { host: string; owner: string }> } };
-  return [...v.sources.rows.keys(), ...[...v.lanes.rows.values()].filter((l) => l.owner !== "source").map((l) => l.host)];
+  return [...v.sources.rows.keys(), ...[...v.lanes.rows.values()].map((l) => l.host)];
 }
 
 type FetchMode = "empty" | "live" | "hold";
@@ -101,13 +118,14 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
   let mode: FetchMode = "empty";
   let held: ((r: Response) => void)[] = [];
   let liveSeq = 0;
+  let livePeer = "93.184.216.34";
 
   const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
   /** one real packet per poll, newer each time (a device on the LAN talking to a web host) */
   const liveBody = (ip: string) => {
     liveSeq++;
     const t = Date.now() / 1000;
-    const p: Packet = [t, "out", "93.184.216.34", "TCP", "tcp/443", 74, "eth0", "[SYN] Seq=0", `${50000 + liveSeq}→443`, "192.168.1.50"];
+    const p: Packet = [t, "out", livePeer, "TCP", "tcp/443", 74, "eth0", "[SYN] Seq=0", `${50000 + liveSeq}→443`, "192.168.1.50"];
     return { ip, peer: null, ts: t, packets: [p], window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] } };
   };
 
@@ -117,7 +135,7 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
     rec = recordingCtx();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(rec.ctx as never);
-    fetches = 0; mode = "empty"; held = []; liveSeq = 0;
+    fetches = 0; mode = "empty"; held = []; liveSeq = 0; livePeer = "93.184.216.34";
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       fetches++;
       const ip = new URL(url, "http://x").searchParams.get("ip") ?? "";
@@ -134,7 +152,8 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
   });
 
   function mount(engine: Engine, msg: StateMsg = goldenLanFixture()) {
-    const ingest = vi.spyOn(protoOf(engine), "ingest");
+    const proto = protoOf(engine);
+    const ingest = vi.isMockFunction(proto.ingest) ? (proto.ingest as unknown as ReturnType<typeof vi.spyOn>) : vi.spyOn(proto, "ingest");
     const el = document.createElement("div");
     el.className = "arcade";
     Object.defineProperty(el, "clientWidth", { configurable: true, value: 960 });
@@ -148,10 +167,11 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
     const demoCalls = () => ingest.mock.calls.filter((c) => isDemo(rowsOf(engine, c))).length;
     const allRows = () => ingest.mock.calls.flatMap((c) => rowsOf(engine, c));
     const label = () => el.querySelector<HTMLElement>(`.${DEMO_LABEL_CLASS}`);
-    const labelShown = () => { const l = label(); return !!l && l.classList.contains("is-visible") && l.textContent === DEMO_DATA_LABEL; };
+    const badge = () => label()?.textContent ?? "";
+    const labelShown = () => { const l = label(); return !!l && l.classList.contains("is-visible") && (badge() === DEMO_DATA_LABEL || badge().startsWith("Demo traffic around ")); };
     /** advance exactly one poll interval (one /api/traffic fetch) */
     const poll = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "one poll per interval").toBe(f + 1); };
-    return { el, view, ingest, demoCalls, allRows, labelShown, poll };
+    return { el, view, ingest, demoCalls, allRows, labelShown, badge, poll };
   }
 
   async function runEngine(engine: Engine) {
@@ -265,12 +285,68 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       const { view, allRows, demoCalls } = mount(engine, cleanHomeState());
       for (let s = 0; s < 6; s++) await vi.advanceTimersByTimeAsync(1000);
       const list = new Set((IDLE_VIZ_DEMO_HOSTS ?? []).map((h) => h.ip));
+      const allowed = allowedFor(engine, view); // the demo list plus the picked device (netpong's default pick: the gateway)
       const rowHosts = allRows().flatMap((p) => [p[2], p[9]].filter((x): x is string => !!x));
       const onBoard = boardHosts(engine, view);
       expect(demoCalls(), "the feed ran").toBeGreaterThan(0);
       expect(onBoard.length, "hosts on the board").toBeGreaterThan(0);
-      expect([...new Set(rowHosts)].filter((h) => !list.has(h)), "row hosts off the demo list").toEqual([]);
-      expect([...new Set(onBoard)].filter((h) => !list.has(h)), "board hosts off the demo list").toEqual([]);
+      expect(allowed.size - list.size, "exceptions besides the demo list (the pick only)").toBeLessThanOrEqual(1);
+      expect([...new Set(rowHosts)].filter((h) => !list.has(h)), "row hosts off the demo list (rows never carry the pick)").toEqual([]);
+      expect([...new Set(onBoard)].filter((h) => !allowed.has(h)), "board hosts off the demo list + pick").toEqual([]);
+    });
+
+    it(`${engine}: resume — after live traffic from ${OFF_HOST} and 3 empty polls, every board host is in IDLE_VIZ_DEMO_HOSTS (+ the pick)`, async () => {
+      livePeer = OFF_HOST;
+      const { view, poll, labelShown } = mount(engine, cleanHomeWithOffHost());
+      await poll();
+      mode = "live";
+      await poll();
+      expect(boardHosts(engine, view), "the live host is on the board").toContain(OFF_HOST);
+      mode = "empty";
+      await poll(); await poll(); await poll();
+      expect(labelShown(), "demo back on the 3rd empty poll").toBe(true);
+      const allowed = allowedFor(engine, view);
+      expect([...new Set(boardHosts(engine, view))].filter((h) => !allowed.has(h)), "board hosts off the demo list + pick under the demo label").toEqual([]);
+    });
+
+    it(`${engine}: restart — a view restarted with no live cursor shows the demo on its first empty poll (no "waiting for packets…")`, async () => {
+      const { view, poll, demoCalls, labelShown } = mount(engine, cleanHomeState());
+      await poll();
+      mode = "live";
+      await poll(); // the feed is off now
+      view.stop();
+      mode = "empty";
+      // a new pick while stopped starts the board over: the live cursor is 0 again
+      const v = view as unknown as { picker?: { set(x: string): void }; chooseSource?: (x: string) => void };
+      if (v.picker) v.picker.set("self"); else v.chooseSource!("self");
+      const d0 = demoCalls();
+      rec.texts.length = 0;
+      view.start(null);
+      await vi.advanceTimersByTimeAsync(500); // the poll at start, and some frames; no interval poll yet
+      expect(demoCalls() - d0, "feed calls on the first empty poll after restart").toBe(1);
+      expect(labelShown(), "label after the first empty poll").toBe(true);
+      expect(rec.texts.filter((t) => t === WAIT_TEXT).length, `"${WAIT_TEXT}" draws after restart`).toBe(0);
+    });
+
+    it(`${engine}: picked device — board hosts are the demo list + the pick only; badge "Demo traffic around <name>"; a group reads exactly "Demo data"`, async () => {
+      if (engine === "netpong") localStorage.setItem(PICK_KEY.netpong, "any");
+      const group = mount(engine, cleanHomeState());
+      await group.poll(); await group.poll();
+      expect(pickedOf(engine, group.view), "group pick").toEqual([]);
+      expect(group.labelShown(), "group badge shown").toBe(true);
+      expect(group.badge(), "group badge text").toBe(DEMO_DATA_LABEL);
+      group.view.stop();
+
+      localStorage.setItem(PICK_KEY[engine], "self");
+      const one = mount(engine, cleanHomeState());
+      await one.poll(); await one.poll(); await one.poll();
+      expect(pickedOf(engine, one.view), "single pick").toEqual(["192.168.1.50"]);
+      expect(one.labelShown(), "single-device badge shown").toBe(true);
+      expect(one.badge(), "single-device badge text").toBe("Demo traffic around box");
+      const allowed = allowedFor(engine, one.view);
+      const onBoard = boardHosts(engine, one.view);
+      expect(onBoard.length, "hosts on the board").toBeGreaterThan(0);
+      expect([...new Set(onBoard)].filter((h) => !allowed.has(h)), "board hosts off the demo list + pick").toEqual([]);
     });
   }
 });
