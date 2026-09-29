@@ -62,6 +62,13 @@ function cleanHomeState(): StateMsg {
   return { ...g, local_ip: self.ip, gateway: gw.ip, devices: [self, gw], flows: [] };
 }
 
+/** A LAN device with no name at all (no DNS, mDNS or hostname). */
+const NAMELESS_IP = "192.168.1.77";
+function cleanHomeWithNameless(): StateMsg {
+  const m = cleanHomeState();
+  return { ...m, devices: [...m.devices, { ...m.devices[0], ip: NAMELESS_IP, role: "lan", online: true, names: [], hostnames: [], mdns_name: undefined, aliases: [] }] };
+}
+
 /** An off-fixture internet host that live traffic talks to (TEST-NET-1). */
 const OFF_HOST = "192.0.2.7";
 function cleanHomeWithOffHost(): StateMsg {
@@ -328,25 +335,40 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       expect(rec.texts.filter((t) => t === WAIT_TEXT).length, `"${WAIT_TEXT}" draws after restart`).toBe(0);
     });
 
-    it(`${engine}: picked device — board hosts are the demo list + the pick only; badge "Demo traffic around <name>"; a group reads exactly "Demo data"`, async () => {
-      if (engine === "netpong") localStorage.setItem(PICK_KEY.netpong, "any");
-      const group = mount(engine, cleanHomeState());
-      await group.poll(); await group.poll();
-      expect(pickedOf(engine, group.view), "group pick").toEqual([]);
-      expect(group.labelShown(), "group badge shown").toBe(true);
-      expect(group.badge(), "group badge text").toBe(DEMO_DATA_LABEL);
+    it(`${engine}: badge — only an explicit pick changes it ("Demo traffic around <name>", or "…the selected device" with no name, never an address); no explicit pick${engine === "netpong" ? " (the default gateway source)" : ""} reads exactly "Demo data"`, async () => {
+      const ADDRESS = /\b\d{1,3}(?:\.\d{1,3}){3}\b|[0-9a-f]{0,4}:[0-9a-f]{0,4}:[0-9a-f:]*/i;
+      const run = async (stored: string | null, msg: StateMsg) => {
+        localStorage.clear();
+        if (stored !== null) localStorage.setItem(PICK_KEY[engine], stored);
+        const v = mount(engine, msg);
+        await v.poll(); await v.poll(); await v.poll();
+        expect(v.labelShown(), `badge shown (stored pick ${stored})`).toBe(true);
+        const allowed = allowedFor(engine, v.view);
+        const onBoard = boardHosts(engine, v.view);
+        expect(onBoard.length, "hosts on the board").toBeGreaterThan(0);
+        expect([...new Set(onBoard)].filter((h) => !allowed.has(h)), "board hosts off the demo list + pick").toEqual([]);
+        return v;
+      };
+
+      const def = await run(null, cleanHomeState());
+      expect(pickedOf(engine, def.view), "default pick").toEqual(engine === "netpong" ? ["192.168.1.1"] : []);
+      expect(def.badge(), "no explicit pick").toBe(DEMO_DATA_LABEL);
+      def.view.stop();
+
+      const group = await run(engine === "netpong" ? "any" : "lan", cleanHomeState());
+      expect(pickedOf(engine, group.view), "explicit group pick").toEqual([]);
+      expect(group.badge(), "explicit group pick").toBe(DEMO_DATA_LABEL);
       group.view.stop();
 
-      localStorage.setItem(PICK_KEY[engine], "self");
-      const one = mount(engine, cleanHomeState());
-      await one.poll(); await one.poll(); await one.poll();
-      expect(pickedOf(engine, one.view), "single pick").toEqual(["192.168.1.50"]);
-      expect(one.labelShown(), "single-device badge shown").toBe(true);
-      expect(one.badge(), "single-device badge text").toBe("Demo traffic around box");
-      const allowed = allowedFor(engine, one.view);
-      const onBoard = boardHosts(engine, one.view);
-      expect(onBoard.length, "hosts on the board").toBeGreaterThan(0);
-      expect([...new Set(onBoard)].filter((h) => !allowed.has(h)), "board hosts off the demo list + pick").toEqual([]);
+      const named = await run("self", cleanHomeState());
+      expect(pickedOf(engine, named.view), "named pick").toEqual(["192.168.1.50"]);
+      expect(named.badge(), "explicit pick with a name").toBe("Demo traffic around box");
+      named.view.stop();
+
+      const nameless = await run(NAMELESS_IP, cleanHomeWithNameless());
+      expect(pickedOf(engine, nameless.view), "nameless pick").toEqual([NAMELESS_IP]);
+      expect(nameless.badge(), "explicit pick with no name").toBe("Demo traffic around the selected device");
+      expect(nameless.badge(), "no address in the badge").not.toMatch(ADDRESS);
     });
   }
 });
