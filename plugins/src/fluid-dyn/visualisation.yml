@@ -1,0 +1,14 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: ice
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1.12
+  skyAudio: false
+  skySpeed: 1
+  gridOpacity: 0
+  mosaic: 'off'

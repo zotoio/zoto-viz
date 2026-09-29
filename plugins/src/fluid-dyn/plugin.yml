@@ -1,0 +1,333 @@
+id: fluid-dyn
+name: Fluid Dynamics
+version: 1
+hint: Stable-fluids tank — ink, smoke, vortex streets, rivers, lava, storms, oil, and shear. Every knob is in This view.
+description: >-
+  Stage-only 2D Navier–Stokes tank (diffusion, projection, semi-Lagrangian advection,
+  vorticity confinement). Characters pick the recipe: where the dye enters, which way
+  buoyancy and wind point, and which obstacle sits in the flow. Sliders left at the
+  middle keep that recipe; moving one scales just that term. Audio stir and traffic
+  stir are off until you turn them on. The grid is solved on the CPU and drawn by the
+  sky. Respects prefers-reduced-motion by slowing the clock and stilling the paddles.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+viz:
+  graphWalk: false
+  presentTick: true
+  maxBuffers: 8
+  maxBufferFloats: 64
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uOpacity
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts
+config:
+  - key: character
+    label: character
+    type: select
+    default: ink
+    section: Flow
+    hint: Recipe for emitters, forces, and the obstacle. Switching clears the tank.
+    values:
+      - - ink
+        - ink drop
+      - - smoke
+        - smoke plume
+      - - vortex
+        - vortex street
+      - - river
+        - river and sluice
+      - - lava
+        - lava
+      - - storm
+        - storm
+      - - oil
+        - oil
+      - - kelvin
+        - shear layer
+  - key: viscosity
+    label: viscosity
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Flow
+    hint: Middle keeps the character. Zero is nearly inviscid; full is thick.
+  - key: diffusion
+    label: dye diffusion
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Flow
+    hint: How fast colour spreads through the grid, apart from being carried.
+  - key: dissipation
+    label: dissipation
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Flow
+    hint: How quickly dye fades. Zero holds the ink.
+  - key: vorticity
+    label: vorticity
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Flow
+    hint: Confinement that keeps swirls from dying out.
+  - key: iterations
+    label: solver iterations
+    type: number
+    default: 8
+    min: 4
+    max: 16
+    step: 1
+    section: Flow
+    hint: Pressure and viscosity passes. Higher is steadier and costs a little more.
+  - key: speed
+    label: speed
+    type: number
+    default: 0.55
+    min: 0
+    max: 1.5
+    step: 0.05
+    section: Flow
+    hint: Clock scale. Zero holds the current field.
+  - key: paused
+    label: paused
+    type: boolean
+    default: false
+    section: Flow
+  - key: clear
+    label: clear
+    type: select
+    default: hold
+    section: Flow
+    values:
+      - - hold
+        - hold
+      - - go
+        - clear
+    hint: Empty the tank once. Set it back to hold before clearing again.
+  - key: gravity
+    label: buoyancy
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Forces
+    hint: Middle keeps the character's rise or fall. Zero turns buoyancy off.
+  - key: wind
+    label: wind
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Forces
+    hint: Scales the character's wind, including the shear-layer counterflow.
+  - key: swirl
+    label: swirl
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Forces
+    hint: Body rotation around the middle of the tank.
+  - key: stirrer
+    label: stirrer
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Forces
+    hint: An orbiting paddle. Stilled when the system asks for reduced motion.
+  - key: emitRate
+    label: emit rate
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Ink
+    hint: How hard the emitters push new dye in. Zero seals them.
+  - key: emitSize
+    label: emit size
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Ink
+  - key: emitters
+    label: emitters
+    type: select
+    default: recipe
+    section: Ink
+    hint: Recipe uses the character's sources. One, two, or three override that count.
+    values:
+      - - recipe
+        - recipe
+      - - one
+        - one
+      - - two
+        - two
+      - - three
+        - three
+  - key: hue
+    label: hue
+    type: number
+    default: 0
+    min: 0
+    max: 1
+    step: 0.02
+    section: Ink
+    hint: Rotates the emitter colours around the wheel.
+  - key: hueSpread
+    label: hue spread
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Ink
+    hint: How far a second and third emitter sit from the first hue.
+  - key: obstacle
+    label: obstacle size
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    section: Obstacle
+    hint: Scales the character's body. Zero removes it. Kind follows the character.
+  - key: shade
+    label: shade
+    type: select
+    default: dye
+    section: Picture
+    values:
+      - - dye
+        - dye
+      - - speed
+        - speed
+      - - vorticity
+        - vorticity
+      - - stream
+        - streamlines
+      - - mix
+        - dye and stream
+  - key: palette
+    label: palette
+    type: select
+    default: ink
+    section: Picture
+    values:
+      - - ink
+        - ink on paper
+      - - ocean
+        - ocean
+      - - magma
+        - magma
+      - - thermal
+        - thermal
+      - - neon
+        - neon
+      - - mono
+        - mono
+  - key: glow
+    label: glow
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.05
+    section: Picture
+  - key: foam
+    label: foam
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.05
+    section: Picture
+    hint: White on the fastest, most spinning dye.
+  - key: streamSteps
+    label: streamline steps
+    type: number
+    default: 8
+    min: 2
+    max: 16
+    step: 1
+    section: Picture
+  - key: detail
+    label: detail
+    type: number
+    default: 0.35
+    min: 0
+    max: 1
+    step: 0.05
+    section: Picture
+    hint: A small warp so the coarse grid does not read as blocks.
+  - key: gamma
+    label: gamma
+    type: number
+    default: 0.85
+    min: 0.35
+    max: 2.2
+    step: 0.05
+    section: Picture
+    hint: Contrast of the dye. Lower lifts faint ink.
+  - key: domain
+    label: domain
+    type: select
+    default: slab
+    section: Picture
+    values:
+      - - slab
+        - flat slab
+      - - tank
+        - glass tank
+  - key: vectors
+    label: vectors
+    type: boolean
+    default: false
+    section: Picture
+    hint: Tick marks along the velocity on the grid.
+  - key: audioMode
+    label: audio
+    type: select
+    default: off
+    section: Drive
+    hint: Off ignores the mic. Stir spins with the level. Kick shoves the tank on a bass rise.
+    values:
+      - - off
+        - off
+      - - stir
+        - stir
+      - - kick
+        - kick
+  - key: trafficStir
+    label: traffic stir
+    type: boolean
+    default: false
+    section: Drive
+    hint: Adds wind from talker rates. Off leaves the tank to the recipe.
