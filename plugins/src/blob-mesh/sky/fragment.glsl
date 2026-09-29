@@ -1,5 +1,10 @@
 void main() {
-  vec3 dir = normalize(vDir);
+  // vDir is the camera-local ray (the host parents plugin skies to the camera),
+  // so the view looks down -z and dir.xz/|dir.y| would sit far outside the blob
+  // field. Tilt the ray by the host camera's default 45 degree pitch so the dome
+  // projection frames the metaballs the way this sky was authored.
+  vec3 cam = normalize(vDir);
+  vec3 dir = normalize(vec3(cam.x, 0.70710678 * (cam.y + cam.z), 0.70710678 * (cam.z - cam.y)));
   vec2 uv = vec2(dir.x, dir.z) / (0.35 + abs(dir.y));
   float field = 0.0;
   vec3 tint = uAccent;

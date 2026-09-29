@@ -133,6 +133,8 @@ Uniform writes reach the active plugin `sky/fragment.glsl` via
 `scene.setPluginUniform`. Buffer writes land in the UBO mirror and are
 uploaded via `scene.setPluginUboBuffer`.
 
+In `sky/fragment.glsl`, `in vec3 vDir` is a camera-relative ray: the host has parented plugin skies to the camera since 2f44932a, so the view looks straight down `-z`. A world-space dome mapping like `dir.xz / (k + abs(dir.y))` will not frame your scene; map the screen plane instead (e.g. `rd.xy / -rd.z`, as `koi-pond` does).
+
 ## Adaptive render scale (`render.scale`)
 
 Optional in `plugin.yml` (schema `$defs/renderScale`). The **host** owns the

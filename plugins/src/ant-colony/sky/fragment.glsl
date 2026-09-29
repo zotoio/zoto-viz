@@ -10,6 +10,8 @@ out vec4 fragColor;
 
 #define PI 3.14159265
 const vec3 FAIL_COL = vec3(1.0, 0.2, 0.33);
+const float SOIL_LIFT = 1.8;
+const vec3 SOIL_AMBIENT = vec3(0.02, 0.015, 0.01);
 
 float slot(int i) {
   vec4 v = zotoVizSlots[i >> 2];
@@ -181,14 +183,23 @@ vec3 soilColor(vec2 uv, float strata) {
   float pebb = step(0.92, fbm(uv * 11.0));
   base = mix(base, base * 0.7 + vec3(0.05), roots * 0.35);
   base += vec3(0.04) * pebb;
-  return base;
+  // Lift the whole soil (base colour and a warm ambient), not just the dim outside the cut:
+  // at 0.7 dim the bare loam still drew luma ~16-20 in the app and QE's patches read it as black.
+  return base * SOIL_LIFT + SOIL_AMBIENT;
 }
 
 void main() {
+  // vDir is the camera-local ray (the host parents plugin skies to the camera and
+  // levels the stage-only camera), so the view looks down -z. Map the screen plane
+  // onto the cutaway (0.9 fits the host 55 degree view top to bottom); a world-dome
+  // dir.xz / |dir.y| mapping would put the whole view off the formicarium.
   vec3 dir = normalize(vDir);
-  vec2 uv = vec2(dir.x, dir.z) / (0.42 + abs(dir.y) * 0.35) + 0.5;
-  vec2 cam = vec2(slot(0), slot(1));
-  float zoom = slot(2);
+  vec2 uv = dir.xy / max(-dir.z, 0.18) * 0.9 + 0.5;
+  // Before the first frame the meta slots are zero: use the static cutaway camera
+  // (colony.ts packSlots defaults) instead of dividing by a zero zoom.
+  bool meta = slot(2) > 0.0;
+  vec2 cam = meta ? vec2(slot(0), slot(1)) : vec2(0.5, 0.45);
+  float zoom = meta ? slot(2) : 1.1;
   uv = (uv - 0.5) / zoom + cam;
 
   float day = slot(3);
@@ -200,7 +211,7 @@ void main() {
   vec3 col = soilColor(uv, soil);
   col = mix(col, mix(col, FAIL_COL, 0.35 + fail * 0.25), failWash * 0.55);
   float cut = smoothstep(0.02, 0.0, abs(dir.y + 0.15));
-  col = mix(col * 0.35, col, cut);
+  col = mix(col * 0.7, col, cut);
 
   float ph = pheroAt(uv);
   col += uAccent * ph * (0.35 + uAudio * 0.2);
