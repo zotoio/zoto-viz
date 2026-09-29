@@ -86,6 +86,33 @@ export function lanFrames35s(idle: VizIdleConfig | undefined, contract: number, 
 }
 
 /** backdrop.setColors writes uAccent / uBg with THREE.Color.setHex, i.e. sRGB hex -> linear. */
+/**
+ * One delivered frame at 35 s for an arbitrary talker mix: each device sends `pps` to an
+ * off-LAN sink (not a device), so the host picks exactly these talkers at these rates.
+ */
+export function talkerFrame35s(
+  talkers: { ip: string; role: Role; pps: number }[],
+  idle: VizIdleConfig | undefined,
+  contract: number,
+): VizDataFrame {
+  const ts = LAN_35S_EPOCH;
+  const age = 35;
+  const total = talkers.reduce((s, t) => s + t.pps, 0);
+  const flows: Flow[] = talkers.map((t) => ({
+    a: t.ip, b: "203.0.113.9", bytes: t.pps * AVG_PKT_BYTES * age, packets: t.pps * age, ports: [], protos: ["tcp", "https"],
+    ifaces: ["enp0s3"], first_seen: ts - age, last_seen: ts, rate: t.pps * AVG_PKT_BYTES,
+    rate_ab: t.pps * AVG_PKT_BYTES, rate_ba: 0, rate_pkt_ab: t.pps, rate_pkt_ba: 0,
+  }));
+  const state: StateMsg = {
+    ...lanState35s(ts),
+    stats: { pps: total, bps: total * AVG_PKT_BYTES, packets: total * age, bytes: total * AVG_PKT_BYTES * age,
+      devices: talkers.length, online: talkers.length, flows: flows.length, active_flows: flows.length },
+    devices: talkers.map((t, i) => device(t.ip, t.role, i)),
+    flows,
+  };
+  return mainVizBuildFrame(state, monoMs(0), 0, idle, parseSourceBind({}), contract);
+}
+
 function hex(n: number): [number, number, number] {
   const c = new THREE.Color().setHex(n);
   return [c.r, c.g, c.b];

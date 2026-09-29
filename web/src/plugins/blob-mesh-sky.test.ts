@@ -28,10 +28,12 @@ import {
   lanFrames35s,
   LAN_35S_PPS,
   noteRowNumbers,
+  talkerFrame35s,
   UXPRO_MAX_DARK,
 } from "./pack-sky-lan-frame-test-helper";
 import { runPackFrameHandler } from "./viz-pack-host";
 import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
+import type { Role } from "../core/types";
 
 /**
  * Blob Mesh wall black (QE pick-every-view on 20fa18a7, row 29): the host parents
@@ -248,3 +250,155 @@ describe("blob-mesh on the app's production path (host runPackFrameHandler, live
     }
   });
 });
+
+/**
+ * Coverage budget (pod decision, fixed by the pod lead): the blobs may light at most 35% of
+ * the tile. "Lit" = luma above the sky background (uBg * 0.12 * uBright, ~0 luma) + 10, over
+ * the whole 128 px host-camera draw. Every talker keeps a minimum blob (the shader floor,
+ * rad = max(0.16, b.z)); when the minimums alone exceed the budget, the minimum wins.
+ * Same production path as above: talker frame from mainVizBuildFrame -> host case ->
+ * SwiftShader at the app lens span with the look uniforms, QE's app-region patches.
+ */
+describe("blob-mesh coverage budget on the app's production path (35% of the tile)", () => {
+  const APP_LOOK = hostLookUniforms({ skyBright: 1.18, skyOpacity: 0.96, rim: 0x4cc9f0, bg: 0x0b141c });
+  const SLOT = VIZ_UBO.slotFloats;
+  const LIT_BUDGET = 0.35;
+  const R_MIN = 0.16;
+  const BG_LUMA = 255 * (0.2126 * APP_LOOK.uBg[0] + 0.7152 * APP_LOOK.uBg[1] + 0.0722 * APP_LOOK.uBg[2]) * 0.12 * APP_LOOK.uBright;
+  const LAN: [string, Role][] = [
+    ["172.30.0.10", "self"], ["172.30.0.1", "gateway"], ["172.30.0.21", "lan"], ["172.30.0.22", "lan"],
+    ["172.30.0.23", "lan"], ["142.250.66.14", "internet"], ["104.18.32.7", "internet"],
+  ];
+  const ray = () => parentedSkyRay("blob-mesh", rawSky, HOST_DEFAULT_PITCH_DEG);
+  const frag = () => wrappedSky(rawSky, ray(), appLensSkySpan());
+
+  function hostSlots(frame: VizDataFrame): Float32Array {
+    const slots = new Float32Array(VIZ_UBO.totalFloats);
+    runPackFrameHandler("blob-mesh", frame, {
+      writeBuffer: (slot, data) => { slots.fill(0, slot * SLOT, (slot + 1) * SLOT); slots.set(data, slot * SLOT); },
+      writeUniform: () => {},
+      writeParticles: () => {},
+    });
+    return slots;
+  }
+
+  async function wall(name: string, frame: VizDataFrame, slots = hostSlots(frame)) {
+    const r = await smokeRenderPluginSky(frag(), slots, APP_LOOK, { keepLuma: true, pngPath: pluginSkySmokePngPath(name) });
+    const five = fivePatchSummary(appFivePatches(r.luma!));
+    const lit = r.luma!.filter((v) => v > BG_LUMA + 10).length / r.luma!.length;
+    const spread = Math.max(...five.lums) - Math.min(...five.lums);
+    const radii = Array.from({ length: frame.talkers.length }, (_, i) => slots[i * 4 + 2]!);
+    const r2 = radii.reduce((a, v) => a + Math.max(R_MIN, v) ** 2, 0) + (8 - radii.length) * R_MIN * R_MIN;
+    const why = `${five.text} spread ${spread}; lit ${lit.toFixed(3)} (luma > ${(BG_LUMA + 10).toFixed(1)}); slot sum r^2 ${r2.toFixed(3)}; radii ${radii.map((v) => v.toFixed(3)).join(",")}`;
+    noteRowNumbers(name, why);
+    return { r, five, lit, spread, radii, why };
+  }
+
+  function expectNotWallNotBlack(w: Awaited<ReturnType<typeof wall>>): void {
+    expect(w.five.dark, `black: ${w.why}`).toBeLessThanOrEqual(UXPRO_MAX_DARK);
+    const allBright = w.five.lums.every((l) => l > 200);
+    expect(allBright && w.spread < 30, `uniform wall: ${w.why}`).toBe(false);
+    expect(w.spread, `uniform: ${w.why}`).toBeGreaterThanOrEqual(30);
+    expect(Math.max(...w.five.lums), `white: ${w.why}`).toBeLessThan(240);
+  }
+
+  it("7 equal talkers at 60 pkt/s (420 total): not a wall, not black, lit fraction within the budget", async () => {
+    const frame = talkerFrame35s(LAN.map(([ip, role]) => ({ ip, role, pps: 60 })), { fixture: "host" }, 2);
+    expect(frame.talkers).toHaveLength(7);
+    const w = await wall("blob-budget-equal7", frame);
+    expectNotWallNotBlack(w);
+    expect(w.lit, `over the 35% budget: ${w.why}`).toBeLessThanOrEqual(LIT_BUDGET);
+  }, 60_000);
+
+  it("a single talker: not black, lit fraction within the budget", async () => {
+    const frame = talkerFrame35s([{ ip: "172.30.0.10", role: "self", pps: 300 }], { fixture: "host" }, 2);
+    const w = await wall("blob-budget-single", frame);
+    expect(w.five.dark, `black: ${w.why}`).toBeLessThanOrEqual(UXPRO_MAX_DARK);
+    expect(w.lit, `over the 35% budget: ${w.why}`).toBeLessThanOrEqual(LIT_BUDGET);
+  }, 60_000);
+
+  it("1 busy (400 pkt/s) + 6 at 1 pkt/s: all 7 blobs present at >= the minimum, each small one visible", async () => {
+    const frame = talkerFrame35s(LAN.map(([ip, role], i) => ({ ip, role, pps: i === 0 ? 400 : 1 })), { fixture: "host" }, 2);
+    expect(frame.talkers).toHaveLength(7);
+    const slots = hostSlots(frame);
+    const w = await wall("blob-budget-busy1-idle6", frame, slots);
+    expect(w.five.dark, `black: ${w.why}`).toBeLessThanOrEqual(UXPRO_MAX_DARK);
+    for (let i = 0; i < 7; i++) {
+      expect(Math.hypot(slots[i * 4]!, slots[i * 4 + 1]!), `slot ${i} placed (not an idle orbit)`).toBeGreaterThan(0.02);
+      expect(slots[i * 4 + 2]!, `slot ${i} radius >= minimum: ${w.why}`).toBeGreaterThanOrEqual(R_MIN - 1e-6);
+    }
+    // Render check at each small blob's projected centre: with the blob vs the same blob moved off-view.
+    const small = frame.talkers.map((t, i) => ({ t, i })).filter(({ t }) => t.rate < 10);
+    expect(small).toHaveLength(6);
+    const centres = projectBlobCentres(slots, ray(), appLensSkySpan());
+    let inView = 0;
+    const notes: string[] = [];
+    for (const { i } of small) {
+      const c = centres[i]!;
+      if (!c.inView) { notes.push(`slot ${i} off-view`); continue; }
+      inView++;
+      const away = new Float32Array(slots);
+      away[i * 4] = 3; away[i * 4 + 1] = 3;
+      const r0 = await smokeRenderPluginSky(frag(), away, APP_LOOK, { keepLuma: true });
+      const here = w.r.luma![c.idx]!;
+      const gone = r0.luma![c.idx]!;
+      notes.push(`slot ${i} centre px(${c.px},${c.py}) luma ${here.toFixed(0)} vs ${gone.toFixed(0)} without it`);
+      expect(here - gone, `small blob ${i} not visible at its centre: ${notes.join("; ")}`).toBeGreaterThanOrEqual(10);
+    }
+    noteRowNumbers("blob-budget-busy1-idle6 centres", notes.join("; "));
+    expect(inView, `small blobs in view: ${notes.join("; ")}`).toBeGreaterThan(0);
+  }, 120_000);
+
+  it("the live 7-device 420 pkt/s LAN: lit fraction within the budget", async () => {
+    const [frame] = lanFrames35s({ fixture: "host" }, 2);
+    const w = await wall("blob-budget-lan7", frame!);
+    expectNotWallNotBlack(w);
+    expect(w.lit, `over the 35% budget: ${w.why}`).toBeLessThanOrEqual(LIT_BUDGET);
+  }, 60_000);
+});
+
+/**
+ * Where each slot's blob centre lands in the 128 px host-camera draw: the sky's own ray
+ * mapping (atHostCamera span + ray, then the 45 degree tilt and dome uv) run per pixel.
+ */
+function projectBlobCentres(slots: Float32Array, ray: SkyRay, span: SkySpan): { px: number; py: number; idx: number; inView: boolean }[] {
+  const N = 128;
+  const uvs: [number, number][] = new Array(N * N);
+  for (let py = 0; py < N; py++) {
+    for (let px = 0; px < N; px++) {
+      const nx = ((px + 0.5) / N) * 2 - 1;
+      const ny = ((py + 0.5) / N) * 2 - 1; // readPixels row 0 = bottom
+      let v = [nx, ny, -1];
+      const l0 = Math.hypot(v[0]!, v[1]!, v[2]!);
+      v = v.map((c) => c / l0);
+      const s3 = [v[0]! * span[0], v[1]! * span[1], v[2]!];
+      const m = ray; // column-major mat3
+      let c = [
+        m[0]! * s3[0]! + m[3]! * s3[1]! + m[6]! * s3[2]!,
+        m[1]! * s3[0]! + m[4]! * s3[1]! + m[7]! * s3[2]!,
+        m[2]! * s3[0]! + m[5]! * s3[1]! + m[8]! * s3[2]!,
+      ];
+      const l1 = Math.hypot(c[0]!, c[1]!, c[2]!);
+      c = c.map((x) => x / l1);
+      let d = [c[0]!, 0.70710678 * (c[1]! + c[2]!), 0.70710678 * (c[2]! - c[1]!)];
+      const l2 = Math.hypot(d[0]!, d[1]!, d[2]!);
+      d = d.map((x) => x / l2);
+      const k = 0.35 + Math.abs(d[1]!);
+      uvs[py * N + px] = [d[0]! / k, d[2]! / k];
+    }
+  }
+  const out: { px: number; py: number; idx: number; inView: boolean }[] = [];
+  for (let i = 0; i < 8; i++) {
+    const pos = [slots[i * 4]! * 1.7, slots[i * 4 + 1]! * 1.7];
+    let best = 0;
+    let bestD = Infinity;
+    for (let j = 0; j < uvs.length; j++) {
+      const dd = Math.hypot(uvs[j]![0] - pos[0]!, uvs[j]![1] - pos[1]!);
+      if (dd < bestD) { bestD = dd; best = j; }
+    }
+    const px = best % N;
+    const py = Math.floor(best / N);
+    out.push({ px, py: N - 1 - py, idx: best, inView: bestD < 0.03 && px > 0 && px < N - 1 && py > 0 && py < N - 1 });
+  }
+  return out;
+}
