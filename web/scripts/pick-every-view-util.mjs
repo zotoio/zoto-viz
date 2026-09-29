@@ -398,6 +398,102 @@ export function qeOverlayRects() {
   return { rects, vw: innerWidth, vh: innerHeight };
 }
 
+const shortErr = (e) => String(e?.message ?? e).split("\n")[0].replace(/\s+/g, " ").slice(0, 160);
+const isDetach = (m) => /not attached|detached|was detached|Target closed|Execution context was destroyed|stale/i.test(m);
+
+/**
+ * Dismiss an optional prompt (the mic/camera "Not now", a consent "Not now") without ever throwing.
+ *
+ * The prompt may re-render or be replaced while it is being clicked (zoto-viz#166: on an older
+ * shipped HOME the mic/camera sheet's button detached mid-click and Playwright retried until its
+ * 30s timeout, which crashed the run at boot). Every attempt looks the button up again; the whole
+ * call is bounded by `budgetMs`. Per attempt: a real click with a short timeout, else a mouse click
+ * at the button's current box, else a DOM click() on whichever node is current (atomic in the page,
+ * so it cannot race a re-render). A clicked node that is gone afterwards with no prompt in its place
+ * counts as dismissed; a node replaced by a re-render is looked up again. When the budget runs out
+ * the prompt is reported not dismissed (stillUp) and the caller carries on.
+ *
+ * `page` is a Playwright Page (locator, mouse.click, evaluate, waitForTimeout). `container` is a CSS
+ * selector for the prompt, `hasText` an optional filter on it, `name` the button's accessible name.
+ * Returns { present, dismissed, stillUp, via, attempts, ms, errors }.
+ */
+export async function dismissOptionalPrompt(page, opts = {}) {
+  const t0 = Date.now();
+  try {
+    return await dismissPromptAttempts(page, opts);
+  } catch (e) {
+    // Never let an optional prompt take the run down (page closed, navigation, driver error).
+    return { present: null, dismissed: false, stillUp: null, via: null, attempts: null, ms: Date.now() - t0, errors: [`gave up: ${shortErr(e)}`] };
+  }
+}
+
+async function dismissPromptAttempts(page, { container, hasText = null, name = "Not now", budgetMs = 8000, clickTimeoutMs = 1500, settleMs = 300 } = {}) {
+  const t0 = Date.now();
+  const left = () => budgetMs - (Date.now() - t0);
+  const errors = [];
+  const out = (o) => ({ attempts, ms: Date.now() - t0, errors: errors.slice(0, 6), ...o });
+  const boxes = () => { const l = page.locator(container); return hasText ? l.filter({ hasText }) : l; };
+  const promptCount = async () => { try { return await boxes().count(); } catch (e) { errors.push(`count: ${shortErr(e)}`); return 0; } };
+  const nameRe = name instanceof RegExp ? name : new RegExp(`^\\s*${String(name).replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "i");
+  let attempts = 0; let seen = false; let via = null;
+  while (left() > 0) {
+    attempts++;
+    const btn = boxes().last().getByRole("button", { name: nameRe }).first();
+    let n = 0;
+    try { n = await btn.count(); } catch (e) { errors.push(`lookup: ${shortErr(e)}`); }
+    if (!n) {
+      if (!seen) return out({ present: false, dismissed: false, stillUp: false, via: null });
+      if (!(await promptCount())) return out({ present: true, dismissed: true, stillUp: false, via: via ?? "gone" });
+      // Prompt up but its button not found this instant (mid re-render): look again shortly.
+      try { await page.waitForTimeout(Math.max(0, Math.min(settleMs, left()))); } catch { /* page gone */ }
+      continue;
+    }
+    seen = true;
+    let handle = null;
+    try { handle = await btn.elementHandle({ timeout: Math.max(1, Math.min(clickTimeoutMs, left())) }); } catch (e) { errors.push(`handle: ${shortErr(e)}`); }
+    try {
+      await (handle ?? btn).click({ timeout: Math.max(1, Math.min(clickTimeoutMs, left())) });
+      via = "click";
+    } catch (e) {
+      const m = shortErr(e); errors.push(`click: ${m}`);
+      // Re-rendered under the cursor: a mouse click at wherever the current button is.
+      try {
+        const bb = await btn.boundingBox({ timeout: Math.max(1, Math.min(500, left())) });
+        if (bb) { await page.mouse.click(bb.x + bb.width / 2, bb.y + bb.height / 2); via = isDetach(m) ? "mouse (button detached mid-click)" : "mouse"; }
+      } catch (e2) { errors.push(`mouse: ${shortErr(e2)}`); }
+    }
+    try { await page.waitForTimeout(Math.max(0, Math.min(settleMs, left()))); } catch { /* page gone */ }
+    let nodeGone = false;
+    if (handle) {
+      try { nodeGone = !(await handle.evaluate((el) => el.isConnected)); } catch { nodeGone = true; }
+    }
+    // Gone after the click and nothing in its place: dismissed. Replaced by a re-render: look again.
+    if (!(await promptCount())) return out({ present: true, dismissed: true, stillUp: false, via: `${via ?? "gone"}${nodeGone ? "; clicked node gone after the click" : ""}` });
+    if (nodeGone) errors.push(`attempt ${attempts}: button re-rendered (clicked node detached, prompt still up)`);
+    if (handle) handle.dispose().catch(() => {});
+    if (left() <= 0) break;
+    // Last resort for this attempt: click() on the node that is current right now.
+    let r = null;
+    try {
+      r = await page.evaluate(({ sel, src, flags, hsrc, hflags }) => {
+        const re = new RegExp(src, flags);
+        const has = hsrc == null ? null : new RegExp(hsrc, hflags);
+        const all = [...document.querySelectorAll(sel)].filter((d) => !has || has.test(d.textContent || ""));
+        const box = all[all.length - 1];
+        if (!box) return "gone";
+        const b = [...box.querySelectorAll("button, [role=button]")].find((x) => re.test((x.textContent || x.getAttribute("aria-label") || "").trim()));
+        if (!b) return "no-button";
+        b.click();
+        return "clicked";
+      }, { sel: container, src: nameRe.source, flags: nameRe.flags, hsrc: hasText == null ? null : hasText instanceof RegExp ? hasText.source : String(hasText).replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), hflags: hasText instanceof RegExp ? hasText.flags.replace("g", "") : "" });
+    } catch (e) { errors.push(`dom-click: ${shortErr(e)}`); }
+    if (r === "clicked") via = "dom-click";
+    try { await page.waitForTimeout(Math.max(0, Math.min(settleMs, left()))); } catch { /* page gone */ }
+    if (r === "gone" || !(await promptCount())) return out({ present: true, dismissed: true, stillUp: false, via: via ?? "gone" });
+  }
+  return out({ present: seen, dismissed: false, stillUp: seen ? (await promptCount()) > 0 : false, via });
+}
+
 /** Runs in every frame before page scripts. Top frame also counts listeners, ports, GL contexts. */
 export function qeInstrument() {
   if (window.__qe) return;

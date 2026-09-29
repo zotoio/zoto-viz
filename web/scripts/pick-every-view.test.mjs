@@ -66,6 +66,7 @@ import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
 import { PNG } from "pngjs";
 import {
+  dismissOptionalPrompt,
   fivePatchSample,
   maskedWallSample,
   noticeNamingOtherView,
@@ -103,6 +104,8 @@ const base = opts.baseUrl;
 const t0 = Date.now();
 const T = () => `${((Date.now() - t0) / 1000).toFixed(0).padStart(5)}s`;
 const log = (...a) => console.log(`[pickall ${T()}]`, ...a);
+/** Cleanup steps run if main() throws (restore the startup default, flush results, close Chrome). */
+const onCrash = [];
 
 function readHelp() {
   const src = readFileSync(fileURLToPath(import.meta.url), "utf8");
@@ -363,6 +366,11 @@ async function main() {
     const r = await api("api/profiles/default", { method: "PUT", headers: await csrfHeaders(), body: JSON.stringify({ id: "zoto-viz" }) });
     setup.profileDefaultSet = { status: r.status, body: r.body };
     log(`startup profile -> zoto-viz: ${r.status}`);
+    // A crash must not leave the server's startup default changed (zoto-viz#166).
+    if (setup.profileDefaultBefore) onCrash.push(async () => {
+      const r2 = await api("api/profiles/default", { method: "PUT", headers: await csrfHeaders(), body: JSON.stringify({ id: setup.profileDefaultBefore }) });
+      console.error(`pick-every-view: startup profile restored to ${setup.profileDefaultBefore} after the crash: ${r2.status}`);
+    });
   }
   if (opts.autoconsent !== "keep") {
     const r = await mcp("set_settings", { autoconsent: opts.autoconsent === "on" });
@@ -447,6 +455,11 @@ async function main() {
     await ctx.route((u) => res.some((re) => re.test(u.href)), (route) => { results.meta.blockedRequests++; return route.abort("namenotresolved"); });
     log(`blocking in the test browser only: ${extra.blockUrl.join(" , ")}`);
   }
+  onCrash.push(async (err) => {
+    results.meta.crashed = { at: new Date().toISOString(), error: String(err?.message ?? err).split("\n")[0].slice(0, 300) };
+    flush();
+  });
+  onCrash.push(() => browser.close());
   const flush = () => {
     results.meta.elapsedSec = Math.round((Date.now() - t0) / 1000);
     writeFileSync(path.join(outDir, "pickall.json"), JSON.stringify(results, null, 1));
@@ -456,29 +469,37 @@ async function main() {
   const st = () => page.evaluate(pageState);
   const overlayRects = () => page.evaluate(qeOverlayRects).catch((e) => ({ rects: [], error: String(e.message ?? e).split("\n")[0].slice(0, 120) }));
 
-  async function dismissMediaAsk() {
-    const d = page.locator("dialog[open][data-media-ask]");
-    if (await d.count()) {
-      const nn = d.getByRole("button", { name: "Not now" });
-      if (await nn.count()) { await nn.first().click(); await page.waitForTimeout(500); return true; }
-    }
-    return false;
+  // Optional prompts never crash the run (zoto-viz#166): bounded, re-looked-up, logged, and on
+  // any failure the run carries on. Each attempt that found a prompt lands in results.prompts.
+  results.prompts = [];
+  const notePrompt = (kind, r, where) => {
+    if (!r.present && !r.error) return;
+    const rec = { at: Math.round((Date.now() - t0) / 1000), kind, where, dismissed: r.dismissed, stillUp: r.stillUp ?? null, via: r.via ?? null, attempts: r.attempts ?? null, ms: r.ms ?? null, errors: r.errors?.length ? r.errors : undefined, error: r.error };
+    if (results.prompts.length < 200) results.prompts.push(rec);
+    if (!r.dismissed || r.errors?.length || r.error) log(`optional prompt ${kind}${where ? ` (${where})` : ""}: ${r.dismissed ? `dismissed via ${r.via}` : "NOT dismissed"}${r.stillUp ? "; a prompt is still up" : ""}${r.errors?.length ? `; ${r.errors[0]}` : ""}${r.error ? `; ${r.error}` : ""} — continuing`);
+  };
+  async function dismissMediaAsk(where = "") {
+    let r;
+    try { r = await dismissOptionalPrompt(page, { container: "dialog[open][data-media-ask]", name: "Not now", budgetMs: 8000 }); } catch (e) { r = { present: true, dismissed: false, error: String(e.message ?? e).split("\n")[0].slice(0, 160) }; }
+    notePrompt("media-ask", r, where);
+    if (r.dismissed) await page.waitForTimeout(500).catch(() => {});
+    return !!r.dismissed;
   }
   async function closeChat() {
-    if (await page.evaluate(() => document.body.classList.contains("chat-open"))) {
-      await page.locator("#chatBox label").click();
-      await page.waitForTimeout(400);
-      return true;
-    }
+    try {
+      if (await page.evaluate(() => document.body.classList.contains("chat-open"))) {
+        await page.locator("#chatBox label").click({ timeout: 8000 });
+        await page.waitForTimeout(400);
+        return true;
+      }
+    } catch (e) { notePrompt("close-chat", { present: true, dismissed: false, error: String(e.message ?? e).split("\n")[0].slice(0, 160) }, ""); }
     return false;
   }
-  async function declineConsentModal() {
-    const d = page.locator(".modal[role=dialog], dialog[open].modal").filter({ hasText: /review/i });
-    if (await d.count()) {
-      const nn = d.first().getByRole("button", { name: /not now/i });
-      if (await nn.count()) { await nn.first().click(); return true; }
-    }
-    return false;
+  async function declineConsentModal(where = "") {
+    let r;
+    try { r = await dismissOptionalPrompt(page, { container: ".modal[role=dialog], dialog[open].modal", hasText: /review/i, name: /not now/i, budgetMs: 8000 }); } catch (e) { r = { present: true, dismissed: false, error: String(e.message ?? e).split("\n")[0].slice(0, 160) }; }
+    notePrompt("consent-modal", r, where);
+    return !!r.dismissed;
   }
 
   /** Real mouse clicks: open the header picker, click the option. Returns the option label. */
@@ -624,14 +645,16 @@ async function main() {
   const bootStart = Date.now();
   let bootSt = null;
   while (Date.now() - bootStart < 120_000) {
-    await dismissMediaAsk();
+    await dismissMediaAsk("boot");
     bootSt = await st().catch(() => null);
     if (bootSt && !bootSt.booting && bootSt.mode) break;
     await page.waitForTimeout(1000);
   }
   await page.waitForTimeout(3000);
-  const askDismissed = await dismissMediaAsk();
+  const askDismissed = await dismissMediaAsk("boot");
   const chatClosedAtBoot = await closeChat();
+  const askStillUp = await page.locator("dialog[open][data-media-ask]").count().catch(() => 0);
+  if (askStillUp) results.flags.push("mic/camera prompt still up after boot (could not dismiss it; carried on)");
   await page.waitForTimeout(3000);
   bootSt = await st();
   results.boot = {
@@ -1373,6 +1396,7 @@ async function main() {
   flush();
   await browser.close();
 
+  onCrash.length = 0;
   if (opts.profile === "shipped" && setup.profileDefaultSet && setup.profileDefaultBefore) {
     const r = await api("api/profiles/default", { method: "PUT", headers: await csrfHeaders(), body: JSON.stringify({ id: setup.profileDefaultBefore }) });
     log(`startup profile restored to ${setup.profileDefaultBefore}: ${r.status}`);
@@ -1542,7 +1566,11 @@ function markdown(res) {
   return `${L.join("\n")}\n`;
 }
 
-main().catch((err) => {
+main().catch(async (err) => {
   console.error("pick-every-view: FAIL", err?.stack ?? err);
+  // Best effort, each step bounded: put the startup default back, write what we have, close Chrome.
+  for (const f of onCrash.splice(0)) {
+    try { await Promise.race([f(err), new Promise((_, rej) => setTimeout(() => rej(new Error("timeout")), 15_000))]); } catch (e) { console.error(`pick-every-view: cleanup step failed: ${String(e?.message ?? e).split("\n")[0]}`); }
+  }
   process.exit(2);
 });
