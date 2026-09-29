@@ -99,6 +99,11 @@ void main() {
   float load = clamp((cpu + mem + gpu + temp) * 0.25, 0.0, 1.0);
 
   vec3 dir = normalize(vDir);
+  // vDir is the camera-local ray (the host parents plugin skies to the camera), so
+  // dir looks level down -z: the skyline, horizon, rain and tunnel read it as is.
+  // The floor and circuit traces are dome projections authored for the host camera's
+  // default 45 degree look-down; they read the ray tilted by that pitch.
+  vec3 dome = normalize(vec3(dir.x, 0.70710678 * (dir.y + dir.z), 0.70710678 * (dir.z - dir.y)));
   float lon = atan(dir.z, dir.x);
   float lat = dir.y;
 
@@ -135,9 +140,9 @@ void main() {
   float horizon = 1.0 - smoothstep(0.02, 0.12, abs(lat + 0.04));
   col += cyan * horizon * (0.16 + 0.2 * aud);
 
-  float floorY = lat + 0.12;
+  float floorY = dome.y + 0.12;
   if (floorY < 0.0) {
-    vec2 gp = dir.xz / max(0.04, -floorY);
+    vec2 gp = dome.xz / max(0.04, -floorY);
     vec2 gf = abs(fract(gp * 2.4) - 0.5);
     float line = 1.0 - smoothstep(0.0, 0.04, min(gf.x, gf.y));
     float fade = exp(floorY * 3.2);
@@ -167,7 +172,7 @@ void main() {
   }
   col += cyan * rain * (0.22 + 0.25 * rainAmt) * (0.55 + 0.45 * (1.0 - fog));
 
-  vec2 traces = dir.xz / (0.22 + abs(dir.y));
+  vec2 traces = dome.xz / (0.22 + abs(dome.y));
   float grid = hexGrid(traces * (5.5 + load)) * (1.0 - smoothstep(0.55, 1.4, length(traces)));
   float pulse = 0.55 + 0.45 * sin(length(traces) * 6.0 - uTime * 1.6);
   col += cyan * grid * pulse * 0.22;
