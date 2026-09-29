@@ -9,7 +9,7 @@ function mockScene(): NetScene {
 
 /** Feeds a snapshot the way Stage3D.update does once running (no WebGL needed). */
 class CarouselHarness extends CarouselView {
-  feed(sources: Record<string, SourceLive & { demo?: boolean }>): void {
+  feed(sources: Record<string, SourceLive & { demo?: boolean; sampleSource?: string }>): void {
     (this as unknown as { msg: unknown }).msg = { sources };
     this.onSnapshot();
   }
@@ -62,17 +62,30 @@ describe("CarouselView per-source stills", () => {
   it("shows a visible sample-pictures line only while the bound source serves its demo stills", () => {
     const view = make();
     const apodSample = {
-      id: "apod", kind: "http", label: "APOD", ok: true, feed: false, demo: true,
+      id: "apod", kind: "http", label: "Astronomy Picture of the Day", ok: true, feed: false, demo: true, sampleSource: "APOD",
       items: [{ title: "A Zodiacal Night", image: "https://apod.nasa.gov/apod/image/2609/2026-09-09ZodiacalLightHSP.jpg" }],
     };
     view.setBind({ source: "apod", filter: "has-image" });
     view.feed({ nasa, apod: apodSample });
     expect(view.sampleEl.hidden).toBe(false);
-    expect(view.sampleEl.textContent).toMatch(/sample pictures/i);
+    expect(view.sampleEl.textContent).toBe("Showing sample pictures. APOD isn't responding.");
     expect(view.sampleEl.isConnected).toBe(true);
+    // In the caption area, not over the picture.
+    expect(view.sampleEl.closest("figcaption.carousel-caption")).not.toBeNull();
     expect(view.slideImages()).toEqual(["https://apod.nasa.gov/apod/image/2609/2026-09-09ZodiacalLightHSP.jpg"]);
     view.setBind({ source: "nasa", filter: "has-image" });
     expect(view.sampleEl.hidden).toBe(true);
     expect(view.slideImages()[0]).toContain("www.nasa.gov");
+  });
+
+  it("names whichever source failed", () => {
+    const view = make();
+    const nasaSample = {
+      ...nasa, feed: false, demo: true, sampleSource: "NASA",
+      items: [{ title: "Space Station View of Earth at Night", image: "https://www.nasa.gov/wp-content/uploads/2026/09/55534901810-95d2f06788-o.jpg" }],
+    };
+    view.setBind({ source: "nasa", filter: "has-image" });
+    view.feed({ nasa: nasaSample });
+    expect(view.sampleEl.textContent).toBe("Showing sample pictures. NASA isn't responding.");
   });
 });

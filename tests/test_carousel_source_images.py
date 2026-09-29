@@ -186,6 +186,8 @@ def test_live_failure_serves_own_sample_with_flag(sid: str, why: str, monkeypatc
         assert row["demo"] is True and row["sample"] is True
         assert row["feed"] is False, "demo titles stay off the news ticker"
         assert "DEMO" in row["sampleLabel"]
+        assert row["sampleSource"] == {"nasa": "NASA", "apod": "APOD", "earth-iotd": "Earth Observatory",
+                                       "commons-potd": "Wikimedia Commons"}[sid]
         assert row["liveError"], "the live failure stays visible"
         _assert_only_own(sid, row)
         assert set(_images(row)) <= _sample_images(sid)
@@ -219,20 +221,108 @@ def test_recovers_to_live_after_sample(monkeypatch: pytest.MonkeyPatch) -> None:
 
 # --- per-source specifics ------------------------------------------------------------------
 
-def test_nasa_skips_enclosures_the_still_proxy_would_refuse(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_nasa_oversized_enclosure_uses_smaller_rendition_of_same_still(monkeypatch: pytest.MonkeyPatch) -> None:
     """m101-lg.jpg is 64 MB; the proxy caps at agent_assets.MAX_BYTES and answered 502."""
     _mock_net(monkeypatch, bodies={"nasa": (NASA_RSS_OVERSIZED, "application/rss+xml")})
     live = asyncio.run(sources.fetch_one(_row("nasa")))
     assert not live.get("demo")
-    assert _images(live) == ["https://www.nasa.gov/wp-content/uploads/2026/09/fits.jpg"]
+    assert _images(live) == [
+        "https://www.nasa.gov/wp-content/uploads/2026/09/m101-lg.jpg?w=2048",
+        "https://www.nasa.gov/wp-content/uploads/2026/09/fits.jpg",
+    ]
 
 
-def test_nasa_with_only_oversized_stills_serves_own_sample(monkeypatch: pytest.MonkeyPatch) -> None:
-    only_big = NASA_RSS_OVERSIZED.replace('length="4500000"', 'length="30000000"')
+def test_nasa_oversized_with_no_rendition_serves_own_sample(monkeypatch: pytest.MonkeyPatch) -> None:
+    # Not a WordPress upload: nasa.gov offers no resized rendition for this path.
+    only_big = NASA_RSS_OVERSIZED.replace('length="4500000"', 'length="30000000"').replace(
+        "/wp-content/uploads/2026/09/", "/sites/default/files/")
     _mock_net(monkeypatch, bodies={"nasa": (only_big, "application/rss+xml")})
     live = asyncio.run(sources.fetch_one(_row("nasa")))
     assert live["demo"] is True and live["liveError"] == "no pictured items"
+    assert live["sampleSource"] == "NASA"
     _assert_only_own("nasa", live)
+
+
+# --- still proxy: oversize -> smaller rendition of the same still -> own sample ------------
+
+class _Req:
+    def __init__(self, url: str) -> None:
+        self.query = {"url": url}
+
+
+def _mock_proxy(monkeypatch: pytest.MonkeyPatch, serves: set[str]) -> list[str]:
+    asked: list[str] = []
+
+    async def ensure_photo(url: str) -> dict[str, Any]:
+        asked.append(url)
+        if url in serves:
+            return {"url": url}
+        raise ValueError("image too large")
+
+    monkeypatch.setattr(sources.agent_assets, "ensure_photo", ensure_photo)
+    monkeypatch.setattr(sources.agent_assets, "file_response",
+                        lambda row: sources.web.json_response({"served": row["url"]}))
+    return asked
+
+
+BIG = "https://www.nasa.gov/wp-content/uploads/2026/09/m101-lg.jpg"
+
+
+def test_proxy_oversize_serves_smaller_rendition_of_same_still(monkeypatch: pytest.MonkeyPatch) -> None:
+    asked = _mock_proxy(monkeypatch, serves={BIG + "?w=2048"})
+    resp = asyncio.run(sources.api_image(_Req(BIG)))  # type: ignore[arg-type]
+    assert resp.status == 200
+    assert json.loads(resp.body)["served"] == BIG + "?w=2048"
+    assert asked == [BIG, BIG + "?w=2048"]
+
+
+def test_proxy_oversize_tries_each_rendition_then_own_sample(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No rendition fits: the still is dropped; a row left with none serves its OWN sample."""
+    _mock_net(monkeypatch, bodies={"nasa": (NASA_RSS_OVERSIZED.replace('length="64440402"', 'length="1"'), "application/rss+xml")})
+    asyncio.run(sources.fetch_one(_row("nasa")))
+    asked = _mock_proxy(monkeypatch, serves=set())
+    fits = "https://www.nasa.gov/wp-content/uploads/2026/09/fits.jpg"
+    resp = asyncio.run(sources.api_image(_Req(BIG)))  # type: ignore[arg-type]
+    assert resp.status == 502
+    assert asked == [BIG, BIG + "?w=2048", BIG + "?w=1280"]
+    snap = sources.snapshot()["nasa"]
+    assert not snap.get("demo") and _images(snap) == [fits], "one bad still does not flip the feed"
+    asyncio.run(sources.api_image(_Req(fits)))  # type: ignore[arg-type]
+    snap = sources.snapshot()["nasa"]
+    assert snap["demo"] is True and snap["sample"] is True and snap["sampleSource"] == "NASA"
+    assert snap["liveError"] == "image too large"
+    _assert_only_own("nasa", snap)
+
+
+def test_proxy_oversize_apod_has_no_rendition_and_falls_to_apod_sample(monkeypatch: pytest.MonkeyPatch) -> None:
+    _mock_net(monkeypatch)
+    asyncio.run(sources.fetch_one(_row("apod")))
+    hd = "https://apod.nasa.gov/apod/image/2609/live_4000.jpg"
+    asked = _mock_proxy(monkeypatch, serves=set())
+    resp = asyncio.run(sources.api_image(_Req(hd)))  # type: ignore[arg-type]
+    assert resp.status == 502 and asked == [hd]
+    snap = sources.snapshot()["apod"]
+    assert snap["demo"] is True and snap["sampleSource"] == "APOD"
+    assert all(_host(u) == "apod.nasa.gov" for u in _images(snap))
+
+
+@pytest.mark.parametrize(("url", "want"), [
+    (BIG, [BIG + "?w=2048", BIG + "?w=1280"]),
+    ("https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/x/a.jpg?w=1440&fit=clip",
+     ["https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/x/a.jpg?fit=clip&w=1280"]),
+    ("https://upload.wikimedia.org/wikipedia/commons/8/80/Big.jpg",
+     ["https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Big.jpg/2048px-Big.jpg",
+      "https://upload.wikimedia.org/wikipedia/commons/thumb/8/80/Big.jpg/1280px-Big.jpg"]),
+    ("https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/C.jpg/4000px-C.jpg",
+     ["https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/C.jpg/2048px-C.jpg",
+      "https://thumb.wikimedia.org/wikipedia/commons/thumb/5/59/C.jpg/1280px-C.jpg"]),
+    ("https://apod.nasa.gov/apod/image/2609/x.jpg", []),
+])
+def test_smaller_renditions_stay_on_the_same_still(url: str, want: list[str]) -> None:
+    got = sources.smaller_renditions(url)
+    assert got == want
+    for u in got:
+        assert _host(u) == _host(url)
 
 
 def test_apod_rate_limit_json_serves_apod_sample(monkeypatch: pytest.MonkeyPatch) -> None:
