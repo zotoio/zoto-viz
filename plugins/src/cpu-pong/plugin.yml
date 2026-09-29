@@ -1,0 +1,5 @@
+id: cpupong
+name: CPU Pong
+version: 1
+hint: Processes vs cores. A timeslice is a ball. Under load one paddle takes the upper
+  cores and one the lower; lasers intercept when a half's queue is too deep.
