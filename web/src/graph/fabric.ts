@@ -411,6 +411,7 @@ uniform float uGlowAmt;
 uniform float uGlowSpeed;
 uniform float uGlowMode;
 uniform float uKind;
+uniform float uEdgeOpacity;
 
 float comet(float along, float phase) {
   float behind = fract(phase - along);
