@@ -465,15 +465,23 @@ def save(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def upsert(raw: dict[str, Any]) -> dict[str, Any]:
-    rows = ensure()
-    want = str(raw.get("id") or "").strip()
-    rest = [r for r in rows if r["id"] != want]
-    taken = {r["id"] for r in rest}
-    row = normalize({**raw, "id": want or raw.get("id")}, taken=taken)
-    rest.append(row)
-    save(rest)
-    _due.pop(row["id"], None)
-    return row
+    from . import source_library
+
+    incoming = source_library.materialize(raw.get("library"), raw) if "library" in raw else [raw]
+    last: dict[str, Any] | None = None
+    for item in incoming:
+        rows = ensure()
+        want = str(item.get("id") or "").strip()
+        rest = [r for r in rows if r["id"] != want]
+        taken = {r["id"] for r in rest}
+        row = normalize({**item, "id": want or item.get("id")}, taken=taken)
+        rest.append(row)
+        save(rest)
+        _due.pop(row["id"], None)
+        last = row
+    if last is None:
+        raise ValueError("source object required")
+    return last
 
 
 def delete(sid: str) -> bool:
@@ -1102,6 +1110,12 @@ async def api_image(request: web.Request) -> web.Response:
         err = str(e) if isinstance(e, ValueError) else f"fetch failed: {e}"
         return web.json_response({"error": nasa_api.redact_string(err)}, status=status)
     return agent_assets.file_response(row)
+
+
+async def api_source_library(_request: web.Request) -> web.Response:
+    from . import source_library
+
+    return web.json_response({"ok": True, "library": source_library.catalog()})
 
 
 async def api_sources(request: web.Request) -> web.Response:

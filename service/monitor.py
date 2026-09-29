@@ -2230,6 +2230,7 @@ def make_app(
     app.router.add_put("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
     app.router.add_delete("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
     app.router.add_get("/api/sources/image", sources.api_image)
+    app.router.add_get("/api/sources/library", sources.api_source_library)
     app.router.add_get("/api/sources", sources.api_sources)
     app.router.add_put("/api/sources", sources.api_sources)
     app.router.add_post("/api/sources", sources.api_sources)

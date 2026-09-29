@@ -34,6 +34,7 @@ Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** 
 
 | Path / tool | Role |
 | --- | --- |
+| `GET /api/sources/library` | third-party recipes (not polled until added) |
 | `GET /api/sources` | registry + last poll |
 | `GET /api/sources/image?url=` | same-origin still proxy (CSP `img-src 'self'`) |
 | `POST /api/sources` | upsert one |
@@ -42,10 +43,13 @@ Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** 
 | `DELETE /api/sources/{id}` | remove |
 | `GET/POST/PUT /api/plugin-instances` | operator view instances (`~/.zoto-viz/plugin-instances.yml`) |
 | `PUT/DELETE /api/plugin-instances/{plugin}/{id}` | upsert or remove one instance |
-| MCP `list_sources` / `set_source` / `delete_source` | same registry |
+| MCP `list_source_library` | same recipe list as `GET /api/sources/library` |
+| MCP `list_sources` / `set_source` / `delete_source` | same registry; `set_source` `{library}` materializes one or more recipes |
 | MCP `list_plugin_instances` / `set_plugin_instance` / `delete_plugin_instance` | view instances |
 
 `set_settings` `{ feed: { includeSources } }` shows or hides headlines on the ticker. Source rows themselves are not a live UI patch — they persist on the server.
+
+[JSONLint datasets](https://jsonlint.com/datasets) are in that library as `jl-<slug>` (for example `jl-countries`, `jl-planets`). Settings → Sources lists the useful reference sets first and the rest of the catalog in a selector. They stay off the ticker until headlines are enabled. Static files are polled once a day.
 
 ## Graph (`base: sources`)
 
