@@ -67,10 +67,12 @@ import {
   asCanvasDeviceHeight,
   deviceRect,
   type DeviceRect,
+  type DeviceRectMut,
   type GlRect,
   type GlRectMut,
   isDeviceRect,
   toGlRectInto,
+  viewMutAsDeviceRect,
 } from "./pack-mirror-rect";
 import {
   devicePxRatioNumber,
@@ -1126,6 +1128,7 @@ export class NetScene implements HostedView, RenderScalePane {
   /** viewport of the last present() through the host, framebuffer pixels */
   private lastVp: Viewport | null = null;
   private readonly glVpScratch: GlRectMut = { x: 0, y: 0, w: 0, h: 0 };
+  private readonly devVpScratch: DeviceRectMut = { x: 0, y: 0, w: 0, h: 0 };
   /** WebGL clear colour this scene wants (applied at present time so panes sharing a context differ) */
   private clearHex: number;
   readonly labelLayer: LabelLayer;
@@ -1827,8 +1830,21 @@ export class NetScene implements HostedView, RenderScalePane {
     }
     const gl = (this.host?.gl ?? (this.renderer as THREE.WebGLRenderer).getContext()) as WebGL2RenderingContext | null;
     if (!gl) return;
-    const dev = deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
-    const vp = toGlRectInto(dev, asCanvasDeviceHeight(gl.drawingBufferHeight), this.glVpScratch);
+    const bufH = asCanvasDeviceHeight(gl.drawingBufferHeight);
+    let vp: GlRect;
+    if (this.lastVp && isDeviceRect(this.lastVp)) {
+      // Read only this pane. host.present's viewport already counts y from the bottom (it is what
+      // setViewport got), so turn it back into a top-left device rect before toGlRectInto flips it.
+      const lv = this.lastVp;
+      const d = this.devVpScratch;
+      d.x = lv.x;
+      d.y = bufH - lv.y - lv.h;
+      d.w = lv.w;
+      d.h = lv.h;
+      vp = toGlRectInto(viewMutAsDeviceRect(d), bufH, this.glVpScratch);
+    } else {
+      vp = toGlRectInto(deviceRect(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight), bufH, this.glVpScratch);
+    }
     this.changeProbe.tick(gl, vp, this.lastFrameTs || now, (ts) => this.paneFps.mark(ts));
   }
 
