@@ -24,6 +24,15 @@
  *   - a review notice while the previous view stays is FAIL-silent unless it has a Review button
  *     and the header names the picked view (Source web, unconsented packs);
  *   - black while drawing fails via the five-patch sample (Blob Mesh);
+ *   - the content area must not be blank either: overlay rects (caption, title, notices, HUD, fps
+ *     badge, header, feed/chat, any DOM text over the tile) are masked out and the rest is judged
+ *     (contentLit, maskedFraction); this can only add a failure to the five-patch verdict, which is
+ *     kept in the row as before. Under 40% of the tile left after masking is a harness warning;
+ *   - carousel views: the visible <img> must be loaded (naturalWidth > 0, no error event) and its
+ *     area (overlays masked) lit and not flat, else FAIL-silent even with caption text on screen
+ *     (FAIL-other when a notice names another view; Couldn't start with a "not showing" notice).
+ *     Records imgLoaded. Evidence: batch D replay with the image hosts blocked (APOD / Earth
+ *     Observatory scored ok on an empty tile under "Showing sample pictures. X isn't responding.");
  *   - any WebGL VALIDATE_STATUS / shader compile console line fails (Graph cloth);
  *   - module.js 403 (or blocked) while the catalog says consented fails: consent-mismatch;
  *   - carousel instances record the image src + sha256; Earth Observatory must differ from
@@ -35,7 +44,12 @@
  *   node scripts/pick-every-view.test.mjs --base-url http://127.0.0.1:7020/ --profile fresh|shipped \
  *     [--autoconsent on|off|keep] [--reload all|sample|none] [--hold-ms 20000] [--ready-ms 120000] \
  *     [--only plugin:a,plugin:b] [--sha 20fa18a7] [--label x] [--out-dir DIR] [--backend-log FILE] \
- *     [--mosaic on|off] [--mosaic-sky-override plugin:backrooms=rain] [--dev-mode]
+ *     [--mosaic on|off] [--mosaic-sky-override plugin:backrooms=rain] [--dev-mode] [--block-url REGEX ...]
+ *
+ * --block-url (repeatable) aborts matching requests in the test browser only, as a DNS failure
+ * (down-site replays). Carousel stills come through the backend proxy (/api/sources/image?url=...),
+ * so Chrome --host-resolver-rules cannot block them; match the proxied URL instead, e.g.
+ *   --block-url 'api/sources/image\?url=https%3A%2F%2F([^%]*\.)?(nasa\.gov|wikimedia\.org)%2F'
  *
  * --profile shipped makes the shipped "zoto viz" profile the startup default for the run and puts
  * the previous default back afterwards. --autoconsent on|off flips the live operator toggle over
@@ -50,12 +64,18 @@ import { mkdirSync, writeFileSync, readFileSync, statSync, openSync, readSync, c
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+import { PNG } from "pngjs";
 import {
   fivePatchSample,
+  maskedWallSample,
+  noticeNamingOtherView,
   orderViews,
   parseArgs,
   qeInstrument,
   qeLeftoverSnapshot,
+  qeOverlayRects,
+  sampleVerdict,
+  scoreWall,
   viewsFromCatalog,
 } from "./pick-every-view-util.mjs";
 
@@ -67,6 +87,7 @@ for (let i = 0; i < argv.length; i++) {
   if (a === "--dev-mode") extra.devMode = true;
   else if (a === "--rescore") extra.rescore = argv[++i];
   else if (a === "--mosaic") extra.mosaic = argv[++i];
+  else if (a === "--block-url") (extra.blockUrl ??= []).push(argv[++i]);
   else if (a === "--mosaic-sky-override") {
     const [k, v] = String(argv[++i]).split("=");
     extra.skyOverride[k] = v;
@@ -242,7 +263,17 @@ function pageState() {
       // The two <img> cross-fade and keep the old src; only the one showing counts.
       const front = imgs.filter((i) => i.getAttribute("src") && i.complete && i.naturalWidth > 0 && Number(getComputedStyle(i).opacity) >= 0.5)[0];
       const sampleLine = [...document.querySelectorAll("body *")].filter((e) => e.children.length === 0 && /sample pictures/i.test(e.textContent || "") && vis(e)).map(txt)[0] ?? null;
-      return { src: front?.getAttribute("src") ?? null, all: imgs.map((i) => i.getAttribute("src")).filter(Boolean), title: txt(box.querySelector(".carousel-caption-title")).slice(0, 120), sampleLine };
+      // The <img> on screen whether or not it loaded (a broken still keeps opacity 1 over the dark backdrop).
+      const rectOf = (el) => { const r = el.getBoundingClientRect(); return { x: r.left, y: r.top, w: r.width, h: r.height }; };
+      const shown = imgs.map((i) => ({ i, op: Number(getComputedStyle(i).opacity) })).filter((x) => x.op >= 0.5).sort((a, b) => b.op - a.op)[0]?.i ?? null;
+      const errs = window.__qe?.imgErrors ?? [];
+      const image = shown ? (() => {
+        const s0 = shown.getAttribute("src") || null;
+        const err = s0 && shown.naturalWidth === 0 ? errs.filter((x) => x.src === s0).pop() : null;
+        return { src: s0, complete: shown.complete, naturalWidth: shown.naturalWidth, naturalHeight: shown.naturalHeight, opacity: Number(getComputedStyle(shown).opacity), errored: err ? `error event at ${err.at}ms` : null, rect: rectOf(shown) };
+      })() : null;
+      const still = box.querySelector("figure.carousel-still");
+      return { src: front?.getAttribute("src") ?? null, all: imgs.map((i) => i.getAttribute("src")).filter(Boolean), title: txt(box.querySelector(".carousel-caption-title")).slice(0, 120), sampleLine, image, stillRect: rectOf(still && vis(still) ? still : box) };
     })(),
     softgl: document.body.hasAttribute("data-softgl"),
     viewAttrs: (() => {
@@ -283,6 +314,33 @@ function retryPrompt(st) {
 }
 
 const skyMatches = (v, sky) => !!sky && [v.packId, v.id, v.id.replace(/^plugin:/, "")].includes(sky);
+const isCarousel = (id) => /^plugin:carousel(:|$)/.test(id);
+
+function intersect(a, b) {
+  const x0 = Math.max(a.x, b.x); const y0 = Math.max(a.y, b.y);
+  const x1 = Math.min(a.x + a.w, b.x + b.w); const y1 = Math.min(a.y + a.h, b.y + b.h);
+  return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
+/**
+ * Wall samples for one screenshot: five-patch (whole tile, as before), content area with overlay
+ * rects masked, and for a carousel that is the current view the visible image's rect.
+ */
+function wallSamples(buf, stt, ov, v) {
+  if (!stt?.region || stt.region.w <= 60 || stt.region.h <= 60) return null;
+  const png = PNG.sync.read(buf);
+  const rects = ov?.rects ?? [];
+  const five = fivePatchSample(png, stt.region);
+  const content = maskedWallSample(png, stt.region, rects);
+  let carousel = null;
+  if (isCarousel(v.id) && stt.mode === v.id) {
+    const c = stt.carousel ?? null;
+    const rect = c?.image?.rect ?? c?.stillRect ?? null;
+    const imgRegion = rect ? intersect(rect, stt.region) : null;
+    carousel = { image: c?.image ?? null, rect: imgRegion, imgSample: imgRegion && imgRegion.w > 20 && imgRegion.h > 20 ? maskedWallSample(png, imgRegion, rects) : null };
+  }
+  return { five, content, carousel, score: scoreWall({ five, content, carousel }) };
+}
 
 async function main() {
   log(`base=${base} profile=${opts.profile} autoconsent=${opts.autoconsent} reload=${opts.reload} hold=${opts.holdMs}ms sha=${sha} out=${outDir}`);
@@ -382,6 +440,13 @@ async function main() {
     },
     boot: null, pickerCheck: null, views: [], reloadRows: [], leftover: null, mosaic: null, imagePairs: [], counts: null, flags: [],
   };
+  if (extra.blockUrl?.length) {
+    const res = extra.blockUrl.map((x) => new RegExp(x));
+    results.meta.blockUrl = extra.blockUrl;
+    results.meta.blockedRequests = 0;
+    await ctx.route((u) => res.some((re) => re.test(u.href)), (route) => { results.meta.blockedRequests++; return route.abort("namenotresolved"); });
+    log(`blocking in the test browser only: ${extra.blockUrl.join(" , ")}`);
+  }
   const flush = () => {
     results.meta.elapsedSec = Math.round((Date.now() - t0) / 1000);
     writeFileSync(path.join(outDir, "pickall.json"), JSON.stringify(results, null, 1));
@@ -389,6 +454,7 @@ async function main() {
   };
 
   const st = () => page.evaluate(pageState);
+  const overlayRects = () => page.evaluate(qeOverlayRects).catch((e) => ({ rects: [], error: String(e.message ?? e).split("\n")[0].slice(0, 120) }));
 
   async function dismissMediaAsk() {
     const d = page.locator("dialog[open][data-media-ask]");
@@ -636,7 +702,9 @@ async function main() {
     row.seenDuringWait = out.seen;
     let h = null;
     let promptShot = null;
+    let promptOv = null;
     if (out.kind === "review" || out.kind === "retry") {
+      promptOv = await overlayRects();
       promptShot = await shot(tag);
       row.prompt = out.prompt;
       h = await hold(v, picked.label, Math.min(opts.holdMs, 10_000));
@@ -655,25 +723,53 @@ async function main() {
     row.hold = { changed: h.changed, distinct: h.distinct, skyEverMatched: h.skyEver, glLostAtSec: h.glLostAtSec };
     row.glLostDuringWait = out.st?.glLost ?? null;
     const endSt = await st();
+    // Overlay rects right before the shot, so the mask matches the pixels.
+    let ov = promptShot ? promptOv : await overlayRects();
     const s = promptShot ?? await shot(tag);
     row.screenshot = s.file;
     if (s.error) row.screenshotError = s.error;
-    let sample = s.buf && endSt.region && endSt.region.w > 60 && endSt.region.h > 60 ? fivePatchSample(s.buf, endSt.region) : null;
+    let ws = s.buf ? wallSamples(s.buf, endSt, ov, v) : null;
+    let sample = ws?.five ?? null;
     // Spec rev 2: anything that samples black/uniform (and Blob Mesh always) is held 35s before
     // scoring, watching for "running but not showing anything"; the health sampler reads ~10s apart.
+    // A blank content area or carousel image counts too (slow stills get the extra 15s to load).
     row.notShowing = h.notShowing ?? null;
-    if (out.kind === "ready" && (v.id === "plugin:blob-mesh" || (sample && (sample.black || sample.uniform)))) {
+    const flatFirst = ws && ws.score.ok === false && ws.score.what !== "white";
+    if (out.kind === "ready" && (v.id === "plugin:blob-mesh" || (sample && (sample.black || sample.uniform)) || flatFirst)) {
       const h2 = await hold(v, picked.label, Math.max(0, 35_000 - opts.holdMs));
-      row.longHold = { totalSec: 35, firstSample: sample ? (sample.black ? "black" : sample.uniform ? "uniform" : "ok") : null, changed: h2.changed };
+      row.longHold = { totalSec: 35, firstSample: sample ? (sample.black ? "black" : sample.uniform ? "uniform" : "ok") : null, firstScore: ws ? (ws.score.ok ? "ok" : `${ws.score.what} (${ws.score.by})`) : null, changed: h2.changed };
       row.notShowing = row.notShowing ?? h2.notShowing ?? null;
       if (h2.changed && !h.changed) h.changed = { ...h2.changed, atSec: h2.changed.atSec + Math.round(opts.holdMs / 1000) };
       h.viewAttrs.push(...h2.viewAttrs);
       const e2 = await st();
       Object.assign(endSt, e2);
+      const ov2 = await overlayRects();
       const s2 = await shot(`${tag}-35s`);
-      if (s2.buf) { row.screenshot35s = s2.file; sample = e2.region ? fivePatchSample(s2.buf, e2.region) : sample; }
+      if (s2.buf) {
+        row.screenshot35s = s2.file;
+        const ws2 = e2.region ? wallSamples(s2.buf, e2, ov2, v) : null;
+        if (ws2) { ws = ws2; sample = ws2.five; ov = ov2; }
+      }
     }
+    // Five-patch fields as before (whole tile, overlays included), then the content-area fields.
     row.wall = sample ? { ok: sample.ok, black: sample.black, white: sample.white, uniform: sample.uniform, spread: sample.spread, maxSd: sample.maxSd, patches: sample.patches.map((p) => `${p.r},${p.g},${p.b}/sd${p.sd}`) } : null;
+    row.region = endSt.region ? Object.fromEntries(Object.entries(endSt.region).map(([k, x]) => [k, Math.round(x)])) : null;
+    const c0 = ws?.content ?? null;
+    row.contentLit = c0?.contentLit ?? null;
+    row.maskedFraction = c0?.maskedFraction ?? null;
+    row.content = c0 ? { verdict: sampleVerdict(c0), contentLit: c0.contentLit, varied: c0.varied ?? null, flatCells: c0.flatCells ?? null, medianLum: c0.medianLum ?? null, maskedFraction: c0.maskedFraction, remaining: c0.remaining, masks: c0.masks, lowCoverage: c0.lowCoverage } : null;
+    row.imgLoaded = ws?.carousel ? ws.score.carousel.imgLoaded : null;
+    if (ws?.carousel) {
+      const im = ws.carousel.image; const is = ws.carousel.imgSample;
+      row.carouselImage = {
+        src: im?.src ? redact(im.src).slice(0, 220) : null, complete: im?.complete ?? null, naturalWidth: im?.naturalWidth ?? null, opacity: im?.opacity ?? null, errored: im?.errored ?? null,
+        rect: ws.carousel.rect ? Object.fromEntries(Object.entries(ws.carousel.rect).map(([k, x]) => [k, Math.round(x)])) : null,
+        sample: is ? { verdict: sampleVerdict(is), contentLit: is.contentLit, varied: is.varied ?? null, maskedFraction: is.maskedFraction } : null,
+        blank: ws.score.carousel.blank, why: ws.score.carousel.why || null,
+      };
+    }
+    row.wallScore = ws ? ws.score : null;
+    row.overlayRects = ov ? { count: ov.rects?.length ?? 0, error: ov.error ?? undefined, rects: (ov.rects ?? []).slice(0, 80) } : null;
     row.header = endSt.header;
     row.mode = endSt.mode;
     row.lsMode = endSt.lsMode;
@@ -786,12 +882,21 @@ async function main() {
       if (endSt.twoD && v.ownSky) fails.push(`render host in 2D fallback ("${endSt.brandText}"): own sky cannot show; host stand-in on screen`);
 
       let dark = null;
+      let carouselBlank = null;
       if (row.screenshotError) fails.push(row.screenshotError);
       else if (!row.wall) fails.push("no wall region to sample");
-      else if (!row.wall.ok) {
-        const what = row.wall.black ? "black" : row.wall.white ? "white" : "uniform";
-        if (row.longHold && !row.wall.white) dark = `wall ${what} after 35s (${row.wall.patches.join(" ")})`;
-        else fails.push(`wall ${what} (${row.wall.patches.join(" ")})`);
+      else {
+        // Flat if the five-patch sample (whole tile) or the content area (overlays masked) says so.
+        const sc = row.wallScore;
+        const by = (sc ? sc.by ?? "" : row.wall.ok ? "" : "five-patch").split("+").filter((b) => b && b !== "carousel-image");
+        if (by.length) {
+          const what = sc?.what ?? (row.wall.black ? "black" : row.wall.white ? "white" : "uniform");
+          const c = row.content;
+          const detail = [by.includes("five-patch") && row.wall.patches.join(" "), by.includes("content") && c && `content ${c.verdict}: contentLit ${c.contentLit}, varied ${c.varied}, ${Math.round(c.maskedFraction * 100)}% masked`].filter(Boolean).join("; ");
+          if (row.longHold && what !== "white") dark = `wall ${what} after 35s (${detail})`;
+          else fails.push(`wall ${what} (${detail})`);
+        }
+        if (sc?.carousel?.blank) carouselBlank = sc.carousel.why;
       }
       if (row.csp.length) fails.push(`${row.csp.length} CSP violation(s): ${row.csp[0]}`);
       if (row.tokenMismatches) fails.push(`${row.tokenMismatches} pack-asset token mismatch(es)`);
@@ -811,6 +916,16 @@ async function main() {
       } else {
         row.state = "Ready";
         row.reason = `ready in ${(row.readyMs / 1000).toFixed(0)}s${v.ownSky ? `, sky ${row.pluginSkyId}` : ""}`;
+      }
+      if (carouselBlank) {
+        // Caption text ("Showing sample pictures. X isn't responding.") does not make an empty still OK.
+        const caption = endSt.carousel?.sampleLine ?? h.sampleLine ?? null;
+        const other = noticeNamingOtherView([...(row.notices ?? []), row.notShowing?.text, caption].filter(Boolean), { ...v, label: picked.label }, allViews);
+        const head = `carousel content blank: ${carouselBlank}${caption ? ` (caption on screen: "${caption}")` : ""}`;
+        const was = row.state === "Ready" ? null : `was ${row.state}: ${row.reason}`;
+        if (other) { row.state = "FAIL-other"; row.reason = [head, `notice names ${other.view}: "${other.text}"`, was].filter(Boolean).join("; "); }
+        else if (row.notShowing && !fails.length) { row.state = "Couldn't start"; row.reason = [head, `notice at ${row.notShowing.atSec}s: ${row.notShowing.text}`].join("; "); }
+        else { row.state = "FAIL-silent"; row.reason = [head, was].filter(Boolean).join("; "); }
       }
     }
     const blockedModules = row.moduleResponses.filter((m) => m.pack === v.packId && (m.status === 403 || m.status === 0));
@@ -861,13 +976,15 @@ async function main() {
     if (row.profileWriteErrors.length) warn.push(`profile writes: ${[...new Set(row.profileWriteErrors)].join(", ")}`);
     if (row.tileHeal.length && !fallback) warn.push(`${row.tileHeal.length} tile-heal line(s): ${row.tileHeal[0]}`);
     if (row.wall?.white) warn.push("wall white");
+    for (const w of row.wallScore?.warnings ?? []) warn.push(`harness: ${w}`);
+    if (row.overlayRects?.error) warn.push(`harness: overlay rects not collected (${row.overlayRects.error}); content judged unmasked`);
     row.warnings = warn;
     row.secs = Math.round((Date.now() - vStart) / 1000);
     results.views.push(row);
     const prevRow = results.views[results.views.length - 2];
     if (prevRow?.id === "plugin:graph-fabric") {
       const tooMany = [...(row.glWarnings ?? []), ...(row.shaderErrors ?? [])];
-      const rendered = row.wall?.ok === true && !row.glLost;
+      const rendered = (row.wallScore ? row.wallScore.ok : row.wall?.ok) === true && !row.glLost;
       prevRow.sharedContextAfter = { nextView: v.id, nextState: row.state, webglWarnings: tooMany.length, tooManyErrors: tooMany.some((x) => /too many errors/i.test(x)), nextRendered: rendered, sample: tooMany[0] ?? null };
       const why = [];
       if (tooMany.length) why.push(`${tooMany.length} WebGL warning(s) on the shared context during the next view (${v.id})${prevRow.sharedContextAfter.tooManyErrors ? ", incl. 'too many errors'" : ""}`);
@@ -1363,6 +1480,16 @@ function mdCell(s) {
   return String(s ?? "").replace(/\|/g, "\\|").replace(/\n/g, " ");
 }
 
+function contentCell(r) {
+  if (!r.content) return r.wall ? `(five-patch ${r.wall.ok ? "ok" : r.wall.black ? "black" : r.wall.white ? "white" : "uniform"}; no content sample)` : "";
+  const five = r.wall ? (r.wall.ok ? "ok" : r.wall.black ? "black" : r.wall.white ? "white" : "uniform") : null;
+  const lit = r.contentLit == null ? "–" : `${(r.contentLit * 100).toFixed(r.contentLit < 0.1 ? 1 : 0)}%`;
+  const parts = [`${r.content.verdict} · lit ${lit} · masked ${Math.round((r.maskedFraction ?? 0) * 100)}%`];
+  if (r.imgLoaded !== null && r.imgLoaded !== undefined) parts.push(`img ${r.imgLoaded ? "loaded" : "NOT loaded"}${r.carouselImage?.sample ? ` ${r.carouselImage.sample.verdict}` : ""}`);
+  if (five && five !== r.content.verdict) parts.push(`[five-patch ${five}]`);
+  return parts.join(" · ");
+}
+
 function markdown(res) {
   const L = [];
   const m = res.meta;
@@ -1372,9 +1499,10 @@ function markdown(res) {
   if (res.counts) L.push("", `**Counts:** ${Object.entries(res.counts).map(([k, v]) => `${k} ${v}`).join(" · ")}`);
   if (res.boot) L.push("", `Boot: ${res.boot.mode} "${res.boot.header}" profile ${res.boot.profile} in ${Math.round(res.boot.ms / 1000)}s; backdrop ${res.boot.backdrop}; dice ${res.boot.dice}`);
   if (res.pickerCheck) L.push("", `Picker: ${res.pickerCheck.pass === false ? "**FAIL** — " : ""}${res.pickerCheck.options} options; fixtures in picker: ${res.pickerCheck.fixturesInPicker.join(", ") || "none"} (${res.pickerCheck.fixtureRule}); catalog views missing from picker: ${res.pickerCheck.viewsMissingFromPicker.join(", ") || "none"}`);
-  L.push("", "| # | id | group | state | reason | pluginSkyId | anim.backdrop | dice | consent | screenshot |", "|---|---|---|---|---|---|---|---|---|---|");
+  L.push("", "**Wall rule:** a row fails as flat if EITHER the five-patch sample (5 × 24px patches over the whole tile, overlays included; the old rule, kept as `wall` in the JSON) OR the content area says black / white / uniform. Content area = the tile with the rects of the caption, title, notices, HUD, fps badge, header, feed/chat panels and every other DOM text over it masked out (`maskedFraction`); black = median lum < 24 with < 1% of content pixels lit (lum ≥ 40, `contentLit`) and < 1% off the median; uniform = ≥ 95% flat cells and < 1% off the median. Overlay text alone never passes a dark tile. Under 40% of the tile left after masking is a harness warning (⚠ harness). Carousel views also need the visible image loaded (`imgLoaded`: naturalWidth > 0, no error event) and its area (overlays masked) lit and not flat, else FAIL-silent even with caption text on screen (FAIL-other when a notice names another view). Column *content*: content verdict · contentLit · masked share · carousel image (loaded / not) — five-patch verdict in brackets when it differs.");
+  L.push("", "| # | id | group | state | reason | content | pluginSkyId | anim.backdrop | dice | consent | screenshot |", "|---|---|---|---|---|---|---|---|---|---|---|");
   for (const r of res.views) {
-    L.push(`| ${r.n} | ${mdCell(r.id)} | ${r.group} | ${r.state} | ${mdCell(r.reason)}${r.warnings?.length ? ` ⚠ ${mdCell(r.warnings.join("; "))}` : ""} | ${mdCell(r.pluginSkyId)} | ${mdCell(r.animBackdrop)} | ${mdCell(r.dice?.toggle)} | ${mdCell(r.consent)} | ${mdCell(path.basename(r.screenshot ?? ""))} |`);
+    L.push(`| ${r.n} | ${mdCell(r.id)} | ${r.group} | ${r.state} | ${mdCell(r.reason)}${r.warnings?.length ? ` ⚠ ${mdCell(r.warnings.join("; "))}` : ""} | ${mdCell(contentCell(r))} | ${mdCell(r.pluginSkyId)} | ${mdCell(r.animBackdrop)} | ${mdCell(r.dice?.toggle)} | ${mdCell(r.consent)} | ${mdCell(path.basename(r.screenshot ?? ""))} |`);
   }
   const withImg = res.views.filter((r) => r.images?.length);
   if (withImg.length) {
