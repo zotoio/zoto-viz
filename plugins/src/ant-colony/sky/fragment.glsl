@@ -10,6 +10,8 @@ out vec4 fragColor;
 
 #define PI 3.14159265
 const vec3 FAIL_COL = vec3(1.0, 0.2, 0.33);
+const float SOIL_LIFT = 1.8;
+const vec3 SOIL_AMBIENT = vec3(0.02, 0.015, 0.01);
 
 float slot(int i) {
   vec4 v = zotoVizSlots[i >> 2];
@@ -181,7 +183,9 @@ vec3 soilColor(vec2 uv, float strata) {
   float pebb = step(0.92, fbm(uv * 11.0));
   base = mix(base, base * 0.7 + vec3(0.05), roots * 0.35);
   base += vec3(0.04) * pebb;
-  return base;
+  // Lift the whole soil (base colour and a warm ambient), not just the dim outside the cut:
+  // at 0.7 dim the bare loam still drew luma ~16-20 in the app and QE's patches read it as black.
+  return base * SOIL_LIFT + SOIL_AMBIENT;
 }
 
 void main() {
