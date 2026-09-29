@@ -115,6 +115,14 @@ export interface VizPackHandlers {
   writeParticles: (data: number[], stride?: number) => void;
 }
 
+/** Same hues as plugins/src/blob-mesh/frontend/index.ts roleHue. */
+function blobMeshRoleHue(role: string): number {
+  if (role === "gateway") return 0.08;
+  if (role === "internet") return 0.78;
+  if (role === "lan") return 0.45;
+  return 0.22;
+}
+
 function roleHue(role: string): number {
   if (role === "gateway") return 0.9;
   if (role === "internet") return 0.75;
@@ -215,13 +223,23 @@ export function runPackFrameHandler(
       break;
     }
     case "blob-mesh": {
+      // Mirror of plugins/src/blob-mesh/frontend/index.ts (#161). This case runs right before
+      // the draw (viz-frame-tick.ts), so its slot 0 is what the app shows: the old fixed
+      // radius-0.1 row at x = (i/8)*2-1 sat outside the dome view and left the wall black.
       const buf: number[] = [];
       const n = Math.min(8, frame.talkers.length);
+      const peak = frame.talkers.reduce((m, t) => Math.max(m, t.rate), 0);
+      const busy = Math.min(1, peak / 60);
       for (let i = 0; i < n; i++) {
-        buf.push((i / 8) * 2 - 1, ((i * 17) % 10) / 10, 0.1, 0.4);
+        const t = frame.talkers[i]!;
+        const h = (t.id.charCodeAt(0) + i * 19) % 97;
+        const ang = (h / 97) * 6.283 + frame.t * (0.15 + i * 0.03);
+        const r = 0.25 + (h % 20) / 50;
+        const share = peak > 0 ? t.rate / peak : 0;
+        buf.push(Math.cos(ang) * r, Math.sin(ang) * r, 0.16 + 0.1 * share * busy, blobMeshRoleHue(t.role));
       }
       handlers.writeBuffer(0, buf);
-      handlers.writeUniform("uBright", 0.55);
+      handlers.writeUniform("uBright", 0.8 + Math.min(0.35, (frame.talkers[0]?.rate ?? 0) / 80) + frame.audio * 0.2);
       handlers.writeUniform("uAudio", frame.audio);
       handlers.writeUniform("uAccent", [0.25, 0.75, 0.95]);
       break;
