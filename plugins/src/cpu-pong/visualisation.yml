@@ -1,6 +1,0 @@
-engine: cpupong
-look:
-  theme: tactical
-  backdrop: none
-  gridShape: circle
-  themeCycle: 'off'
