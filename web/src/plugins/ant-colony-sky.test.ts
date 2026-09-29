@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { wrapPluginSky } from "./plugin-sky-probe";
 import {
   closePluginSkySmokeBrowser,
+  pluginSkySmokePngPath,
   smokeRenderPluginSky,
   type PluginSkySmokeResult,
   type PluginSkySmokeUniforms,
@@ -15,8 +16,20 @@ import {
   IDENTITY_SKY_RAY,
   parentedSkyRay,
   worldDomeSkyRay,
+  appLensSkySpan,
   type SkyRay,
+  type SkySpan,
 } from "./pack-sky-host-camera-test-helper";
+import {
+  appFivePatches,
+  fivePatchSummary,
+  hostLookUniforms,
+  lanFrames35s,
+  noteRowNumbers,
+  UXPRO_DARK_LUM,
+  UXPRO_MAX_DARK,
+} from "./pack-sky-lan-frame-test-helper";
+import { normalizeVizDemoPackId } from "../ui/viz-hud";
 
 /**
  * Ant Colony wall black (QE pick-every-view on 20fa18a7, row 27). The pack is
@@ -43,8 +56,8 @@ const HOST_DEFAULTS: PluginSkySmokeUniforms = {
   uBg: [0x1a / 255, 0x14 / 255, 0x12 / 255],
 };
 
-function wrappedSky(ray: SkyRay = IDENTITY_SKY_RAY): string {
-  const w = wrapPluginSky(atHostCamera(rawSky, ray));
+function wrappedSky(ray: SkyRay = IDENTITY_SKY_RAY, span?: SkySpan): string {
+  const w = wrapPluginSky(atHostCamera(rawSky, ray, span));
   if ("error" in w) throw new Error(w.error);
   return w.frag;
 }
@@ -121,12 +134,12 @@ function changedShare(a: PluginSkySmokeResult, b: PluginSkySmokeResult, step = 2
   return n / la.length;
 }
 
-async function expectNestInView(out: PackOut): Promise<void> {
-  const frag = wrappedSky();
+async function expectNestInView(out: PackOut, frag = wrappedSky()): Promise<void> {
   const withNest = await smokeRenderPluginSky(frag, out.slots, out.uniforms, { keepLuma: true });
   const bare = await smokeRenderPluginSky(frag, withoutNest(out.slots), out.uniforms, { keepLuma: true });
   const share = changedShare(withNest, bare);
   const why = `with nest: ${withNest.assertion} / without: ${bare.assertion} / changed share ${share.toFixed(4)}`;
+  noteRowNumbers(`nest share (${expect.getState().currentTestName ?? "?"})`, `changed share ${share.toFixed(4)}`);
   expect(withNest.pixelChecksum, `chambers and tunnels must change the host view (${why})`).not.toBe(bare.pixelChecksum);
   // The authored mapping leaves the frame bit-identical without the nest; require a visible share, not one pixel:
   // at least 2% of the view moves by 2/255 luma or more (the nest covers about 4-5% of it).
@@ -190,4 +203,76 @@ describe("ant-colony sky frames the formicarium on the host camera", () => {
     const w75 = await smokeRenderPluginSky(wrappedSky(worldDomeSkyRay(75)), out.slots, out.uniforms);
     expect(w15.pixelChecksum, "world-fixed dome control should differ across pitch").not.toBe(w75.pixelChecksum);
   }, 90_000);
+});
+
+/**
+ * Ant Colony near-black in the real app (UX Pro headed run at 6b172413, 35 s after pick,
+ * 7 devices / 420 pkt/s): five-patch lumas fresh 17/22/26/14/17, shipped 16/23/27/14/17,
+ * no pixel reaching luma 40. The idle row above drives the host idle fixture with the pack's
+ * own uniforms; the app does neither.
+ *
+ * Production path: ant-colony is not a VIZ_DEMO_PACK, so viz-present-deliver.ts builds the
+ * frame with mainVizBuildFrame (live LAN talkers win over the idle fixture in
+ * mergeVizIdleFrame, viz-host.ts:311) and deliverVizPluginFrame only posts it to the pack's
+ * sandboxed frontend (viz-frame-tick.ts:29; no runPackFrameHandler case). The frontend's
+ * zotoVizSlots writes reach the UBO, but its uBright / uAccent / uBg / uAudio writes are
+ * overwritten every frame by scene.ts applyLook -> backdrop setLook / setColors ->
+ * syncPluginLook: the sky draws with the look's skyBright 1.05, skyOpacity 1, the ember rim
+ * 0xff5e3a as uAccent and the ember clear 0x1a1412 as uBg (the red trails in UX Pro's shot).
+ */
+describe("ant-colony on the app's production path (live LAN frame, host look uniforms)", () => {
+  /** ant-colony look: theme ember, skyBright 1.05, skyOpacity 1, skySpeed 0.35 (uTime ~ 35 s * 0.35). */
+  const APP_LOOK = hostLookUniforms({ skyBright: 1.05, skyOpacity: 1, rim: 0xff5e3a, bg: 0x1a1412 }, 12.25);
+
+  function appSlots(): Float32Array {
+    expect(normalizeVizDemoPackId("ant-colony"), "no host mirror: only the pack frontend writes").toBeNull();
+    // ~35 s of 6 fps delivers would be ~210 frames; the colony settles well inside 60.
+    const frames = lanFrames35s({ fixture: "host" }, 2, 60);
+    expect(frames.at(-1)!.talkers).toHaveLength(7);
+    expect(frames.at(-1)!.demoSlices?.talkers, "live LAN talkers, not the idle fixture").toBeUndefined();
+    return runPack(frames).slots;
+  }
+
+  /**
+   * Where QE's patches land depends on where this seed digs the nest for these IPs (UX Pro's
+   * shot had all five on bare soil). The soil-only frame keeps meta (camera, day, soil style)
+   * and drops chambers, tunnels, pheromone and ants: the wall the patches see when they miss.
+   */
+  function soilOnly(s: Float32Array): Float32Array {
+    const out = withoutNest(s);
+    out.fill(0, 3 * SLOT, 8 * SLOT);
+    return out;
+  }
+
+  async function appWall(slots: Float32Array, png: string) {
+    // App camera: stage-only levelled, lensFov-clamped 64 x 42.7 degrees at 1280 x 800.
+    const frag = wrappedSky(parentedSkyRay("ant-colony", rawSky, 0), appLensSkySpan());
+    const r = await smokeRenderPluginSky(frag, slots, APP_LOOK, { keepLuma: true, pngPath: pluginSkySmokePngPath(png) });
+    const five = fivePatchSummary(appFivePatches(r.luma!));
+    const canvas = fivePatchSummary(r.qePatches);
+    const maxLuma = Math.round(Math.max(...r.luma!));
+    noteRowNumbers(png, `app-region ${five.text}; canvas ${canvas.text}; max luma ${maxLuma}; ${r.assertion}`);
+    return { r, five, maxLuma, why: `app-region ${five.text}; canvas ${canvas.text}; max luma ${maxLuma}; ${r.assertion}` };
+  }
+
+  function expectLitWall(w: Awaited<ReturnType<typeof appWall>>): void {
+    expect(w.five.dark, w.why).toBeLessThanOrEqual(UXPRO_MAX_DARK);
+    // Margin: this draw reads ~0.8x brighter than UX Pro's app shot at 6b172413 (bare soil here
+    // 20/31/32/17/17 vs app 17/21/26/14/16), so a median of 34 here is ~28 in the app, in
+    // Roto Proto's app ballpark (27/25/24/28/30).
+    expect(w.five.median, w.why).toBeGreaterThanOrEqual(34);
+    expect(Math.max(...w.five.lums), `not blown out: ${w.why}`).toBeLessThan(200);
+  }
+
+  it("keeps the wall lit for a 7-talker 420 pkt/s LAN at the levelled host camera (UX Pro five-patch rule)", async () => {
+    expectLitWall(await appWall(appSlots(), "ant-colony-prod-lan-35s"));
+  }, 60_000);
+
+  it("keeps the bare soil lit on that frame where QE's patches miss the nest", async () => {
+    expectLitWall(await appWall(soilOnly(appSlots()), "ant-colony-prod-lan-35s-soil"));
+  }, 60_000);
+
+  it("still shows the nest on that frame (chambers and tunnels move >= 2% of the view)", async () => {
+    await expectNestInView({ slots: appSlots(), uniforms: APP_LOOK }, wrappedSky(parentedSkyRay("ant-colony", rawSky, 0), appLensSkySpan()));
+  }, 60_000);
 });
