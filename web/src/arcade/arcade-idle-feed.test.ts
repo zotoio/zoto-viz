@@ -44,6 +44,26 @@ describe("#181 shared arcade idle feed", () => {
     expect(feed.showing).toBe(true);
   });
 
+  it("resume hook: runs once per off→on, before that on-phase's first batch; never while on", () => {
+    const log: string[] = [];
+    const feed = new ArcadeIdleFeed<Row>({ shaper: SHAPERS.frogger, clock: () => 1000, deliver: () => log.push("batch"), onResume: () => log.push("resume") });
+    feed.start();
+    feed.pollEmpty(); feed.pollEmpty();
+    feed.pollLive();
+    feed.pollEmpty(); feed.pollEmpty(); feed.pollEmpty(); feed.pollEmpty();
+    expect(log).toEqual(["batch", "batch", "resume", "batch", "batch"]);
+  });
+
+  it("start(fresh): a restart with no live cursor turns the feed on at once; start() keeps it off", () => {
+    const got: number[] = [];
+    const feed = new ArcadeIdleFeed<Row>({ shaper: SHAPERS.frogger, clock: () => 1000, deliver: (r) => got.push(r.length) });
+    feed.start(); feed.pollEmpty(); feed.pollLive(); feed.stop();
+    feed.start(); feed.pollEmpty();
+    expect(got.length, "start() after live, 1 empty poll").toBe(1);
+    feed.stop(); feed.start(true); feed.pollEmpty();
+    expect(got.length, "start(true), 1 empty poll").toBe(2);
+  });
+
   for (const [name, shaper] of Object.entries(SHAPERS)) {
     it(`${name}: pace — one delivery per empty poll, at most ${ARCADE_IDLE_MAX_ROWS_PER_STEP} rows each, none without a poll`, () => {
       vi.useFakeTimers();
