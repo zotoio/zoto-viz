@@ -208,9 +208,9 @@ export function noteConsentGranted(seed: ConsentSeed, kind: ConsentKind): void {
   settleEntry(seed.id, { state: "granted", kind, identity: consentIdentity(seed), local: true, error: null });
 }
 
+/** Entries and requests only: listeners the host registered at module load (picker) stay. */
 export function resetConsentStoreForTests(): void {
   for (const p of pending.values()) p.controller.abort();
   pending.clear();
   entries.clear();
-  listeners.clear();
 }

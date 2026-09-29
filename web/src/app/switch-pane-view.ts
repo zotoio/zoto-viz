@@ -27,6 +27,11 @@ export type SwitchPaneViewOpts = {
   pluginId?: string | null;
   /** Clears session flags (e.g. viz UBO preserve) when consent blocks a switch. */
   onConsentDenied?: () => void;
+  /**
+   * Paint Needs you (name, one sentence, Review) on the pane instead of the Settings hint. Review
+   * there approves in place and the switch resumes.
+   */
+  onNeedsYou?: (paneId: string) => void;
 };
 
 const paneSwitchGen = new Map<string, number>();
@@ -103,7 +108,8 @@ export async function switchPaneView(
     }
     const msg = consentBlockMessage(opts.spec);
     opts.onConsentDenied?.();
-    mosaic.setPaneNotice(slot.paneId, msg);
+    if (opts.onNeedsYou) opts.onNeedsYou(slot.paneId);
+    else mosaic.setPaneNotice(slot.paneId, msg);
     const pid = opts.pluginId?.trim();
     if (pid && slot.swap) {
       registerConsentPending({

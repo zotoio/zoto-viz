@@ -768,7 +768,13 @@ export function fillViewSelect(
   }
 }
 
-export function viewSelectOptions(): { value: string; label: string; hint: string; group: string }[] {
+/**
+ * `suffixFor` marks a row with a short trailing word ("needs OK") when the view needs attention;
+ * rows that just work carry their plain name.
+ */
+export function viewSelectOptions(
+  suffixFor?: (viewId: string) => string | null,
+): { value: string; label: string; hint: string; group: string }[] {
   const rows = allModes().map((m) => ({
     value: m.id,
     label: viewCaption(m),
@@ -792,8 +798,14 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
     ...row,
     hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : row.group,
   }));
+  const marked = suffixFor
+    ? numbered.map((row) => {
+      const suffix = suffixFor(row.value);
+      return suffix ? { ...row, label: `${row.label} · ${suffix}` } : row;
+    })
+    : numbered;
   const blocked = blockedViewSelectRow(blockedCatalogEntries());
-  return blocked ? [...numbered, blocked] : numbered;
+  return blocked ? [...marked, blocked] : marked;
 }
 
 export async function fetchPlugins(): Promise<PluginList> {

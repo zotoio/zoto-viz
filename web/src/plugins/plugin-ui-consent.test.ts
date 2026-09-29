@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PluginView } from "./plugin";
-import { askPluginReview } from "./plugin-ui";
+import { renderPackReview } from "./plugin-ui";
 
 const spec: PluginView = {
   id: "pack-a",
@@ -10,23 +10,40 @@ const spec: PluginView = {
   runtime: "typescript",
 };
 
-describe("askPluginReview", () => {
-  it("focuses Not now on open and Enter declines", async () => {
-    const pending = askPluginReview(spec);
-    const cancel = document.querySelector(".modal.ask .ask-actions .btn") as HTMLButtonElement;
+describe("renderPackReview (Needs you → Review, inline, never a modal)", () => {
+  it("opens inside the tile notice with Not now focused; Escape is Not now", () => {
+    const notice = document.createElement("div");
+    document.body.append(notice);
+    const onChoice = vi.fn();
+    renderPackReview(notice, spec, { onChoice });
+    const cancel = notice.querySelector<HTMLButtonElement>(".pack-review-cancel")!;
     expect(document.activeElement).toBe(cancel);
     expect(cancel.textContent).toBe("Not now");
-    cancel.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
-    await expect(pending).resolves.toBeNull();
     expect(document.querySelector(".modal.ask")).toBeNull();
+    expect(document.querySelector("[aria-modal]")).toBeNull();
+    expect(document.body.classList.contains("modal-open")).toBe(false);
+    cancel.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(onChoice).toHaveBeenCalledWith(null);
+    expect(notice.querySelector(".pack-review")).toBeNull();
+    notice.remove();
   });
 
-  it("closes the dialog when AbortSignal aborts", async () => {
-    const ac = new AbortController();
-    const pending = askPluginReview(spec, { signal: ac.signal });
-    expect(document.querySelector(".modal.ask")).toBeTruthy();
-    ac.abort();
-    await expect(pending).resolves.toBeNull();
-    expect(document.querySelector(".modal.ask")).toBeNull();
+  it("dispose takes the panel down without a choice", () => {
+    const notice = document.createElement("div");
+    const onChoice = vi.fn();
+    const dispose = renderPackReview(notice, spec, { onChoice });
+    expect(notice.querySelector(".pack-review")).toBeTruthy();
+    dispose();
+    expect(notice.querySelector(".pack-review")).toBeNull();
+    expect(onChoice).not.toHaveBeenCalled();
+  });
+
+  it("changed / stale wording says why the earlier OK does not cover it", () => {
+    const notice = document.createElement("div");
+    renderPackReview(notice, spec, { state: "changed", onChoice: () => {} });
+    expect(notice.textContent).toMatch(/differ from what you approved/);
+    const stale = document.createElement("div");
+    renderPackReview(stale, spec, { state: "stale", onChoice: () => {} });
+    expect(stale.textContent).toMatch(/earlier OK did not cover/);
   });
 });
