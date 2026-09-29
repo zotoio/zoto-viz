@@ -1,5 +1,10 @@
 void main() {
-  vec3 dir = normalize(vDir);
+  // vDir is the camera-local ray (the host parents plugin skies to the camera),
+  // so the view looks down -z and the dir.xz/|dir.y| plane would sit edge-on in the
+  // clamp band. Tilt the ray by the host camera's default 45 degree pitch so the
+  // rotozoom plane is framed the way this sky was authored.
+  vec3 cam = normalize(vDir);
+  vec3 dir = normalize(vec3(cam.x, 0.70710678 * (cam.y + cam.z), 0.70710678 * (cam.z - cam.y)));
   vec2 uv = vec2(dir.x, dir.z) / max(0.22, abs(dir.y));
   float lead = max(0.35, zotoVizSlots[0].x);
   float mixv = max(0.25, zotoVizSlots[0].y);

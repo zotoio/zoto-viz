@@ -55,5 +55,6 @@ CI also runs `web/src/plugins/starter-pack-ci.test.ts` (zip → compile → WebG
 - Held-pack migrations (#17, #19, #21, #22, #24, #29, #30, #31): replace `declare const zoto` / `globalThis.zoto` casts with `getVizZoto()` (see `plugins/sdk/README.md`).
 - Value-import SDK runtime helpers (`talker-slots`, `viz-pack-host`); pack build bundles them into `module.js`.
 - `getConfig?.()` once at init; `onConfig` for live updates (not inside `onFrame`).
+- Sky `vDir` is a camera-relative ray looking down `-z` (plugin skies are parented to the camera since 2f44932a): use `rd.xy / -rd.z` (as `koi-pond` does), not a world dome like `dir.xz / (k + abs(dir.y))`. See [docs/plugins-viz.md](../../../docs/plugins-viz.md).
 - `data-mapping.yml` documents fields; host reads mapping via pack files — there is no `dataMapping:` key in `visualisation.yml` today.
 - **Idle source:** `plugin.yml` `viz.idle` is what the compile/consent path uses; keep `visualisation.yml` `idle.fixture: host` aligned for the graph view.
