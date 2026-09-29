@@ -212,7 +212,8 @@ describe("pane-change probe on a shared RenderHost reads only its own pane (real
     vi.spyOn(RenderHost.prototype as unknown as HostPresent, "present").mockImplementation(function (this: RenderHost, ...a: unknown[]) {
       spy.state.viewport = null;
       const vp = presentOrig.apply(this, a) as ProbeRect | null;
-      if (spy.state.viewport) hostBoxes.set(a[0] as object, { ...spy.state.viewport });
+      const drawn = spy.state.viewport as ProbeRect | null; // set by the stand-in's setViewport during present
+      if (drawn) hostBoxes.set(a[0] as object, { x: drawn.x, y: drawn.y, w: drawn.w, h: drawn.h });
       if (vp) returned.set(a[0] as object, { x: vp.x, y: vp.y, w: vp.w, h: vp.h });
       return vp;
     });
