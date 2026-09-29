@@ -47,6 +47,18 @@ PREFETCH_STILLS = 48
 HEADLINE_LIMIT = 64
 _COUNT_Q = re.compile(r"([?&]count=)(\d+)")
 _PAGE_Q = re.compile(r"([?&]page-size=)(\d+)")
+# Bundled per-source demo stills (``demo: true``). When a pictured feed's live fetch fails
+# (5xx, 403/429, timeout, bad XML) or yields no stills, the row serves ITS OWN sample so a
+# carousel never keeps showing another source's pictures. Every image in a sample must sit
+# on that source's own host.
+SAMPLE_DIR = Path(__file__).resolve().parents[1] / "plugins" / "src" / "carousel" / "snapshots"
+SAMPLE_HOSTS: dict[str, tuple[str, ...]] = {
+    "nasa": ("www.nasa.gov",),
+    "apod": ("apod.nasa.gov",),
+    "earth-iotd": ("science.nasa.gov",),
+    "commons-potd": ("wikimedia.org",),
+}
+MAX_SAMPLE_BYTES = 256_000
 
 DEFAULT_SOURCES: list[dict[str, Any]] = [
     {
@@ -593,6 +605,12 @@ def pick_image_url(*blobs: str) -> str:
     return max(enumerate(found), key=lambda iv: (_image_score(iv[1]), iv[0]))[1]
 
 
+def _too_large(child: ET.Element) -> bool:
+    """An enclosure the still proxy would refuse (``length`` over its cap) only yields 502s."""
+    raw = _attr(child, "length").strip()
+    return raw.isdigit() and int(raw) > agent_assets.MAX_BYTES
+
+
 def _item_image(it: ET.Element) -> str:
     """enclosure / media:content / img-in-description — NASA IOTD uses enclosure."""
     enclosed: list[str] = []
@@ -603,7 +621,7 @@ def _item_image(it: ET.Element) -> str:
         url = _attr(child, "url")
         typ = _attr(child, "type").lower()
         medium = _attr(child, "medium").lower()
-        if not url.startswith("https://"):
+        if not url.startswith("https://") or _too_large(child):
             continue
         if typ.startswith("image/") or medium == "image" or _IMG_HREF.match(url):
             enclosed.append(url)
@@ -619,9 +637,25 @@ def _item_image(it: ET.Element) -> str:
     return pick_image_url(*enclosed, *blobs)
 
 
+_GLUED_ATTR = re.compile(r'"(?=[A-Za-z_][\w.-]*(?::[\w.-]+)?=")')
+
+
+def _xml_root(body: str) -> ET.Element:
+    """Parse, repairing attributes glued together in the prolog/root tag (NASA Science feed)."""
+    try:
+        return ET.fromstring(body)
+    except ET.ParseError:
+        head = body[:4000]
+        starts = [i for i in (head.find("<rss"), head.find("<feed")) if i >= 0]
+        end = head.find(">", min(starts)) if starts else -1
+        if end < 0:
+            raise
+        return ET.fromstring(_GLUED_ATTR.sub('" ', body[:end]) + body[end:])
+
+
 def parse_rss(body: str) -> dict[str, Any]:
     """RSS 2.0 or Atom → ``{title, items[]}``."""
-    root = ET.fromstring(body)
+    root = _xml_root(body)
     tag = root.tag.split("}")[-1].lower()
     items: list[dict[str, str]] = []
     title = ""
@@ -938,7 +972,97 @@ def _record(row: dict[str, Any], *, ok: bool, payload: dict[str, Any] | None = N
     _live[row["id"]] = live
 
 
+def _default_row(sid: str) -> dict[str, Any] | None:
+    return next((r for r in DEFAULT_SOURCES if r["id"] == sid), None)
+
+
+def _host_ok(url: str, hosts: tuple[str, ...]) -> bool:
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    return url.startswith("https://") and any(host == h or host.endswith("." + h) for h in hosts)
+
+
+def sample_for(row: dict[str, Any]) -> dict[str, Any] | None:
+    """This row's own bundled demo stills, or None.
+
+    Only shipped pictured rows that still point at their shipped host get one, so an
+    operator who repoints ``nasa`` elsewhere never sees NASA sample pictures. Items whose
+    image is not on the source's own host are dropped.
+    """
+    sid = str(row.get("id") or "")
+    hosts = SAMPLE_HOSTS.get(sid)
+    shipped = _default_row(sid)
+    if not hosts or not shipped:
+        return None
+    try:
+        live_host = urlparse(str(row.get("url") or "")).hostname
+        if live_host != urlparse(str(shipped["url"])).hostname:
+            return None
+        path = SAMPLE_DIR / f"{sid}.demo.json"
+        raw = path.read_bytes()
+        if len(raw) > MAX_SAMPLE_BYTES:
+            return None
+        doc = json.loads(raw.decode("utf-8"))
+    except (OSError, ValueError, UnicodeDecodeError):
+        return None
+    if not isinstance(doc, dict) or doc.get("demo") is not True or doc.get("source") != sid:
+        return None
+    items: list[dict[str, str]] = []
+    for it in doc.get("items") or []:
+        if not isinstance(it, dict):
+            continue
+        image = str(it.get("image") or "").strip()
+        title = " ".join(str(it.get("title") or "").split())[:MAX_TITLE]
+        if not title or not _host_ok(image, hosts):
+            continue
+        items.append({
+            "title": title,
+            "link": str(it.get("link") or "")[:500] if _host_ok(str(it.get("link") or ""), hosts) else "",
+            "published": str(it.get("published") or "")[:80],
+            "summary": " ".join(str(it.get("summary") or "").split())[:MAX_SUMMARY],
+            "image": image[:MAX_IMAGE_URL],
+        })
+    if not items:
+        return None
+    return {"label": str(doc.get("label") or "DEMO SNAPSHOT")[:120], "items": items[:MAX_ITEMS]}
+
+
+def _pictured(live: dict[str, Any]) -> bool:
+    return any(str(it.get("image") or "").startswith("https://") for it in live.get("items") or [])
+
+
+def _serve_sample(row: dict[str, Any], reason: str) -> bool:
+    """Swap a failed / still-less live row for its own demo stills. False when it has none."""
+    sample = sample_for(row)
+    if sample is None:
+        return False
+    # ok stays true so the carousel binds these items; feed=false keeps demo titles off the
+    # news ticker; demo/sample tell the view to say "sample pictures".
+    _record(row, ok=True, payload={
+        "items": sample["items"],
+        "demo": True,
+        "sample": True,
+        "sampleLabel": sample["label"],
+        "liveError": nasa_api.redact_string(reason)[:160],
+    })
+    _live[row["id"]]["feed"] = False
+    _schedule_prefetch(sample["items"])
+    return True
+
+
 async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
+    live = await _fetch_live(row)
+    if row["id"] in SAMPLE_HOSTS and row.get("type") in ("rss", "http"):
+        if not live.get("ok"):
+            _serve_sample(row, str(live.get("error") or "live fetch failed"))
+        elif not _pictured(live):
+            _serve_sample(row, "no pictured items")
+    return _live[row["id"]]
+
+
+async def _fetch_live(row: dict[str, Any]) -> dict[str, Any]:
     kind = row["type"]
     try:
         if kind == "file":
@@ -977,8 +1101,8 @@ async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
                 _record(row, ok=True, payload=payload)
             else:
                 _record(row, ok=True, payload={"text": body[:MAX_BODY]})
-    except (ValueError, ClientError, OSError, ET.ParseError) as e:
-        _record(row, ok=False, error=str(e))
+    except (ValueError, ClientError, OSError, ET.ParseError, asyncio.TimeoutError) as e:
+        _record(row, ok=False, error=str(e) or type(e).__name__)
     return _live[row["id"]]
 
 
@@ -1056,7 +1180,7 @@ def headlines(limit: int = HEADLINE_LIMIT) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
     for row in ensure():
         live = _live.get(row["id"])
-        if not live or not row.get("feed", True) or not row.get("enabled", True):
+        if not live or not row.get("feed", True) or not row.get("enabled", True) or live.get("demo"):
             continue
         label = str(live.get("label") or row["label"])
         for item in live.get("items") or []:

@@ -1,0 +1,50 @@
+{
+  "demo": true,
+  "source": "earth-iotd",
+  "label": "DEMO SNAPSHOT — sample Earth Observatory pictures, not live",
+  "note": "Bundled demo data. Served only when the live feed fails or has no stills. Every image is on this source's own host.",
+  "items": [
+    {
+      "title": "Fire Cloud with a Pileus on Top",
+      "summary": "Scientists captured rare observations of an ephemeral pileus cloud hovering over a smoke-infused cloud that rose above a wildfire in Montana. The post Fire Cloud with a Pileus on Top appeared first on NASA Science .",
+      "link": "https://science.nasa.gov/earth/earth-observatory/fire-cloud-with-a-pileus-on-top/",
+      "published": "Tue, 29 Sep 2026 04:01:00 +0000",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/fire-cloud-with-a-pileus-on-top/montanafire_master_20260811.jpg?w=1440&fit=clip"
+    },
+    {
+      "title": "Explosive Intensification for Hurricane Polo",
+      "summary": "Several ingredients came together off the Pacific coast of Mexico to generate one of the strongest storms the eastern Pacific basin has ever seen. The post Explosive Intensification for Hurricane Polo appeared first on NASA Science .",
+      "link": "https://science.nasa.gov/earth/earth-observatory/explosive-intensification-for-hurricane-polo/",
+      "published": "Fri, 25 Sep 2026 04:01:00 +0000",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/explosive-intensification-for-hurricane-polo/hurricanepolo_amo_20260923.jpg?w=1440&fit=clip"
+    },
+    {
+      "title": "Cloudy Cloak Over the Northwest",
+      "summary": "A low-lying cloud layer brought autumn ambience to western Washington and Oregon, while mountainous areas near the coast remained above the pall. The post Cloudy Cloak Over the Northwest appeared first on NASA Science .",
+      "link": "https://science.nasa.gov/earth/earth-observatory/cloudy-cloak-over-the-northwest/",
+      "published": "Thu, 24 Sep 2026 04:01:00 +0000",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/cloudy-cloak-over-the-northwest/westcoastfog_tmo_20260919.jpg?w=1440&fit=clip"
+    },
+    {
+      "title": "Boom Year for Desert Blooms",
+      "summary": "Carpets of wildflowers burst from arid, ochre-colored land in Western Australia following winter rains. The post Boom Year for Desert Blooms appeared first on NASA Science .",
+      "link": "https://science.nasa.gov/earth/earth-observatory/boom-year-for-desert-blooms/",
+      "published": "Wed, 23 Sep 2026 04:01:00 +0000",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/boom-year-for-desert-blooms/australiawildflowes_oli_20250819.jpg?w=1440&fit=clip"
+    },
+    {
+      "title": "An Epic View of the Seasons",
+      "summary": "The tilt in Earth's axis of rotation makes the apparent position of continents shift with the seasons in imagery from a NASA camera in deep space. The post An Epic View of the Seasons appeared first on NASA Science .",
+      "link": "https://science.nasa.gov/earth/earth-observatory/an-epic-view-of-the-seasons/",
+      "published": "Tue, 22 Sep 2026 04:01:00 +0000",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/an-epic-view-of-the-seasons/equinox_epic_20240922.jpg?w=1440&fit=clip"
+    },
+    {
+      "title": "Arctic Melt Season Length Levels Off",
+      "summary": "While the sea ice melt season has lengthened dramatically in most of the satellite era, the trend unexpectedly stabilized around 2010. The post Arctic Melt Season Length Levels Off appeared first on NASA Science .",
+      "link": "https://science.nasa.gov/earth/earth-observatory/arctic-melt-season-length-levels-off/",
+      "published": "Mon, 21 Sep 2026 04:00:00 +0000",
+      "image": "https://assets.science.nasa.gov/dynamicimage/assets/science/esd/eo/images/iotd/2026/arctic-melt-season-length-levels-off/arcticmelttrend_20002009.jpg?w=1440&fit=clip"
+    }
+  ]
+}

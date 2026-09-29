@@ -22,6 +22,8 @@ export class CarouselView extends Stage3D {
   private readonly capEl: HTMLElement;
   private readonly capTitle: HTMLElement;
   private readonly capBody: HTMLElement;
+  /** Shown while the bound source serves its own bundled demo stills (`demo: true`). */
+  readonly sampleEl: HTMLElement;
   private slides: CarouselSlide[] = [];
   private focus = 0;
   private cycle0 = 0;
@@ -56,7 +58,12 @@ export class CarouselView extends Stage3D {
     this.capBody = document.createElement("span");
     this.capBody.className = "carousel-caption-body";
     this.capEl.append(this.capTitle, this.capBody);
-    this.stillEl.append(this.imgA, this.imgB, this.capEl);
+    this.sampleEl = document.createElement("div");
+    this.sampleEl.className = "carousel-sample";
+    this.sampleEl.setAttribute("role", "status");
+    this.sampleEl.style.cssText = "position:absolute;top:1rem;left:5vw;z-index:4;padding:.3rem .7rem;border-radius:.4rem;background:rgba(7,9,15,.72);color:#fff;font:600 .95rem/1.3 ui-sans-serif,system-ui,sans-serif";
+    this.sampleEl.hidden = true;
+    this.stillEl.append(this.imgA, this.imgB, this.capEl, this.sampleEl);
     this.front = this.imgA;
 
     this.container.append(this.stillEl);
@@ -73,12 +80,16 @@ export class CarouselView extends Stage3D {
     const prev = `${this.bind.source ?? ""}\u0001${this.bind.titleField ?? ""}\u0001${this.bind.imageField ?? ""}\u0001${this.bind.filter ?? ""}`;
     this.bind = { ...bind };
     if (key !== prev) {
-      this.slideKey = "";
+      // Never a real key: a source with no stills must clear the last source's slides.
+      this.slideKey = "\u0000";
       this.onSnapshot();
     }
   }
 
   protected onSnapshot(): void {
+    const live = this.msg?.sources?.[this.bind.source ?? ""] as { demo?: unknown } | undefined;
+    this.sampleEl.hidden = live?.demo !== true;
+    this.sampleEl.textContent = this.sampleEl.hidden ? "" : "Sample pictures (demo data) — live feed unavailable";
     const next = carouselSlides(headlinesFromSources(this.msg?.sources, this.bind), MAX_SLIDES);
     const key = next.map((s) => `${s.id}\u0001${s.image ?? ""}`).join("|");
     if (key === this.slideKey) return;
