@@ -119,17 +119,33 @@ function pinKoiContents(lane: HostMeshLane): void {
   }
 }
 
-export function createHostMeshBridge(scene: NetScene): HostMeshBridge {
+/**
+ * `canPlace(packId)` gates host meshes: the pack must still be the current view and, for a
+ * sandboxed pack, its frame must have reached `ready`. Checked before and after the asset
+ * await so a slow load never pins fish onto a view that has moved on.
+ */
+export function createHostMeshBridge(
+  scene: NetScene,
+  canPlace: (packId: string) => boolean = () => true,
+): HostMeshBridge {
   const lane = scene.hostMeshLane;
+  let gen = 0;
 
   return {
     lane,
     async mountPack(spec) {
+      const mine = ++gen;
       lane.clear();
       if (!spec?.assets?.length) return true;
+      if (!canPlace(spec.id)) return false;
       const decls = spec.assets as HostMeshAssetDecl[];
       lane.setAssetOrder(decls.map((d) => d.id));
       await lane.ensureAssets(spec.id, decls);
+      if (mine !== gen) return false;
+      if (!canPlace(spec.id)) {
+        lane.clear();
+        return false;
+      }
       if (spec.id === "aquarium") {
         lane.setScenery(buildAquariumTank());
         pinAquariumContents(lane);

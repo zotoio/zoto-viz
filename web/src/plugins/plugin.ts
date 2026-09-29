@@ -734,7 +734,11 @@ export function specCaption(spec: PluginView): string {
 const CATALOG_GROUP_RANK: Record<string, number> = { graph: 0, demo: 1, arcade: 2 };
 
 /** Catalog <select> used on mosaic tiles and This view pane pickers. */
-export function fillViewSelect(sel: HTMLSelectElement, current: string): void {
+export function fillViewSelect(
+  sel: HTMLSelectElement,
+  current: string,
+  suffix?: (value: string) => string,
+): void {
   sel.replaceChildren();
   const modes = viewSelectOptions();
   let groupEl: HTMLOptGroupElement | null = null;
@@ -748,7 +752,7 @@ export function fillViewSelect(sel: HTMLSelectElement, current: string): void {
     }
     const o = document.createElement("option");
     o.value = m.value;
-    o.textContent = m.label;
+    o.textContent = m.label + (suffix?.(m.value) ?? "");
     if (m.value === current) o.selected = true;
     (groupEl ?? sel).appendChild(o);
   }

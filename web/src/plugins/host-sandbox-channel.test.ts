@@ -64,7 +64,7 @@ describe("PluginSandbox navigation teardown", () => {
     await vi.waitFor(() => {
       expect(document.querySelector("iframe")).toBeNull();
     });
-    expect(unregister).toHaveBeenCalledWith("plugin:demo");
+    expect(unregister).toHaveBeenCalledWith("plugin:demo", expect.any(String));
     const nav = await import("./pack-asset-navigation");
     expect(nav.packNavigationStoppedForTile("plugin:demo")).toBe(true);
     box.unload();

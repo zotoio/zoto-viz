@@ -213,6 +213,7 @@ import { registerPackAssetRetry } from "../plugins/pack-asset-frame";
 import { syncPanelPackSub, releasePanelView } from "../graph/panel-view-lifecycle";
 import { addPresentListener } from "../core/fps";
 import { bindTileHealthPresentTick } from "./tile-health-present";
+import { paintLiveBlankNotice } from "./live-blank-notice";
 import { createProductionTileHealthMonitor } from "./tile-health-boot";
 import { markPresent, presentInterval } from "../core/present-clock";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
@@ -299,7 +300,7 @@ mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 bootRenderScaleGpuTimer(scene, renderHost.gl);
-const hostMeshBridge = createHostMeshBridge(scene);
+const hostMeshBridge = createHostMeshBridge(scene, (packId) => hostMeshCanPlace(packId));
 scene.retargetPanel("main");
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
@@ -627,6 +628,17 @@ scene.afterLook = () => {
   for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
   broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
 };
+/** Host meshes only for the current view's pack, and for a sandboxed pack only once its frame is ready. */
+function hostMeshCanPlace(packId: string): boolean {
+  const current = pluginSpecForMode(modeSel.value);
+  if (current?.id !== packId) return false;
+  return !pluginHasFrontend(current) || sandbox.readyPack === packId;
+}
+/** Mosaic pane showing a sandboxed pack that the single sandbox is not driving. */
+function mosaicPanePreviewOnly(tileId: string): boolean {
+  if (!mosaic?.on || tileId === "main" || tileId === modeSel.value) return false;
+  return pluginHasFrontend(pluginSpecForMode(tileId));
+}
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
     ? defaultVizContract() : undefined);
@@ -651,7 +663,7 @@ sandbox.handlers = {
   setStyle: (s: Record<string, unknown>) => scene.setPluginStyle(s),
   setNodeColor: (id: string, hex: number) => scene.setPluginNodeColor(id, hex),
   writeBuffer: (slot: number, data: number[]) => {
-    tileHealth?.noteVizWrite();
+    tileHealth?.noteSandboxWrite();
     if (vizWriter?.writeBuffer(slot, data).ok) {
       broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
       tryApplyHostMeshBridge(
@@ -664,11 +676,11 @@ sandbox.handlers = {
     }
   },
   writeUniform: (name: string, value: import("../plugins/viz-host").VizUniformValue) => {
-    tileHealth?.noteVizWrite();
+    tileHealth?.noteSandboxWrite();
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data: number[], stride?: number) => {
-    tileHealth?.noteVizWrite();
+    tileHealth?.noteSandboxWrite();
     vizWriter?.writeParticles(data, stride);
   },
   writeBatch: (batch: import("../plugins/viz-write-batch").VizWriteBatchPayload) => {
@@ -676,10 +688,13 @@ sandbox.handlers = {
     const contract = vizContractFor(activePluginSpec);
     applyVizWriteBatch(vizWriter, batch, {
       onBuffer: () => {
-        tileHealth?.noteVizWrite();
+        tileHealth?.noteSandboxWrite();
         broadcastPluginUbo(scene, vizWriter!.ubo, mosaic?.on ? mosaic : null);
       },
-      onUniform: (name, value) => scene.setPluginUniform(name, value),
+      onUniform: (name, value) => {
+        tileHealth?.noteSandboxWrite();
+        scene.setPluginUniform(name, value);
+      },
     });
     for (const b of batch.buffers) {
       tryApplyHostMeshBridge(hostMeshBridge, activePluginSpec, contract, b.slot, b.data);
@@ -2003,6 +2018,7 @@ mosaic = new Mosaic({
       settings.openView(id);
     },
   }),
+  pickSuffix: (modeId) => (pluginHasFrontend(pluginSpecForMode(modeId)) ? " (full view only)" : ""),
   paneDice: (id) => makePaneDiceButton({
     pane: id,
     onClick: () => { rollPaneDice(id); },
@@ -2067,8 +2083,29 @@ tileHealth = createProductionTileHealthMonitor({
   },
   showErrors: () => tileHealErrorsOn,
   onHeal: (tileId, step) => healTile(tileId, step),
+  packLive: (id, packId) => (id === "main" || id === modeSel.value) && sandbox.readyPack === packId,
+  previewOnly: (id) => mosaicPanePreviewOnly(id),
+  onLiveBlank: (id, packId, blank) => onLiveBlank(id, packId, blank),
 });
+function onLiveBlank(tileId: string, packId: string, blank: boolean): void {
+  const paneId = tileId === "main" ? modeSel.value : tileId;
+  const m = mosaic?.on ? mosaic : null;
+  paintLiveBlankNotice({
+    setPaneNotice: m ? (id, text, recipe, opts) => m.setPaneNotice(id, text, recipe, opts) : null,
+    paneEl: (id) => (m ? document.querySelector(`.mosaic-pane[data-mode="${CSS.escape(id)}"]`) : scene.viewEl),
+    soloEl: scene.viewEl,
+    viewName: (id) => pluginSpecForMode(id)?.name ?? null,
+    retry: () => { void healTile(tileId, "restart-pack"); },
+  }, paneId, packId, blank);
+}
 bindTileHealthPresentTick(tileHealth, addPresentListener);
+let previewCaptionAt = 0;
+addPresentListener(() => {
+  const now = performance.now();
+  if (now - previewCaptionAt < 500) return;
+  previewCaptionAt = now;
+  mosaic?.syncPreviewCaptions(mosaicPanePreviewOnly);
+});
 
 settings.onMosaicPanePick = (from, to) => pickMosaicPane(from, to);
 

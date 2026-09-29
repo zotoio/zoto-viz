@@ -1,5 +1,6 @@
 import { relativeLuminance } from "../core/themes";
-import { AsyncRgbaPatchProbe, patchOriginFb } from "./async-rgba-patch";
+import { AsyncRgbaPatchProbe } from "./async-rgba-patch";
+import { TILE_HEALTH_PATCHES, healthPatchOrigins } from "../plugins/tile-health";
 
 /**
  * Non-blocking probe of the framebuffer's luminance behind the labels.
@@ -11,10 +12,15 @@ export class LumaProbe {
   private readonly patch: AsyncRgbaPatchProbe;
   private readonly vals: number[];
   private issuedAt = -Infinity;
+  /** Tile-health reads: centre + four quadrants, each its own async PBO read. */
+  private readonly healthPatches: AsyncRgbaPatchProbe[];
+  private readonly healthBytes: Uint8Array;
 
   constructor(private readonly size = 16, private readonly everyMs = 150) {
     this.patch = new AsyncRgbaPatchProbe(size);
     this.vals = new Array<number>(size * size);
+    this.healthPatches = Array.from({ length: TILE_HEALTH_PATCHES }, () => new AsyncRgbaPatchProbe(size));
+    this.healthBytes = new Uint8Array(TILE_HEALTH_PATCHES * size * size * 4);
   }
 
   /** Last harvested RGBA bytes (same buffer tile-health uses for contrast). */
@@ -52,7 +58,7 @@ export class LumaProbe {
   }
 
   /**
-   * Tile-health: reuse the luma probe patch when fresh; otherwise queue a read and return null
+   * Tile-health: the five health patches when all are fresh; otherwise queue reads and return null
    * (skip empty classification this cycle — does not count as empty).
    */
   sampleForHealth(
@@ -65,12 +71,20 @@ export class LumaProbe {
       this.reset();
       return null;
     }
-    this.patch.tryHarvest(gl);
-    if (this.patch.harvestedAt >= 0 && now - this.patch.harvestedAt <= maxStaleMs) {
-      return this.patch.bytes;
+    let fresh = true;
+    for (const p of this.healthPatches) {
+      p.tryHarvest(gl);
+      if (p.harvestedAt < 0 || now - p.harvestedAt > maxStaleMs) fresh = false;
     }
-    const { x, y } = patchOriginFb(vp, this.size);
-    if (!this.patch.pending) this.patch.issue(gl, x, y);
+    if (fresh) {
+      const chunk = this.size * this.size * 4;
+      this.healthPatches.forEach((p, i) => this.healthBytes.set(p.bytes, i * chunk));
+      return this.healthBytes;
+    }
+    const origins = healthPatchOrigins(vp, this.size);
+    this.healthPatches.forEach((p, i) => {
+      if (!p.pending) p.issue(gl, origins[i]!.x, origins[i]!.y);
+    });
     return null;
   }
 
@@ -90,6 +104,7 @@ export class LumaProbe {
   /** Drop GPU handles (context lost or renderer disposed). */
   reset(): void {
     this.patch.reset(null);
+    for (const p of this.healthPatches) p.reset(null);
     this.issuedAt = -Infinity;
     this.value = -1;
   }

@@ -45,6 +45,7 @@ export function resetPackAssetFrameState(): void {
   retryHandlers.clear();
   activePackByTile.clear();
   tileRebuild.clear();
+  sandboxOwnedFrames.clear();
   wallNoticePending = false;
   wallNoticeShown = false;
 }
@@ -125,13 +126,36 @@ export function activePackForTile(tileId: string): string | undefined {
   return activePackByTile.get(tileId);
 }
 
-export async function closePackAssetFrameForTile(tileId: string): Promise<void> {
-  abortPackAssetRebuildForTile(tileId);
-  activePackByTile.delete(tileId);
-  const frameId = tileFrames.get(tileId);
+/** Frames a live {@link PluginSandbox} currently owns; panel release must not close them. */
+const sandboxOwnedFrames = new Set<string>();
+
+export function markSandboxOwnedFrame(frameId: string, owned: boolean): void {
   if (!frameId) return;
-  tileFrames.delete(tileId);
-  await unregisterPackAssetFrame(frameId);
+  if (owned) sandboxOwnedFrames.add(frameId);
+  else sandboxOwnedFrames.delete(frameId);
+}
+
+export function isSandboxOwnedFrame(frameId: string): boolean {
+  return sandboxOwnedFrames.has(frameId);
+}
+
+/**
+ * Close a tile's pack-asset frame. With `frameId`, only that frame is unregistered, and the
+ * tile's bookkeeping is cleared only if it still points at it — a delayed close for frame A
+ * never tears down a newer frame B on the same tile.
+ */
+export async function closePackAssetFrameForTile(tileId: string, frameId?: string): Promise<void> {
+  const current = tileFrames.get(tileId);
+  const target = frameId ?? current;
+  const ownsTile = !frameId || current === frameId;
+  if (ownsTile) {
+    abortPackAssetRebuildForTile(tileId);
+    activePackByTile.delete(tileId);
+  }
+  if (!target) return;
+  if (current === target) tileFrames.delete(tileId);
+  sandboxOwnedFrames.delete(target);
+  await unregisterPackAssetFrame(target);
 }
 
 export function registerPackAssetRetry(tileId: string, packName: string, run: () => void): void {

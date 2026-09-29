@@ -322,7 +322,46 @@ export class Mosaic {
       onPaneRebind?: (id: string) => void;
     };
     pluginSpecForMode?: (modeId: string) => PluginView | null;
+    /** Picker label suffix, e.g. " (full view only)" for sandboxed packs a pane can only preview. */
+    pickSuffix?: (modeId: string) => string;
   }) {}
+
+  private fillPanePick(pick: HTMLSelectElement, id: string): void {
+    fillViewSelect(pick, id, this.cfg.pickSuffix);
+  }
+
+  /**
+   * Bottom caption on panes that can only preview their pack (no sandbox frame). The button
+   * does what the tile's max does: fill the wall and make it the live view.
+   */
+  syncPreviewCaptions(previewOnly: (id: string) => boolean): void {
+    for (const [id, pane] of this.panes) {
+      const on = this.on && previewOnly(id);
+      const existing = pane.querySelector(".mosaic-pane-preview-caption");
+      if (!on) {
+        existing?.remove();
+        continue;
+      }
+      if (existing) continue;
+      const el = document.createElement("div");
+      el.className = "mosaic-pane-preview-caption";
+      const label = document.createElement("span");
+      label.textContent = "Preview only · ";
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mosaic-pane-preview-open";
+      btn.textContent = "Open full view";
+      btn.addEventListener("pointerdown", (e) => e.stopPropagation());
+      btn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        const cur = [...this.panes.entries()].find(([, p]) => p === pane)?.[0] ?? id;
+        if (this.maximized === cur) this.promote(cur);
+        else this.toggleMax(cur);
+      });
+      el.append(label, btn);
+      pane.appendChild(el);
+    }
+  }
 
   private syncPackCoalesce(): void {
     applyPackCoalesceLayout(this, mosaicPaneMode, this.cfg.pluginSpecForMode);
@@ -1026,7 +1065,7 @@ export class Mosaic {
   private refreshChrome(): void {
     for (const [id, pane] of this.panes) {
       const pick = pane.querySelector<HTMLSelectElement>(".mosaic-pick");
-      if (pick) fillViewSelect(pick, id);
+      if (pick) this.fillPanePick(pick, id);
       pane.classList.toggle("hero", this.hero !== "off" && id === this.heroId);
       pane.classList.toggle("max", this.maximized === id);
       const maxBtn = pane.querySelector<HTMLButtonElement>('[data-act="max"]');
@@ -1047,7 +1086,7 @@ export class Mosaic {
     pick.className = "mosaic-pick";
     pick.setAttribute("aria-label", "pane view");
     pick.title = "this pane only — other panes stay as they are";
-    fillViewSelect(pick, id);
+    this.fillPanePick(pick, id);
     pick.addEventListener("pointerdown", (e) => e.stopPropagation());
     pick.addEventListener("click", (e) => e.stopPropagation());
     pick.addEventListener("change", () => {
@@ -1056,10 +1095,10 @@ export class Mosaic {
       if (fromId === toId) return;
       if (this.cfg.onPanePick) {
         const ret = this.cfg.onPanePick(fromId, toId);
-        const fail = () => fillViewSelect(pick, fromId);
+        const fail = () => this.fillPanePick(pick, fromId);
         if (ret instanceof Promise) void ret.then((ok) => { if (ok === false) fail(); });
         else if (ret === false) fail();
-      } else if (!this.setPaneView(fromId, toId)) fillViewSelect(pick, fromId);
+      } else if (!this.setPaneView(fromId, toId)) this.fillPanePick(pick, fromId);
     });
     const tools = document.createElement("div");
     tools.className = "mosaic-tools";

@@ -2,6 +2,7 @@ import { mintPackAssetToken } from "../core/http";
 import {
   closePackAssetFrameForTile,
   openPackAssetFrame,
+  markSandboxOwnedFrame,
   packAssetFrameForTile,
 } from "./pack-asset-frame";
 import { PLUGIN_SDK } from "./sdk";
@@ -209,6 +210,10 @@ export class PluginSandbox {
   private onIframeLoad: (() => void) | null = null;
   private activePackLabel = "";
   private activePackId = "";
+  /** Pack whose sandbox frame reached `ready` (cleared on unload). */
+  private readyPackId = "";
+  /** Identical in-flight {@link loadModule} shares one frame instead of churning a new one. */
+  private inflightModule: { key: string; epoch: number; promise: Promise<void> } | null = null;
   private navigationHost: NavigationStopHost | null = null;
   private readonly presentTickPayload: VizPresentTick = { frameMs: 0, tileId: "" };
   private lastPresentFrameMs = -1;
@@ -219,6 +224,11 @@ export class PluginSandbox {
   setActiveTile(tileId: string): void {
     const id = tileId.trim();
     this.activeTileId = id || "main";
+  }
+
+  /** Pack id whose frame has booted to `ready`, or "" while loading / unloaded. */
+  get readyPack(): string {
+    return this.readyPackId;
   }
 
   setActivePackLabel(label: string): void {
@@ -246,14 +256,19 @@ export class PluginSandbox {
     this.cancelBootWait();
     this.bootReject = null;
     this.activePackId = "";
+    this.readyPackId = "";
+    this.inflightModule = null;
     this.teardownPort();
     const tile = this.activeTileId;
     const fid = this.frameId;
     this.frameId = "";
     this.bootNonce = "";
-    if (fid) sandboxAssetTokenByFrame.delete(fid);
-    if (activePackAssetFrameByTile.get(tile) === fid) activePackAssetFrameByTile.delete(tile);
-    void closePackAssetFrameForTile(tile);
+    if (fid) {
+      sandboxAssetTokenByFrame.delete(fid);
+      if (activePackAssetFrameByTile.get(tile) === fid) activePackAssetFrameByTile.delete(tile);
+      markSandboxOwnedFrame(fid, false);
+      void closePackAssetFrameForTile(tile, fid);
+    }
     this.moduleBlobUrl = null;
     if (this.onIframeLoad && this.iframe) {
       this.iframe.removeEventListener("load", this.onIframeLoad);
@@ -314,29 +329,72 @@ export class PluginSandbox {
     const plugin = js.replace(/<\/script/gi, "<\\/script");
     const src = `const zoto = globalThis.zoto;\n${plugin}\n`;
     this.moduleBlobUrl = `data:text/javascript,${encodeURIComponent(src)}`;
-    await this.bootFrame(this.moduleBlobUrl, config, viz, this.bootEpoch);
+    const epoch = this.bootEpoch;
+    await this.bootFrame(this.moduleBlobUrl, config, viz, epoch);
+    this.noteReady(id, epoch);
   }
 
-  async loadModule(
+  private noteReady(id: string, epoch: number): void {
+    if (epoch === this.bootEpoch && this.hostPort && this.iframe) this.readyPackId = id;
+  }
+
+  /** Own a freshly opened frame, or close it if a newer load superseded this one mid-open. */
+  private adoptFrame(frameId: string, tile: string, epoch: number): boolean {
+    if (epoch !== this.bootEpoch) {
+      // Orphan from a superseded open. Never close an id a newer load already owns (ids repeat
+      // when the server hands back the tile's existing frame).
+      if (frameId !== this.frameId && activePackAssetFrameByTile.get(tile) !== frameId) {
+        void closePackAssetFrameForTile(tile, frameId);
+      }
+      return false;
+    }
+    this.frameId = frameId;
+    markSandboxOwnedFrame(frameId, true);
+    activePackAssetFrameByTile.set(tile, frameId);
+    return true;
+  }
+
+  loadModule(
     id: string,
     caps: string[],
     config: Record<string, string>,
     hash?: string,
     viz?: VizPluginContract,
   ): Promise<void> {
+    // One frame per pick: a repeat of the same load while it is still booting joins it rather
+    // than unloading a frame whose token is mid-mint and opening another.
+    const key = JSON.stringify([id, hash ?? "", this.activeTileId, caps, config]);
+    const inflight = this.inflightModule;
+    if (inflight && inflight.key === key && inflight.epoch === this.bootEpoch) return inflight.promise;
     this.unload();
     this.activePackId = "";
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
     const epoch = this.bootEpoch;
-    // Production has no test fallback frame: module.js mint needs a live frame id.
-    const frameId = await openPackAssetFrame(this.activeTileId);
-    if (epoch !== this.bootEpoch) return;
-    this.frameId = frameId;
-    activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
-    // module.js must carry the frame's _sandbox token, which bootFrame mints, so resolve it there.
+    // Hand back bootModule's own promise (no extra await layer) so callers see the same timing.
+    const promise = this.bootModule(id, hash, config, viz, epoch);
+    this.inflightModule = { key, epoch, promise };
+    return promise;
+  }
+
+  private async bootModule(
+    id: string,
+    hash: string | undefined,
+    config: Record<string, string>,
+    viz: VizPluginContract | undefined,
+    epoch: number,
+  ): Promise<void> {
     const tile = this.activeTileId;
-    await this.bootFrame(() => pluginModuleSandboxUrl(id, hash, tile), config, viz, epoch);
+    try {
+      // Production has no test fallback frame: module.js mint needs a live frame id.
+      const frameId = await openPackAssetFrame(tile);
+      if (!this.adoptFrame(frameId, tile, epoch)) return;
+      // module.js must carry the frame's _sandbox token, which bootFrame mints, so resolve it there.
+      await this.bootFrame(() => pluginModuleSandboxUrl(id, hash, tile), config, viz, epoch);
+      this.noteReady(id, epoch);
+    } finally {
+      if (this.inflightModule?.epoch === epoch) this.inflightModule = null;
+    }
   }
 
   async loadModuleUrl(
@@ -366,10 +424,9 @@ export class PluginSandbox {
     if (epoch !== this.bootEpoch) return;
     this.ensureWindowMessageListener();
     if (!this.frameId) {
-      const frameId = await openPackAssetFrame(this.activeTileId);
-      if (epoch !== this.bootEpoch) return;
-      this.frameId = frameId;
-      activePackAssetFrameByTile.set(this.activeTileId, this.frameId);
+      const tile = this.activeTileId;
+      const frameId = await openPackAssetFrame(tile);
+      if (!this.adoptFrame(frameId, tile, epoch)) return;
     }
     const bootOut = { nonce: "" };
     const iframe = document.createElement("iframe");
@@ -443,7 +500,11 @@ export class PluginSandbox {
     const fid = this.frameId;
     this.frameId = "";
     this.bootNonce = "";
-    if (fid) sandboxAssetTokenByFrame.delete(fid);
+    this.readyPackId = "";
+    if (fid) {
+      sandboxAssetTokenByFrame.delete(fid);
+      markSandboxOwnedFrame(fid, false);
+    }
     if (activePackAssetFrameByTile.get(tile) === fid) activePackAssetFrameByTile.delete(tile);
     if (this.onIframeLoad && this.iframe) {
       this.iframe.removeEventListener("load", this.onIframeLoad);
@@ -453,7 +514,7 @@ export class PluginSandbox {
       this.iframe.remove();
       this.iframe = null;
     }
-    await closePackAssetFrameForTile(tile);
+    if (fid) await closePackAssetFrameForTile(tile, fid);
     setSandboxReady(false);
     registerPackNavigationRemove(tile, () => {
       this.navigationHost?.closeTile?.(tile);

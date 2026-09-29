@@ -530,6 +530,16 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
   background: var(--overlay); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
   font: 600 11px/18px inherit; letter-spacing: 0.02em;
 }
+.mosaic-pane-preview-caption {
+  position: absolute; right: 8px; bottom: 8px; z-index: 3; max-width: calc(100% - 16px);
+  padding: 2px 8px;
+  background: var(--overlay); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+  font: 600 11px/18px inherit; letter-spacing: 0.02em;
+}
+.mosaic-pane-preview-open {
+  padding: 0; margin: 0; border: 0; background: none; color: var(--accent);
+  font: inherit; cursor: pointer; text-decoration: underline;
+}
 .mosaic-tools { margin-left: auto; display: flex; gap: 4px; cursor: default; }
 .mosaic-tool {
   height: 22px; padding: 0 7px; margin: 0;

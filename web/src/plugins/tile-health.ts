@@ -13,6 +13,8 @@ export const TILE_LOAD_GRACE_MS = 5000;
 export const TILE_EMPTY_STREAK = 3;
 export const TILE_HEAL_OK_STREAK = 3;
 export const TILE_PATCH = 16;
+/** Health samples: the centre plus the centre of each quadrant. */
+export const TILE_HEALTH_PATCHES = 5;
 /** Luminance max−min (0–255) below this ⇒ near-uniform. */
 export const TILE_UNIFORM_SPREAD = 6;
 /** Luminance std-dev below this ⇒ near-uniform. */
@@ -62,7 +64,7 @@ export interface TileEmptyInput {
 /** True when this 2 s check should count as EMPTY. */
 export function classifyTileEmpty(input: TileEmptyInput): EmptyReason | null {
   if (input.signals.contextLost) return "context-lost";
-  if (patchIsNearUniform(input.patch)) return "uniform";
+  if (patchesAreNearUniform(input.patch)) return "uniform";
   if (input.signals.drawingNothing && input.signals.dataFramesArriving) return "drawing-nothing";
   if (!input.signals.mayBeStatic
     && input.signals.pictureSerial === input.lastCheckPictureSerial) {
@@ -96,6 +98,52 @@ export function patchIsNearUniform(
 }
 
 /** Reused 16×16 scratch (no per-check allocation). */
+/**
+ * Multi-patch read (centre + four quadrants, {@link TILE_HEALTH_PATCHES} × N×N RGBA back to back).
+ * Uniform only when every patch is near-uniform AND the patches match each other: a flat pond
+ * centre with fish at the edges is a working pack, not a blank tile. A single-patch buffer falls
+ * back to {@link patchIsNearUniform}.
+ */
+export function patchesAreNearUniform(data: TilePatchBytes, size = TILE_PATCH): boolean {
+  const chunk = size * size * 4;
+  if (data.length < chunk * 2) return patchIsNearUniform(data);
+  let lo = 255;
+  let hi = 0;
+  for (let off = 0; off + chunk <= data.length; off += chunk) {
+    const part = data.subarray(off, off + chunk);
+    if (!patchIsNearUniform(part)) return false;
+    const m = patchMeanLuma(part);
+    if (m < lo) lo = m;
+    if (m > hi) hi = m;
+  }
+  return hi - lo < TILE_UNIFORM_SPREAD;
+}
+
+function patchMeanLuma(data: TilePatchBytes): number {
+  let sum = 0;
+  let n = 0;
+  for (let i = 0; i + 2 < data.length; i += 4) {
+    sum += 0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!;
+    n++;
+  }
+  return n ? sum / n : 0;
+}
+
+/**
+ * Top-left (or bottom-left in framebuffer space; the layout is symmetric) of the five health
+ * patches inside `vp`: centre, then the centre of each quadrant. Clamped inside the viewport.
+ */
+export function healthPatchOrigins(
+  vp: { x: number; y: number; w: number; h: number },
+  size = TILE_PATCH,
+): { x: number; y: number }[] {
+  const at = (fx: number, fy: number) => ({
+    x: Math.floor(Math.max(vp.x, Math.min(vp.x + vp.w - size, vp.x + vp.w * fx - size / 2))),
+    y: Math.floor(Math.max(vp.y, Math.min(vp.y + vp.h - size, vp.y + vp.h * fy - size / 2))),
+  });
+  return [at(0.5, 0.5), at(0.25, 0.25), at(0.75, 0.25), at(0.25, 0.75), at(0.75, 0.75)];
+}
+
 export class TilePatchSampler {
   readonly canvas: HTMLCanvasElement;
   private ctx: CanvasRenderingContext2D | null = null;
@@ -134,6 +182,24 @@ export class TilePatchSampler {
     return this.buf;
   }
 
+  /** Software path: the five health patches back to back (see {@link patchesAreNearUniform}). */
+  sampleMulti2d(source: CanvasImageSource, origins: { x: number; y: number }[], sw: number): TilePatchBytes {
+    const s = this.canvas.width;
+    const chunk = s * s * 4;
+    if (!this.multi || this.multi.length !== chunk * origins.length) {
+      this.multi = new Uint8Array(chunk * origins.length);
+    }
+    const ctx = this.ensureCtx();
+    if (!ctx) return this.multi;
+    origins.forEach((o, i) => {
+      ctx.clearRect(0, 0, s, s);
+      ctx.drawImage(source, o.x, o.y, sw, sw, 0, 0, s, s);
+      this.multi!.set(ctx.getImageData(0, 0, s, s).data, i * chunk);
+    });
+    return this.multi;
+  }
+
+  private multi: TilePatchBytes | null = null;
 }
 
 export function healMessage(reason: EmptyReason, step: HealStep, emptyMs: number): string {

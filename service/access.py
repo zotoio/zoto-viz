@@ -7,6 +7,7 @@ that send Origin must also use a loopback origin. PUT/POST/DELETE need X-Zoto-Vi
 from __future__ import annotations
 
 import hmac
+import json
 import ipaddress
 import re
 from urllib.parse import quote, unquote, urlparse
@@ -342,10 +343,48 @@ def _deny(msg: str, status: int = 403) -> web.Response:
     return resp
 
 
+def _pack_path_redacted(path: str) -> str | None:
+    """``/pack-assets/<token>/…`` with the token always masked (valid or not), else None."""
+    parsed = parse_pack_assets_path(path or "")
+    if not parsed:
+        return None
+    _tok, pack_id, tail = parsed
+    return "/pack-assets/" + SANDBOX_TOKEN_REDACT + "/" + pack_id + ("/" + tail if tail else "")
+
+
+def _response_error(resp: web.StreamResponse) -> str:
+    body = getattr(resp, "body", None)
+    if not isinstance(body, (bytes, bytearray)):
+        return "?"
+    try:
+        data = json.loads(body.decode("utf-8", "replace"))
+    except ValueError:
+        return "?"
+    err = data.get("error") if isinstance(data, dict) else None
+    return str(err)[:80] if err else "?"
+
+
+def log_pack_asset_4xx(request: web.Request, resp: web.StreamResponse) -> None:
+    """One line per /pack-assets 4xx so a Chrome "CORS" error can be told apart (401 vs 403)."""
+    status = getattr(resp, "status", 0) or 0
+    if not 400 <= status < 500:
+        return
+    safe = _pack_path_redacted(request.path or "")
+    if safe is None:
+        return
+    origin = request.headers.get("Origin", "").strip() or "-"
+    print(
+        f"[monitor] pack-assets {request.method} {safe} -> {status} error={_response_error(resp)} origin={origin[:64]}",
+        flush=True,
+    )
+
+
 @web.middleware
 async def middleware(request: web.Request, handler):  # noqa: ANN001
     if not origin_ok(request):
-        return _deny("forbidden origin")
+        denied = _deny("forbidden origin")
+        log_pack_asset_4xx(request, denied)
+        return denied
     if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):
         return _deny("csrf required")
     resp = await handler(request)
@@ -354,6 +393,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
         attach_sandbox_cors(resp)
     if parse_pack_assets_path(request.path or ""):
         attach_sandbox_referrer_policy(resp)
+        log_pack_asset_4xx(request, resp)
     attach_csrf(request, resp)
     if request.method in MUTATE:
         sat = read_sandbox_asset_token(request)

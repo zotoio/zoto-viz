@@ -10,6 +10,8 @@ import {
   TilePatchSampler,
   type TilePatchBytes,
   freshTileHealthState,
+  healthPatchOrigins,
+  patchesAreNearUniform,
   resetTileHealthProgress,
   stepTileHealth,
   type HealStep,
@@ -17,6 +19,11 @@ import {
   type TileHealLogEntry,
 } from "./tile-health";
 import { applyTileExemptReset, graceUntilFrom } from "./tile-health-exempt";
+
+/** Live-blank notice: uniform on this many reads… */
+export const LIVE_BLANK_READS = 3;
+/** …each at least this far apart. */
+export const LIVE_BLANK_SPACING_MS = 10_000;
 
 export const TILE_HEAL_ERRORS_KEY = "zoto-viz.tileHealErrors";
 
@@ -46,6 +53,21 @@ export interface TileHealthDeps {
   tabVisible?: () => boolean;
   /** Optional: override on-screen (tests). */
   onScreen?: (tileId: string) => boolean;
+  /**
+   * Optional: the tile's sandbox frame for `packId` has reached `ready`. With sandbox draws
+   * rising since the last check, the tile is healthy whatever the sampled patch says.
+   */
+  packLive?: (tileId: string, packId: string) => boolean;
+  /**
+   * Optional: tile shows a sandboxed pack with no sandbox frame (mosaic preview pane). The
+   * pack cannot draw there, so the heal ladder must not judge it.
+   */
+  previewOnly?: (tileId: string) => boolean;
+  /**
+   * Optional: a ready frame with draws rising is sampling uniform. The ladder does not escalate
+   * (the pack is running), but the wall must say so — `blank` false clears the notice.
+   */
+  onLiveBlank?: (tileId: string, packId: string, blank: boolean) => void;
 }
 
 export class TileHealthMonitor {
@@ -61,6 +83,12 @@ export class TileHealthMonitor {
   private vizDeliverGen = 0;
   private vizWriteGen = 0;
   private lastVizWriteGen = 0;
+  private sandboxWriteGen = 0;
+  private readonly lastPackByTile = new Map<string, string>();
+  private readonly lastSandboxGenByTile = new Map<string, number>();
+  private readonly liveBlankShown = new Map<string, string>();
+  /** Times of spaced uniform reads while live-drawing (notice needs LIVE_BLANK_READS of them). */
+  private readonly liveBlankReads = new Map<string, number[]>();
   private packDrawingNothing = false;
   private tabVisible = typeof document !== "undefined" ? document.visibilityState !== "hidden" : true;
 
@@ -101,6 +129,12 @@ export class TileHealthMonitor {
   noteVizWrite(): void {
     this.vizWriteGen++;
     this.packDrawingNothing = false;
+  }
+
+  /** A write that came from the pack's sandbox frame (the pack itself is drawing). */
+  noteSandboxWrite(): void {
+    this.sandboxWriteGen++;
+    this.noteVizWrite();
   }
 
   setPackDrawingNothing(on: boolean): void {
@@ -203,6 +237,34 @@ export class TileHealthMonitor {
 
   private checkTile(tileId: string, now: number): void {
     this.ensureObserver(tileId);
+    const packId = this.deps.packFor(tileId)?.id ?? tileId;
+    const lastPack = this.lastPackByTile.get(tileId);
+    this.lastPackByTile.set(tileId, packId);
+    if (lastPack !== undefined && lastPack !== packId) {
+      // Heal progress belongs to the pack that earned it: Voxel's ladder step and heal history
+      // must not make Koi's first step fallback-pack.
+      this.states.set(tileId, freshTileHealthState());
+      this.lastSandboxGenByTile.delete(tileId);
+      this.liveBlankReads.delete(tileId);
+      this.setLiveBlank(tileId, null);
+    }
+    if (this.deps.previewOnly?.(tileId)) {
+      this.resetProgress(tileId);
+      this.setLiveBlank(tileId, null);
+      return;
+    }
+    let liveDrawing = false;
+    if (this.deps.packLive?.(tileId, packId)) {
+      const lastGen = this.lastSandboxGenByTile.get(tileId);
+      this.lastSandboxGenByTile.set(tileId, this.sandboxWriteGen);
+      liveDrawing = lastGen !== undefined && this.sandboxWriteGen > lastGen;
+    } else {
+      this.lastSandboxGenByTile.delete(tileId);
+    }
+    if (!liveDrawing) {
+      this.liveBlankReads.delete(tileId);
+      this.setLiveBlank(tileId, null);
+    }
     const exemptIn = this.exemptInput(tileId, now);
     let prev = this.stateFor(tileId);
     prev = applyTileExemptReset(prev, exemptIn);
@@ -219,7 +281,51 @@ export class TileHealthMonitor {
     if (sc.gpuContextLost) return;
     const patch = this.sampleScene(sc, now);
     if (!patch) return; // async GL read pending — not empty
+    if (liveDrawing) {
+      this.runLiveFloor(tileId, packId, patch, now);
+      return;
+    }
     this.runTileCheck(tileId, now, sc, patch);
+  }
+
+  /**
+   * Floor: a ready frame whose draws keep rising never climbs the ladder. Non-uniform output is
+   * healthy; uniform output is a pack running but showing nothing, which gets an on-screen notice.
+   */
+  private runLiveFloor(tileId: string, packId: string, patch: TilePatchBytes, now: number): void {
+    this.states.set(tileId, {
+      ...resetTileHealthProgress(this.stateFor(tileId)),
+      ladderIndex: 0,
+      healAttempts: 0,
+      forceDemo: false,
+    });
+    this.paintLabel(tileId, this.stateFor(tileId));
+    if (!patchesAreNearUniform(patch)) {
+      this.liveBlankReads.delete(tileId);
+      this.setLiveBlank(tileId, null);
+      return;
+    }
+    // Second guard: only a tile that reads uniform on LIVE_BLANK_READS samples at least
+    // LIVE_BLANK_SPACING_MS apart (no non-uniform read between) gets the notice.
+    const reads = this.liveBlankReads.get(tileId) ?? [];
+    const last = reads[reads.length - 1];
+    if (last === undefined || now - last >= LIVE_BLANK_SPACING_MS) reads.push(now);
+    this.liveBlankReads.set(tileId, reads);
+    if (reads.length >= LIVE_BLANK_READS) this.setLiveBlank(tileId, packId);
+  }
+
+  private setLiveBlank(tileId: string, packId: string | null): void {
+    const shown = this.liveBlankShown.get(tileId);
+    if (packId) {
+      if (shown === packId) return;
+      this.liveBlankShown.set(tileId, packId);
+      console.info(`[zoto-viz tile-heal] tile=${tileId} pack=${packId} step=notice reason=live-blank`);
+      this.deps.onLiveBlank?.(tileId, packId, true);
+      return;
+    }
+    if (shown === undefined) return;
+    this.liveBlankShown.delete(tileId);
+    this.deps.onLiveBlank?.(tileId, shown, false);
   }
 
   private runTileCheck(
@@ -265,9 +371,11 @@ export class TileHealthMonitor {
       const box = host.canvas.getBoundingClientRect();
       const el = sc.viewEl.getBoundingClientRect();
       const pr = host.pixelRatio;
-      const sx = (el.left - box.left) * pr + (el.width * pr) / 2 - TILE_PATCH / 2;
-      const sy = (el.top - box.top) * pr + (el.height * pr) / 2 - TILE_PATCH / 2;
-      return this.sampler.sample2d(host.canvas, sx, sy, TILE_PATCH, TILE_PATCH);
+      const origins = healthPatchOrigins(
+        { x: (el.left - box.left) * pr, y: (el.top - box.top) * pr, w: el.width * pr, h: el.height * pr },
+        TILE_PATCH,
+      );
+      return this.sampler.sampleMulti2d(host.canvas, origins, TILE_PATCH);
     }
     const gl = host.gl;
     if (!gl || gl.isContextLost?.()) return null;
@@ -308,6 +416,10 @@ export class TileHealthMonitor {
   resetTile(tileId: string): void {
     this.states.delete(tileId);
     this.graceUntil.delete(tileId);
+    this.lastPackByTile.delete(tileId);
+    this.liveBlankReads.delete(tileId);
+    this.lastSandboxGenByTile.delete(tileId);
+    this.setLiveBlank(tileId, null);
     this.observers.get(tileId)?.disconnect();
     this.observers.delete(tileId);
     this.observerRoots.delete(tileId);

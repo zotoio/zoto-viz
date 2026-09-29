@@ -1,3 +1,5 @@
+import { closePackAssetFrameForTile, isSandboxOwnedFrame, packAssetFrameForTile } from "../plugins/pack-asset-frame";
+
 /**
  * Per-mosaic-tile leases for animation and pack delivery. A view switch must
  * release the previous tile's leases before the new view binds — never stack
@@ -41,7 +43,10 @@ export function claimPanelPack(panelId: string): () => void {
 export function releasePanelView(panelId: string): void {
   rafLeases.delete(panelId);
   packLeases.delete(panelId);
-  void import("../plugins/pack-asset-frame").then((m) => m.closePackAssetFrameForTile(panelId));
+  // Capture the frame now: a deferred lookup would close whatever frame the tile holds later,
+  // including a live sandbox frame opened after this release.
+  const frameId = packAssetFrameForTile(panelId);
+  if (frameId && !isSandboxOwnedFrame(frameId)) void closePackAssetFrameForTile(panelId, frameId);
   if (packSubKey.startsWith(`${panelId}\0`)) {
     packSubRelease?.();
     packSubRelease = null;
