@@ -2,7 +2,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { scanPackDirectory } from "../../plugins/sdk/pack-lint";
+import { assertBaselineGuard, loadBaseline, scanPackDirectory, violationKey } from "../../plugins/sdk/pack-lint";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const packArg = process.argv[2];
@@ -22,11 +22,24 @@ if (rel.startsWith("plugins/sdk/starter")) {
 
 const { formatViolationMessage } = await import("../../plugins/sdk/pack-lint-hints");
 const violations = scanPackDirectory(abs, repoRoot, opts);
-if (violations.length === 0) {
-  process.exit(0);
-}
+// #207: apply the checked-in baseline (plugins/sdk/pack-lint-baseline.json) the way the CI guard in
+// pack-lint.test.ts does. Baselined rows are reported; only new violations (and the never-baselined
+// guards: off-allowlist legacy zoto, host → plugins/src, blocking uniform rules) fail.
+const guard = assertBaselineGuard(violations, loadBaseline(repoRoot));
+const failing = new Set(
+  [
+    ...guard.newViolations,
+    ...guard.disallowedLegacyZoto,
+    ...guard.disallowedHostPackSrc,
+    ...guard.disallowedUniformBlocking,
+  ].map(violationKey),
+);
+let newCount = 0;
 for (const v of violations) {
+  const isNew = failing.has(violationKey(v));
+  if (isNew) newCount += 1;
   const loc = v.line != null ? `${v.file}:${v.line}` : v.file;
-  console.log(`${loc} ${v.rule} — ${formatViolationMessage(v)}`);
+  console.log(`${loc} ${v.rule} — ${formatViolationMessage(v)}${isNew ? "" : " (baselined)"}`);
 }
-process.exit(1);
+console.log(`pack-lint: ${newCount} new, ${violations.length - newCount} baselined (plugins/sdk/pack-lint-baseline.json)`);
+process.exit(newCount > 0 ? 1 : 0);
