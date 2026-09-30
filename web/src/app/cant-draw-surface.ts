@@ -26,7 +26,8 @@ export type CantDrawTileCount = () => number;
 export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName, tileCount?: CantDrawTileCount): void {
   const el = viewStateTileEl(tileId);
   if (!el) return;
-  const existing = el.querySelector<HTMLElement>(`:scope > .${SURFACE}`);
+  const found = el.querySelector(`:scope > .${SURFACE}`);
+  const existing = found instanceof HTMLElement ? found : null;
   const state = viewStateOf(tileId);
   if (state?.kind !== "cant-draw" || state.reason !== "shader" || el.querySelector(".tile-shader-fallback")) {
     existing?.remove();
