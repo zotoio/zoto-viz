@@ -111,6 +111,16 @@
       "target": "parent."
     },
     {
+      "file": "plugins/src/packet-tunnel/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/rf-constellation/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
       "file": "plugins/src/rocket-car-soccer/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
@@ -141,9 +151,19 @@
       "target": "vitest"
     },
     {
+      "file": "plugins/src/sandbox-fixture-multi/frontend/module.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
       "file": "plugins/src/syscon/frontend/telemetry.ts",
       "rule": "sandbox-escape",
       "target": "parent."
+    },
+    {
+      "file": "plugins/src/talker-storm/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
     },
     {
       "file": "plugins/src/voxel-world/frontend/index.ts",
