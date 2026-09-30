@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
-import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../sdk/viz-contract";
 import {
   METRO_DEFAULTS,
   METRO_FAIL_RGB,
@@ -168,7 +168,7 @@ describe("metro-lines pack", () => {
 
   it("headline with down does not create disruption on healthy sys", () => {
     const tick = buildTicker(liveFrame({
-      sys: { failed: 0 },
+      sys: { ...EMPTY_SYS_TELEMETRY, failed: 0 },
       headlines: [{ id: "1", label: "x", text: "Markets down sharply" }],
     }), false);
     expect(tick.banner).toBe(false);
@@ -177,11 +177,11 @@ describe("metro-lines pack", () => {
   });
 
   it("sys.failed over threshold shows network banner", () => {
-    const tick = buildTicker(liveFrame({ sys: { failed: METRO_SYS_FAIL_BANNER + 0.1 } }), false);
+    const tick = buildTicker(liveFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: METRO_SYS_FAIL_BANNER + 0.1 } }), false);
     expect(tick.banner).toBe(true);
     expect(tick.text).toContain("NETWORK DISRUPTION");
     const net = buildMetroNetwork(liveFrame({
-      sys: { failed: 0.5 },
+      sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.5 },
       talkers: [{ id: "gw", rate: 100, role: "gateway" }],
     }), parseMetroOptions({}));
     expect(net.disruptions).toBe(1);

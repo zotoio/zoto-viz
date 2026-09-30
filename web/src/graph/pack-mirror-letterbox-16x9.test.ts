@@ -2,8 +2,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { zotoSurfacePanelClearHex } from "../core/themes";
 import { getSurfaceLetterboxFill, letterboxFillHex } from "./letterbox-fill";
-import { PackTexturePresenter, type PackMirrorHostGl } from "./pack-mirror-gl";
+import { PackTexturePresenter, type MirrorRenderer, type PackMirrorHostGl } from "./pack-mirror-gl";
 import { asCanvasDeviceHeight } from "./pack-mirror-rect";
+import { mockPartial } from "../../test-support/mock-partial";
 import {
   LETTERBOX_SCENE_ASPECT,
   LETTERBOX_TILE_CSS,
@@ -34,7 +35,7 @@ describe("pack mirror 16:9 letterbox (production presenter)", () => {
       const viewports: { x: number; y: number; w: number; h: number }[] = [];
       const clearColors: number[] = [];
       const presenter = new PackTexturePresenter();
-      const renderer = {
+      const renderer = mockPartial<MirrorRenderer>({
         setScissorTest: vi.fn(),
         setViewport: vi.fn((x: number, y: number, w: number, h: number) => {
           viewports.push({ x, y, w, h });
@@ -45,8 +46,7 @@ describe("pack mirror 16:9 letterbox (production presenter)", () => {
         getPixelRatio: () => 1,
         setRenderTarget: vi.fn(),
         render: vi.fn(),
-        getContext: () => null,
-      };
+      });
       const tex = new THREE.Texture();
       presenter.draw(
         renderer,
