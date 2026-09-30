@@ -105,6 +105,8 @@ export function cycleColonyTeardown(times = 20): void {
       audio: 0.1,
       packets: [{ proto: "tcp", size: 120, field: 0.4 }],
       talkers: [{ id: "a", rate: 80, role: "lan" }],
+      rf: [],
+      headlines: [],
       sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0 },
     });
     c.packSlots({
@@ -113,6 +115,8 @@ export function cycleColonyTeardown(times = 20): void {
       audio: 0.1,
       packets: [],
       talkers: [],
+      rf: [],
+      headlines: [],
     });
     c.dispose();
   }

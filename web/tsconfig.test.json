@@ -22,7 +22,8 @@
     "../plugins/src/roto-proto/frontend/index.ts",
     "../plugins/src/talker-storm/frontend/index.ts",
     "../plugins/sdk/pack-lint.ts",
-    "../plugins/sdk/pack-lint-import.ts"
+    "../plugins/sdk/pack-lint-import.ts",
+    "../plugins/src/ant-colony/frontend/index.ts"
   ],
   "exclude": []
 }
