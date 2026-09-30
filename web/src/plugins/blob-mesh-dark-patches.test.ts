@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { BLOB_MESH_FLOOR, BLOB_MESH_SLOT_BUDGET, planBlobMesh } from "../../../plugins/sdk/blob-mesh-budget";
-import { themeById } from "../core/themes";
+import { blobMeshLookNumber, blobMeshPackLook } from "./blob-mesh-look-test-helper";
 import { appLensSkySpan, HOST_DEFAULT_PITCH_DEG, parentedSkyRay, type SkyRay, type SkySpan } from "./pack-sky-host-camera-test-helper";
 import {
   appFivePatches,
@@ -17,7 +17,7 @@ import {
 } from "./pack-sky-lan-frame-test-helper";
 import type { PluginSkySmokeUniforms } from "./plugin-sky-smoke-render";
 import { runPackFrameHandler } from "./viz-pack-host";
-import { VIZ_UBO, type VizDataFrame, type VizUniformValue } from "./viz-host";
+import { VIZ_UBO, type VizDataFrame } from "./viz-host";
 
 /**
  * #174 dark-patch rows on a CPU mirror of plugins/src/blob-mesh/sky/fragment.glsl (no browser).
@@ -151,43 +151,8 @@ function connectedDarkRegions(luma: readonly number[]): number {
   return regions;
 }
 
-/** The pack's own look (visualisation.yml skyBright / skyOpacity), so a look change reaches these rows. */
-const LOOK_YML = readFileSync(path.resolve(here, "../../../plugins/src/blob-mesh/visualisation.yml"), "utf8");
-function lookNumber(key: string): number {
-  const m = LOOK_YML.match(new RegExp(`^\\s+${key}: ([0-9.]+)\\s*$`, "m"));
-  if (!m) throw new Error(`blob-mesh visualisation.yml: look.${key} not found`);
-  return Number(m[1]);
-}
-const LOOK_THEME = themeById(LOOK_YML.match(/^\s+theme: ([a-z0-9-]+)\s*$/m)?.[1]);
-/** The pack look as the host applies it: yml skyBright / skyOpacity, the yml theme's scene rim and bg. */
-function appLook(skyBright = lookNumber("skyBright")): PluginSkySmokeUniforms {
-  return hostLookUniforms({ skyBright, skyOpacity: lookNumber("skyOpacity"), rim: LOOK_THEME.scene.rim, bg: Number.parseInt(LOOK_THEME.ui.bg.slice(1), 16) });
-}
-/**
- * The uniforms the plugin sky actually draws with once the pack writes (#180 H1 on main): the
- * host look (yml skyBright / skyOpacity, theme bg) times the pack's own uBright / uOpacity (pack
- * default 1), and the pack's uTime / uAudio / uAccent / uBg where it writes them. The pack writes
- * come from its onFrame (runPackFrameHandler, the host mirror of frontend/index.ts).
- */
-export function packLook(frame: VizDataFrame, skyBright = lookNumber("skyBright")): { u: PluginSkySmokeUniforms; packBright: number } {
-  const w: Record<string, VizUniformValue> = {};
-  runPackFrameHandler("blob-mesh", frame, { writeBuffer: () => {}, writeUniform: (n, v) => { w[n] = v; }, writeParticles: () => {} });
-  const host = { ...appLook(skyBright), uAudio: frame.audio };
-  const num = (k: string) => (typeof w[k] === "number" ? (w[k] as number) : undefined);
-  const vec = (k: string) => (Array.isArray(w[k]) ? (w[k] as number[]) : undefined);
-  const packBright = num("uBright") ?? 1;
-  return {
-    packBright,
-    u: {
-      uTime: num("uTime") ?? host.uTime,
-      uOpacity: host.uOpacity * (num("uOpacity") ?? 1),
-      uBright: host.uBright * packBright,
-      uAudio: num("uAudio") ?? host.uAudio,
-      uAccent: vec("uAccent") ?? host.uAccent,
-      uBg: vec("uBg") ?? host.uBg,
-    } as PluginSkySmokeUniforms,
-  };
-}
+const lookNumber = blobMeshLookNumber;
+const packLook = blobMeshPackLook;
 /** The look #174's SwiftShader floor scan rendered (calibration rows only). */
 const SCAN_LOOK = hostLookUniforms({ skyBright: 1.18, skyOpacity: 0.96, rim: 0x4cc9f0, bg: 0x0b141c });
 const RAY = parentedSkyRay("blob-mesh", SKY, HOST_DEFAULT_PITCH_DEG);
@@ -315,10 +280,11 @@ const MIN_SPREAD = 30;
 const MAX_LUMA = 240;
 const CONTRAST_CASES = ["LAN7", "LAN11", "PAIR", "TRIPLE", "EQUAL7", "EQUAL8", "BUSY1_IDLE6", "LOW_BESIDE_BUSY", "HALF", "FULL8"] as const;
 /**
- * Known gaps at the #174 b sky (UX Pro to decide, see the #174 thread): a lone device (SINGLE,
- * spread min 27) and a quiet LAN (QUIET5, 5 devices at 0.5 pkt/s: the pack's uBright falls to
- * 0.806, spread min 16) stay under 30 at every sky value that keeps the sky under the blobs.
- * it.fails: turns red once they reach the bounds, so the row can move into CONTRAST_CASES.
+ * Known gaps at the #174 sky (option 2: no rate term in uBright, skyBright at the tightest value
+ * that keeps the sky under the blobs): a lone device (SINGLE, spread min 26 at t=20 s) and a quiet
+ * LAN (QUIET5, 5 devices at 0.5 pkt/s, spread min 22 at t=10 s) stay under 30. Shader and rule
+ * unchanged. it.fails that only "passes" on the spread assertion itself (see contrastGapRow): turns
+ * red once they reach the bounds, or if anything else throws.
  */
 const CONTRAST_GAPS = ["SINGLE", "QUIET5"] as const;
 /** #174 b (UX Pro): the sky's brightest pixel sits at least this far (luma) under the dimmest blob. */
@@ -431,15 +397,29 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
   for (const name of CONTRAST_CASES) {
     it(`${name} contrast: patch spread >= ${MIN_SPREAD} and every patch < ${MAX_LUMA} at every 5 s step from 0 to 60 s`, contrastRow(name, swept(name)));
   }
+  /**
+   * Known-gap body: run the contrast row, and rethrow only the spread assertion (`t=<t> spread: ...
+   * spread=<n> ...: expected <n> to be greater than or equal to 30`). Any other failure (setup throw,
+   * the < 240 assertion) or no failure makes the body return normally, so it.fails goes red.
+   */
+  const SPREAD_FAIL = new RegExp(`^t=\\d+ spread: .* spread=(\\d+) .*: expected (\\d+) to be greater than or equal to ${MIN_SPREAD}$`);
+  const contrastGapRow = (name: string, frame: VizDataFrame) => () => {
+    let msg = "(no failure)";
+    let err: unknown = null;
+    try { contrastRow(name, frame)(); } catch (e) { err = e; msg = e instanceof Error ? e.message : String(e); }
+    const m = msg.match(SPREAD_FAIL);
+    process.stdout.write(`[contrast-gap] ${name}: ${m && m[1] === m[2] && Number(m[1]) < MIN_SPREAD ? "spread assertion" : "NOT the spread assertion"}: ${msg}\n`);
+    if (m && m[1] === m[2] && Number(m[1]) < MIN_SPREAD) throw err;
+  };
   for (const name of CONTRAST_GAPS) {
-    it.fails(`${name} contrast (known gap, it.fails): patch spread >= ${MIN_SPREAD} and every patch < ${MAX_LUMA} at every 5 s step from 0 to 60 s`, contrastRow(name, swept(name)));
+    it.fails(`${name} contrast (known gap, it.fails on the spread assertion): patch spread >= ${MIN_SPREAD} and every patch < ${MAX_LUMA} at every 5 s step from 0 to 60 s`, contrastGapRow(name, swept(name)));
   }
 
   /**
    * #174 b (UX Pro): size is the only thing that shows rate, and the sky reads as background, so its
    * brightest pixel stays under the dimmest blob. Sky peak and dimmest blob come from the CPU mirror
    * (blobVsSky) with the uniforms the pack draws with at the audio peak (packLook: yml skyBright x
-   * the pack's uBright, the pack's uAudio / uAccent). Revert: skyBright 1.18 -> red.
+   * the pack's uBright, the pack's uAudio / uAccent). Reverts: skyBright 1.18, or 0.01 over the limit -> red.
    */
   for (const [name, frame] of [["LAN7", LAN7], ["LAN11", LAN11]] as const) {
     it(`${name} sky under the blobs: at the audio peak the sky's brightest pixel is >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob at every 5 s step from 0 to 60 s`, () => {
@@ -457,26 +437,31 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
   }
 
   /**
-   * Uniform row (#195 pattern): drive the pack's onFrame at the audio peak, read the effective sky
-   * uBright from the uniforms (yml skyBright x pack uBright), and hold it at or under the brightest
-   * uBright the mirror allows with the sky >= 5 luma under the dimmest blob (found here by bisection
-   * on the same mirror and uniforms, so no copy of either number lives in the test).
+   * Uniform row (#195 pattern): drive the pack's onFrame at the audio peak on LAN7 and LAN11, read
+   * the effective sky uBright from the uniforms (yml skyBright x pack uBright), and find by bisection
+   * on the same mirror the brightest uBright that keeps the sky >= 5 luma under the dimmest blob at
+   * every 5 s step from 0 to 60 s (no copy of either number lives in the test). The yml skyBright
+   * must clear it, and be the tightest two-decimal value that does (skyBright + 0.01 must not).
    */
-  it(`uniform: the pack's effective sky uBright at the audio peak (LAN7) is at most the brightest that keeps the sky >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob`, () => {
-    const frames = Array.from({ length: 13 }, (_, i) => ({ ...LAN7, t: i * 5, audio: AUDIO_PEAK }));
-    const looks = frames.map((f) => packLook(f).u);
+  it(`uniform: the pack's effective sky uBright at the audio peak (LAN7, LAN11) is at most the brightest that keeps the sky >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob, and skyBright is the tightest two-decimal value`, () => {
+    const frames = [LAN7, LAN11].flatMap((f) => Array.from({ length: 13 }, (_, i) => ({ ...f, t: i * 5, audio: AUDIO_PEAK })));
+    const looks = frames.map((f) => packLook(f));
     const clears = (uBright: number) => frames.every((f, i) => {
-      const r = blobVsSky(f, { ...looks[i]!, uBright });
+      const r = blobVsSky(f, { ...looks[i]!.u, uBright });
       return r.dimmestBlob - r.skyPeak >= SKY_UNDER_BLOB_MARGIN;
     });
     let lo = 0.5, hi = 2;
     expect(clears(lo), "bisection floor must clear").toBe(true);
     expect(clears(hi), "bisection ceiling must not clear").toBe(false);
-    while (hi - lo > 0.002) { const mid = (lo + hi) / 2; if (clears(mid)) lo = mid; else hi = mid; }
-    const eff = looks[0]!.uBright;
-    const text = `effective uBright ${eff.toFixed(3)} (skyBright ${lookNumber("skyBright")} x pack uBright ${packLook(frames[0]!).packBright.toFixed(3)} at audio ${AUDIO_PEAK}) vs brightest clearing ${lo.toFixed(3)}`;
-    process.stdout.write(`[sky-uniform] LAN7: ${text}\n`);
-    expect(new Set(looks.map((u) => u.uBright)).size, "uBright does not move with t").toBe(1);
+    while (hi - lo > 0.0005) { const mid = (lo + hi) / 2; if (clears(mid)) lo = mid; else hi = mid; }
+    expect(new Set(looks.map((l) => l.u.uBright)).size, "uBright does not move with t or with LAN7 vs LAN11").toBe(1);
+    const sky = lookNumber("skyBright");
+    const pack = looks[0]!.packBright;
+    const eff = looks[0]!.u.uBright;
+    const limit = lo / pack; // largest skyBright that clears, in yml units
+    const text = `effective uBright ${eff.toFixed(4)} (skyBright ${sky} x pack uBright ${pack.toFixed(3)} at audio ${AUDIO_PEAK}) vs brightest clearing ${lo.toFixed(4)} (skyBright limit ${limit.toFixed(4)})`;
+    process.stdout.write(`[sky-uniform] LAN7+LAN11: ${text}\n`);
     expect(eff, text).toBeLessThanOrEqual(lo);
-  }, 120_000);
+    expect(Math.round((sky + 0.01) * 100) / 100, `tightest two-decimal skyBright: ${text}`).toBeGreaterThan(limit);
+  }, 240_000);
 });
