@@ -1,7 +1,8 @@
 // #193: compact metaball falloff. Each blob's field is r^2/d^2 shifted and rescaled so it is
 // exactly 1 at the blob's radius and exactly 0 at rad + 0.5 * BLOB_GAP, so two blobs whose centres
 // are at least r1 + r2 + BLOB_GAP apart never touch (their merge distance). The iso threshold
-// below is unchanged.
+// below is unchanged. 0.1 is provisional, pending UX Pro's pick (must stay > 0; 0.06 drops FULL8's
+// patch spread under 30).
 const float BLOB_GAP = 0.1;
 // #174: the empty sky between and around blobs is a dim share of the accent (not black), so a
 // sparse or quiet tile keeps a brightness step at every blob edge without dark patches.

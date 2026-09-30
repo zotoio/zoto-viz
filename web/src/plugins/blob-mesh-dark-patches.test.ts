@@ -305,6 +305,28 @@ export function blobVsSky(frame: VizDataFrame, look = packLook(frame).u, src = S
   return { skyPeak, dimmestBlob };
 }
 
+/** Drawn blobs of a frame in uv (slot xy x 1.7), radius max(shader floor, slot r), the way blobVsSky reads them. */
+function drawnBlobs(frame: VizDataFrame, shape: Shape): { x: number; y: number; r: number }[] {
+  const slots = hostSlots(frame);
+  const out: { x: number; y: number; r: number }[] = [];
+  for (let i = 0; i < 8; i++) if (slots[i * 4 + 2]! > 0) out.push({ x: slots[i * 4]! * 1.7, y: slots[i * 4 + 1]! * 1.7, r: Math.max(shape.floor, slots[i * 4 + 2]!) });
+  return out;
+}
+
+/**
+ * #193 merge distance of two blobs, from the falloff the mirror reads out of fragment.glsl: with the
+ * compact falloff r1 + r2 + BLOB_GAP (the shader's constant, never retyped here); the authored
+ * r^2/d^2 reaches the whole field, so it never lets two blobs apart (Infinity).
+ */
+export function mergeDistance(r1: number, r2: number, falloff: Falloff): number {
+  return falloff.kind === "compact" ? r1 + r2 + falloff.gap : Infinity;
+}
+
+/** How many blobs stand apart: centre distance to every other blob >= their merge distance. */
+export function separatedBlobs(blobs: readonly { x: number; y: number; r: number }[], falloff: Falloff): number {
+  return blobs.filter((a, i) => blobs.every((b, j) => j === i || Math.hypot(a.x - b.x, a.y - b.y) >= mergeDistance(a.r, b.r, falloff))).length;
+}
+
 const EMPTY: VizDataFrame = { t: 35, dt: 1 / 6, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
 const talker = (ip: string, rate: number, role = "lan") => ({ id: ip, rate, role });
 const LAN7 = lanFrames35s({ fixture: "host" }, 2)[0]!;
@@ -496,4 +518,92 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
     expect(eff, text).toBeLessThanOrEqual(lo);
     expect(Math.round((sky + 0.01) * 100) / 100, `tightest two-decimal skyBright: ${text}`).toBeGreaterThan(limit);
   }, 240_000);
+
+  /**
+   * #193 (UX Pro spec): a steeper falloff with compact support, the iso threshold left alone. The
+   * cutoff is the shader's BLOB_GAP (read from fragment.glsl, never retyped here): a blob's field is
+   * exactly 1 at its radius and exactly 0 from rad + BLOB_GAP / 2 out, so the merge distance of two
+   * blobs is r1 + r2 + BLOB_GAP. Revert: the authored r^2/d^2 line -> red.
+   */
+  it("#193 compact falloff: each blob's field is 1 at its radius and exactly 0 from rad + BLOB_GAP / 2 out (BLOB_GAP read from the shader), threshold unchanged", () => {
+    const shape = mirrorShape(SKY);
+    expect(SKY, "iso threshold unchanged").toContain("float iso = smoothstep(0.55, 1.25, field + 0.45 + uAudio * 0.3);");
+    expect(shape.falloff.kind, "fragment.glsl blob falloff").toBe("compact");
+    const gap = shaderConst(SKY, "BLOB_GAP");
+    expect(gap, "BLOB_GAP in fragment.glsl").not.toBeNull();
+    expect(gap!).toBeGreaterThan(0);
+    for (const rad of [BLOB_MESH_FLOOR, 0.132, 0.168, 0.343]) {
+      const reach = rad + 0.5 * gap!;
+      expect(blobContrib(rad, rad * rad, shape.falloff), `rad ${rad}: field at the radius`).toBeCloseTo(1, 9);
+      for (const d of [reach, reach + 1e-4, reach + 0.05, 1, 3]) expect(blobContrib(rad, d * d, shape.falloff), `rad ${rad}: field at ${d.toFixed(4)} (reach ${reach.toFixed(4)})`).toBe(0);
+      expect(blobContrib(rad, (reach - 0.005) ** 2, shape.falloff), `rad ${rad}: field just inside the reach`).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * The merge distance on the shader's field: two blobs set r1 + r2 + BLOB_GAP (+1e-4) apart leave a
+   * point between them where the summed field is exactly 0 (no bridge); 0.01 closer, every point on
+   * the path between their centres (401 samples) has field > 0, so they join.
+   */
+  it("#193 merge distance: two blobs r1 + r2 + BLOB_GAP apart leave a point of exactly 0 field between them; 0.01 closer they join", () => {
+    const shape = mirrorShape(SKY);
+    const gap = shaderConst(SKY, "BLOB_GAP")!;
+    const pairs: [number, number][] = [[BLOB_MESH_FLOOR, BLOB_MESH_FLOOR], [0.168, 0.132], [0.168, BLOB_MESH_FLOOR], [0.343, BLOB_MESH_FLOOR]];
+    for (const [r1, r2] of pairs) {
+      const md = mergeDistance(r1, r2, shape.falloff);
+      expect(md, `merge distance for ${r1} + ${r2}`).toBeCloseTo(r1 + r2 + gap, 12);
+      const field = (x: number, d: number) => blobContrib(r1, x * x, shape.falloff) + blobContrib(r2, (d - x) ** 2, shape.falloff);
+      const d = md + 1e-4;
+      expect(field(r1 + 0.5 * gap + 5e-5, d), `r ${r1} + ${r2} at ${d.toFixed(4)}: field in the gap`).toBe(0);
+      const near = md - 0.01;
+      const lows = Array.from({ length: 401 }, (_, k) => field((near * k) / 400, near));
+      expect(Math.min(...lows), `r ${r1} + ${r2} at ${near.toFixed(4)}: lowest field on the path`).toBeGreaterThan(0);
+    }
+  });
+
+  /**
+   * #193 target, shader side: LAN7's seven drawn radii (from the real writer at t=0) laid on a hex
+   * lattice whose spacing is the largest pairwise merge distance (max ri + rj + BLOB_GAP) all stand
+   * apart. Only the layout is constructed (the view and the safe ellipse are
+   * not asked here); it shows the falloff delivers >= 5 of 7 once placement honours the merge
+   * distance. Revert: the authored r^2/d^2 falloff (merge distance Infinity) -> 0 of 7, red.
+   */
+  it("#193 separation, shader side: LAN7's seven radii on a hex lattice at the shader's merge distance stand apart (>= 5 of 7)", () => {
+    const shape = mirrorShape(SKY);
+    const gap = shaderConst(SKY, "BLOB_GAP")!;
+    const radii = drawnBlobs({ ...LAN7, t: 0 }, shape).map((b) => b.r);
+    expect(radii).toHaveLength(7);
+    const sorted = [...radii].sort((a, b) => b - a);
+    const spacing = sorted[0]! + sorted[1]! + gap;
+    const sites = [[0, 0], ...Array.from({ length: 6 }, (_, k) => [Math.cos((k * Math.PI) / 3), Math.sin((k * Math.PI) / 3)])];
+    const blobs = radii.map((r, i) => ({ x: sites[i]![0]! * spacing, y: sites[i]![1]! * spacing, r }));
+    const n = separatedBlobs(blobs, shape.falloff);
+    process.stdout.write(`[separation] lattice LAN7: ${n} of 7 apart (spacing ${spacing.toFixed(3)} = ${sorted[0]!.toFixed(3)} + ${sorted[1]!.toFixed(3)} + BLOB_GAP ${gap})\n`);
+    expect(n, `LAN7 radii ${radii.map((r) => r.toFixed(3)).join(",")} on a lattice at spacing ${spacing.toFixed(3)}`).toBeGreaterThanOrEqual(5);
+  });
+
+  /**
+   * #193 target on the live placement (known gap, it.fails on the count assertion only): LAN7 and
+   * LAN11 at every 5 s from 0 to 60 s with today's hashed homes. 0 of 7 stand apart at any step for
+   * any BLOB_GAP > 0: the closest pairs sit 0.0325 uv apart against r1 + r2 >= 0.24, and the safe
+   * home ellipse (0.355 x 0.225 uv after drift + wobble) holds at most 4 sites 0.37 uv apart
+   * (floor pair + BLOB_GAP 0.1 + 2 x wobble). Reaching 5 needs Performance Pedant's lattice
+   * placement spec (#193 comments) and a bigger field or smaller blobs. Turns red once it holds.
+   */
+  const SEPARATION_FAIL = /^(LAN7|LAN11) t=\d+: \d+ of 7 apart: expected (\d+) to be greater than or equal to 5$/;
+  it.fails("#193 separation, live placement (known gap, it.fails on the count assertion): >= 5 of 7 drawn blobs stand apart on LAN7 and LAN11 at every 5 s step from 0 to 60 s", () => {
+    const shape = mirrorShape(SKY);
+    const counts: string[] = [];
+    let err: unknown = null;
+    let msg = "(no failure)";
+    try {
+      const live: [string, VizDataFrame][] = [["LAN7", LAN7], ["LAN11", LAN11]];
+      const rows = live.map(([name, frame]) => ({ name, row: Array.from({ length: 13 }, (_, i) => i * 5).map((t) => ({ t, n: separatedBlobs(drawnBlobs({ ...frame, t }, shape), shape.falloff) })) }));
+      for (const { name, row } of rows) counts.push(`${name} ${row.map(({ t, n }) => `t${t}=${n}`).join(" ")}`);
+      for (const { name, row } of rows) for (const { t, n } of row) expect(n, `${name} t=${t}: ${n} of 7 apart`).toBeGreaterThanOrEqual(5);
+    } catch (e) { err = e; msg = e instanceof Error ? e.message : String(e); }
+    const m = msg.match(SEPARATION_FAIL);
+    process.stdout.write(`[separation] live: ${counts.join(" | ")} :: ${m ? "count assertion" : "NOT the count assertion"}: ${msg}\n`);
+    if (m) throw err;
+  });
 });
