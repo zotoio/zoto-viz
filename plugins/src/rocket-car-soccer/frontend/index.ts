@@ -12,7 +12,7 @@ declare const zoto: {
   onConfig: ((cfg: Record<string, string>) => void) | null;
   onPresent?: ((tick: { frameMs: number; tileId: string }) => void) | null;
   getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
+  writeBuffer: (slot: number, data: number[] | Float32Array) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
   writeParticles: (data: number[], stride?: number) => void;
 };
