@@ -1,13 +1,13 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import yml from "../plugin.yml?raw";
+import src from "./module.js?raw";
 
 // #180: the sandbox iframe CSP is `connect-src 'none'` (service/pack_assets.py). Chrome fetches JSON
 // modules (`import x from "./a.json" with { type: "json" }`) under connect-src, so the import fails,
 // the pack never registers onPresent and the view heals to Topology. Every relative import in this
 // pack has to be a JS module, which loads under script-src like helper.js does.
-const here = path.dirname(new URL(import.meta.url).pathname);
-const entry = path.join(here, "module.js");
+/** JS modules shipped next to module.js (keys like "./helper.js"). */
+const packJs = import.meta.glob("./*.js", { query: "?raw", import: "default", eager: true });
 
 function relativeImports(src: string): { spec: string; attrs: string }[] {
   const out: { spec: string; attrs: string }[] = [];
@@ -18,13 +18,12 @@ function relativeImports(src: string): { spec: string; attrs: string }[] {
 
 describe("sandbox-fixture-multi module graph (#180)", () => {
   it("imports only JS modules that ship in the pack (no JSON import blocked by connect-src 'none')", () => {
-    const src = readFileSync(entry, "utf8");
     const imports = relativeImports(src);
     expect(imports.map((i) => i.spec)).toContain("./helper.js");
     for (const i of imports) {
       expect(i.attrs, `${i.spec} uses import attributes`).toBe("");
       expect(i.spec, `${i.spec} is not a .js module`).toMatch(/\.js$/);
-      expect(existsSync(path.join(here, i.spec)), `${i.spec} missing from the pack`).toBe(true);
+      expect(i.spec in packJs, `${i.spec} missing from the pack`).toBe(true);
     }
     expect(src).not.toMatch(/\.json["']/);
     expect(src).not.toMatch(/type\s*:\s*["']json["']/);
@@ -66,7 +65,6 @@ describe("sandbox-fixture-multi module graph (#180)", () => {
     it("writes on data frames too, because the manifest has no viz.presentTick (host sends no present ticks)", () => {
       // Red at c20802db: onPresent never fires without presentTick, so the pack makes no viz writes while
       // frames arrive; tile health reads that as drawing-nothing and heals the view to Topology.
-      const yml = readFileSync(path.join(here, "..", "plugin.yml"), "utf8");
       expect(/^\s*presentTick:\s*true\b/m.test(yml)).toBe(false);
       writes.length = 0;
       expect(typeof z.onFrame, "module.js must set zoto.onFrame").toBe("function");

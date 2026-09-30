@@ -1,12 +1,10 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { VIZ_FIXTURE_IDLE } from "../../../sdk/viz-fixtures";
+import sky from "../sky/fragment.glsl?raw";
+import * as constellationSky from "./constellation-sky";
 
 // #180: DEMO_RF beacons reach ubo slot 0 but the scaffold sky never read zotoVizSlots, so no beacon was
 // ever drawn (lit 0, mean 7.1 on the box).
-const here = path.dirname(new URL(import.meta.url).pathname);
-const sky = readFileSync(path.join(here, "..", "sky", "fragment.glsl"), "utf8");
 const lum = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
 
 /** 16:10 frame of camera-relative rays (-z forward, 55 degree vertical FOV like the stage camera). */
@@ -24,9 +22,8 @@ function frameDirs(w = 64, h = 40): [number, number, number][] {
   return out;
 }
 
-async function mirror() {
-  // Loaded by path so a missing mirror fails its own rows only.
-  return (await import(/* @vite-ignore */ path.join(here, "constellation-sky.ts"))) as typeof import("./constellation-sky");
+function mirror(): typeof constellationSky {
+  return constellationSky;
 }
 
 describe("rf-constellation sky (#180)", () => {

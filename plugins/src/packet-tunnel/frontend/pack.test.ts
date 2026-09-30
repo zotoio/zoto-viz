@@ -1,13 +1,10 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
+import sky from "../sky/fragment.glsl?raw";
 import { packetTunnelSample } from "./tunnel";
+import { PT_SKY_GLSL_LINES, packetTunnelSky } from "./tunnel-sky";
 
 // #180: the scaffold sky used `depth = 0.5 + 0.5 * dir.z`, about 0 across a camera-relative (-z forward)
 // view, and never read slot 0 (lead / depth from packetTunnelSample). Mean luma 5.5 on the box.
-const here = path.dirname(new URL(import.meta.url).pathname);
-const sky = readFileSync(path.join(here, "..", "sky", "fragment.glsl"), "utf8");
-
 /** Evaluate the sky's `float <name> = <expr>;` on the CPU (dir.xyz, numbers, + - * /, clamp/min/max/abs only). */
 function skyFloat(name: string, dir: [number, number, number]): number {
   const m = sky.match(new RegExp(`\\bfloat\\s+${name}\\s*=\\s*([^;]+);`));
@@ -30,10 +27,7 @@ describe("packet-tunnel sky (#180)", () => {
     expect(skyFloat("depth", [0, 0, 1])).toBeLessThanOrEqual(0.1);
   });
 
-  it("CPU mirror of the tunnel lights a -z-forward frame from the idle slot 0 (mean luma > 20/255)", async () => {
-    // Loaded by path so a missing mirror fails this row only.
-    const mirror = path.join(here, "tunnel-sky.ts");
-    const { packetTunnelSky, PT_SKY_GLSL_LINES } = (await import(/* @vite-ignore */ mirror)) as typeof import("./tunnel-sky");
+  it("CPU mirror of the tunnel lights a -z-forward frame from the idle slot 0 (mean luma > 20/255)", () => {
     for (const line of PT_SKY_GLSL_LINES) expect(sky, `mirror line missing from the sky: ${line}`).toContain(line);
     const slot0 = packetTunnelSample({ t: 12.3, packets: [] }).buffer;
     const lum = (c: [number, number, number]) => 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];

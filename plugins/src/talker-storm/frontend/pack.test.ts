@@ -1,15 +1,13 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { VIZ_FIXTURE_IDLE } from "../../../sdk/viz-fixtures";
+import yml from "../plugin.yml?raw";
+import sky from "../sky/fragment.glsl?raw";
+import * as stormSky from "./storm-sky";
 
 // #180 (decided with Performance Pedant): draw the storm from the sky's UBO slots, not a host particle
 // lane. writeParticles had no renderer and the scaffold sky never read zotoVizSlots, so the view was a
 // flat orange wash (mean 136). Pack uniform writes are clobbered by the host today (H1), so storm data
 // has to travel in slots.
-const here = path.dirname(new URL(import.meta.url).pathname);
-const sky = readFileSync(path.join(here, "..", "sky", "fragment.glsl"), "utf8");
-const yml = readFileSync(path.join(here, "..", "plugin.yml"), "utf8");
 const lum = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
 const TAN_V = Math.tan((55 / 2) * (Math.PI / 180));
 
@@ -21,9 +19,8 @@ function ray(u: number, v: number): [number, number, number] {
   return [x / l, y / l, -1 / l];
 }
 
-async function mirror() {
-  // Loaded by path so a missing mirror fails its own rows only.
-  return (await import(/* @vite-ignore */ path.join(here, "storm-sky.ts"))) as typeof import("./storm-sky");
+function mirror(): typeof stormSky {
+  return stormSky;
 }
 
 describe("talker-storm sky (#180)", () => {
