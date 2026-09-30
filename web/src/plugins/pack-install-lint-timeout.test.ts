@@ -384,8 +384,8 @@ describe.runIf(process.platform === "linux")("#186 lint_timeout: a spinning lint
     const parent = startParent(argv, env, { scriptDetached: false, parentDetached: true });
     const r = await exited(parent, INNER_MS + MARGIN_MS, parent.pid ?? 0);
     const why = `parent exit ${r.code} signal ${r.signal} capped ${r.capped}; stdout ${r.stdout.trim()}; stderr: ${r.stderr.slice(0, 600)}`;
+    expect(r.capped, `the script didn't end by itself: ${why}`).toBe(false);
     expect(r.signal, `the parent's group was killed by the script: ${why}`).toBeNull();
-    expect(r.capped, why).toBe(false);
     expect(r.code, why).toBe(0);
     expect(r.stdout, why).toMatch(/^script-exit 3 null$/m);
     expect(verdicts(r.stderr, "pack-install-lint-setup-error")[0]?.reason, why).toBe("lint_timeout");
