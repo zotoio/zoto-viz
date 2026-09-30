@@ -7,6 +7,8 @@ import {
   BLOB_MESH_SKY_LIFT,
   BLOB_MESH_SKY_TILT,
   BLOB_MESH_SLOT_TO_UV,
+  BLOB_MESH_SPREAD,
+  BLOB_MESH_SPREAD_MARGIN,
   blobMeshVisibleRegion,
 } from "../../../plugins/sdk/blob-mesh-budget";
 import { appLensSkySpan } from "./pack-sky-host-camera-test-helper";
@@ -22,7 +24,16 @@ import type { VizDataFrame } from "./viz-host";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SKY = readFileSync(path.resolve(here, "../../../plugins/src/blob-mesh/sky/fragment.glsl"), "utf8");
 const SPAN = appLensSkySpan();
-const SWEEP = Array.from({ length: 13 }, (_, i) => i * 5);
+/** Fine sweep for the margin and spacing rows: every 0.5 s from 0 to 60 s. */
+const FINE = Array.from({ length: 121 }, (_, i) => i * 0.5);
+/**
+ * Minimum pairwise centre distance (uv) on LAN7 and LAN11, 7 drawn, across FINE. The spread
+ * achieves 0.032 there (172.30.0.22 and .23 at t = 47 s; homes are independent hashes, so the
+ * closest pair is luck of the ids, and the shared drift keeps pair distances except for the
+ * 2 x 0.015 wobble). 0.03 keeps a small margin under that. The old 0.18 uv knot reached 0.002,
+ * and a first-character angle stacks the 172.x devices at 0.
+ */
+const MIN_PAIR_UV = 0.03;
 
 const talker = (id: string, rate: number, role = "lan") => ({ id, rate, role });
 const frameOf = (talkers: VizDataFrame["talkers"], t = 35): VizDataFrame => ({ t, dt: 1 / 6, audio: 0, packets: [], rf: [], talkers, headlines: [] });
@@ -69,6 +80,20 @@ function placements(frame: VizDataFrame, slotsOf: (f: VizDataFrame) => number[])
   return new Map(shown.map((ti, j) => [frame.talkers[ti]!.id, [slot0[j * 4]!, slot0[j * 4 + 1]!] as [number, number]]));
 }
 
+/** A disc of radius m (uv) around slot xy stays on screen: worst |screen| over 16 rim points and the centre. */
+function discOnScreen(x: number, y: number, m: number): { ok: boolean; worst: number } {
+  let ok = true;
+  let worst = 0;
+  for (let k = 0; k <= 16; k++) {
+    const a = (k / 16) * 2 * Math.PI;
+    const r = k === 16 ? 0 : m;
+    const s = onScreen(x + (r * Math.cos(a)) / 1.7, y + (r * Math.sin(a)) / 1.7);
+    ok &&= s.ok;
+    worst = Math.max(worst, Math.abs(s.sx), Math.abs(s.sy));
+  }
+  return { ok, worst };
+}
+
 /**
  * Independent of the SDK: invert the shader's plane map (uv = dir.xz / (0.35 + |dir.y|), tilt 45)
  * for a slot xy, back to the camera ray, and test it against the host lens (appLensSkySpan, from
@@ -108,18 +133,66 @@ describe("blob-mesh placement: on screen, whole-id angle, stable per device", ()
 
   for (const [who, slotsOf] of writers) {
     for (const [name, frame, drawn] of [["LAN7", LAN7, 7], ["LAN11", LAN11, 7], ["SINGLE", SINGLE, 1], ["PAIR", PAIR, 2], ["TRIPLE", TRIPLE, 3]] as const) {
-      it(`${who}: ${name} keeps all ${drawn} drawn blob centres inside the default camera's view at every 5 s step, 0-60 s`, () => {
+      it(`${who}: ${name} keeps all ${drawn} drawn blob centres, with a ${BLOB_MESH_SPREAD_MARGIN.toFixed(3)} uv margin, inside the default camera's view every 0.5 s, 0-60 s`, () => {
         let worst = 0;
-        for (const t of SWEEP) {
+        let worstCentre = 0;
+        for (const t of FINE) {
           const slot0 = slotsOf({ ...frame, t });
           expect(slot0.length / 4).toBe(drawn);
           for (let j = 0; j < slot0.length; j += 4) {
             const s = onScreen(slot0[j]!, slot0[j + 1]!);
-            worst = Math.max(worst, Math.abs(s.sx), Math.abs(s.sy));
+            const d = discOnScreen(slot0[j]!, slot0[j + 1]!, BLOB_MESH_SPREAD_MARGIN);
+            worst = Math.max(worst, d.worst);
+            worstCentre = Math.max(worstCentre, Math.abs(s.sx), Math.abs(s.sy));
             expect(s.ok, `t=${t} slot ${j / 4} xy=(${slot0[j]!.toFixed(3)}, ${slot0[j + 1]!.toFixed(3)}) screen=(${s.sx.toFixed(2)}, ${s.sy.toFixed(2)})`).toBe(true);
+            expect(d.ok, `t=${t} slot ${j / 4}: margin disc reaches |screen| ${d.worst.toFixed(2)}`).toBe(true);
           }
         }
-        if (who === "host mirror") process.stdout.write(`[in-view] ${name}: worst |screen| ${worst.toFixed(2)} of the half-frame\n`);
+        if (who === "host mirror") process.stdout.write(`[in-view] ${name}: worst centre |screen| ${worstCentre.toFixed(2)}, worst margin-rim |screen| ${worst.toFixed(2)} of the half-frame\n`);
+      });
+    }
+  }
+
+  it("the spread ellipse is safe: every point keeps its margin disc on screen (independent map), and it is wider than the old 0.18 knot", () => {
+    const { cx, cy, ax, ay } = BLOB_MESH_SPREAD;
+    expect(BLOB_MESH_SPREAD_MARGIN).toBeCloseTo(0.168, 12);
+    let worst = 0;
+    for (let k = 0; k < 64; k++) {
+      const a = (k / 64) * 2 * Math.PI;
+      const d = discOnScreen((cx + ax * Math.cos(a)) / 1.7, (cy + ay * Math.sin(a)) / 1.7, BLOB_MESH_SPREAD_MARGIN);
+      worst = Math.max(worst, d.worst);
+      expect(d.ok, `ellipse point ${k}`).toBe(true);
+    }
+    process.stdout.write(`[spread] ellipse centre (${cx}, ${cy}) semi-axes ${ax} x ${ay}, margin ${BLOB_MESH_SPREAD_MARGIN.toFixed(3)}: worst rim |screen| ${worst.toFixed(3)}\n`);
+    expect(Math.min(ax, ay)).toBeGreaterThan(0.18);
+  });
+
+  for (const [who, slotsOf] of writers) {
+    for (const [name, frame] of [["LAN7", LAN7], ["LAN11", LAN11]] as const) {
+      it(`${who}: ${name} keeps every pair of its 7 drawn blob centres >= ${MIN_PAIR_UV} uv apart, every 0.5 s from 0 to 60 s`, () => {
+        let min = Infinity;
+        let at = "";
+        let meanSum = 0;
+        let pairs = 0;
+        let reach = 0;
+        const v = blobMeshVisibleRegion();
+        for (const t of FINE) {
+          const slot0 = slotsOf({ ...frame, t });
+          expect(slot0.length / 4).toBe(7);
+          const p = Array.from({ length: 7 }, (_, j) => [slot0[j * 4]! * 1.7, slot0[j * 4 + 1]! * 1.7] as const);
+          for (let i = 0; i < 7; i++) {
+            reach = Math.max(reach, Math.hypot(p[i]![0] - v.cx, p[i]![1] - v.cy));
+            for (let j = i + 1; j < 7; j++) {
+              const d = Math.hypot(p[i]![0] - p[j]![0], p[i]![1] - p[j]![1]);
+              meanSum += d;
+              pairs++;
+              if (d < min) { min = d; at = `t=${t} slots ${i}/${j}`; }
+            }
+          }
+        }
+        const text = `${name}: min pair ${min.toFixed(4)} uv at ${at}, mean pair ${(meanSum / pairs).toFixed(3)}, farthest from view centre ${reach.toFixed(3)}`;
+        if (who === "host mirror") process.stdout.write(`[spacing] ${text}\n`);
+        expect(min, text).toBeGreaterThanOrEqual(MIN_PAIR_UV);
       });
     }
   }

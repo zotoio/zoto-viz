@@ -289,10 +289,14 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
     expect(r.five.dark, r.text).toBeLessThanOrEqual(UXPRO_MAX_DARK);
   });
 
-  /** Sparse tiles over time: 1, 2 and 3 devices, every 5 s from 0 to 60 s, <= 2 dark at every step. */
+  /** Over time (spread placement drifts): sparse 1, 2 and 3 devices plus every other case, every 5 s from 0 to 60 s, <= 2 dark at every step. */
   const PAIR: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 400), talker("172.30.0.31", 1)] };
   const TRIPLE: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 120), talker("172.30.0.11", 60), talker("172.30.0.12", 2)] };
-  for (const [name, frame] of [["SINGLE", SINGLE], ["PAIR", PAIR], ["TRIPLE", TRIPLE]] as const) {
+  const SWEPT: [string, VizDataFrame][] = [
+    ["SINGLE", SINGLE], ["PAIR", PAIR], ["TRIPLE", TRIPLE],
+    ...(Object.entries(DARK_PATCH_CASES) as [string, VizDataFrame][]).filter(([n]) => n !== "SINGLE" && n !== "EMPTY"),
+  ];
+  for (const [name, frame] of SWEPT) {
     it(`${name} sweep: at most ${UXPRO_MAX_DARK} of five dark at every 5 s step from 0 to 60 s`, () => {
       const rows = Array.from({ length: 13 }, (_, i) => i * 5).map((t) => ({ t, r: darkPatchReport({ ...frame, t }) }));
       process.stdout.write(`[sweep] ${name}: ${rows.map(({ t, r }) => `t${t}=${r.five.dark}`).join(" ")}\n`);

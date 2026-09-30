@@ -188,6 +188,20 @@ export function blobMeshIdHash(id: string): number {
   return h >>> 0;
 }
 
+/**
+ * Avalanche finaliser (murmur3 fmix32) on top of the FNV-1a id hash: FNV-1a alone barely moves the
+ * low and high halves when only the last character differs (172.30.0.21 vs .22 landed 0.002 uv
+ * apart), so every placement bit goes through this first.
+ */
+export function blobMeshMix(h: number): number {
+  h ^= h >>> 16;
+  h = Math.imul(h, 0x85ebca6b) >>> 0;
+  h ^= h >>> 13;
+  h = Math.imul(h, 0xc2b2ae35) >>> 0;
+  h ^= h >>> 16;
+  return h >>> 0;
+}
+
 /*
  * Visible region. The sky maps a camera ray to the blob plane as
  *   dir = (c.x, T (c.y + c.z), T (c.z - c.y)),  uv = dir.xz / (L + |dir.y|),  T = cos 45, L = 0.35
@@ -228,23 +242,49 @@ export function blobMeshVisibleRegion(span: readonly [number, number] = BLOB_MES
   return { cx, cy, half: Math.min(halfW, halfH) };
 }
 
-/** Each device orbits the visible centre at a hashed radius between these shares of the inscribed radius. */
-export const BLOB_MESH_ORBIT_MIN = 0.15;
-export const BLOB_MESH_ORBIT_MAX = 0.5;
-const VISIBLE = blobMeshVisibleRegion();
+/*
+ * Spread (UX Pro option 3): drawn blobs use the whole SAFE visible field, not a 0.18 uv knot at the
+ * view centre. Safe means a disc of BLOB_MESH_SPREAD_MARGIN (uv) around the centre stays on screen
+ * at the default camera: 1.4 x the floor, the largest blob in a 7-device frame, so the body of a
+ * crowded frame's blobs isn't clipped (a sparse frame's bigger blobs, up to sqrt(B) = 0.343 alone,
+ * can lose some rim at the field's edge; their centres stay in view). The largest axis-aligned
+ * ellipse whose every point keeps that disc on screen (scanned through the shader's plane map and
+ * the host lens) is centre (0, -0.77), semi-axes 0.41 x 0.28; BLOB_MESH_SPREAD keeps 0.01 inside it.
+ */
+export const BLOB_MESH_SPREAD_MARGIN = BLOB_MESH_CONTRAST * BLOB_MESH_FLOOR;
+export const BLOB_MESH_SPREAD = { cx: 0, cy: -0.77, ax: 0.4, ay: 0.27 } as const;
+/**
+ * Motion: the whole constellation drifts together on a BLOB_MESH_DRIFT (uv) circle, which keeps
+ * every pairwise distance, and each blob adds its own small hashed BLOB_MESH_WOBBLE circle, which
+ * can close a pair by at most 2 x 0.015. (Independent per-device orbits let pairs cross: 0.005 uv
+ * on the live LAN.)
+ */
+export const BLOB_MESH_DRIFT = 0.03;
+export const BLOB_MESH_WOBBLE = 0.015;
+/** Shared drift speed (rad/s). */
+export const BLOB_MESH_DRIFT_SPEED = 0.15;
 
 /**
  * Where a device's blob sits at time t, from its id alone (never its slot, rank or the other
- * devices): it circles the visible centre at a hashed radius, phase and speed, so every drawn blob
- * stays on screen and a device keeps its place as others come and go. Returns slot xy (uv / 1.7).
+ * devices): a hashed home spread uniformly over the safe ellipse (area-uniform radius), plus a small
+ * hashed drift circle, so every drawn blob stays in view with its margin and a device keeps its
+ * place as others come and go. Returns slot xy (uv / 1.7).
  */
 export function blobMeshPlacement(id: string, t: number): [number, number] {
-  const h = blobMeshIdHash(id); // whole-id hash
-  const phase = ((h & 0xffff) / 65536) * 6.283;
-  const orbit = VISIBLE.half * (BLOB_MESH_ORBIT_MIN + (BLOB_MESH_ORBIT_MAX - BLOB_MESH_ORBIT_MIN) * (((h >>> 16) & 0xff) / 255));
-  const speed = (0.12 + 0.08 * ((h >>> 24) / 255)) * ((h & 0x10000) ? 1 : -1);
-  const ang = phase + t * speed;
-  return [(VISIBLE.cx + Math.cos(ang) * orbit) / BLOB_MESH_SLOT_TO_UV, (VISIBLE.cy + Math.sin(ang) * orbit) / BLOB_MESH_SLOT_TO_UV]; // in-view placement
+  const h = blobMeshMix(blobMeshIdHash(id)); // whole-id hash
+  const h2 = blobMeshMix(h ^ 0x9e3779b9);
+  const { cx, cy, ax, ay } = BLOB_MESH_SPREAD;
+  const w = BLOB_MESH_DRIFT + BLOB_MESH_WOBBLE; // homes sit this far inside the ellipse
+  const homeAng = ((h & 0xffff) / 65536) * 2 * Math.PI;
+  const homeRad = Math.sqrt((h >>> 16) / 65535); // area-uniform over the ellipse
+  const hx = cx + (ax - w) * homeRad * Math.cos(homeAng);
+  const hy = cy + (ay - w) * homeRad * Math.sin(homeAng);
+  const drift = t * BLOB_MESH_DRIFT_SPEED; // shared by every blob
+  const speed = (0.12 + 0.08 * (((h2 >>> 16) & 0xff) / 255)) * ((h2 & 0x1) ? 1 : -1);
+  const ang = ((h2 & 0xffff) / 65536) * 2 * Math.PI + t * speed;
+  const x = hx + BLOB_MESH_DRIFT * Math.cos(drift) + BLOB_MESH_WOBBLE * Math.cos(ang);
+  const y = hy + BLOB_MESH_DRIFT * Math.sin(drift) + BLOB_MESH_WOBBLE * Math.sin(ang);
+  return [x / BLOB_MESH_SLOT_TO_UV, y / BLOB_MESH_SLOT_TO_UV]; // spread placement
 }
 
 /** Slot 0 (x, y, radius, hue per drawn device) plus the plan it came from. */
