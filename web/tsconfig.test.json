@@ -14,7 +14,9 @@
     "src/graph/pack-mirror-rect-converters.test.ts",
     "src/graph/pack-mirror-readback.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
-    "test/node/pack-mirror-readback-vite.ts"
+    "test/node/pack-mirror-readback-vite.ts",
+    "src/app/__tests__/main-entry.wall-view.test.ts",
+    "src/app/apply-mode.test.ts"
   ],
   "exclude": []
 }

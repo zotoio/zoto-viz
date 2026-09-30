@@ -88,3 +88,83 @@ describe("main.ts wall view opens its wall (#172)", () => {
     expect.soft(paneModes, "no tile's scene is re-moded to the wall view").not.toContain(wallMode);
   });
 });
+
+/**
+ * The wall view ships its own plugin sky (backdrop: plugin) and its tiles ship none (backdrop:
+ * none), like Syscon and Cypher CIC. Approved, so the sky may load.
+ */
+function skyWallPacks(w: WallCase): Record<string, unknown>[] {
+  const packs = new Set([...w.tiles, START]);
+  return [
+    {
+      ...packRow(w.wallId, w.name, { backdrop: "plugin", mosaic: "8", hero: w.hero, mosaicSharedTheme: true, mosaicTiles: w.tiles }),
+      has_sky: true,
+      has_sky_shader: true,
+      shader_sha256: `${w.wallId}-sky`,
+      consent: "authored",
+    },
+    ...[...packs].map((t) => packRow(t.replace("plugin:", ""), t, { backdrop: "none" })),
+  ];
+}
+
+/** The tile the host's main scene sits in (the wall's main tile). */
+function mainTileId(): string {
+  return document.getElementById("scene")?.closest<HTMLElement>("[data-mode]")?.dataset.mode ?? "";
+}
+
+describe("main.ts wall view uses its own sky on its wall (#172c)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    for (const a of [...document.body.attributes]) document.body.removeAttribute(a.name);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each(WALLS)("wall view uses its own sky on a hero-$hero wall ($name, #172c)", async (w) => {
+    expect.hasAssertions();
+    const wallMode = `plugin:${w.wallId}`;
+    localStorage.setItem("zoto-viz.mode", START);
+    await bootMainEntry(skyWallPacks(w));
+    await waitEntryBootComplete();
+    expect(document.body.dataset.mosaic ?? "off").toBe("off");
+
+    // A compilable fragment for the wall view's sky (the harness answers other /api/ paths with "{}").
+    const harnessFetch = globalThis.fetch;
+    vi.stubGlobal("fetch", ((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input instanceof Request ? input.url : input).includes(`/api/plugins/${w.wallId}/sky/`)
+        ? Promise.resolve(new Response("void main() { gl_FragColor = vec4(0.0); }", { status: 200 }))
+        : harnessFetch(input, init)) as typeof fetch);
+
+    // Same module instance main.ts loaded (bootMainEntry resets modules before importing it).
+    const { NetScene } = await import("../../graph/scene");
+    type Scene = InstanceType<typeof NetScene>;
+    const skies: { scene: Scene; id: string | null }[] = [];
+    const setPluginShader = NetScene.prototype.setPluginShader;
+    vi.spyOn(NetScene.prototype, "setPluginShader").mockImplementation(function (this: Scene, ...args) {
+      skies.push({ scene: this, id: args[0]?.id ?? null });
+      return setPluginShader.apply(this, args);
+    });
+
+    await pickModeFromUi(wallMode);
+    await vi.waitFor(() => {
+      expect(document.body.dataset.mosaic).toBe("8");
+      expect(wallTileIds().length).toBeGreaterThan(0);
+    }, { timeout: 8000 });
+    const main = mainTileId();
+    expect(w.tiles).toContain(main);
+
+    // The wall's main tile gets the wall view's own sky, and its backdrop draws it.
+    await vi.waitFor(() => {
+      const onMain = skies.filter((s) => s.scene.currentMode.id === main).map((s) => s.id);
+      expect(onMain, `setPluginShader on ${main}: ${JSON.stringify(skies.map((s) => [s.scene.currentMode.id, s.id]))}`)
+        .toContain(w.wallId);
+    }, { timeout: 4000 });
+    const mainScene = skies.find((s) => s.scene.currentMode.id === main)!.scene;
+    expect(mainScene.dreamAnim.backdrop, `${main} backdrop`).toBe("plugin");
+    // The other tiles keep their own (sky-less) look: the wall sky is not on them.
+    const others = skies.filter((s) => s.scene.currentMode.id !== main && s.id === w.wallId);
+    expect(others.map((s) => s.scene.currentMode.id)).toEqual([]);
+  });
+});

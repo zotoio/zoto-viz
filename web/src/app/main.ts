@@ -123,6 +123,7 @@ import {
   attachPluginFrontend,
   fetchPluginSky,
   pluginHasFrontend,
+  pluginHasSky,
   pluginNeedsReview,
   pluginViewId,
   viewSelectOptions,
@@ -1404,15 +1405,32 @@ function tileSkyStarting(tileId: string): boolean {
   return skyWaits.exempt(key);
 }
 
+/**
+ * While a wall view's own wall is up (Syscon, Cypher CIC) and it ships a plugin sky: that sky and
+ * the tile it goes on, the wall's main tile (the pane skySpecForMode picks). Null otherwise.
+ */
+function wallViewSky(): { tile: string; spec: PluginView } | null {
+  if (!mosaic?.on || !wallOwner || mosaic.tileIds.includes(wallOwner)) return null;
+  const spec = pluginSpecForMode(wallOwner);
+  if (!spec || !pluginHasSky(spec)) return null;
+  const main = mosaic.mainTileId || mosaic.focusedId;
+  return main && mosaic.tileIds.includes(main) ? { tile: main, spec } : null;
+}
+
 async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   if (mosaic?.on) {
     mosaic.markSkyPending();
+    // The wall row's sky wins over its main tile's own; the other tiles keep theirs (#172c).
+    const wall = wallViewSky();
+    const tileSpec = (id: string): PluginView | null => (id === wall?.tile ? wall.spec : pluginSpecForMode(id));
+    const wantSky = (m: Mosaic, id: string): boolean =>
+      id === wall?.tile || mosaicPluginSkyPaneView(id, m.paneSky(id), lookForMode).wantPlugin;
     try {
       for (const id of mosaic.tileIds) {
         const target = mosaic.graphScene(id);
-        const pane = pluginSpecForMode(id);
+        const pane = tileSpec(id);
         if (!target || !pane || target.pluginSkyDrawn === pane.id) continue;
-        if (!mosaicPluginSkyPaneView(id, mosaic.paneSky(id), lookForMode).wantPlugin) continue;
+        if (!wantSky(mosaic, id)) continue;
         if (pluginNeedsReview(pane) && !pane.consent) continue;
         if (!(pane.has_sky_shader === true || !!pane.shader_sha256)) continue;
         beginSkyWait(id, target, pane, id, signal);
@@ -1423,9 +1441,8 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
       await loadTilesSettlingEach(m.tileIds, signal, async (id) => {
         const target = m.graphScene(id);
         if (!target) return;
-        const tileSky = m.paneSky(id);
-        const pane = pluginSpecForMode(id);
-        const wantPlugin = mosaicPluginSkyPaneView(id, tileSky, lookForMode).wantPlugin;
+        const pane = tileSpec(id);
+        const wantPlugin = wantSky(m, id);
         await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
       }, (id) => { if (m.on) m.settlePane(id); });
     } finally {
@@ -2168,6 +2185,7 @@ mosaic = new Mosaic({
     },
   }),
   pickSuffix: (modeId) => (pluginHasFrontend(pluginSpecForMode(modeId)) ? " (full view only)" : ""),
+  wallSkyTile: () => wallViewSky()?.tile ?? null,
   paneDice: (id) => makePaneDiceButton({
     pane: id,
     onClick: () => { rollPaneDice(id); },

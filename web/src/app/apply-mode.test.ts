@@ -109,7 +109,7 @@ function mode(id: string, pluginId: string, label: string): ViewMode {
     legend: () => [],
     options: [],
     config: {},
-  } as ViewMode;
+  } as unknown as ViewMode;
 }
 
 function hudPackLabel(): string {
@@ -118,7 +118,7 @@ function hudPackLabel(): string {
 
 function buildHost(
   overrides: Partial<ApplyModeHost> & { ensureReviewed: ApplyModeHost["ensureReviewed"] },
-): ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud } {
+): ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud; skyPromptPack: () => string } {
   const sandbox = new PluginSandbox();
   const presentDriveDeps = { sandbox, pluginClock: () => 0, stageAspect: () => 16 / 9 };
   refreshPluginDriveState(stereoSpec, "plugin:stereo-gram", presentDriveDeps);
@@ -187,12 +187,11 @@ function buildHost(
     applyModeFeedExtras: () => {},
     bindThisView,
     clearModeOpts: () => {},
-    ensureReviewed: overrides.ensureReviewed,
     loadTsPlugin: overrides.loadTsPlugin ?? vi.fn(async () => {}),
     syncPluginSky: overrides.syncPluginSky ?? vi.fn(async () => {}),
     mosaic: overrides.mosaic ?? null,
     captureMosaicSnap: () => ({
-      size: "2",
+      size: "4",
       hero: "off",
       tree: null,
       maximized: null,
@@ -340,7 +339,7 @@ describe("applyModeImpl rollback", () => {
   });
 
   it("present drive capture order: mosaic failure restores via reapply refresh (not loadTs stub)", async () => {
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
       loadTsPlugin: async (spec, signal) => loadTs(spec, signal),
@@ -353,7 +352,7 @@ describe("applyModeImpl rollback", () => {
         focusedId: "topology",
         setPaneView: () => false,
         setSize: vi.fn(),
-      } as ApplyModeHost["mosaic"],
+      } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
     });
@@ -368,7 +367,7 @@ describe("applyModeImpl rollback", () => {
     const restoreMosaicSnap = vi.fn();
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
-      mosaic: { on: true, heroPos: "left", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "left", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as unknown as ApplyModeHost["mosaic"],
       mosaicShouldResize: () => true,
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
@@ -388,7 +387,7 @@ describe("applyModeImpl rollback", () => {
     const applyMosaicModeVisuals = vi.fn();
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "declined",
-      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setPaneView, setSize: vi.fn() } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setPaneView, setSize: vi.fn() } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: setPaneView,
       applyMosaicModeVisuals,
@@ -404,7 +403,7 @@ describe("applyModeImpl rollback", () => {
   it("stale consent: B pending, switch to C, resolve B — no B load, HUD shows C", async () => {
     let resolveB!: (r: ConsentReviewResult) => void;
     const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const host = buildHost({
       ensureReviewed: async (spec, _signal) => {
         if (spec?.id === "roto-proto") return bPending;
@@ -442,7 +441,7 @@ describe("applyModeImpl rollback", () => {
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
       applyMosaicModeVisuals,
-      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
     });
@@ -471,7 +470,7 @@ describe("applyModeImpl rollback", () => {
 
   it("dream-cycle while B consent open then accept records consent, HUD, and load", async () => {
     const consent = deferConsentForPack("packet-tunnel");
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const syncSky = vi.fn(async () => {});
     const applySolo = vi.fn();
     const host = buildHost({
