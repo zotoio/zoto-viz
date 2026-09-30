@@ -15,6 +15,9 @@
  * helpers under web/src). Code patterns count only outside strings and comments. Partial fakes go
  * through mockPartial() in web/test-support/mock-partial.ts, the only file exempt. Existing hits are
  * listed per file in tsconfig-test-casts.baseline.json, which may only shrink.
+ *
+ * The JS-include row: tsconfig.test.json sets allowJs with checkJs off, so a .js/.mjs/.cjs file it
+ * lists explicitly is only type-checked if its first line is `// @ts-check`.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -45,7 +48,7 @@ const TEST_FILE = /\.test\.tsx?$/;
  * tsconfig.test.json as JSON (tsconfig allows `//` comments; this file only uses whole-line ones).
  * A file that doesn't parse fails every row with the parser's message, not with a list of paths.
  */
-function readTestConfig(): { exclude: string[] } {
+function readTestConfig(): { exclude: string[]; include: string[] } {
   // Blank the comment lines rather than drop them, so the parser's line numbers match the file.
   const text = readFileSync(TEST_CONFIG, "utf8")
     .split("\n")
@@ -61,7 +64,11 @@ function readTestConfig(): { exclude: string[] } {
   if (!Array.isArray(exclude) || !exclude.every((p) => typeof p === "string")) {
     throw new Error(`could not parse ${TEST_CONFIG_REL}: "exclude" is not a list of paths`);
   }
-  return { exclude };
+  const include = (parsed as { include?: unknown }).include;
+  if (!Array.isArray(include) || !include.every((p) => typeof p === "string")) {
+    throw new Error(`could not parse ${TEST_CONFIG_REL}: "include" is not a list of paths`);
+  }
+  return { exclude, include };
 }
 
 /** Splits `exclude` at the `// HELD` comment line (the list is read line by line to see the comments). */
@@ -180,5 +187,11 @@ describe("tsconfig.test.json exclude list (#192)", () => {
     expect(added).toEqual([]);
     const lower = [...baseline].filter(([rel, n]) => (counts.get(rel) ?? 0) < n).map(([rel, n]) => `${rel}: ${counts.get(rel) ?? 0} (baseline ${n}); lower its count in tsconfig-test-casts.baseline.json`);
     expect(lower).toEqual([]);
+  });
+
+  it("every .js/.mjs/.cjs file in the includes starts with // @ts-check (checkJs is off)", () => {
+    const js = readTestConfig().include.filter((p) => /\.[cm]?js$/.test(p));
+    const unchecked = js.filter((p) => readFileSync(path.join(webRoot, p), "utf8").split("\n", 1)[0]!.trim() !== "// @ts-check");
+    expect(unchecked).toEqual([]);
   });
 });
