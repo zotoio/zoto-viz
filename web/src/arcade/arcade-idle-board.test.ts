@@ -256,7 +256,7 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       expect(feedStatus(), "feed status after one live poll: no demo text, no stale waiting").toBe("");
     });
 
-    // ArcadeView engines only: netpong keeps its own stats.pps, which moves only when rows are ingested (pong.ts).
+    // ArcadeView engines only: netpong keeps its own stats.pps; its quiet-poll decay rows are in pong-pps-decay.test.ts (#197).
     if (engine !== "netpong") it(`${engine}: a failed poll (HTTP error) decays the HUD rate x0.6, exactly like an empty poll (#182)`, async () => {
       const { view, poll, labelShown, demoCalls } = mount(engine, cleanHomeState());
       const pps = () => (view as unknown as { pps: number }).pps;
