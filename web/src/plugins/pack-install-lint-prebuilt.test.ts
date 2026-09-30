@@ -37,9 +37,16 @@ const sdkRoot = path.join(repoRoot, "plugins/sdk");
 const BUILT = "pack-install-lint.built.mjs";
 const BUILT_PATH = path.join(webRoot, "scripts", BUILT);
 const PACK_NAME = "Star Sines";
-/** #185's setup sentence, unchanged (service/pack_install_lint.py, bundle-pack-entry.mjs). */
-const setupMsg = (name: string) =>
-  `Couldn't safety-check ${name}, so it wasn't installed. Run \`pnpm install\` in \`web/\` and try again.`;
+/**
+ * The setup sentence by reason, pinned as literals (the source is web/scripts/pack-install-lint-setup-copy.json,
+ * which service/pack_install_lint.py and bundle-pack-entry.mjs both read): a missing or stale built
+ * lint says `pnpm run prepare` (an up-to-date `pnpm install` skips prepare); everything else keeps
+ * #185's `pnpm install`.
+ */
+const FIX_INSTALL = "Run `pnpm install` in `web/` and try again.";
+const FIX_PREPARE = "Run `pnpm run prepare` in `web/` and try again.";
+const setupMsg = (name: string, reason: SetupReason) =>
+  `Couldn't safety-check ${name}, so it wasn't installed. ${FIX_FOR[reason]}`;
 const EXIT_LINT_BLOCK = 1;
 const EXIT_LINT_SETUP = 3;
 const SANDBOX_PLAIN = PACK_LINT_PLAIN_SUMMARY["sandbox-escape"];
@@ -154,19 +161,26 @@ function expectSandboxBlock(r: Run): void {
 
 /** #186: bundle-pack-entry.mjs's machine-readable setup reasons (diagnostic line only, never user text). */
 type SetupReason = "lint_prebuilt_missing" | "lint_prebuilt_stale" | "esbuild_unresolvable" | "lint_threw" | "lint_no_verdict";
+const FIX_FOR: Record<SetupReason, string> = {
+  lint_prebuilt_missing: FIX_PREPARE,
+  lint_prebuilt_stale: FIX_PREPARE,
+  esbuild_unresolvable: FIX_INSTALL,
+  lint_threw: FIX_INSTALL,
+  lint_no_verdict: FIX_INSTALL,
+};
 
 /**
- * Exit 3, this cause's own reason code, #185's sentence and nothing raw for the user: no exit code,
- * signal, error class or stack.
+ * Exit 3, this cause's own reason code, that reason's own sentence and nothing raw for the user: no
+ * exit code, signal, error class or stack.
  */
 function expectSetupRefusal(r: Run, reason: SetupReason, detail: RegExp, name = PACK_NAME): void {
   expect(r.status, `refused with the setup exit, not installed: ${why(r)}`).toBe(EXIT_LINT_SETUP);
   expect(verdicts(r.stderr, "pack-install-lint-setup-error")[0]?.reason, `setup reason code: ${why(r)}`).toBe(reason);
   expect(r.stdout, "no bundle written").toBe("");
-  expect(r.stderr.split(/\r?\n/)[0], "first stderr line is the user sentence").toBe(setupMsg(name));
+  expect(r.stderr.split(/\r?\n/)[0], `first stderr line is the ${reason} sentence`).toBe(setupMsg(name, reason));
   const setup = verdicts(r.stderr, "pack-install-lint-setup-error");
   expect(setup, "one setup-error line").toHaveLength(1);
-  expect(setup[0]!.message).toBe(setupMsg(name));
+  expect(setup[0]!.message, `the ${reason} sentence`).toBe(setupMsg(name, reason));
   expect(String(setup[0]!.message)).not.toMatch(/\b1[0-9]{2}\b|\bSIG[A-Z]+\b|Error\b|ERR_|\bat .+:\d+|node:|exit \d/);
   expect(String(setup[0]!.detail), "the raw cause is only in the diagnostic line").toMatch(detail);
   expect(r.stderr, "no stack trace anywhere in the output").not.toMatch(/\n\s+at .+:\d+:\d+/);
@@ -258,20 +272,41 @@ describe("#186 no TypeScript runner on the install path", () => {
   }, 60_000);
 });
 
-describe("#186 the built lint fails closed at install (exit 3, #185's sentence)", () => {
+describe("#186 the built lint fails closed at install (exit 3, the reason's own sentence)", () => {
   it("built lint deleted: the install is refused with the setup sentence, no raw exit code or stack; lint-only too", () => {
     const tree = scriptTree({ built: null });
     expect(existsSync(path.join(tree, "web/scripts", BUILT)), "built lint really missing").toBe(false);
     expectSetupRefusal(bundle(tree, packHome()), "lint_prebuilt_missing", /built lint not importable: ERR_MODULE_NOT_FOUND/);
+    expect(setupMsg(PACK_NAME, "lint_prebuilt_missing")).toBe(
+      "Couldn't safety-check Star Sines, so it wasn't installed. Run `pnpm run prepare` in `web/` and try again.",
+    );
     expectSetupRefusal(bundle(tree, packHome({ id: "cores" }), { lintOnly: true }), "lint_prebuilt_missing", /built lint not importable/, "CPU cores");
   }, 60_000);
 
   it("built lint stale (plugins/sdk edited after the build): refused with the setup sentence", () => {
     const tree = scriptTree({ stale: true });
     expectSetupRefusal(bundle(tree, packHome()), "lint_prebuilt_stale", /built lint is stale: sources changed since it was built/);
+    expect(setupMsg(PACK_NAME, "lint_prebuilt_stale")).toBe(
+      "Couldn't safety-check Star Sines, so it wasn't installed. Run `pnpm run prepare` in `web/` and try again.",
+    );
     // Control: the same copy, unedited, passes.
     expectPass(bundle(scriptTree({ sdkCopy: true }), packHome()), "star-sines");
   }, 120_000);
+
+  it("the setup copy table missing too: still refused (exit 3, same reason), no sentence, no stack; the service renders its own", () => {
+    const tree = scriptTree({ built: null });
+    unlinkSync(path.join(tree, "web/scripts/pack-install-lint-setup-copy.json"));
+    const r = bundle(tree, packHome());
+    expect(r.status, why(r)).toBe(EXIT_LINT_SETUP);
+    expect(r.stdout).toBe("");
+    const setup = verdicts(r.stderr, "pack-install-lint-setup-error");
+    expect(setup, `one setup-error line: ${why(r)}`).toHaveLength(1);
+    expect(setup[0]!.reason).toBe("lint_prebuilt_missing");
+    expect(setup[0]!.message, "no sentence without the table (never a second copy)").toBeNull();
+    expect(String(setup[0]!.detail)).toMatch(/built lint not importable: .*; setup copy unavailable: ENOENT/);
+    expect(r.stderr).not.toMatch(/Couldn't safety-check|\n\s+at .+:\d+:\d+/);
+    expect(verdicts(r.stderr, "pack-install-lint-pass")).toEqual([]);
+  }, 60_000);
 
   it("a built lint that throws: refused with the setup sentence, the error only in the diagnostic line", async () => {
     const built = await fakeBuilt('export function runPackInstallLint() { throw new TypeError("lint broke (#186 row)"); }');
@@ -352,7 +387,7 @@ describe("#186 tsx is no production dependency of web/", () => {
       importers: Record<string, { dependencies?: Record<string, unknown> }>;
     };
     expect(lock.importers["."]?.dependencies?.tsx, "lockfile importer '.' dependencies.tsx").toBeUndefined();
-    for (const f of ["bundle-pack-entry.mjs", "pack-install-lint-stamp.mjs", BUILT]) {
+    for (const f of ["bundle-pack-entry.mjs", "pack-install-lint-stamp.mjs", "pack-install-lint-setup-copy.mjs", BUILT]) {
       const text = readFileSync(path.join(webRoot, "scripts", f), "utf8");
       expect(text, `${f} names no TS runner`).not.toMatch(/\btsx\/|["']tsx["']|node_modules\/tsx/);
       expect(text, `${f} starts no child process`).not.toMatch(/node:child_process/);

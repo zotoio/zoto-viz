@@ -76,6 +76,25 @@ _LINT_SETUP = "pack-install-lint-setup-error"
 NONCE_ENV = "ZOTO_PACK_INSTALL_LINT_NONCE"
 
 
+#: #186: the one table for the setup-refusal copy, shared with bundle-pack-entry.mjs (through
+#: web/scripts/pack-install-lint-setup-copy.mjs). Read once at import: it's a tracked file of this
+#: checkout, like web/scripts/bundle-pack-entry.mjs itself.
+SETUP_COPY_PATH = Path(__file__).resolve().parents[1] / "web" / "scripts" / "pack-install-lint-setup-copy.json"
+SETUP_COPY: dict[str, Any] = json.loads(SETUP_COPY_PATH.read_text(encoding="utf-8"))
+_PLACEHOLDER = re.compile(r"\{(\w+)\}")
+
+
+def _fill(template: str, values: dict[str, str]) -> str:
+    """One pass, like the script's renderer: a placeholder inside a value is never expanded."""
+    return _PLACEHOLDER.sub(lambda m: values.get(m.group(1), m.group(0)), template)
+
+
+def setup_fix(reason: str | None) -> str:
+    """The fix sentence for a setup reason code ("" or an unlisted code: the table's default)."""
+    key = SETUP_COPY["reasons"].get(reason or "", SETUP_COPY["default"])
+    return str(SETUP_COPY["fixes"][key])
+
+
 class PackInstallLintSetupError(ValueError):
     """The install lint couldn't run (or gave no valid verdict), so the install was refused.
 
@@ -86,24 +105,22 @@ class PackInstallLintSetupError(ValueError):
     def __init__(self, pack_name: str, reason: str = "") -> None:
         self.pack_name = (pack_name or "").strip() or "Plugin"
         #: #186: machine-readable cause for the log and tests (``lint_prebuilt_missing``,
-        #: ``lint_prebuilt_stale``, ``esbuild_unresolvable``, …); never user text.
+        #: ``lint_prebuilt_stale``, ``esbuild_unresolvable``, …); never user text. It picks the fix
+        #: sentence from SETUP_COPY.
         self.reason = reason
-        super().__init__(format_install_lint_setup_message(self.pack_name))
+        super().__init__(format_install_lint_setup_message(self.pack_name, reason))
 
 
-def format_install_lint_setup_message(name: str) -> str:
+def format_install_lint_setup_message(name: str, reason: str = "") -> str:
     label = (name or "").strip() or "Plugin"
-    return f"Couldn't safety-check {label}, so it wasn't installed. Run `pnpm install` in `web/` and try again."
+    return _fill(str(SETUP_COPY["install"]), {"name": label, "fix": setup_fix(reason)})
 
 
-def format_install_lint_setup_upgrade_message(name: str, old_version: str | int | None) -> str:
+def format_install_lint_setup_upgrade_message(name: str, old_version: str | int | None, reason: str = "") -> str:
     label = (name or "").strip() or "Plugin"
     old = str(old_version).strip() if old_version is not None else ""
-    still = f"You're still on v{old}." if old else "You're still on the version you had."
-    return (
-        f"Couldn't safety-check the new version of {label}, so it wasn't updated. {still} "
-        "Run `pnpm install` in `web/` and try again."
-    )
+    still = _fill(str(SETUP_COPY["still"]), {"old": old}) if old else str(SETUP_COPY["still_unknown"])
+    return _fill(str(SETUP_COPY["upgrade"]), {"name": label, "still": still, "fix": setup_fix(reason)})
 
 
 def _verdict_lines(stderr: str, kind: str) -> list[dict[str, Any]]:

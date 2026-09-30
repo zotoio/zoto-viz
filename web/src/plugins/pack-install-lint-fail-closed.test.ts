@@ -42,17 +42,36 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const webRoot = path.join(repoRoot, "web");
 const sdkRoot = path.join(repoRoot, "plugins/sdk");
 const PACK_NAME = "Star Sines";
-const setupMsg = (name: string) =>
-  `Couldn't safety-check ${name}, so it wasn't installed. Run \`pnpm install\` in \`web/\` and try again.`;
-const SETUP_MSG = setupMsg(PACK_NAME);
+/**
+ * UX Pro's fix sentences, pinned here as literals (the source is web/scripts/pack-install-lint-setup-copy.json):
+ * #186 split them by setup reason; a missing or stale built lint says `pnpm run prepare`.
+ */
+const FIX_INSTALL = "Run `pnpm install` in `web/` and try again.";
+const FIX_PREPARE = "Run `pnpm run prepare` in `web/` and try again.";
+type Fix = typeof FIX_INSTALL | typeof FIX_PREPARE;
+/** Each setup reason's own fix (the reasons these rows produce). */
+const FIX_FOR: Record<string, Fix> = {
+  esbuild_unresolvable: FIX_INSTALL,
+  lint_prebuilt_missing: FIX_PREPARE,
+  lint_prebuilt_stale: FIX_PREPARE,
+};
+const setupMsg = (name: string, fix: Fix) => `Couldn't safety-check ${name}, so it wasn't installed. ${fix}`;
+/** The built lint missing (the separation / plain-words rows' setup refusal). */
+const SETUP_MSG_MISSING = setupMsg(PACK_NAME, FIX_PREPARE);
 /** UX Pro's upgrade copy (the service builds it; it knows the installed version). */
-const upgradeSetupMsg = (name: string, old: string) =>
-  `Couldn't safety-check the new version of ${name}, so it wasn't updated. You're still on v${old}. Run \`pnpm install\` in \`web/\` and try again.`;
+const upgradeSetupMsg = (name: string, old: string, fix: Fix) =>
+  `Couldn't safety-check the new version of ${name}, so it wasn't updated. You're still on v${old}. ${fix}`;
 const EXIT_LINT_BLOCK = 1;
 const EXIT_LINT_SETUP = 3;
 const BARE_PASS = '{"type":"pack-install-lint-pass"}';
 /** #186: the files bundle-pack-entry.mjs needs next to it for the in-process install lint. */
-const LINT_SCRIPTS = ["bundle-pack-entry.mjs", "pack-install-lint-stamp.mjs", "pack-install-lint.built.mjs"];
+const LINT_SCRIPTS = [
+  "bundle-pack-entry.mjs",
+  "pack-install-lint-stamp.mjs",
+  "pack-install-lint.built.mjs",
+  "pack-install-lint-setup-copy.mjs",
+  "pack-install-lint-setup-copy.json",
+];
 /** Plain-words block summary for sandbox-escape findings (plugins/sdk/pack-lint-hints.ts). */
 const SANDBOX_PLAIN = PACK_LINT_PLAIN_SUMMARY["sandbox-escape"];
 
@@ -160,15 +179,19 @@ function expectPlainUserMessage(message: string): void {
   expect(message).not.toMatch(/\b1[0-9]{2}\b|\bSIG[A-Z]+\b|Error\b|ERR_|\bat .+:\d+|node:|exit \d/);
 }
 
-/** `reason`: #186's machine-readable setup cause on the diagnostic line (never user text). */
+/**
+ * `reason`: #186's machine-readable setup cause on the diagnostic line (never user text); the
+ * sentence is that reason's own (FIX_FOR).
+ */
 function expectSetupRefusal(r: SpawnSyncReturns<string>, reason: string, detail: RegExp, name = PACK_NAME): Record<string, unknown> {
   expect(r.status, `refused with the setup exit, not installed: ${why(r)}`).toBe(EXIT_LINT_SETUP);
   expect(verdicts(r.stderr, "pack-install-lint-setup-error")[0]?.reason, `setup reason code: ${why(r)}`).toBe(reason);
   expect(r.stdout, "no bundle written").toBe("");
-  expect(r.stderr, "setup message").toContain(setupMsg(name));
+  const want = setupMsg(name, FIX_FOR[reason]!);
+  expect(r.stderr, `setup message for ${reason}`).toContain(want);
   const setup = verdicts(r.stderr, "pack-install-lint-setup-error");
   expect(setup, "one setup-error line").toHaveLength(1);
-  expect(setup[0]!.message).toBe(setupMsg(name));
+  expect(setup[0]!.message, `the ${reason} sentence`).toBe(want);
   expectPlainUserMessage(String(setup[0]!.message));
   expect(String(setup[0]!.detail), "the raw cause is only in the diagnostic line").toMatch(detail);
   expect(verdicts(r.stderr, "pack-install-lint-pass"), "no pass verdict").toEqual([]);
@@ -210,6 +233,9 @@ describe("#185 pack install lint fails closed (bundle-pack-entry.mjs)", () => {
     expect(existsSync(path.join(tree, "web/node_modules/esbuild")), "esbuild really absent").toBe(false);
     const r = bundle(tree, packHome());
     const setup = expectSetupRefusal(r, "esbuild_unresolvable", /esbuild not importable: ERR_MODULE_NOT_FOUND/);
+    expect(setup.message, "esbuild unresolvable keeps the pnpm install sentence").toBe(
+      "Couldn't safety-check Star Sines, so it wasn't installed. Run `pnpm install` in `web/` and try again.",
+    );
     expect(String(setup.message)).not.toMatch(/esbuild|Cannot find|ERR_MODULE_NOT_FOUND|\n/);
     expect(r.stderr, "no stack trace anywhere in the output").not.toMatch(/\n\s+at .+:\d+:\d+/);
   }, 60_000);
@@ -244,20 +270,20 @@ describe("#185 pack install lint fails closed (bundle-pack-entry.mjs)", () => {
     expect(setup.status).not.toBe(block.status);
     const setupText = String(verdicts(setup.stderr, "pack-install-lint-setup-error")[0]?.message ?? "");
     const blockMsg = String(verdicts(block.stderr, "pack-install-lint-block")[0]?.message ?? "");
-    expect(setupText).toBe(SETUP_MSG);
+    expect(setupText).toBe(SETUP_MSG_MISSING);
     expect(blockMsg.length).toBeGreaterThan(0);
     // Both setup messages (fresh install here, upgrade from the service) vs the lint block.
-    for (const s of [setupText, upgradeSetupMsg(PACK_NAME, "1")]) {
+    for (const s of [setupText, upgradeSetupMsg(PACK_NAME, "1", FIX_PREPARE), upgradeSetupMsg(PACK_NAME, "1", FIX_INSTALL)]) {
       expect(s).not.toBe(blockMsg);
       expect(s).not.toContain(blockMsg);
       expect(blockMsg).not.toContain(s);
       expect(s).not.toMatch(/sandbox-escape|was blocked|indexedDB/);
     }
-    expect(blockMsg).not.toMatch(/safety-check|pnpm install|wasn't (installed|updated)|still on v/);
+    expect(blockMsg).not.toMatch(/safety-check|pnpm install|pnpm run prepare|wasn't (installed|updated)|still on v/);
     expect(setup.stderr, "setup output carries none of the block's text").not.toContain(blockMsg);
     expect(setup.stderr).not.toMatch(/sandbox-escape|pack-install-lint-block|was blocked/);
     expect(block.stderr, "block output carries none of the setup text").not.toContain(setupText);
-    expect(block.stderr).not.toMatch(/safety-check|pnpm install|pack-install-lint-setup-error/);
+    expect(block.stderr).not.toMatch(/safety-check|pnpm install|pnpm run prepare|pack-install-lint-setup-error/);
   }, 120_000);
 });
 
@@ -396,7 +422,7 @@ describe("#185 a lint block tells the user in plain words (no rule ids, paths or
     for (const s of setupLines) {
       expect(s).toMatch(/^Couldn't safety-check/);
       expect(s).not.toContain("was blocked");
-      // The setup copy names `pnpm install` in `web/` on purpose; the path / file-type / rule-id bar still holds.
+      // The setup copy names `pnpm run prepare` / `pnpm install` in `web/` on purpose; the path / file-type / rule-id bar still holds.
       for (const id of RULE_IDS) expect(s).not.toContain(id);
       expect(s).not.toMatch(/plugins\/|README|\.ts\b|\.mjs\b/);
     }
@@ -406,15 +432,23 @@ describe("#185 a lint block tells the user in plain words (no rule ids, paths or
 describe("#185 the install UI shows the setup refusal in the service's words", () => {
   it("pack_install_check_unavailable rows surface with their message, unchanged (install and upgrade copy)", () => {
     expect(PACK_INSTALL_CHECK_UNAVAILABLE).toBe("pack_install_check_unavailable");
-    for (const message of [SETUP_MSG, upgradeSetupMsg(PACK_NAME, "3")]) {
+    for (const message of [
+      setupMsg(PACK_NAME, FIX_INSTALL),
+      setupMsg(PACK_NAME, FIX_PREPARE),
+      upgradeSetupMsg(PACK_NAME, "3", FIX_INSTALL),
+      upgradeSetupMsg(PACK_NAME, "3", FIX_PREPARE),
+    ]) {
       const row = { ok: false as const, error: PACK_INSTALL_CHECK_UNAVAILABLE, message, zip: "star-sines.zip" };
       expect(isPackInstallBlockedPayload(row), "catalog notice").toBe(true);
       expect(formatPackInstallBlocked(row), "catalog notice text").toBe(message);
       expect(catalogErrorLooksBlocked(message)).toBe(true);
       expect(localPluginPublishChatLine(row, "frontend/index.ts"), "agent chat").toBe(message);
     }
-    expect(upgradeSetupMsg(PACK_NAME, "3")).toBe(
+    expect(upgradeSetupMsg(PACK_NAME, "3", FIX_INSTALL)).toBe(
       "Couldn't safety-check the new version of Star Sines, so it wasn't updated. You're still on v3. Run `pnpm install` in `web/` and try again.",
+    );
+    expect(upgradeSetupMsg(PACK_NAME, "3", FIX_PREPARE)).toBe(
+      "Couldn't safety-check the new version of Star Sines, so it wasn't updated. You're still on v3. Run `pnpm run prepare` in `web/` and try again.",
     );
   });
 });

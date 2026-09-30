@@ -80,7 +80,9 @@ const packName = manifestField(manifest, "name") || packId;
 
 /**
  * #186: `reason` is a machine-readable code for the log and the rows (never user text): which setup
- * step failed. The user sentence is the same for all of them — `pnpm install` in web/ fixes each.
+ * step failed. The user sentence's fix depends on it (`pnpm run prepare` for a missing or stale built
+ * lint, `pnpm install` otherwise); the wording lives in one table, pack-install-lint-setup-copy.json,
+ * which the service reads too.
  */
 const SETUP_REASONS = Object.freeze({
   noRepoRoot: "no_repo_root",
@@ -94,10 +96,26 @@ const SETUP_REASONS = Object.freeze({
   noVerdict: "lint_no_verdict",
 });
 
+/**
+ * The setup copy (pack-install-lint-setup-copy.mjs + .json), loaded up front in lint mode so a refusal
+ * can't fail on it. If it can't load, the refusal still happens (exit 3, same reason) without a
+ * sentence; the service renders its own from the same table.
+ */
+const setupCopy = lintMode
+  ? await import("./pack-install-lint-setup-copy.mjs").catch((err) => ({ loadError: err }))
+  : null;
+
 function refuseLintSetup(detail, reason) {
-  const message = `Couldn't safety-check ${packName}, so it wasn't installed. Run \`pnpm install\` in \`web/\` and try again.`;
-  console.error(message);
-  console.error(JSON.stringify({ type: LINT_SETUP, message, reason, detail }));
+  let message = null;
+  let copyDetail = "";
+  try {
+    if (setupCopy?.loadError) throw setupCopy.loadError;
+    message = setupCopy.setupSentence(packName, reason);
+  } catch (err) {
+    copyDetail = `; setup copy unavailable: ${errCode(err)}`;
+  }
+  if (message) console.error(message);
+  console.error(JSON.stringify({ type: LINT_SETUP, message, reason, detail: `${detail}${copyDetail}` }));
   process.exit(EXIT_LINT_SETUP);
 }
 
@@ -128,8 +146,8 @@ const bundleResolve = lintOnly
 
 /**
  * #186: the install lint, in this process. The built lint is plain JS (no tsx); a missing or stale one
- * is the setup refusal, and `pnpm install` in web/ rebuilds it (web/ `prepare`), so the setup sentence
- * stays true. Only a `{kind: "pass"}` return value lets the install go ahead.
+ * is the setup refusal, and its sentence says `pnpm run prepare` in web/ (which rebuilds it; an
+ * up-to-date `pnpm install` skips prepare). Only a `{kind: "pass"}` return value lets the install go ahead.
  */
 async function runInstallLint() {
   if (!repoRoot) refuseLintSetup("no repo root passed to bundle-pack-entry.mjs", SETUP_REASONS.noRepoRoot);

@@ -556,7 +556,7 @@ def _install_staged_to_runtime_locked(
             # an upgrade says which version is still installed.
             if upgrade:
                 raise InstallV2BlockedError(
-                    format_install_lint_setup_upgrade_message(name or e.pack_name, installed_runtime_version(runtime)),
+                    format_install_lint_setup_upgrade_message(name or e.pack_name, installed_runtime_version(runtime), e.reason),
                     payload={"error": REASON_INSTALL_CHECK_UNAVAILABLE, "upgrade_blocked": "true", "zip": rel},
                 ) from e
             raise

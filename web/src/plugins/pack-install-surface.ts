@@ -26,9 +26,12 @@ export const PACK_BLOCKED_SELECT_VALUE = "__pack_blocked_catalog__";
 /**
  * #185: the service refused an install because the pack install lint couldn't run (or gave no valid
  * verdict, or timed out). The UI shows the service's message as is:
- * - fresh install: "Couldn't safety-check <Name>, so it wasn't installed. Run `pnpm install` in `web/` and try again."
+ * - fresh install: "Couldn't safety-check <Name>, so it wasn't installed. <fix>"
  * - upgrade: "Couldn't safety-check the new version of <Name>, so it wasn't updated. You're still on
- *   v<old>. Run `pnpm install` in `web/` and try again."
+ *   v<old>. <fix>"
+ * where <fix> is "Run `pnpm run prepare` in `web/` and try again." for a missing or stale built lint
+ * (#186) and "Run `pnpm install` in `web/` and try again." otherwise. The wording is the service's,
+ * from web/scripts/pack-install-lint-setup-copy.json; nothing here depends on it.
  */
 export const PACK_INSTALL_CHECK_UNAVAILABLE = "pack_install_check_unavailable";
 
