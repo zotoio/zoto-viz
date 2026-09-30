@@ -38,23 +38,29 @@ const OFF_ALLOWLIST_ZOTO_FIXTURE = "plugins/sdk/pack-lint-fixtures/off-allowlist
 const OFF_ALLOWLIST_PACK_REPO_REL = "plugins/src/not-on-legacy-allowlist/frontend/index.ts";
 
 const SHIPPED_GET_VIZ_ZOTO_PACK_IDS = [
+  "ant-colony",
+  "aquarium",
   "backrooms",
   "blob-mesh",
   "cypher-cic",
   "hn-rain",
   "hn-term",
   "kefrens-bars",
+  "koi-pond",
   "lan-pulse",
   "marble-run",
+  "metro-lines",
   "nixie-clock",
   "packet-tunnel",
   "pulse-ts",
   "rf-constellation",
+  "rocket-car-soccer",
   "roto-proto",
   "star-sines",
   "stereo-gram",
   "syscon",
   "talker-storm",
+  "voxel-world",
 ] as const;
 
 const hostAliasPaths = JSON.parse(
@@ -379,7 +385,10 @@ describe("pack lint guardrails", () => {
         path.join(repoRoot, "plugins/src", packId, "frontend/index.ts"),
         "utf8",
       );
-      expect(indexSrc).toMatch(/from "plugins\/sdk\/viz-zoto"/);
+      // The alias, or the relative path from frontend/ (#210: ant-colony and rocket-car-soccer have
+      // solo vitest configs, run by tests/test_*_pack.py, with no plugins/sdk alias).
+      expect(indexSrc).toMatch(/from "(?:plugins\/sdk|\.\.\/\.\.\/\.\.\/sdk)\/viz-zoto"/);
+      expect(indexSrc).not.toMatch(/\bdeclare\s+const\s+zoto\b/);
       expect(indexSrc).toMatch(/getVizZoto\(\)/);
     }
   });
@@ -412,14 +421,8 @@ describe("pack lint guardrails", () => {
     for (const packId of SHIPPED_GET_VIZ_ZOTO_PACK_IDS) {
       expect(isLegacyDeclareZotoPackAllowed(packId)).toBe(false);
     }
-    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toEqual([
-      "ant-colony",
-      "aquarium",
-      "koi-pond",
-      "metro-lines",
-      "rocket-car-soccer",
-      "voxel-world",
-    ]);
+    // #210: empty, so the old pattern can't come back on any pack.
+    expect(LEGACY_DECLARE_ZOTO_PACK_IDS).toEqual([]);
     const text = readFileSync(path.join(repoRoot, OFF_ALLOWLIST_ZOTO_FIXTURE), "utf8");
     const hits = scanPackLintFixture(OFF_ALLOWLIST_PACK_REPO_REL, text, "not-on-legacy-allowlist", repoRoot);
     expect(hits.some((h) => h.rule === "inline-zoto-declare")).toBe(true);
@@ -429,7 +432,12 @@ describe("pack lint guardrails", () => {
 
   it("reports baseline counts per pack and per rule (documentation)", () => {
     const baseline = loadBaseline(repoRoot);
-    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(6);
+    // #210: no pack carries baseline debt; the one row left is host code (web/src/graph/backdrop.ts).
+    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(0);
+    expect(baseline.violations.map((v) => `${v.file} ${v.rule} ${v.target}`)).toEqual([
+      "web/src/graph/backdrop.ts uniform-set-undeclared uPhoto",
+    ]);
+    expect(baselineCountsByRule(baseline)["inline-zoto-declare"] ?? 0).toBe(0);
     expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBe(0);
     // #207: pack test and vitest config files are out of scope, so no host-import debt is left.
     expect(baselineCountsByRule(baseline)["host-import"] ?? 0).toBe(0);

@@ -1,6 +1,6 @@
 /** Photoreal aquarium — host frame drives fish, packets, and SYS murk. */
-
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+
 import {
   AquariumSim,
   applyConfigActions,
@@ -11,22 +11,11 @@ import {
 import { PackModelSlotController } from "../../../sdk/pack-model-slot";
 import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
 import { writeAquariumHostMeshSlots } from "./host-mesh-drive";
+import { getVizZoto } from "../../../sdk/viz-zoto";
 
-type AquariumFrame = Pick<
-  VizDataFrame,
-  "t" | "dt" | "audio" | "talkers" | "packets" | "demo" | "sys"
->;
+const host = getVizZoto();
 
-declare const zoto: {
-  onFrame: ((frame: AquariumFrame) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[] | Float32Array) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-  writeParticles: (data: number[] | Float32Array, stride?: number) => void;
-};
-
-/** Latest host config from {@link zoto.onConfig} only (never polled in onFrame). */
+/** Latest host config from {@link host.onConfig} only (never polled in onFrame). */
 let hostConfigCache: Record<string, string> = {};
 
 let options: AquariumOptions = parseAquariumOptions();
@@ -63,34 +52,34 @@ function applyLiveConfig(cfg: Record<string, string>): void {
   sim.setModelSlotFloat(modelSlot.slotFloat());
 }
 
-zoto.onConfig = (cfg) => {
+host.onConfig = (cfg) => {
   applyLiveConfig(cfg);
 };
 
-if (zoto.getConfig) {
-  applyLiveConfig(zoto.getConfig());
+if (host.getConfig) {
+  applyLiveConfig(host.getConfig());
 }
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame: VizDataFrame) => {
   const { w, h } = canvasSize();
   const packed = sim.advance(frame, w, h);
   buf0.set(packed.slot0);
   buf1.set(packed.slot1);
   buf2.set(packed.slot2);
-  zoto.writeBuffer(0, buf0);
-  zoto.writeBuffer(1, buf1);
-  zoto.writeBuffer(2, buf2);
+  host.writeBuffer(0, buf0);
+  host.writeBuffer(1, buf1);
+  host.writeBuffer(2, buf2);
   if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
-    writeAquariumHostMeshSlots(zoto.writeBuffer, buf0, buf1, frame.t);
+    writeAquariumHostMeshSlots(host.writeBuffer, buf0, buf1, frame.t);
   }
   if (packed.particleCount > 0) {
-    zoto.writeParticles(
+    host.writeParticles(
       packed.particles.subarray(0, packed.particleCount * 4),
       4,
     );
   }
-  zoto.writeUniform("uBright", packed.bright);
-  zoto.writeUniform("uAudio", frame.audio);
-  zoto.writeUniform("uAccent", packed.accent);
-  zoto.writeUniform("uBg", packed.bg);
+  host.writeUniform("uBright", packed.bright);
+  host.writeUniform("uAudio", frame.audio);
+  host.writeUniform("uAccent", packed.accent);
+  host.writeUniform("uBg", packed.bg);
 };

@@ -119,6 +119,9 @@ export class SoftwareGpu {
 
 export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
+/** three's `renderer.debug.onShaderError`: it calls this instead of logging when a program fails. */
+type ShaderErrorHook = NonNullable<THREE.WebGLRenderer["debug"]["onShaderError"]>;
+
 /**
  * Delays (ms) between the host's own attempts to bring a lost WebGL context back (#179).
  * A loss the host caused (heal ladder / pack `loseHostContext`) is restored right after its
@@ -193,6 +196,14 @@ export class RenderHost {
   private gpuTimedCamera: THREE.Camera | null = null;
   private gpuTimedClearHex = 0;
   private gpuTimedBox: SoftRect | null = null;
+  /**
+   * Each tile's shader-error hook, bound once when the tile first draws (#171 c). three compiles a
+   * material lazily inside `render()` (the graph fabric included), so the drawn tile's hook is on the
+   * renderer only for its own render: a failure trips that tile's latch, never another tile's.
+   */
+  private readonly tileShaderErrorHooks = new Map<string, ShaderErrorHook>();
+  /** The tile whose lazy compile failed inside the render in progress (fallback mounts after it). */
+  private lazyCompileFailedTile: string | null = null;
   private readonly bufferPixels: DevicePixelSize = { w: 0, h: 0 };
   private layoutDevicePxRatio: DevicePxRatio;
   private readonly unsubLayoutDpi: (() => void) | null;
@@ -784,15 +795,20 @@ export class RenderHost {
     const camera = this.gpuTimedCamera;
     if (!packKey || !box || !scene || !camera) return;
     const rd = this.renderer as THREE.WebGLRenderer;
-    this.packMirrors.renderPrimary(
-      packKey,
-      rd,
-      scene,
-      camera,
-      asCssRect(box),
-      this.gpuTimedClearHex,
-      this.contextAntialias,
-    );
+    const prevHook = this.swapInTileShaderHook(rd);
+    try {
+      this.packMirrors.renderPrimary(
+        packKey,
+        rd,
+        scene,
+        camera,
+        asCssRect(box),
+        this.gpuTimedClearHex,
+        this.contextAntialias,
+      );
+    } finally {
+      this.swapOutTileShaderHook(rd, prevHook);
+    }
     this.packDrawViewport.x = box.x;
     this.packDrawViewport.y = box.y;
     this.packDrawViewport.w = box.w;
@@ -820,9 +836,48 @@ export class RenderHost {
       this.glViewportScratch,
     );
     rd.setClearColor(this.gpuTimedClearHex, 1);
-    rd.render(scene, camera);
+    const prevHook = this.swapInTileShaderHook(rd);
+    try {
+      rd.render(scene, camera);
+    } finally {
+      this.swapOutTileShaderHook(rd, prevHook);
+    }
     this.drewThisFrame = true;
   };
+
+  private tileShaderErrorHook(tileId: string): ShaderErrorHook {
+    let hook = this.tileShaderErrorHooks.get(tileId);
+    if (hook) return hook;
+    hook = (gl, program, _vs, fs) => {
+      // Empty logs from a context that just died say nothing about the shader.
+      if (typeof gl.isContextLost === "function" && gl.isContextLost()) return;
+      const slot = this.tileShader.tileSlot(tileId);
+      if (slot.latch.dead) return;
+      const msg = (gl.getShaderInfoLog(fs) || gl.getProgramInfoLog(program) || "shader failed").trim();
+      slot.failLog = msg || "shader failed";
+      slot.latch.fail(slot.failLog, () => {});
+      this.lazyCompileFailedTile = tileId;
+    };
+    this.tileShaderErrorHooks.set(tileId, hook);
+    return hook;
+  }
+
+  /** Put the drawn tile's hook on the renderer for its render; returns the hook it replaced. */
+  private swapInTileShaderHook(rd: THREE.WebGLRenderer): ShaderErrorHook | null | undefined {
+    const tileId = this.gpuTimedView?.tileId;
+    if (!tileId || !rd.debug) return undefined;
+    const prev = rd.debug.onShaderError;
+    rd.debug.onShaderError = this.tileShaderErrorHook(tileId);
+    return prev;
+  }
+
+  /** Give the renderer back its previous hook; a tile that failed in this render gets its fallback. */
+  private swapOutTileShaderHook(rd: THREE.WebGLRenderer, prev: ShaderErrorHook | null | undefined): void {
+    if (prev !== undefined && rd.debug) rd.debug.onShaderError = prev;
+    const failed = this.lazyCompileFailedTile;
+    this.lazyCompileFailedTile = null;
+    if (failed) this.tileShader.onTileShaderCompileFailed(failed);
+  }
 
   private writeFbViewport(box: SoftRect, pr: number): Viewport {
     const cssTop = this.software

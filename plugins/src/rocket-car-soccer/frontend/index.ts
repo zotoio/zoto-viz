@@ -6,16 +6,9 @@ import { rcsMount, rcsTick, rcsUnmount, setRcsOptions } from "./match";
 import { PackModelSlotController } from "../../../sdk/pack-model-slot";
 import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
 import { writeRcsHostMeshSlots } from "./host-mesh-drive";
+import { getVizZoto } from "../../../sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  onPresent?: ((tick: { frameMs: number; tileId: string }) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[] | Float32Array) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-  writeParticles: (data: number[], stride?: number) => void;
-};
+const host = getVizZoto();
 
 let opts: RcsOptions = parseRcsOptions({});
 let mergedCfg: Record<string, string> = {};
@@ -25,7 +18,7 @@ let mounted = false;
 /** Host `frame.t` is wall/unix; orbit/ball cameras cannot use it as sim seconds. */
 let simClock = 0;
 let simStarted = false;
-const modelSlot = new PackModelSlotController(zoto.getConfig?.());
+const modelSlot = new PackModelSlotController(host.getConfig?.());
 let lookBg: [number, number, number] = [0, 0, 0];
 let lookAccent: [number, number, number] = [1, 1, 1];
 
@@ -68,25 +61,25 @@ function applyConfig(cfg: Record<string, string>): void {
  * frame, not only on config events, so the stage keeps the pack's look (#180).
  */
 function writeLookUniforms(): void {
-  zoto.writeUniform("uBg", lookBg);
-  zoto.writeUniform("uAccent", lookAccent);
-  zoto.writeUniform("uBright", 1.05);
-  zoto.writeUniform("uOpacity", 1);
+  host.writeUniform("uBg", lookBg);
+  host.writeUniform("uAccent", lookAccent);
+  host.writeUniform("uBright", 1.05);
+  host.writeUniform("uOpacity", 1);
 }
 
 function pollHostConfig(): void {
-  const cfg = zoto.getConfig?.();
+  const cfg = host.getConfig?.();
   if (!cfg || cfg === lastCfgRef) return;
   lastCfgRef = cfg;
   applyConfig(cfg);
 }
 
-zoto.onConfig = (cfg) => {
+host.onConfig = (cfg) => {
   lastCfgRef = cfg;
   applyConfig({ ...cfg });
 };
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame: VizDataFrame) => {
   ensureMounted();
   pollHostConfig();
   const feedDt = frame.dt > 0 && frame.dt < 0.2 ? frame.dt : frame.dt >= 0.25 ? frame.dt : 1 / 60;
@@ -99,24 +92,24 @@ zoto.onFrame = (frame) => {
   }
   const out = rcsTick(frame, simClock, feedDt, aspect);
   out.slot0[RCS_SLOT.modelFlags] = modelSlot.slotFloat();
-  zoto.writeBuffer(0, out.slot0);
-  zoto.writeBuffer(1, out.slot1);
-  zoto.writeBuffer(2, out.slot2);
+  host.writeBuffer(0, out.slot0);
+  host.writeBuffer(1, out.slot1);
+  host.writeBuffer(2, out.slot2);
   if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
-    writeRcsHostMeshSlots(zoto.writeBuffer, out.slot1, Math.round(out.slot0[RCS_SLOT.carCount]!));
+    writeRcsHostMeshSlots(host.writeBuffer, out.slot1, Math.round(out.slot0[RCS_SLOT.carCount]!));
   }
   if (out.budget.particles > 0) {
-    zoto.writeParticles(out.particles, 4);
+    host.writeParticles(out.particles, 4);
   }
-  zoto.writeUniform("uAudio", frame.audio);
+  host.writeUniform("uAudio", frame.audio);
   writeLookUniforms();
 };
 
-zoto.onPresent = () => {
+host.onPresent = () => {
   writeLookUniforms();
 };
 
-const bootCfg = zoto.getConfig?.();
+const bootCfg = host.getConfig?.();
 if (bootCfg) {
   lastCfgRef = bootCfg;
   applyConfig(bootCfg);

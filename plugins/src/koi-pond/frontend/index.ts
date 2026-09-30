@@ -1,6 +1,6 @@
 /** Koi pond — talkers swim as koi toward lily pads and lotus destinations. */
-
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+
 import {
   applyConfigActions,
   configActionEdges,
@@ -13,20 +13,14 @@ import {
 import { PackModelSlotController } from "../../../sdk/pack-model-slot";
 import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
 import { writeKoiHostMeshSlots } from "./host-mesh-drive";
+import { getVizZoto } from "../../../sdk/viz-zoto";
 
-declare const zoto: {
-  getConfig?: () => Record<string, string>;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  writeBuffer: (slot: number, data: number[] | Float32Array) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-  writeParticles: (data: number[] | Float32Array, stride?: number) => void;
-};
+const host = getVizZoto();
 
-let options: KoiPondOptions = parseKoiPondOptions(zoto.getConfig?.());
-let tileSize = hostTileSizeFromConfig(zoto.getConfig?.());
+let options: KoiPondOptions = parseKoiPondOptions(host.getConfig?.());
+let tileSize = hostTileSizeFromConfig(host.getConfig?.());
 const sim = new KoiPondSim(options);
-const modelSlot = new PackModelSlotController(zoto.getConfig?.());
+const modelSlot = new PackModelSlotController(host.getConfig?.());
 sim.mountTile();
 
 const buf0 = new Float32Array(64);
@@ -47,24 +41,24 @@ function applyLiveConfig(cfg: Record<string, string>): void {
   sim.setModelSlotFloat(modelSlot.slotFloat());
 }
 
-zoto.onConfig = (cfg) => {
+host.onConfig = (cfg) => {
   applyLiveConfig(cfg);
 };
 
-zoto.onFrame = (frame) => {
+host.onFrame = (frame: VizDataFrame) => {
   const { w, h } = tileSize;
   const packed = sim.advance(frame, w, h);
   buf0.set(packed.slot0);
   buf1.set(packed.slot1);
   buf2.set(packed.slot2);
-  zoto.writeBuffer(0, buf0);
-  zoto.writeBuffer(1, buf1);
-  zoto.writeBuffer(2, buf2);
+  host.writeBuffer(0, buf0);
+  host.writeBuffer(1, buf1);
+  host.writeBuffer(2, buf2);
   if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
-    writeKoiHostMeshSlots(zoto.writeBuffer, buf0, buf1, frame.t);
+    writeKoiHostMeshSlots(host.writeBuffer, buf0, buf1, frame.t);
   }
-  zoto.writeUniform("uBright", packed.bright);
-  zoto.writeUniform("uAudio", frame.audio);
-  zoto.writeUniform("uAccent", packed.accent);
-  zoto.writeUniform("uBg", packed.bg);
+  host.writeUniform("uBright", packed.bright);
+  host.writeUniform("uAudio", frame.audio);
+  host.writeUniform("uAccent", packed.accent);
+  host.writeUniform("uBg", packed.bg);
 };

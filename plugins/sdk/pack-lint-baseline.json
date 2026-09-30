@@ -1,36 +1,6 @@
 {
   "violations": [
     {
-      "file": "plugins/src/ant-colony/frontend/index.ts",
-      "rule": "inline-zoto-declare",
-      "target": "declare-const-zoto"
-    },
-    {
-      "file": "plugins/src/aquarium/frontend/index.ts",
-      "rule": "inline-zoto-declare",
-      "target": "declare-const-zoto"
-    },
-    {
-      "file": "plugins/src/koi-pond/frontend/index.ts",
-      "rule": "inline-zoto-declare",
-      "target": "declare-const-zoto"
-    },
-    {
-      "file": "plugins/src/metro-lines/frontend/index.ts",
-      "rule": "inline-zoto-declare",
-      "target": "declare-const-zoto"
-    },
-    {
-      "file": "plugins/src/rocket-car-soccer/frontend/index.ts",
-      "rule": "inline-zoto-declare",
-      "target": "declare-const-zoto"
-    },
-    {
-      "file": "plugins/src/voxel-world/frontend/index.ts",
-      "rule": "inline-zoto-declare",
-      "target": "declare-const-zoto"
-    },
-    {
       "file": "web/src/graph/backdrop.ts",
       "rule": "uniform-set-undeclared",
       "target": "uPhoto"
