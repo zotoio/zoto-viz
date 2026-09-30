@@ -173,8 +173,12 @@ def test_bad_v2_upgrade_preserves_v1_tree_and_blocked_message(
     blocked = plugin_local.install_local_zip(v2, overwrite=True)
     assert blocked.get("ok") is False
     msg = str(blocked.get("message") or "")
-    assert "v2 was blocked" in msg
-    assert "v1 is still running" in msg
+    # #185: one shape; the installed version comes from the runtime plugin.yml (1 here).
+    assert msg == (
+        "Upgrade probe v2 bad was blocked because it tries to talk to the app directly, which packs aren't "
+        "allowed to do. Nothing was updated, so version 1 is still installed. "
+        "If you made this pack, run pack lint to see what to fix."
+    )
 
     runtime = _runtime_parent() / pid
     assert runtime_tree_hash(runtime) == hash_v1
@@ -871,7 +875,10 @@ def test_sdk_contract_still_checked_on_install(
     out = plugin_local.install_local_zip(raw, overwrite=True)
     assert out.get("ok") is False
     assert out.get("error") == "pack_boundary"
-    assert "Built for an older zoto-viz SDK" in str(out.get("message") or "")
+    assert out.get("message") == (
+        "X was blocked because it was built for an older version of zoto-viz. Its author needs to update it. "
+        "Nothing was installed, and your wall is unchanged."
+    )
 
 
 def test_install_local_unchanged_zip_routes_through_pipeline(

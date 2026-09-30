@@ -24,7 +24,7 @@ if (blocks.length > 0) {
     lines.push(line);
     console.error(line);
   }
-  // #185: `message` is what the user sees after "<Name> was blocked:" — plain words only. The raw
+  // #185: `message` is the <sentence> in "<Name> was blocked because <sentence> …" — plain words only. The raw
   // file:line rule lines above (and `details`) are diagnostics for the log, never shown to users.
   console.error(
     JSON.stringify({

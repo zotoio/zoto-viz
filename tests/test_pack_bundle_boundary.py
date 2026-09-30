@@ -130,9 +130,19 @@ def test_boundary_message_names_pack_and_import() -> None:
             import_spec="../../web/src/plugins/host",
         ),
     )
-    assert "Koi Pond was blocked" in msg
-    assert "`frontend/index.ts`" in msg
-    assert "`../../web/src/plugins/host`" in msg
+    # #185: one shape; the file and the import are diagnostics (to_dict "details"), not user text.
+    assert msg == (
+        "Koi Pond was blocked because it loads code from outside its own folder. "
+        "Nothing was installed, and your wall is unchanged. "
+        "If you made this pack, run pack lint to see what to fix."
+    )
+    assert "frontend/index.ts" not in msg and "../../web" not in msg
+    row = PackBundleBoundary(
+        pack_id="koi", pack_name="Koi Pond", file="frontend/index.ts", import_spec="../../web/src/plugins/host"
+    ).to_dict()
+    assert row["message"] == msg
+    assert "frontend/index.ts imports ../../web/src/plugins/host" in row["details"]
+    assert "README" not in row["hint"] and "plugins/" not in row["hint"]
 
 
 def test_blocked_pack_module_route_404(
@@ -179,7 +189,12 @@ def test_upgrade_blocked_preserves_v1_bundle(
 
     blocked = plugin_local.install_local_zip(v2, overwrite=True)
     assert blocked.get("ok") is False
-    assert "v2 was blocked" in str(blocked.get("message") or "")
+    # #185: the installed version (1, from the runtime plugin.yml), not a hard-coded v1.
+    assert blocked.get("message") == (
+        "Upgrade probe v2 bad was blocked because it tries to talk to the app directly, which packs aren't allowed to do. "
+        "Nothing was updated, so version 1 is still installed. "
+        "If you made this pack, run pack lint to see what to fix."
+    )
 
     digest_after, bytes_after = plugins.bundle_for(pid)
     assert digest_after == digest_v1
@@ -196,9 +211,11 @@ def test_upgrade_blocked_preserves_v1_bundle(
     upgrade_err = [e for e in scan_after["errors"] if e.get("upgrade_blocked") == "true"]
     assert upgrade_err
     msg = upgrade_err[0].get("message", "")
-    assert "v2 was blocked" in msg
-    assert "v1 is still running" in msg
-    assert "imports" in msg or "postMessage" in msg or "pack lint" in msg
+    assert msg == (
+        "Upgrade probe v2 bad was blocked because it tries to talk to the app directly, which packs aren't allowed to do. "
+        "Nothing was updated, so version 1 is still installed. "
+        "If you made this pack, run pack lint to see what to fix."
+    )
     assert upgrade_err[0].get("zip") == str(dest)
 
 
@@ -234,8 +251,17 @@ def test_upgrade_blocked_message_copy() -> None:
             file="frontend/index.ts",
             import_spec="../../../web/src/plugins/host",
         ),
-        version=2,
+        old_version=2,
     )
-    assert "v2 was blocked" in msg
-    assert "v1 is still running" in msg
-    assert "frontend/index.ts" in msg
+    assert msg == (
+        "Upgrade probe v2 bad was blocked because it loads code from outside its own folder. "
+        "Nothing was updated, so version 2 is still installed. "
+        "If you made this pack, run pack lint to see what to fix."
+    )
+    assert "frontend/index.ts" not in msg
+    unknown = format_upgrade_blocked_message(PackBundleBoundary(pack_id="p", pack_name="P", file="", import_spec=""), None)
+    assert unknown == (
+        "P was blocked because it loads code from outside its own folder. "
+        "Nothing was updated, so the version you had is still installed. "
+        "If you made this pack, run pack lint to see what to fix."
+    )

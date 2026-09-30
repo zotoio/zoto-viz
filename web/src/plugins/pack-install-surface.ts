@@ -106,13 +106,12 @@ export function isPackInstallBlockedPayload(v: unknown): v is PackInstallBlocked
 export function formatPackInstallBlocked(payload: PackInstallBlockedPayload): string {
   if (payload.message) return payload.message;
   if (typeof payload.error === "string" && payload.error.includes("was blocked")) return payload.error;
+  // #185: same shape as service/pack_block_copy.py; file / import stay in the payload, not the text.
   const name = payload.name || payload.id || "Plugin";
-  const file = payload.file ? ` (\`${payload.file}\`)` : "";
-  const imp = payload.import ? ` (\`${payload.import}\`)` : "";
   return (
-    `${name} was blocked: it imports a file outside its own folder${file}${imp}. `
-    + "Nothing was installed and the current wall is unchanged. "
-    + "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
+    `${name} was blocked because it loads code from outside its own folder. `
+    + "Nothing was installed, and your wall is unchanged. "
+    + "If you made this pack, run pack lint to see what to fix."
   );
 }
 

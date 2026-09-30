@@ -103,7 +103,8 @@ describe.skipIf(!pythonDepsReady())("pack bundle install gate (local zip path)",
         expect(info.ok).toBe(false);
         expect(isPackInstallBlockedPayload(info)).toBe(true);
         const message = formatPackInstallBlocked(info);
-        expect(message).toMatch(/was blocked|v1 is still running/);
+        expect(message).toMatch(/ was blocked because /);
+        expect(message).not.toMatch(/plugins\/|README|\.ts\b|\.mjs\b|`/);
         expect(message).not.toMatch(/plugins\/src\/[0-9a-f]{8}\//);
         expect(ids).not.toContain(id);
         const runtime = path.join(pluginLocalDir, ".runtime", id);
