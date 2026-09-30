@@ -7,12 +7,23 @@
  * of its own.
  */
 import { execFileSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const ZIP = "/home/op/.zoto-viz/plugins/local/upgrade-probe.zip";
+/**
+ * The repo's interpreter, as starter-pack-pipeline.ts does: `<repo>/.venv/bin/python` (where CI's web job
+ * installs the service requirements, PyYAML included, without putting it on PATH), else `python3`.
+ * These rows always run; there is no skip.
+ */
+const venvPython = path.join(repoRoot, ".venv/bin/python");
+const python = existsSync(venvPython) ? venvPython : "python3";
+
+// The first python spawn imports the service (2-4 s on a loaded box).
+vi.setConfig({ testTimeout: 30_000 });
 
 type RefusedPayloadFields = { upgrade_blocked?: string; zip?: string; reasonCode?: string; message?: string };
 
@@ -28,7 +39,7 @@ function serviceRefusedUpdate(name = "Probe", old = "1"): RefusedPayloadFields {
     "print(json.dumps({'message': str(e), **e.payload}))",
   ].join("\n");
   const out: RefusedPayloadFields = JSON.parse(
-    execFileSync("python3", ["-c", script, name, old, ZIP], {
+    execFileSync(python, ["-c", script, name, old, ZIP], {
       cwd: repoRoot,
       encoding: "utf8",
       env: { ...process.env, PYTHONPATH: repoRoot },
@@ -60,7 +71,7 @@ describe("#111 refused update: the surface branches on reasonCode, not on the wo
     const row = { ...serviceRefusedUpdate(), file: ZIP, error: arbitrary, message: arbitrary };
     expect(row.reasonCode).toBe(PACK_UPDATE_REFUSED);
 
-    expect(isPackInstallBlockedPayload(row)).toBe(true);
+    expect(isPackInstallBlockedPayload(row), "reasonCode update_refused alone makes it a refusal").toBe(true);
     expect(formatPackInstallBlocked(row)).toBe(arbitrary);
     expect(isPackInstallBlockedPayload({ ...row, reasonCode: "" }), "without the code it's not a refusal").toBe(false);
 
