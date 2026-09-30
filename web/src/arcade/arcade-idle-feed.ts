@@ -179,12 +179,16 @@ export class ArcadeIdleFeed<P extends TimedRow> {
     this.tell(false, "");
   }
 
-  /** One empty poll came back. On: deliver the next step. Off: count it, and come back on at the 3rd in a row. */
-  pollEmpty(me = "", scope = me ? "" : "lan"): void {
+  /**
+   * One empty poll came back. On: deliver the next step. Off: count it, and come back on at the 3rd in a row.
+   * `resumeNow` (#199): no answer is coming (the fetch failed or hangs) and the view's rate already reads 0: come
+   * back on this poll instead of waiting for three empty ones.
+   */
+  pollEmpty(me = "", scope = me ? "" : "lan", resumeNow = false): void {
     if (!this.active) return;
     if (!this.isOn) {
       this.empties++;
-      if (this.empties < ARCADE_IDLE_RESUME_EMPTY_POLLS) return;
+      if (!resumeNow && this.empties < ARCADE_IDLE_RESUME_EMPTY_POLLS) return;
       this.isOn = true;
       this.shown = 0;
       this.onResume?.(); // live rows leave before the first demo batch goes in

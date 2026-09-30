@@ -325,7 +325,7 @@ export class PongView {
     this.rebuildOptions();
     this.resync();
     this.idle.start(this.lastT === 0);
-    if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
+    if (this.timer === null) this.timer = window.setInterval(() => void this.poll(true), POLL_MS);
     void this.poll();
     cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(this.frame);
@@ -615,8 +615,15 @@ export class PongView {
 
   // ------------------------------------------------------------------ data
 
-  private async poll(): Promise<void> {
-    if (!this.running || !this.srcIp || this.inflight) return;
+  /** `tick`: called by the poll interval (not by start / a retarget). */
+  private async poll(tick = false): Promise<void> {
+    if (!this.running || !this.srcIp) return;
+    // #199: a playing demo makes its own batch on every tick, before (and whatever) the fetch answers: it never waits
+    // on the fetch, so a failed or hung one can't drain the board under the demo label. A live answer still takes over.
+    const stepped = tick && this.idle.on;
+    if (stepped) this.idleStep();
+    // #199: the last fetch has not settled by the next tick (a hung request): a quiet poll, no second fetch
+    if (this.inflight) { if (tick && !stepped) this.noAnswer(); return; }
     this.inflight = true;
     const gen = this.gen;
     try {
@@ -628,31 +635,46 @@ export class PongView {
       if (this.lastT) url += `&since=${this.lastT}`;
       const r = await fetch(url);
       // an error answer (unknown device …) carries no traffic either: the idle feed takes it as an empty poll
-      if (!r.ok) { if (gen === this.gen) this.idleStep(); return; }
+      if (!r.ok) { if (gen === this.gen && !stepped) this.idleStep(); return; }
       const m = (await r.json()) as TrafficMsg;
       if (gen !== this.gen) return; // source / target changed meanwhile: this is the old run's traffic
-      if (!m.packets.length) { this.idleStep(); return; }
+      if (!m.packets.length) { if (!stepped) this.idleStep(); return; }
       // live traffic: the demo stops at once, and its rows leave the board before the live ones go in
       if (this.idle.pollLive()) this.reset();
       this.ingest(m);
     } catch {
       // server away; the next tick retries. No packets this poll either: the rate falls back (#197)
-      if (gen === this.gen) this.stats.pps *= 0.6;
+      if (gen === this.gen && !stepped) this.noAnswer();
     } finally {
       if (gen === this.gen) this.inflight = false;
     }
   }
 
-  /** The demo is back after live traffic: drop the board, keep the live poll cursor (no replay of old packets). */
+  /**
+   * The demo is back after live traffic: drop the board, keep the live poll cursor (no replay of old packets) and
+   * (#199) a live fetch still in flight for this run: its answer still takes over, and no second fetch starts.
+   */
   private clearForIdle(): void {
-    const cursor = this.lastT;
+    const cursor = this.lastT, gen = this.gen, inflight = this.inflight;
     this.reset();
     this.lastT = cursor;
+    this.gen = gen;
+    this.inflight = inflight;
   }
 
-  private idleStep(): void {
+  /**
+   * #199: no answer this tick (the fetch failed, or is still in flight): the rate falls back x0.6 (#197). Once it
+   * reads 0, or while the demo is on, the tick goes through the empty-reply path instead: the demo takes the board
+   * at once (an empty board is a Fail) and plays locally, with no fetch of its own.
+   */
+  private noAnswer(): void {
+    if (this.idle.on || Math.round(this.stats.pps) === 0) this.idleStep(true);
+    else this.stats.pps *= 0.6;
+  }
+
+  private idleStep(resumeNow = false): void {
     const delivered = this.idle.delivered;
-    this.idle.pollEmpty(this.srcIsGroup ? "" : this.srcIp, this.srcIsGroup ? this.srcChoice : "");
+    this.idle.pollEmpty(this.srcIsGroup ? "" : this.srcIp, this.srcIsGroup ? this.srcChoice : "", resumeNow);
     // #197: a quiet poll is a 0-packet sample (x0.6, as in ArcadeView), unless a demo batch went through ingest
     if (this.idle.delivered === delivered) this.stats.pps *= 0.6;
   }
