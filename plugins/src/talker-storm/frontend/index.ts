@@ -10,6 +10,6 @@ const host = getVizZoto();
 // [count, audio, t mod 1] every frame, so the pack never writes it.
 host.onFrame = (frame: VizDataFrame) => {
   host.writeBuffer(1, stormSlots(frame).slot1);
-  host.writeUniform("uBright", 0.8 + frame.audio * 0.4);
+  host.writeUniform("uBright", 0.4 + frame.audio * 0.5);
   host.writeUniform("uAudio", frame.audio);
 };
