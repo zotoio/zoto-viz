@@ -73,8 +73,6 @@ export default defineConfig({
           include: ["**/*.test.ts"],
         },
       },
-      // plugins/sdk tests: the sdk's own config (its include list), run as the "sdk" project.
-      path.join(repoRoot, "plugins/sdk/vitest.config.cjs"),
       {
         extends: true,
         test: {
