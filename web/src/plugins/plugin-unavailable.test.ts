@@ -49,8 +49,16 @@ function catalogPayload() {
   };
 }
 
-async function installUnavailableCatalog(): Promise<void> {
-  vi.stubGlobal("fetch", (async () => ({ ok: true, json: async () => catalogPayload() })) as never);
+/** The same catalog plus an unavailable `picker: hidden` pack (service row carries `picker: "hidden"`). */
+const HIDDEN_UNAV = {
+  id: "tile-health-black", name: "Tile Health Black", file: "/srv/zv/plugins/src/tile-health-black/plugin.yml",
+  available: false, reason: "esbuild_unavailable", version: 1, picker: "hidden",
+};
+
+async function installUnavailableCatalog(extra: readonly object[] = []): Promise<void> {
+  const payload = catalogPayload();
+  payload.unavailable.push(...(extra as typeof payload.unavailable));
+  vi.stubGlobal("fetch", (async () => ({ ok: true, json: async () => payload })) as never);
   await installPlugins();
 }
 
@@ -117,6 +125,28 @@ describe("#169 picker lists unavailable packs greyed out", () => {
     sel.close();
     sel.el.remove();
   });
+
+  it("R1: an unavailable `picker: hidden` pack is absent from the picker: no greyed row, no banner count", async () => {
+    await installUnavailableCatalog([HIDDEN_UNAV]);
+    const opts = viewPickerOptions();
+    expect(opts.filter((o) => /tile-health-black|Tile Health Black/.test(`${o.value} ${o.label}`))).toEqual([]);
+    expect(opts.filter((o) => o.disabled).map((o) => o.value)).toEqual([
+      `${UNAVAILABLE_VIEW_PREFIX}blob-mesh`, `${UNAVAILABLE_VIEW_PREFIX}kefrens-bars`, `${UNAVAILABLE_VIEW_PREFIX}koi-pond`,
+    ]);
+    expect(viewPickerBanner(), "the hidden pack is not counted in the setup banner").toBe(
+      `2 packs can't load until setup is finished. ${FIX}`,
+    );
+  });
+
+  it("R3: an unavailable pack without `picker: hidden` is still listed greyed, with its notice", async () => {
+    await installUnavailableCatalog([HIDDEN_UNAV]);
+    const koi = viewPickerOptions().find((o) => o.value === `${UNAVAILABLE_VIEW_PREFIX}koi-pond`);
+    expect(koi, "a normal unavailable pack keeps its greyed row").toEqual({
+      value: `${UNAVAILABLE_VIEW_PREFIX}koi-pond`, label: "Koi Pond can't load until setup is finished.",
+      hint: "", group: "unavailable", disabled: true,
+    });
+    expect(viewPickerBanner()).toBe(`2 packs can't load until setup is finished. ${FIX}`);
+  });
 });
 
 describe("#169 saved tile on an unavailable pack", () => {
@@ -150,6 +180,19 @@ describe("#169 saved tile on an unavailable pack", () => {
     );
     expect(setMode).not.toHaveBeenCalled();
     expect(pane.querySelector("select.mosaic-pick")?.textContent).not.toContain("koi-pond");
+  });
+
+  it("R2: a saved tile on an unavailable `picker: hidden` pack keeps its slot and shows the notice", async () => {
+    await installUnavailableCatalog([HIDDEN_UNAV]);
+    const setMode = vi.fn();
+    const mosaic = wallMosaic(setMode);
+    const pane = (mosaic as unknown as { ensurePane(id: string): HTMLElement }).ensurePane("plugin:tile-health-black");
+    expect((mosaic as unknown as { panes: Map<string, HTMLElement> }).panes.get("plugin:tile-health-black")).toBe(pane);
+    expect(pane.dataset.mode).toBe("plugin:tile-health-black");
+    expect(pane.querySelector(".mosaic-pane-notice-text")?.textContent, "hidden only affects the picker").toBe(
+      `Tile Health Black can't load until setup is finished. ${FIX}`,
+    );
+    expect(setMode).not.toHaveBeenCalled();
   });
 });
 

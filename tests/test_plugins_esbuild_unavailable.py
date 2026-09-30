@@ -196,3 +196,23 @@ def test_api_list_carries_unavailable_rows_without_raw_error(no_esbuild: Path) -
     }
     assert UNAV not in {p.get("id") for p in body["plugins"]}
     assert "esbuild" not in json.dumps(body["errors"])
+
+
+def test_unavailable_row_carries_picker_hidden_only_for_a_hidden_pack(no_esbuild: Path, tmp_path: Path) -> None:
+    """After #169: the web picker drops an unavailable ``picker: hidden`` pack on the same rule as a
+    loaded one, so the ``unavailable`` row must carry the manifest's ``picker`` (and a normal pack's
+    row must not)."""
+    src = tmp_path / "cat" / "src"
+    shutil.copytree(SRC / "pulse-ts", src / "pulse-ts")
+    hidden = src / "pulse-hidden"
+    shutil.copytree(SRC / "pulse-ts", hidden)
+    yml = hidden / "plugin.yml"
+    yml.write_text(
+        yml.read_text().replace("id: pulse-ts", "id: pulse-hidden", 1).replace("name: Pulse TS", "name: Pulse Hidden", 1)
+        + "picker: hidden\n"
+    )
+    assert plugins.load_file(yml).get("picker") == "hidden"
+    rows = {u["id"]: u for u in plugins.scan(tmp_path / "cat")["unavailable"]}
+    assert set(rows) == {"pulse-ts", "pulse-hidden"}, rows
+    assert rows["pulse-hidden"].get("picker") == "hidden", rows["pulse-hidden"]
+    assert "picker" not in rows["pulse-ts"], rows["pulse-ts"]

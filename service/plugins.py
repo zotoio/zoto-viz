@@ -1824,6 +1824,8 @@ def _unavailable_row(doc: dict[str, Any], rel: str, reason: str) -> dict[str, An
     }
     if doc.get("version") is not None:
         row["version"] = doc.get("version")
+    if doc.get("picker") == "hidden":
+        row["picker"] = "hidden"  # the web picker drops it like a loaded `picker: hidden` spec
     return row
 
 
