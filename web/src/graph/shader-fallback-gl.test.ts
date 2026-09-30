@@ -6,7 +6,7 @@ import {
   GFX_NO_RESTORE_NOTICE,
   genericShaderFallbackMessage,
 } from "./shader-fallback-copy";
-import { failCompileWith } from "./shader-fallback-test-helpers";
+import { drawOneHostFrame, failCompileWith } from "./shader-fallback-test-helpers";
 
 describe("shader fallback gl context", () => {
   beforeEach(() => {
@@ -65,6 +65,7 @@ describe("shader fallback gl context", () => {
     const compile = vi.spyOn(host.renderer as THREE.WebGLRenderer, "compile").mockImplementation(() => {});
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     host.canvas.dispatchEvent(new Event("webglcontextrestored"));
+    drawOneHostFrame(host, wall); // the notice clears on the first drawn frame after the restore (#179)
     expect(wall.querySelectorAll(".gfx-wall-notice").length).toBe(0);
     compile.mockClear();
     host.compilePluginSky("dead", scene, camera);
@@ -90,6 +91,7 @@ describe("shader fallback gl context", () => {
     vi.advanceTimersByTime(10_000);
     expect(wall.querySelectorAll(".gfx-wall-reload").length).toBe(1);
     host.canvas.dispatchEvent(new Event("webglcontextrestored"));
+    drawOneHostFrame(host, wall); // the notice clears on the first drawn frame after the restore (#179)
     expect(wall.querySelectorAll(".gfx-wall-reload").length).toBe(0);
     expect(invalidate).toHaveBeenCalledTimes(1);
     host.dispose();
