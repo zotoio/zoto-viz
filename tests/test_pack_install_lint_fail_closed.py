@@ -15,7 +15,9 @@ from __future__ import annotations
 
 import io
 import json
+import logging
 import os
+import re
 import shutil
 import subprocess
 import time
@@ -39,7 +41,26 @@ from service.pack_install_lint import (
 ROOT = Path(__file__).resolve().parents[1]
 PULSE = ROOT / "plugins" / "src" / "pulse-ts" / "plugin.yml"
 SETUP_TAIL = ", so it wasn't installed. Run `pnpm install` in `web/` and try again."
-_BLOCK_JSON = json.dumps({"type": "pack-install-lint-block", "message": "frontend/leak.ts:1 sandbox-escape — indexedDB"})
+_BLOCK_JSON = json.dumps(
+    {
+        "type": "pack-install-lint-block",
+        "message": "it tries to reach outside its sandbox.",
+        "details": ["plugins/src/pulse-ts/frontend/leak.ts:1 sandbox-escape — indexedDB"],
+    }
+)
+_RULE_IDS = (
+    "sandbox-escape", "host-transport-escape", "inline-zoto-declare", "pack-zoto-binding", "host-import",
+    "cross-pack-import", "side-effect-import", "unverified-import-call", "get-config-in-on-frame",
+    "host-imports-pack-src",
+)
+
+
+def _assert_plain_block_text(text: str) -> None:
+    """#185 UX: after "<Name> was blocked:" only plain words; raw findings stay in the log."""
+    for rule in _RULE_IDS:
+        assert rule not in text, (rule, text)
+    assert "parent" not in text and "plugins/src/" not in text.replace("plugins/sdk/starter", ""), text
+    assert not re.search(r":\d", text), text
 
 
 def _stub_bundle(monkeypatch: pytest.MonkeyPatch, code: int, stderr: object, stdout: str = "export {};\n") -> None:
@@ -126,7 +147,8 @@ def test_compile_lint_block_keeps_its_message_and_is_not_a_setup_error(monkeypat
         plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
     assert not isinstance(e.value, PackInstallLintSetupError)
     text = str(e.value)
-    assert text.startswith("Pulse TS was blocked: frontend/leak.ts:1 sandbox-escape")
+    assert text.startswith("Pulse TS was blocked: it tries to reach outside its sandbox. Nothing was installed")
+    _assert_plain_block_text(text)
     assert "Nothing was installed and the current wall is unchanged." in text
     setup = format_install_lint_setup_message("Pulse TS")
     assert setup not in text and text not in setup
@@ -342,7 +364,8 @@ def test_bundle_false_pack_with_indexeddb_in_a_js_file_is_blocked_at_install(
     assert out.get("ok") is False, out
     text = str(out.get("message") or out.get("error"))
     assert text.startswith("Sandbox Fixture Multi was blocked: "), out
-    assert "frontend/helper.js" in text and "indexedDB" in text, out
+    assert text.startswith("Sandbox Fixture Multi was blocked: it tries to reach outside its sandbox. "), out
+    _assert_plain_block_text(text)
     assert "safety-check" not in text
     assert not (paths.plugin_local_runtime_dir(create=True) / "sandbox-fixture-multi").exists()
 
@@ -387,6 +410,45 @@ def test_no_frontend_pack_is_refused_when_the_runner_is_unresolvable(
     assert out.get("ok") is False, out
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
     assert out.get("message") == f"Couldn't safety-check CPU cores{SETUP_TAIL}"
+
+
+def test_koi_pond_block_is_plain_words_and_the_raw_findings_are_logged(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Real pack, real runner, the service's install-lint check (verify_pack_bundle_home, what the
+    zip install's staging checks call): koi-pond has baselined `parent.` findings, so it's blocked.
+    (koi-pond itself can't be shared as a zip — its .glb assets are disallowed — so no zip here.)"""
+    _needs_node_tree()
+    home = tmp_path / "koi-pond"
+    shutil.copytree(ROOT / "plugins" / "src" / "koi-pond", home, symlinks=True, ignore=shutil.ignore_patterns("node_modules"))
+    doc = plugins.load_file(home / "plugin.yml")
+    codes: list[int] = []
+    real = plugins._run_pack_script
+
+    def spy(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        proc = real(argv, env)
+        codes.append(proc.returncode)
+        return proc
+
+    monkeypatch.setattr(plugins, "_run_pack_script", spy)
+    caplog.set_level(logging.WARNING, logger="service.plugins")
+    plugins.reset_bundles()
+    with pytest.raises(ValueError) as e:
+        plugins.verify_pack_bundle_home(home, doc)
+    assert not isinstance(e.value, PackInstallLintSetupError)
+    text = str(e.value)
+    assert text == (
+        "Koi Pond was blocked: it tries to reach outside its sandbox. "
+        "Nothing was installed and the current wall is unchanged. "
+        "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
+    ), text
+    _assert_plain_block_text(text)
+    assert "safety-check" not in text
+    assert codes == [1], f"bundle-pack-entry.mjs exit codes {codes} (1 = lint block, 3 = setup)"
+    logged = "\n".join(r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
+    assert re.search(r"plugins/src/koi-pond/frontend/\S+:\d+ sandbox-escape", logged), logged
 
 
 def test_setup_messages_and_the_lint_block_share_no_text(

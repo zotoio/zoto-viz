@@ -32,6 +32,8 @@ import {
   localPluginPublishChatLine,
   PACK_INSTALL_CHECK_UNAVAILABLE,
 } from "./pack-install-surface";
+import { PACK_LINT_PLAIN_FALLBACK, PACK_LINT_PLAIN_SUMMARY, plainBlockSummary } from "../../../plugins/sdk/pack-lint-hints";
+import type { PackLintRule } from "../../../plugins/sdk/pack-lint-types";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const webRoot = path.join(repoRoot, "web");
@@ -46,6 +48,13 @@ const upgradeSetupMsg = (name: string, old: string) =>
 const EXIT_LINT_BLOCK = 1;
 const EXIT_LINT_SETUP = 3;
 const BARE_PASS = '{"type":"pack-install-lint-pass"}';
+/** Plain-words block summary for sandbox-escape findings (plugins/sdk/pack-lint-hints.ts). */
+const SANDBOX_PLAIN = PACK_LINT_PLAIN_SUMMARY["sandbox-escape"];
+
+/** Raw `file:line rule — …` lines of a block verdict (diagnostics, never shown to users). */
+function details(block: Record<string, unknown>): string {
+  return Array.isArray(block.details) ? block.details.map(String).join("\n") : "";
+}
 
 const tmpRoots: string[] = [];
 function tmp(prefix: string): string {
@@ -245,7 +254,8 @@ describe("#185 pack install lint fails closed (bundle-pack-entry.mjs)", () => {
     expect(r.stdout).toBe("");
     const block = verdicts(r.stderr, "pack-install-lint-block");
     expect(block, "lint-block line").toHaveLength(1);
-    expect(String(block[0]!.message)).toMatch(/sandbox-escape .*indexedDB/);
+    expect(block[0]!.message).toBe(SANDBOX_PLAIN);
+    expect(details(block[0]!)).toMatch(/sandbox-escape .*indexedDB/);
     expect(verdicts(r.stderr, "pack-install-lint-setup-error")).toEqual([]);
     expect(lastLine(r.stderr)).not.toMatch(/"type":"pack-install-lint-pass"/);
   }, 60_000);
@@ -302,7 +312,8 @@ describe("#185 pack install lint fails closed (bundle-pack-entry.mjs)", () => {
     expect(r.stdout).toBe("");
     const block = verdicts(r.stderr, "pack-install-lint-block");
     expect(block, "lint-block line").toHaveLength(1);
-    expect(String(block[0]!.message)).toMatch(/leak\.ts:1 sandbox-escape .*indexedDB/);
+    expect(block[0]!.message, "plain words only for the user").toBe(SANDBOX_PLAIN);
+    expect(details(block[0]!), "raw finding kept for the log").toMatch(/leak\.ts:1 sandbox-escape .*indexedDB/);
     expect(r.stderr).not.toContain("Couldn't safety-check");
     expect(verdicts(r.stderr, "pack-install-lint-setup-error")).toEqual([]);
     expect(verdicts(r.stderr, "pack-install-lint-pass")).toEqual([]);
@@ -342,7 +353,8 @@ describe("#185 unbundled and no-frontend packs go through the same gate", () => 
     expect(r.status, why(r)).toBe(EXIT_LINT_BLOCK);
     const block = verdicts(r.stderr, "pack-install-lint-block");
     expect(block, "lint-block line").toHaveLength(1);
-    expect(String(block[0]!.message)).toMatch(/frontend\/helper\.js:\d+ sandbox-escape .*indexedDB/);
+    expect(block[0]!.message).toBe(SANDBOX_PLAIN);
+    expect(details(block[0]!)).toMatch(/frontend\/helper\.js:\d+ sandbox-escape .*indexedDB/);
     expect(r.stderr).not.toContain("Couldn't safety-check");
     expect(verdicts(r.stderr, "pack-install-lint-pass")).toEqual([]);
     // Control: the shipped pack as is passes the same gate.
@@ -356,7 +368,9 @@ describe("#185 unbundled and no-frontend packs go through the same gate", () => 
     writeFileSync(path.join(home, "main.mjs"), 'export const k = () => localStorage.getItem("k");\n');
     const r = bundle(repoRoot, home, { lintOnly: true });
     expect(r.status, why(r)).toBe(EXIT_LINT_BLOCK);
-    expect(String(verdicts(r.stderr, "pack-install-lint-block")[0]?.message)).toMatch(/main\.mjs:1 sandbox-escape .*localStorage/);
+    const block = verdicts(r.stderr, "pack-install-lint-block")[0]!;
+    expect(block.message).toBe(SANDBOX_PLAIN);
+    expect(details(block)).toMatch(/main\.mjs:1 sandbox-escape .*localStorage/);
   }, 60_000);
 
   it("a pack with no frontend files gets an explicit pass verdict through the gate", () => {
@@ -367,6 +381,52 @@ describe("#185 unbundled and no-frontend packs go through the same gate", () => 
     // ...and the gate still fails closed for it: no runner, no pass.
     expectSetupRefusal(bundle(scriptTree({ tsx: false }), packHome(false, "cores"), { lintOnly: true }), /tsx not resolvable/, "CPU cores");
   }, 60_000);
+});
+
+describe("#185 a lint block tells the user in plain words (no rule ids, paths or code)", () => {
+  const RULE_IDS: PackLintRule[] = Object.keys(PACK_LINT_PLAIN_SUMMARY) as PackLintRule[];
+  const expectPlain = (text: string) => {
+    for (const id of RULE_IDS) expect(text, `no rule id ${id}`).not.toContain(id);
+    expect(text).not.toMatch(/parent|plugins\/src|:\d|`|\.ts\b|\.js\b/);
+  };
+
+  it("koi-pond (real pack, blocked): message is the plain sandbox sentence, exit 1, not the setup message", () => {
+    const r = bundle(repoRoot, packHome(false, "koi-pond"));
+    expect(r.status, why(r)).toBe(EXIT_LINT_BLOCK);
+    expect(r.stdout).toBe("");
+    const block = verdicts(r.stderr, "pack-install-lint-block");
+    expect(block, "lint-block line").toHaveLength(1);
+    const message = String(block[0]!.message);
+    expect(message).toBe("it tries to reach outside its sandbox.");
+    expectPlain(message);
+    expect(details(block[0]!), "raw findings stay in the diagnostic lines").toMatch(/plugins\/src\/koi-pond\/frontend\/\S+:\d+ sandbox-escape .*parent/);
+    expect(r.stderr).not.toContain("Couldn't safety-check");
+    expect(verdicts(r.stderr, "pack-install-lint-setup-error")).toEqual([]);
+    // The service composes "<Name> was blocked: <message> …"; the web surface shows it unchanged.
+    const serviceText = `Koi Pond was blocked: ${message} Nothing was installed and the current wall is unchanged. `
+      + "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint.";
+    // publish_local answers a fresh-install lint block as error "pack_boundary" + message.
+    for (const error of ["pack_boundary", "pack_install_blocked"]) {
+      const row = { ok: false as const, error, message: serviceText, zip: "koi-pond.zip" };
+      expect(formatPackInstallBlocked(row), `catalog notice (${error})`).toBe(serviceText);
+      expect(localPluginPublishChatLine(row, "frontend/index.ts"), `agent chat (${error})`).toBe(serviceText);
+    }
+  }, 60_000);
+
+  it("every rule has a plain sentence; repeats collapse to one; unknown rules get the fallback", () => {
+    for (const [rule, sentence] of Object.entries(PACK_LINT_PLAIN_SUMMARY)) {
+      expect(sentence, rule).toMatch(/^it .+\.$/);
+      expectPlain(sentence);
+    }
+    expect(plainBlockSummary([{ rule: "sandbox-escape" }, { rule: "sandbox-escape" }, { rule: "sandbox-escape" }])).toBe(
+      "it tries to reach outside its sandbox.",
+    );
+    expect(plainBlockSummary([{ rule: "sandbox-escape" }, { rule: "host-transport-escape" }, { rule: "sandbox-escape" }])).toBe(
+      "it tries to reach outside its sandbox. It tries to talk to the app directly instead of through the pack SDK.",
+    );
+    expect(plainBlockSummary([{ rule: "no-such-rule" as PackLintRule }])).toBe(PACK_LINT_PLAIN_FALLBACK);
+    expect(PACK_LINT_PLAIN_FALLBACK).toBe("it uses code the pack sandbox doesn't allow.");
+  });
 });
 
 describe("#185 tsx is a pinned production dependency of web/", () => {

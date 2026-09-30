@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import hashlib
+import logging
 import os
 import shutil
 import signal
@@ -309,9 +310,13 @@ def scan_builds() -> int:
 
 
 _PACK_BUNDLE_SCRIPT = REPO / "web" / "scripts" / "bundle-pack-entry.mjs"
+_LOG = logging.getLogger(__name__)
 
 
 def _install_lint_block_from_compile(stderr: str) -> str | None:
+    """The plain-words ``message`` of the runner's ``pack-install-lint-block`` line (user-facing).
+
+    #185: the raw ``file:line rule`` lines (``details``) are logged at warning, never returned."""
     import json
 
     for line in stderr.splitlines():
@@ -323,6 +328,9 @@ def _install_lint_block_from_compile(stderr: str) -> str | None:
         except json.JSONDecodeError:
             continue
         if isinstance(raw, dict) and raw.get("type") == "pack-install-lint-block":
+            details = raw.get("details")
+            if isinstance(details, list) and details:
+                _LOG.warning("pack install lint block: %s", " | ".join(str(d) for d in details))
             return str(raw.get("message") or "").strip() or None
     return None
 

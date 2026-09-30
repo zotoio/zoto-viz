@@ -32,6 +32,12 @@ export const PACK_BLOCKED_SELECT_VALUE = "__pack_blocked_catalog__";
  */
 export const PACK_INSTALL_CHECK_UNAVAILABLE = "pack_install_check_unavailable";
 
+const CHAT_SERVICE_WORDED_ERRORS = new Set<string>([
+  PACK_INSTALL_CHECK_UNAVAILABLE,
+  "pack_boundary",
+  "pack_install_blocked",
+]);
+
 /** Agent chat line for a POST /api/ai/plugin/local result (install + activate). */
 export function localPluginPublishChatLine(
   d: { ok?: boolean; error?: string; message?: string; id?: string; activated?: boolean; consentRequired?: boolean },
@@ -39,8 +45,9 @@ export function localPluginPublishChatLine(
 ): string {
   if (d.activated) return `plugin ${d.id} built and activated (${names})`;
   if (d.consentRequired) return `plugin ${d.id} installed (${names}) — source review required`;
-  // #185: the install lint couldn't run; show the service's own wording, not "plugin invalid".
-  if (d.error === PACK_INSTALL_CHECK_UNAVAILABLE && d.message) return d.message;
+  // #185: refusals the service words for users (lint couldn't run, lint block, upgrade blocked):
+  // show that text unchanged, not "plugin invalid: <code>".
+  if (!d.ok && d.message && CHAT_SERVICE_WORDED_ERRORS.has(String(d.error))) return d.message;
   return d.ok ? `plugin ${d.id} built (${names})` : `plugin invalid: ${d.error}`;
 }
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import path from "node:path";
 import { scanPackInstallLint } from "../../plugins/sdk/pack-lint";
-import { formatViolationMessage } from "../../plugins/sdk/pack-lint-hints";
+import { formatViolationMessage, plainBlockSummary } from "../../plugins/sdk/pack-lint-hints";
 
 const packHome = process.argv[2];
 const repoRootArg = process.argv[3];
@@ -24,10 +24,13 @@ if (blocks.length > 0) {
     lines.push(line);
     console.error(line);
   }
+  // #185: `message` is what the user sees after "<Name> was blocked:" — plain words only. The raw
+  // file:line rule lines above (and `details`) are diagnostics for the log, never shown to users.
   console.error(
     JSON.stringify({
       type: "pack-install-lint-block",
-      message: lines.join(" "),
+      message: plainBlockSummary(blocks),
+      details: lines,
     }),
   );
   process.exit(1);
