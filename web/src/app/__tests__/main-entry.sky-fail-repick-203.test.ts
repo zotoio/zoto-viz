@@ -8,6 +8,8 @@
  * stayed on it. The row checks both: Calm Sky compiles and is the main tile's sky again, and the line is gone.
  * The fake GL context fails a compile the way three.js does (renderer.debug.onShaderError) when the
  * probed sky is the broken pack's, and compiles Calm Sky's.
+ * #205: the same failure, then a view with no sky. The failed install leaves skyLoaded non-empty on
+ * purpose, so the no-sky pick still clears the tile; with "" it would skip that and the line would stay.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WebGLProgram as ThreeWebGLProgram } from "three";
@@ -102,6 +104,7 @@ const CALM_SKY = "void main() { fragColor = vec4(normalize(vDir) * 0.123, 1.0); 
 const BROKEN_SKY = "void main() { fragColor = vec4(normalize(vDirr), 1.0); }";
 const CALM = "plugin:calm-sky";
 const BROKEN = "plugin:broken-sky";
+const PLAIN = "plugin:plain-net";
 
 function skyPack(id: string, name: string) {
   return {
@@ -112,12 +115,22 @@ function skyPack(id: string, name: string) {
     consent: "reviewed",
   };
 }
+/** A view with no sky of its own (#205): its backdrop is the host's, so main.ts takes the no-sky path. */
+function plainPack(id: string, name: string) {
+  return {
+    id, name, version: 1, engine: "graph", base: "topology",
+    look: { backdrop: "space" },
+    has_frontend: false, frontend: { entry: "frontend/index.ts" }, capabilities: [],
+    has_sky: false, has_sky_shader: false, has_backend: false, has_datasource: false,
+    consent: "reviewed",
+  };
+}
 const json = (b: unknown) => Promise.resolve(new Response(JSON.stringify(b), { status: 200, headers: { "Content-Type": "application/json" } }));
 
 function serve(): void {
   setHarnessFetchOverride((p, method) => {
     if (p === "/api/plugins") {
-      return json({ dir: "", schema: "", plugins: [skyPack("calm-sky", "Calm Sky"), skyPack("broken-sky", "Broken Sky")], errors: [] });
+      return json({ dir: "", schema: "", plugins: [skyPack("calm-sky", "Calm Sky"), skyPack("broken-sky", "Broken Sky"), plainPack("plain-net", "Plain Net")], errors: [] });
     }
     if (p === "/api/profiles/user" && method === "GET") return json({ settings: { mode: CALM } });
     if (p === "/api/plugins/calm-sky/sky/fragment.glsl") return Promise.resolve(new Response(CALM_SKY, { status: 200 }));
@@ -180,5 +193,33 @@ describe("#203: a failed sky install never leaves the previous sky's state behin
     expect(fallbackText(), "fallback line after the re-pick").toBeNull();
     expect(viewStateOf("main")?.kind, "the tile's state after the re-pick").not.toBe("cant-draw");
     expect(document.getElementById("scene")?.dataset.viewId, "the tile shows Calm Sky").toBe(CALM);
+  });
+
+  it("calm-sky, then a pack whose sky fails, then a view with no sky: the fallback line is gone and no sky is installed (#205)", { timeout: 40_000 }, async () => {
+    serve();
+    await bootMainEntry();
+    const { viewStateOf } = await import("../view-state");
+    await vi.waitFor(() => {
+      expect(headerLabel()).toContain("Calm Sky");
+      expect(t.box.probed, "Calm Sky compiled at boot").toEqual(["calm"]);
+    }, { timeout: 8000 });
+    expect(mainSky(), "Calm Sky is the main tile's sky at boot").toBe("calm-sky");
+
+    await pickModeFromUi(BROKEN);
+    await vi.waitFor(() => {
+      expect(viewStateOf("main"), "the broken pick").toMatchObject({ kind: "cant-draw", reason: "shader", packId: "broken-sky" });
+      expect(fallbackText(), "the failed sky's fallback line").toContain("on this device");
+    }, { timeout: 8000 });
+
+    // The failed install left skyLoaded non-empty (#203), so the no-sky pick still clears the tile.
+    const probedBefore = t.box.probed.length;
+    await pickModeFromUi(PLAIN);
+    await vi.waitFor(() => expect(headerLabel()).toContain("Plain Net"), { timeout: 8000 });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(fallbackText(), "fallback after the no-sky pick").toBeNull();
+    expect(viewStateOf("main")?.kind, "the tile's state after the no-sky pick").not.toBe("cant-draw");
+    expect(mainSky(), "no pack sky on the tile after the no-sky pick").toBeNull();
+    expect(t.box.probed.slice(probedBefore), "the no-sky pick compiles no sky").toEqual([]);
+    expect(document.getElementById("scene")?.dataset.viewId, "the tile shows the no-sky view").toBe(PLAIN);
   });
 });
