@@ -12,4 +12,4 @@ Branch: `cursor/host-models-2874` (extends phase 1 `cursor/pack-frame-path-2874`
 
 ## Reading instrumentation
 
-Same as phase 1 (`docs/perf/phase1-findings.md`): `?packPerf=1`, `GET /api/pack-perf`, MCP `get_pack_perf`.
+Same as phase 1 (`docs/perf/phase1-findings.md`): `?packPerf=1`, `GET /api/pack-perf`, MCP `get_pack_perf`. Changing `?packPerf` needs a reload; localStorage changes are live.
