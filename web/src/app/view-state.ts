@@ -84,10 +84,21 @@ function cantDrawText(name: string, state: Extract<ViewState, { kind: "cant-draw
 }
 
 /**
- * Where the copy lands: the tile id ("main" is the solo wall) and, when the caller knows it, how
- * many tiles are on the wall. Solo (tile "main" or the only tile) drops "Other tiles aren't affected".
+ * Where the copy lands: the tile id ("main" is the solo wall) and how many tiles are on the wall.
+ * Required, so no caller can fall into the mosaic sentence by leaving it out: solo (tile "main" or
+ * the only tile) drops "Other tiles aren't affected". {@link viewStateTile} works it out from the DOM.
  */
-export type ViewStateCopyTile = { tileId?: string; tileCount?: number };
+export type ViewStateCopyTile = { tileId: string; tileCount: number };
+
+/**
+ * The tile a notice lands on: "main" is the solo wall (1 tile); a mosaic pane counts the panes on
+ * its wall (panes are the wall's direct children). An element that is not a mosaic pane is alone.
+ */
+export function viewStateTile(tileId: string, el: HTMLElement | null): ViewStateCopyTile {
+  if (tileId === "main" || !el?.classList.contains("mosaic-pane")) return { tileId, tileCount: 1 };
+  const panes = el.parentElement?.querySelectorAll(":scope > .mosaic-pane").length ?? 1;
+  return { tileId, tileCount: Math.max(1, panes) };
+}
 
 function isSoloTile(tile: ViewStateCopyTile): boolean {
   return tile.tileId === "main" || tile.tileCount === 1;
@@ -108,7 +119,7 @@ function couldntStartText(name: string, reason: CouldntStartReason): string {
 }
 
 /** Plain copy for a state: one sentence and at most one button. */
-export function viewStateCopy(state: ViewState, viewName: string, tile: ViewStateCopyTile = {}): ViewStateCopy {
+export function viewStateCopy(state: ViewState, viewName: string, tile: ViewStateCopyTile): ViewStateCopy {
   const name = viewName.trim() || "This view";
   switch (state.kind) {
     case "starting":
@@ -364,7 +375,7 @@ export function showViewState(
 ): void {
   const el = tileEl(tileId) ?? hostEl ?? null;
   if (el && (state.kind === "needs-you" || state.kind === "couldnt-start")) {
-    const copy = viewStateCopy(state, viewName, { tileId });
+    const copy = viewStateCopy(state, viewName, viewStateTile(tileId, el));
     const onAction = copy.action === "review" ? actions.onReview : copy.action === "retry" ? actions.onRetry : undefined;
     paintPackAssetPaneNotice(el, copy.text, "fail", onAction
       ? { showRetry: true, onRetry: onAction, retryLabel: copy.button ?? undefined, retryAction: copy.action ?? undefined, onRetryFocused: actions.onActionFocused }
