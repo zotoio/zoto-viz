@@ -35,6 +35,16 @@ type SceneInternals = {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packs = path.resolve(here, "../../../plugins/src");
 
+/**
+ * The pack's own look numbers, straight from its visualisation.yml (no parseLook / mergeLook), so
+ * the row pins each pack's skyBright / skyOpacity without a copy here (#174 option 2 moved
+ * blob-mesh to 0.88: the bisected limit 0.8845 in blob-mesh-dark-patches.test.ts).
+ */
+function ymlLook(id: string): { skyBright: unknown; skyOpacity: unknown } {
+  const vis = parseYaml(readFileSync(path.join(packs, id, "visualisation.yml"), "utf8")) as { look?: { skyBright?: unknown; skyOpacity?: unknown } };
+  return { skyBright: vis.look?.skyBright, skyOpacity: vis.look?.skyOpacity };
+}
+
 function packLook(id: string) {
   const vis = parseYaml(readFileSync(path.join(packs, id, "visualisation.yml"), "utf8")) as { look?: unknown };
   const look = parseLook(vis.look);
@@ -66,6 +76,8 @@ describe("#175 app sky brightness reaches the pack sky uniform (frame-row calibr
     const graph = new NetScene(el);
     const s = graph as unknown as SceneInternals;
     const look = packLook(id);
+    const hostDefault = { skyBright: s.anim.skyBright, skyOpacity: s.anim.skyOpacity };
+    const yml = ymlLook(id);
     expect(look.backdrop, `${id} draws a pack sky`).toBe("plugin");
     graph.setStageOnly(!!look.stageOnly);
     graph.setAnim(mergeLook(s.anim, look));
@@ -83,7 +95,15 @@ describe("#175 app sky brightness reaches the pack sky uniform (frame-row calibr
     };
     /** What the frame rows hand the harness for the scene's current sliders (rim / bg unused here). */
     const harness = () => hostLookUniforms({ skyBright: s.anim.skyBright, skyOpacity: s.anim.skyOpacity, rim: 0, bg: 0 });
-    return { graph, s, look, run, drawn, harness };
+    /** The row's pin: the yml numbers are real (finite, skyBright not the host default) and reach anim verbatim. */
+    const expectYmlLook = () => {
+      const why = `${id} visualisation.yml look skyBright ${String(yml.skyBright)} skyOpacity ${String(yml.skyOpacity)}; host default skyBright ${hostDefault.skyBright}`;
+      expect(typeof yml.skyBright === "number" && Number.isFinite(yml.skyBright), `finite skyBright: ${why}`).toBe(true);
+      expect(typeof yml.skyOpacity === "number" && Number.isFinite(yml.skyOpacity), `finite skyOpacity: ${why}`).toBe(true);
+      expect(yml.skyBright, `not the host default (the row can't pass vacuously): ${why}`).not.toBe(hostDefault.skyBright);
+      expect([s.anim.skyBright, s.anim.skyOpacity], `look reaches anim verbatim: ${why}`).toEqual([yml.skyBright, yml.skyOpacity]);
+    };
+    return { graph, s, look, run, drawn, harness, expectYmlLook };
   }
 
   function expectCalibrated(r: ReturnType<typeof packScene>, what: string) {
@@ -97,10 +117,11 @@ describe("#175 app sky brightness reaches the pack sky uniform (frame-row calibr
     expect(d.uOpacity, why).toBeCloseTo(h.uOpacity, 9);
   }
 
-  it("graph view (blob-mesh, skyBright 1.18 / skyOpacity 0.96): the look's sliders are the drawn uBright / uOpacity, and follow the slider", () => {
+  const lookText = (id: string) => `skyBright ${String(ymlLook(id).skyBright)} / skyOpacity ${String(ymlLook(id).skyOpacity)} from its yml`;
+  it(`graph view (blob-mesh, ${lookText("blob-mesh")}): the look's sliders are the drawn uBright / uOpacity, and follow the slider`, () => {
     const r = packScene("blob-mesh");
     expect(r.s.stageOnly, "blob-mesh is a graph view").toBe(false);
-    expect([r.s.anim.skyBright, r.s.anim.skyOpacity], "look reaches anim verbatim").toEqual([1.18, 0.96]);
+    r.expectYmlLook();
     r.run(90, 16); // 1.44 s at 60 fps: past the 1.05 s view morph, far inside the 30 s fps window (no lean)
     expect(r.s.tune?.k ?? 0, "premise: not leaned").toBe(0);
     expectCalibrated(r, "blob-mesh settled");
@@ -110,10 +131,10 @@ describe("#175 app sky brightness reaches the pack sky uniform (frame-row calibr
     expectCalibrated(r, "blob-mesh after slider");
   });
 
-  it("stage-only (ant-colony, skyBright 1.05 / skyOpacity 1): drawn uBright / uOpacity are the look's, un-leaned and fully leaned", () => {
+  it(`stage-only (ant-colony, ${lookText("ant-colony")}): drawn uBright / uOpacity are the look's, un-leaned and fully leaned`, () => {
     const r = packScene("ant-colony");
     expect(r.s.stageOnly, "ant-colony is stage-only").toBe(true);
-    expect([r.s.anim.skyBright, r.s.anim.skyOpacity], "look reaches anim verbatim").toEqual([1.05, 1]);
+    r.expectYmlLook();
     r.run(90, 16);
     expect(r.s.tune?.k ?? 0, "premise: not leaned").toBe(0);
     expectCalibrated(r, "ant-colony un-leaned");
