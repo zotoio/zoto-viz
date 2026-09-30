@@ -636,7 +636,6 @@ function glowMaterial(): THREE.ShaderMaterial {
       uAmt: { value: 1 },
       uMode: { value: 0 },
       uAdditive: { value: 1 },
-      uResolution: { value: new THREE.Vector2(1, 1) },
     },
     vertexShader: GLOW_VERT,
     fragmentShader: GLOW_FRAG,

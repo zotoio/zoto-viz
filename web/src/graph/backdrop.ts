@@ -230,6 +230,9 @@ void main() {
 
 const VERT = pluginSkyVertGlsl;
 
+/** Fragments that sample the photo plate (the agent sky's preamble). */
+const DECLARES_UPHOTO = /\buniform\s+sampler2D\s+uPhoto\s*;/;
+
 const FRAG = /* glsl */ `
 uniform float uTime;
 uniform float uMode;
@@ -868,6 +871,8 @@ export class Backdrop {
   private recipeWant: SkyRecipe = cloneSkyRecipe(DEFAULT_SKY_RECIPE);
   private recipeT = 1;
   private morphT = 1;
+  /** Plate for the agent sky's uPhoto (bound only while that fragment is on {@link mat}). */
+  private photoTex: THREE.Texture | null = null;
   private lookOpacity = 1;
   /**
    * #180 H1: what the bound pack wrote through writeUniform. A written uTime / uAudio / uAccent /
@@ -893,7 +898,6 @@ export class Backdrop {
         uWarp: { value: DEFAULT_SKY_RECIPE.warp },
         uGrain: { value: DEFAULT_SKY_RECIPE.grain },
         uBands: { value: DEFAULT_SKY_RECIPE.bands },
-        uPhoto: { value: blankTex() },
       },
       vertexShader: VERT,
       fragmentShader: FRAG,
@@ -1072,7 +1076,9 @@ export class Backdrop {
   }
 
   setPhoto(tex: THREE.Texture | null): void {
-    this.mat.uniforms.uPhoto.value = tex ?? blankTex();
+    this.photoTex = tex;
+    const u = this.mat.uniforms.uPhoto;
+    if (u) u.value = tex ?? blankTex();
   }
 
   /** Load a photographic plate onto the full-screen sky (cover-fit, no webcam). */
@@ -1308,6 +1314,9 @@ export class Backdrop {
 
   private applyFrag(src: string): void {
     this.mat.fragmentShader = src;
+    // #171 (b): only the agent sky (sky-agent.ts PREAMBLE) declares uPhoto; the built-in FRAG does not.
+    if (DECLARES_UPHOTO.test(src)) this.mat.uniforms.uPhoto = { value: this.photoTex ?? blankTex() };
+    else delete this.mat.uniforms.uPhoto;
     this.mat.needsUpdate = true;
   }
 
