@@ -5,7 +5,9 @@ import {
   assertPluginSkySmokeDraws,
   buildPluginSkySmokeBrowserLaunchOptions,
   closePluginSkySmokeBrowser,
+  PLUGIN_SKY_SMOKE_CLEAR,
   smokeRenderPluginSky,
+  type PluginSkySmokeUniforms,
 } from "./plugin-sky-smoke-render";
 
 const MINI_FRAG = `uniform vec4 zotoVizSlots[8];
@@ -21,6 +23,19 @@ void main() {
   col *= uBright;
   fragColor = vec4(col, uOpacity);
 }`;
+
+/** A flat sky: every pixel is uBg at alpha uOpacity (the alpha a pack sky's fragColor carries). */
+const SOLID_FRAG = `uniform float uOpacity;
+uniform vec3 uBg;
+out vec4 fragColor;
+void main() {
+  fragColor = vec4(uBg, uOpacity);
+}`;
+
+/** Luma (0-255) of a 0-1 RGB colour stored in an 8-bit framebuffer, the way the harness reads it back. */
+function byteLuma(c: readonly number[]): number {
+  return 0.2126 * Math.round(255 * c[0]!) + 0.7152 * Math.round(255 * c[1]!) + 0.0722 * Math.round(255 * c[2]!);
+}
 
 describe("plugin sky smoke render", () => {
   afterAll(async () => {
@@ -91,4 +106,29 @@ describe("plugin sky smoke render", () => {
     expect(() => assertPluginSkySmokeAnimates(a, b)).not.toThrow();
     expect(a.pixelChecksum).not.toBe(b.pixelChecksum);
   });
+
+  /**
+   * #188: the harness composites the sky's alpha (uOpacity) over its clear like the app's
+   * transparent plugin sky material: out = sky x a + clear x (1 - a) per channel. A look with
+   * opacity below 1 therefore changes the read-back. Revert: drop the blend (the draw overwrites
+   * the clear at full strength) and the a 0.5 / 0.25 reads equal the opaque sky: red.
+   */
+  it("composites uOpacity over the clear: a look below opacity 1 changes the output (out = sky x a + clear x (1 - a))", async () => {
+    expect.hasAssertions();
+    const sky: [number, number, number] = [0.8, 0.5, 0.2];
+    const base: PluginSkySmokeUniforms = { uTime: 0, uOpacity: 1, uBright: 1, uAudio: 0, uAccent: sky, uBg: sky };
+    const slots = new Float32Array(32);
+    const composite = (a: number) => sky.map((c, i) => c * a + PLUGIN_SKY_SMOKE_CLEAR[i]! * (1 - a));
+    const opaque = byteLuma(sky);
+    const got: string[] = [];
+    for (const a of [1, 0.96, 0.5, 0.25]) {
+      const r = await smokeRenderPluginSky(SOLID_FRAG, slots, { ...base, uOpacity: a });
+      const luma = r.medianLuma * 255;
+      const want = byteLuma(composite(a));
+      got.push(`a ${a}: luma ${luma.toFixed(2)} want ${want.toFixed(2)}`);
+      expect(Math.abs(luma - want), `a ${a}: harness luma ${luma.toFixed(2)} vs composite ${want.toFixed(2)} (opaque sky ${opaque.toFixed(2)})`).toBeLessThanOrEqual(1);
+      if (a <= 0.5) expect(opaque - luma, `a ${a}: the look's opacity changes the output`).toBeGreaterThan(40);
+    }
+    process.stdout.write(`[smoke-opacity] ${got.join("; ")}\n`);
+  }, 60_000);
 });
