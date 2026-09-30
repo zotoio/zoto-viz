@@ -75,7 +75,7 @@ function settle(view: Harness, prefix: string, ok: boolean): void {
   el.dispatchEvent(new Event(ok ? "load" : "error"));
 }
 
-const flush = (ms = 0): Promise<void> => vi.advanceTimersByTimeAsync(ms);
+const flush = (ms = 0) => vi.advanceTimersByTimeAsync(ms);
 
 describe("CarouselView cancels the old source's image loads on a source switch", () => {
   const hosts: HTMLElement[] = [];

@@ -10,7 +10,7 @@
   "web/src/app/view-state.test.ts": 1,
   "web/src/arcade/arcade-idle-board.test.ts": 6,
   "web/src/arcade/arcade-idle-feed.test.ts": 1,
-  "web/src/arcade/arcade-layout-dpr-fit.test.ts": 2,
+  "web/src/arcade/arcade-layout-dpr-fit.test.ts": 1,
   "web/src/arcade/carousel-sample.test.ts": 3,
   "web/src/arcade/carousel-stale-load.test.ts": 3,
   "web/src/arcade/pong-layout-dpr-fit.test.ts": 4,
