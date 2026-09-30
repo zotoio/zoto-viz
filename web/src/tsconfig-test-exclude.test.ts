@@ -11,12 +11,17 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+// One whole-program tsc run takes ~5-9 s on a loaded box; keep the default 5 s from flaking it.
+vi.setConfig({ testTimeout: 120_000 });
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const TEST_CONFIG = path.join(webRoot, "tsconfig.test.json");
 const TSC_BIN = path.join(webRoot, "node_modules/.bin/tsc");
 const TSC_ERROR_LINE = /^(.+?)\(\d+,\d+\): error TS\d+/;
+/** Below the 120 s test timeout, so a hung tsc fails with its own message. */
+const TSC_TIMEOUT_MS = 90_000;
 
 const HELD_MARKER = "// HELD";
 const HELD_PREFIX = "../scripts/revert-proof";
@@ -54,8 +59,15 @@ function readExcludeJson(): string[] {
   return (JSON.parse(text) as { exclude: string[] }).exclude;
 }
 
+type ExecError = { code?: string; signal?: string | null; status?: number | null; stdout?: string; stderr?: string };
+
+/** tsc exits 2 when it reports errors; that output is the result. A timeout or spawn failure is not. */
 function tscOutput(err: unknown): string {
-  const e = err as { stdout?: string; stderr?: string };
+  const e = err as ExecError;
+  if (e.code === "ETIMEDOUT" || e.signal) {
+    throw new Error(`tsc did not finish within ${TSC_TIMEOUT_MS / 1000} s (killed with ${e.signal ?? "a signal"}); the exclude list was not checked`);
+  }
+  if (typeof e.status !== "number") throw new Error(`tsc could not be run: ${String(e.code ?? err)}`);
   return `${e.stdout ?? ""}${e.stderr ?? ""}`;
 }
 
@@ -74,6 +86,8 @@ function testFilesWithTscErrors(): Set<string> {
         cwd: webRoot,
         encoding: "utf8",
         maxBuffer: 64 * 1024 * 1024,
+        timeout: TSC_TIMEOUT_MS,
+        killSignal: "SIGKILL",
       });
     } catch (err) {
       out = tscOutput(err);
@@ -113,5 +127,5 @@ describe("tsconfig.test.json exclude list (#192)", () => {
   it("every shrink-only path still has a tsc error (delete fixed files from the shrink-only block)", () => {
     const withErrors = testFilesWithTscErrors();
     expect(shrinkOnly.filter((p) => !withErrors.has(p))).toEqual([]);
-  }, 180_000);
+  });
 });
