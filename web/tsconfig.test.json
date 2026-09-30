@@ -113,15 +113,6 @@
     "src/plugins/viz-host.test.ts",
     "src/plugins/viz-publish-surface.test.ts",
     "src/plugins/viz-v1-frame-adapter.test.ts",
-    "src/ui/media-ask-focus.chromium.test.ts",
-    "src/ui/media-ask-ux.chromium.test.ts",
-    "src/ui/media-ask-ux.test.ts",
-    "src/ui/settings-mosaic-pane-sync-tiles.wiring.test.ts",
-    "src/ui/settings-mosaic-pick.test.ts",
-    "src/ui/settings.test.ts",
-    "src/ui/viz-hud-f4.test.ts",
-    "src/ui/viz-hud-null-tile.test.ts",
-    "src/ui/viz-hud-write-steady.test.ts",
     // HELD (#192): scripts/revert-proof* is a held path. Do not fix, edit or move these files, and do
     // not remove them from this list; ask ZotoBoss. Exempt from the shrink-only rule above.
     "../scripts/revert-proof.dogfood.test.ts",

@@ -44,7 +44,7 @@ describe("mosaic HUD lines and tile budgets F4", () => {
         packName: "tunnel",
         stats: { lastMs: 0, overBudget: 0, skipped: 0, total: i },
         frame: null,
-        state: { ts: 0, stats: { active_flows: 0, devices: 0, packets: 0 }, devices: [], flows: [], sources: [], plugin_state: {} },
+        state: { type: "state", ts: 0, iface: "", interfaces: [], network: "", local_ip: "", gateway: "", uptime: 0, stats: { pps: 0, bps: 0, packets: 0, bytes: 0, devices: 0, online: 0, flows: 0, active_flows: 0 }, devices: [], flows: [], sources: {}, plugin_state: {} },
         now: i / 60,
         tileBudgetLines: lines,
       });
