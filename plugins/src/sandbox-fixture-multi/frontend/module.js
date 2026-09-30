@@ -1,5 +1,5 @@
 import { pulse } from "./helper.js";
-import fixture from "./fixture.json" with { type: "json" };
+import fixture from "./fixture.js";
 
 const z = globalThis.zoto;
 
