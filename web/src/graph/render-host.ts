@@ -55,7 +55,8 @@ import {
   type DevicePxRatio,
 } from "./render-host-device-px-ratio";
 import { asCanvasDeviceHeight, type CanvasDeviceHeight } from "./pack-mirror-rect";
-import { RenderHostTileShader } from "./render-host-tile-shader";
+import { RenderHostTileShader, type TileDrawEvent } from "./render-host-tile-shader";
+export type { TileDrawEvent } from "./render-host-tile-shader";
 import type { GfxWallNotice } from "./gfx-wall-notice";
 
 type PackMirrorViewMeta = HostedView & {
@@ -74,6 +75,8 @@ import type { FrameTs } from "../core/time-ms";
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
   readonly viewEl: HTMLElement;
+  /** The tile this view draws ("main", or the mosaic pane id): the key of its view state. */
+  readonly tileId?: string;
   /** update and draw one frame; call `host.present(...)` from inside */
   hostFrame(ts: FrameTs): void;
   hostContextLost(): void;
@@ -82,16 +85,7 @@ export interface HostedView {
   paintSoftware?(ctx: CanvasRenderingContext2D, rect: SoftRect): void;
   /** GPU milliseconds for this pane's last draw, once the timer query resolves. */
   noteFrameCost?(ms: number): void;
-  /** The tile this view draws (solo "main", or the mosaic pane id); views without one are not tiles. */
-  readonly tileId?: string;
 }
-
-/**
- * The shared context's lifecycle as the host sees it (#171 (c) / #179): `lost` on the lost event,
- * `restored` on the restored event, `drawn` on the first real frame drawn after a restore (a restore
- * that never draws is not a recovery).
- */
-export type ContextLifecycleEvent = "lost" | "restored" | "drawn";
 
 /** Framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
 export type Viewport = DeviceRect;
@@ -139,6 +133,7 @@ export const CONTEXT_RESTORE_RETRY_MS: readonly number[] = [1000, 3000, 5000];
 /**
  * Where the shared context's loss recovery stands, as the wall shows it: "restoring" while the
  * "Graphics were interrupted" notice is up, "gave-up" once it offers Reload, "ok" when it is gone.
+ * Internal / diagnostics only: visible wording follows the tiles' cant-draw `reload` flag (#179 c).
  */
 export type ContextRecovery = "ok" | "restoring" | "gave-up";
 
@@ -209,7 +204,6 @@ export class RenderHost {
   private restoreTimer: ReturnType<typeof setTimeout> | null = null;
   private restoreDelays: readonly number[] = CONTEXT_RESTORE_RETRY_MS;
   private restoreAttempts = 0;
-  private readonly contextListeners = new Set<(ev: ContextLifecycleEvent) => void>();
   /**
    * The context came back but no real frame has drawn since: the wall notice stays up (UX Pro, #179 row 4).
    * A restore that never draws is not a recovery, so only the first drawn frame clears it.
@@ -309,7 +303,6 @@ export class RenderHost {
       if (this.noticeWaitsForDraw && this.drewThisFrame && !this.glContextLost) {
         this.noticeWaitsForDraw = false;
         this.tileShader.onFirstFrameAfterRestore();
-        this.emitContext("drawn");
       }
       finishSandboxBitmapHostFrame();
     };
@@ -330,30 +323,20 @@ export class RenderHost {
     if (shown === "interrupted") return "restoring";
     return "ok";
   }
-  /** Tiles drawn by this host (views that name one), for per-tile state such as cant-draw. */
-  tileIds(): string[] {
-    const ids: string[] = [];
-    for (const v of this.views) {
-      if (v.tileId && !ids.includes(v.tileId)) ids.push(v.tileId);
-    }
-    return ids;
-  }
-  /** Subscribe to the shared context's lost / restored / first-drawn-frame events; returns an unsubscribe. */
-  onContextLifecycle(fn: (ev: ContextLifecycleEvent) => void): () => void {
-    this.contextListeners.add(fn);
-    return () => { this.contextListeners.delete(fn); };
-  }
-  private emitContext(ev: ContextLifecycleEvent): void {
-    for (const fn of [...this.contextListeners]) {
-      try {
-        fn(ev);
-      } catch (e) {
-        console.warn("zoto-viz context lifecycle listener:", e);
-      }
-    }
-  }
   get canvasDeviceHeight(): CanvasDeviceHeight { return this._canvasDeviceHeight; }
   get gfxWallNotice(): GfxWallNotice { return this.tileShader.gfxNotice; }
+
+  /** Tile ids of the views on this host, once each (every tile a lost context stops). */
+  drawTileIds(): readonly string[] {
+    const ids: string[] = [];
+    for (const v of this.views) if (v.tileId && !ids.includes(v.tileId)) ids.push(v.tileId);
+    return ids;
+  }
+
+  /** Tile draw events: context lost / Reload offered / drawn again, and per-tile shader failures (#171 c). */
+  onDrawEvent(fn: (e: TileDrawEvent) => void): () => void {
+    return this.tileShader.onDrawEvent(fn);
+  }
 
   beginTilePack(
     tileId: string,
@@ -467,7 +450,6 @@ export class RenderHost {
     // Every loss gets a fresh recovery, including one right after a restore (#179 row 4).
     this.restoreAttempts = 0;
     this.restoreDelays = selfLoss ? [0, ...CONTEXT_RESTORE_RETRY_MS] : CONTEXT_RESTORE_RETRY_MS;
-    this.emitContext("lost");
     // A software host (or a GL renderer without forceContextRestore) cannot ask for the context
     // back: no restore timer at all, so the wall notice's own 10 s window is the only timer the
     // loss adds (qe-hook-context-loss, #179 replay).
@@ -488,16 +470,12 @@ export class RenderHost {
     this.tileShader.onSharedContextRestored();
     // The notice clears on the first real frame drawn after this, not on the event (#179 row 4).
     // A software host has no GL frames to wait for.
-    if (!this.software) this.noticeWaitsForDraw = true;
+    if (this.software) this.tileShader.onFirstFrameAfterRestore();
+    else this.noticeWaitsForDraw = true;
     this.dirty = true;
     this.refreshContextAntialias();
     this.markMirrorScopeDirty();
     for (const v of this.views) v.hostContextRestored();
-    this.emitContext("restored");
-    if (this.software) {
-      this.tileShader.onFirstFrameAfterRestore();
-      this.emitContext("drawn");
-    }
   }
 
   private scheduleContextRestore(delayMs: number): void {

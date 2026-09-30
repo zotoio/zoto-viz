@@ -34,8 +34,8 @@ const t = vi.hoisted(() => {
   return {
     FakeGl,
     host: null as null | { canvas: HTMLCanvasElement; glContextLost: boolean; advanceFrame(ts: number): void; renderer: unknown },
-    /** The wall host's tiles (`RenderHost.tileIds()`), set with `host`. */
-    tileIds: (): string[] => [],
+    /** The wall host's tiles (`RenderHost.drawTileIds()`), set with `host`. */
+    tileIds: (): readonly string[] => [],
     gl: null as null | InstanceType<typeof FakeGl>,
     settled: [] as string[],
   };
@@ -69,7 +69,7 @@ vi.mock("../../graph/render-host", async (orig) => {
         compile: () => {},
       });
       t.host = this;
-      t.tileIds = () => this.tileIds();
+      t.tileIds = () => this.drawTileIds();
       t.gl = gl;
     }
   }
@@ -254,7 +254,8 @@ describe("#179 app level: Backrooms saved as the boot mode, context lost, then a
 
   /**
    * #179 part (c) (with #171 (c)): the per-tile `{ kind: "cant-draw", reason: "context-lost" }` view state.
-   * From web/src/app/view-state.ts: `viewStateOf(tileId)`; tile ids from the shared host's `tileIds()`
+   * Written by app/cant-draw-state.ts from the host's draw events (TSE, tse/issue-171c). From
+   * web/src/app/view-state.ts: `viewStateOf(tileId)`; tile ids from the shared host's `drawTileIds()`
    * (each drawn view's `tileId`: "main" on the solo wall).
    */
   it("#179 part (c): every tile enters cant-draw / context-lost on a loss and leaves it only on restore plus a drawn frame", { timeout: 30_000 }, async () => {

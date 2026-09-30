@@ -12,8 +12,8 @@ import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost, type HostedView } from "../graph/render-host";
 import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
+import { bindCantDrawViewState } from "./cant-draw-state";
 import {
-  followContextLifecycle,
   resetViewStatesForTests,
   setViewState,
   setViewStateTileResolver,
@@ -92,7 +92,7 @@ function bootWall(tileIds: string[], opts: { software?: boolean } = {}): Wall {
     host.add(view);
   }
   setViewStateTileResolver((id) => panes.get(id) ?? null);
-  const stop = followContextLifecycle(host, (id) => `plugin:${id}`);
+  const stop = bindCantDrawViewState(host);
   let ts = 0;
   return {
     host,
@@ -130,7 +130,7 @@ describe("#179 part (c): every tile on the shared host goes cant-draw / context-
 
   it("mosaic: three tiles all enter cant-draw on a loss, hold it while lost and through the restored event, and leave it on the first drawn frame", () => {
     w = bootWall(["a", "b", "c"]);
-    expect(w.host.tileIds()).toEqual(["a", "b", "c"]);
+    expect(w.host.drawTileIds()).toEqual(["a", "b", "c"]);
     setViewState("a", "plugin:a", { kind: "ready" });
     setViewState("b", "plugin:b", { kind: "ready" });
     // c has no state yet: it still can't draw while lost, and comes back ready.

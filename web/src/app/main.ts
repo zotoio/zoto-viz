@@ -265,7 +265,8 @@ import { createHostMeshBridge, tryApplyHostMeshBridge } from "./host-mesh-bridge
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
 import { hasKeptTileAnswer, showNeedsYou, waitForTileReview, type TileReviewRunner } from "./needs-you";
-import { clearViewState, followContextLifecycle, setViewState, setViewStateTileResolver, viewStateOf, viewStatePickerSuffix, viewStateViewId } from "./view-state";
+import { clearViewState, setViewState, setViewStateTileResolver, viewStateOf, viewStatePickerSuffix, viewStateViewId } from "./view-state";
+import { bindCantDrawViewState } from "./cant-draw-state";
 import { packNeedsConsent, shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { livePatchIsConsentOnly, mergePluginConsentLivePatch } from "./plugin-consent-live";
@@ -306,15 +307,14 @@ applyThemeChrome(theme);
 
 // one WebGL context for the whole wall: the main graph and every mosaic tile draw through it
 const renderHost = new RenderHost($("wall"));
+// Each tile's cant-draw view state follows the host: lost context, Reload offered, drawn again, shader failures (#171 c).
+bindCantDrawViewState(renderHost);
 mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 bootRenderScaleGpuTimer(scene, renderHost.gl);
 const hostMeshBridge = createHostMeshBridge(() => sandboxDrivenScene(), (packId) => hostMeshCanPlace(packId));
 scene.retargetPanel("main");
-// #179 part (c): a lost shared context puts every tile in cant-draw / context-lost; the first frame
-// drawn after the restore (not the restored event) takes it back off.
-followContextLifecycle(renderHost, (tileId) => (tileId === "main" ? liveMode : mosaicTileViewId(tileId)));
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
 scene.onSelect = (d) => { selectedIp = d?.ip ?? null; panel.show(d); persistLive(); };
