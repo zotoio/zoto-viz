@@ -133,7 +133,7 @@ def test_an_upgrade_whose_lint_runs_too_long_keeps_the_old_version(
     codes = _spy_codes(monkeypatch)
     plugins.reset_bundles()
     out = plugin_local.install_local_zip(_probe(tmp_path, 4), overwrite=True)
-    assert codes == [EXIT_LINT_SETUP], codes
+    assert codes == [EXIT_LINT_SETUP], f"script exits {codes} (none: the service's backstop timeout fired instead)"
     assert out.get("ok") is False and out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
     assert out.get("message") == (
         "Couldn't safety-check the new version of Upgrade Probe in time, so it wasn't updated. You're still on version 3."
