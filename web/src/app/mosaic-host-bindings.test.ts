@@ -115,7 +115,7 @@ describe("mosaic host bindings", () => {
       syncPluginSky: async () => {},
       arcadeSlotFor: () => null,
     });
-    settings.onPluginChange!();
+    settings.onPluginChange!("plugin:topology!2", {});
     expect(setMode).toHaveBeenCalledWith(
       expect.objectContaining({ id: "plugin:topology" }),
       { k: "v" },

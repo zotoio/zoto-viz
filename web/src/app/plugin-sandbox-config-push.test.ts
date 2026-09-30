@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { PluginSandbox } from "../plugins/host";
-import { configStoreId, type PluginView } from "../plugins/plugin";
+import { configStoreId, type PluginCapability, type PluginView } from "../plugins/plugin";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import {
   mayPushSandboxOnPluginChange,
@@ -16,7 +16,7 @@ const STORE_A2 = "pack-a:tile-a2";
 
 type ConfigPost = { type: string; config: Record<string, string> };
 
-function frontendSpec(storeId: string, caps: string[]): PluginView {
+function frontendSpec(storeId: string, caps: PluginCapability[]): PluginView {
   const instanceId = storeId.includes(":") ? storeId.split(":")[1]! : storeId;
   return {
     id: PACK,
@@ -26,20 +26,21 @@ function frontendSpec(storeId: string, caps: string[]): PluginView {
     engine: "graph",
     has_frontend: true,
     capabilities: caps,
-    config: [{ key: "a", label: "a", type: "string", default: "0" }],
+    config: [{ key: "a", label: "a", type: "text", default: "0" }],
   };
 }
 
 function createConfigPostTap(box: PluginSandbox): { posted: ConfigPost[]; rehook: () => void } {
   const posted: ConfigPost[] = [];
   const rehook = () => {
-    const port = (box as { hostPort: MessagePort | null }).hostPort;
+    const port = box["hostPort"];
     if (!port) return;
     const orig = port.postMessage.bind(port);
     port.postMessage = (data, transfer) => {
       const msg = data as { type?: string; config?: Record<string, string> };
       if (msg?.type === "config" && msg.config) posted.push({ type: msg.type, config: msg.config });
-      orig(data, transfer);
+      if (Array.isArray(transfer)) orig(data, transfer);
+      else orig(data, transfer);
     };
   };
   return { posted, rehook };

@@ -7,7 +7,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import type { PluginView } from "../plugins/plugin";
 import * as pluginModule from "../plugins/plugin";
 import { countPluginSandboxIframes } from "../plugins/host";
@@ -158,8 +158,8 @@ async function mainHost() {
   return { ...main, ...testHost };
 }
 
-let attachSpy: ReturnType<typeof vi.spyOn>;
-let skySpy: ReturnType<typeof vi.spyOn>;
+let attachSpy: MockInstance<typeof pluginModule.attachPluginFrontend>;
+let skySpy: MockInstance<typeof pluginModule.fetchPluginSky>;
 
 describe("Needs you via the main host", { timeout: 60_000 }, () => {
   beforeEach(() => {
