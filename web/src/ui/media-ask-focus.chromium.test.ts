@@ -25,14 +25,14 @@ async function harnessPage(): Promise<Page> {
 
 async function openMicAsk(page: Page): Promise<void> {
   await page.evaluate(() => {
-    const h = (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness;
+    const h = (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness!;
     h.reset();
     void h.openMicAsk();
   });
 }
 
 function activeSelector(page: Page): Promise<string> {
-  return page.evaluate(() => (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.activeSelector());
+  return page.evaluate(() => (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness!.activeSelector());
 }
 
 describe("media ask focus (chromium)", () => {
@@ -101,7 +101,7 @@ describe("media ask focus (chromium)", () => {
         (window as Window & { __gumCalls?: number }).__gumCalls = ((window as Window & { __gumCalls?: number }).__gumCalls ?? 0) + 1;
         return new Promise(() => { /* hang */ });
       };
-      void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
+      void (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness!.openMicAsk();
     });
     await page.waitForSelector("[data-media-ask]", { state: "attached" });
     await page.keyboard.press("Escape");
@@ -109,13 +109,13 @@ describe("media ask focus (chromium)", () => {
     const gumCalls = await page.evaluate(() => (window as Window & { __gumCalls?: number }).__gumCalls ?? 0);
     expect(gumCalls).toBe(0);
     await page.evaluate(() => {
-      void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
+      void (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness!.openMicAsk();
     });
     await expect.poll(async () => await page.locator("[data-media-ask]").count()).toBe(0);
     await page.reload();
     await page.waitForFunction(() => (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness);
     await page.evaluate(() => {
-      void (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness.openMicAsk();
+      void (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness!.openMicAsk();
     });
     await expect.poll(async () => await page.locator("[data-media-ask]").count()).toBe(0);
     await page.close();

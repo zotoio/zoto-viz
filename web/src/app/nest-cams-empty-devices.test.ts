@@ -18,7 +18,7 @@ describe("nest cams drawer empty devices", () => {
   it("hides camera chips and shows account empty copy when Device Access lists no cameras", () => {
     const s = new Settings({ storePrefix: "zoto-nest-empty-devices", onChange: () => {} });
     document.body.append(s.el);
-    s.bindView({ id: "nest-cams", packName: "Nest cams", version: 1, engine: "graph" });
+    s.bindView({ id: "nest-cams", name: "Nest cams", packName: "Nest cams", version: 1, engine: "graph" });
     s.openView();
     s.setNestDevices([]);
     const viewPane = s.el.querySelector('[data-pane="view"]');

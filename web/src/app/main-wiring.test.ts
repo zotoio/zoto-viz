@@ -12,7 +12,7 @@ describe("bootPluginSettingsHost (main.ts boot delegate)", () => {
   it("calls wireSettingsHost with deps", () => {
     const spy = vi.spyOn(wireHost, "wireSettingsHost").mockReturnValue(() => {});
     const deps = {
-      modeById: () => ({ id: "plugin:a", label: "A", pluginId: "a" }),
+      modeById: () => ({ id: "plugin:a", label: "A", hint: "", legend: () => [], pluginId: "a" }),
       pluginSpecForMode: () => loadSettingsDeclFixture(),
       optsFor: () => ({}),
       captions: new Map(),
@@ -32,7 +32,7 @@ describe("wireSettingsHost", () => {
     const spec = loadSettingsDeclFixture();
     wireHost.wireSettingsHost(
       {
-        modeById: () => ({ id: "plugin:settings-fixture", label: "S", pluginId: "settings-fixture" }),
+        modeById: () => ({ id: "plugin:settings-fixture", label: "S", hint: "", legend: () => [], pluginId: "settings-fixture" }),
         pluginSpecForMode: () => spec,
         optsFor: () => ({}),
         captions,
@@ -89,6 +89,8 @@ describe("pluginOptsFromSpec (optsFor export path)", () => {
     const mode: ViewMode = {
       id: "plugin:opts-pack",
       label: "Opts",
+      hint: "",
+      legend: () => [],
       pluginId: "opts-pack",
       config: spec.config,
     };
