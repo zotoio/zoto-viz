@@ -10,6 +10,7 @@ import { writeRcsHostMeshSlots } from "./host-mesh-drive";
 declare const zoto: {
   onFrame: ((frame: VizDataFrame) => void) | null;
   onConfig: ((cfg: Record<string, string>) => void) | null;
+  onPresent?: ((tick: { frameMs: number; tileId: string }) => void) | null;
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: number | [number, number, number]) => void;
@@ -25,6 +26,8 @@ let mounted = false;
 let simClock = 0;
 let simStarted = false;
 const modelSlot = new PackModelSlotController(zoto.getConfig?.());
+let lookBg: [number, number, number] = [0, 0, 0];
+let lookAccent: [number, number, number] = [1, 1, 1];
 
 function mergeHostDelta(cfg: Record<string, string>): void {
   for (const key of Object.keys(cfg)) {
@@ -51,12 +54,22 @@ function applyConfig(cfg: Record<string, string>): void {
   const theme = themeBgAccent(opts.theme);
   const orange = hexToRgb(opts.teamOrange);
   const blue = hexToRgb(opts.teamBlue);
-  zoto.writeUniform("uBg", theme.bg);
-  zoto.writeUniform("uAccent", [
+  lookBg = theme.bg;
+  lookAccent = [
     orange[0] * 0.55 + blue[0] * 0.45,
     orange[1] * 0.55 + blue[1] * 0.45,
     orange[2] * 0.55 + blue[2] * 0.45,
-  ]);
+  ];
+  writeLookUniforms();
+}
+
+/**
+ * Look uniforms from the last applied config. Written on every present and every data
+ * frame, not only on config events, so the stage keeps the pack's look (#180).
+ */
+function writeLookUniforms(): void {
+  zoto.writeUniform("uBg", lookBg);
+  zoto.writeUniform("uAccent", lookAccent);
   zoto.writeUniform("uBright", 1.05);
   zoto.writeUniform("uOpacity", 1);
 }
@@ -96,6 +109,11 @@ zoto.onFrame = (frame) => {
     zoto.writeParticles(out.particles, 4);
   }
   zoto.writeUniform("uAudio", frame.audio);
+  writeLookUniforms();
+};
+
+zoto.onPresent = () => {
+  writeLookUniforms();
 };
 
 const bootCfg = zoto.getConfig?.();

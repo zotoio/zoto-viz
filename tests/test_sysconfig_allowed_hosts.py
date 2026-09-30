@@ -1,6 +1,7 @@
 """sys-config allowed_hosts parsing and main() listen wiring."""
 from __future__ import annotations
 
+import socket
 from pathlib import Path
 
 from service import access, sysconfig
@@ -37,6 +38,13 @@ def test_invalid_allowed_hosts_entry_raises() -> None:
         assert "invalid allowed_hosts" in str(exc)
     else:
         raise AssertionError("expected ValueError")
+
+
+def _free_loopback_port() -> int:
+    """Ask the OS for an unused 127.0.0.1 port (main() claims --port before make_app)."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
 
 
 def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
@@ -84,7 +92,10 @@ def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
     )
     import sys
 
-    monkeypatch.setattr(sys, "argv", ["monitor", "--bind", "127.0.0.1", "--port", "7020"])
+    # claim_listen() exits early when --port is taken (e.g. a live monitor on 7020),
+    # so use an OS-assigned free port instead of the default.
+    port = _free_loopback_port()
+    monkeypatch.setattr(sys, "argv", ["monitor", "--bind", "127.0.0.1", "--port", str(port)])
     try:
         monitor.main()
     except SystemExit:
@@ -93,6 +104,7 @@ def test_main_passes_resolved_allowed_hosts_to_make_app(monkeypatch) -> None:
     assert run_app_calls
     assert run_app_calls[0].get("access_log", "unset") is None
     assert run_app_calls[0]["shutdown_timeout"] == 3
+    assert run_app_calls[0]["port"] == port
 
 
 def test_api_docs_describe_bind_allowlist_branches() -> None:

@@ -28,6 +28,18 @@ export function ruleHint(rule: PackLintRule, v: PackLintViolation): string {
       return "Read config in onConfig or once at init with getConfig(); do not call getConfig() from onFrame.";
     case "host-imports-pack-src":
       return "Load shipped packs only via /api/plugins/<id>/module.js (no direct plugins/src imports).";
+    case "glsl-uniform-undeclared":
+      return "Declare `uniform <type> NAME;` in that stage (or the GLSL const it interpolates). "
+        + "A missing declaration fails the shader compile and leaves the tile bare (#171).";
+    case "uniform-set-undeclared":
+      return "Declare the uniform in the shader it is bound to, or stop setting it (a pack can only set host sky uniforms).";
+    case "glsl-uniform-unset":
+      return "Set it in the material's uniforms / onBeforeCompile (or use a host sky uniform in a pack sky).";
+    case "uniform-type-conflict":
+      return "Use the host's type for that uniform (or drop the declaration: the host preamble already declares it). "
+        + "A mismatch fails the sky compile or runs it against the wrong type.";
+    case "write-uniform-not-in-manifest":
+      return "List the uniform under `viz.uniforms` in plugin.yml (it must be a pack sky uniform), or stop writing it.";
     default:
       return "";
   }
@@ -56,6 +68,22 @@ export function ruleMessage(rule: PackLintRule, v: PackLintViolation): string {
       return `${loc} calls getConfig() inside onFrame.`;
     case "host-imports-pack-src":
       return `${loc} reaches pack source (\`${v.target}\`).`;
+    case "glsl-uniform-undeclared": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader reads undeclared uniform ${name}.`;
+    }
+    case "uniform-set-undeclared":
+      return `${loc} binds uniform ${v.target}, which its GLSL never declares.`;
+    case "glsl-uniform-unset": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader reads uniform ${name}, which nothing sets.`;
+    }
+    case "uniform-type-conflict": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader ${v.detail ?? `redeclares host uniform ${name} with a different type`}.`;
+    }
+    case "write-uniform-not-in-manifest":
+      return `${loc} ${v.detail ?? `writeUniform("${v.target}") isn't in plugin.yml viz.uniforms; the host drops the write`}.`;
     default:
       return `${loc} ${rule} → ${v.target}`;
   }

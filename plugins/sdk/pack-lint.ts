@@ -12,7 +12,7 @@ import {
   packSymlinkEscapes,
 } from "./pack-lint-import";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
-import { violationKey } from "./pack-lint-types";
+import { UNIFORM_BLOCKING_RULES, violationKey } from "./pack-lint-types";
 import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowlist";
 import { INLINE_ZOTO_DECLARE_HINT, PACK_ZOTO_BINDING_HINT } from "./viz-zoto";
 
@@ -43,10 +43,16 @@ const SANDBOX_RULES: { target: string; re: RegExp }[] = [
   { target: "indexedDB", re: /\bindexedDB\b/ },
 ];
 
-function listPackIds(packsRoot: string): string[] {
+/**
+ * The pack folders under `packsRoot` (normally `<repo>/plugins/src`), sorted. Dot-folders are
+ * skipped: `plugins/src/.pack-sdk/` is a gitignored runtime cache that the service catalog scan and
+ * `pack-bundle-install.test.ts` write, not a pack. Every lint walk over `plugins/src` (this file's
+ * `scanPluginsSrc` and the #171 (b) uniform scan) and the pack-lint tests use this one list.
+ */
+export function listPackIds(packsRoot: string): string[] {
   return fs
     .readdirSync(packsRoot, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+    .filter((e) => e.isDirectory() && !e.name.startsWith("."))
     .map((e) => e.name)
     .sort();
 }
@@ -273,6 +279,7 @@ const SDK_SKIP_DIRS = new Set([
   "pack-bundle-fixtures",
   "fixtures",
   "starter-regression",
+  "uniform-lint-fixtures",
 ]);
 
 function listSdkModuleTsFiles(sdkRoot: string, rel = ""): string[] {
@@ -308,6 +315,11 @@ export function scanSdkGuardrails(repoRoot: string): PackLintViolation[] {
   return violations;
 }
 
+/**
+ * Import-boundary guardrails only. The CI guardrail scan used by pack-lint.test.ts (which adds the
+ * #171 (b) uniform lint) is `scanAllGuardrails` in `pack-lint-test-support.ts`; this module is loaded
+ * by the install lint, so it deliberately doesn't import `pack-lint-uniforms`.
+ */
 export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
   const merged = [
     ...scanPluginsSrc(repoRoot),
@@ -459,11 +471,15 @@ export function assertBaselineGuard(
   staleViolations: PackLintViolation[];
   disallowedLegacyZoto: PackLintViolation[];
   disallowedHostPackSrc: PackLintViolation[];
+  /** #171 (b) blocking uniform rules ({@link UNIFORM_BLOCKING_RULES}). Never baselined. */
+  disallowedUniformBlocking: PackLintViolation[];
   ok: boolean;
 } {
   const disallowedLegacyZoto = legacyZotoViolationsOnDisallowedPacks(current);
   const disallowedHostPackSrc = disallowedHostPackSrcImports(current);
-  const baselineTracked = (v: PackLintViolation) => v.rule !== "host-imports-pack-src";
+  const disallowedUniformBlocking = current.filter((v) => UNIFORM_BLOCKING_RULES.has(v.rule));
+  const baselineTracked = (v: PackLintViolation) =>
+    v.rule !== "host-imports-pack-src" && !UNIFORM_BLOCKING_RULES.has(v.rule);
   const baseSet = new Set(baseline.violations.filter(baselineTracked).map(violationKey));
   const curSet = new Set(current.filter(baselineTracked).map(violationKey));
   const newViolations = current.filter((v) => baselineTracked(v) && !baseSet.has(violationKey(v)));
@@ -475,9 +491,11 @@ export function assertBaselineGuard(
     staleViolations,
     disallowedLegacyZoto,
     disallowedHostPackSrc,
+    disallowedUniformBlocking,
     ok:
       disallowedLegacyZoto.length === 0 &&
       disallowedHostPackSrc.length === 0 &&
+      disallowedUniformBlocking.length === 0 &&
       newViolations.length === 0 &&
       staleViolations.length === 0,
   };

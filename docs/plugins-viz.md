@@ -230,6 +230,12 @@ On the Vite dev server only, `?vizFixture=idle|idle-failed|golden-live|vm-live`
 feeds shared SDK fixtures to every viz pack instead of live traffic (see
 `plugins/sdk/README.md`). Production builds omit this path.
 
+Fixture change (#181): `plugins/sdk/fixtures/idle.json` (and `vm-live.json`, which
+carries the idle demo slice) gained two internet talkers, `host-05` (rate 36) and
+`host-06` (rate 30), and the `rf` placeholder names moved from `host-05`/`host-06`
+to `host-07`/`host-08`. A pack test that pinned those names or the talker count
+needs updating.
+
 ## Tests
 
 ```bash

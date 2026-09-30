@@ -166,6 +166,15 @@ body[data-softgl] .brand::after {
 .tetris-idle-label.is-visible {
   opacity: 1;
 }
+/* #181: frogger / netpong / invaders demo-data badge, over the board, under the header */
+.arcade > .arcade-idle-label {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--bar-h, 76px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--bg, #000) 70%, transparent);
+}
 .tetris-skip-hud {
   margin-left: 6px;
   text-transform: none;
@@ -2049,3 +2058,12 @@ body.panel-wide #debuglog {
 }
 .wall-notice-alert .wall-notice-row { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
 .wall-notice-action { margin-left: 8px; }
+/* Needs you: the inline source review opens inside the tile notice (no modal). */
+.mosaic-pane-notice .pack-review {
+  pointer-events: auto; max-width: min(34rem, 94%); text-align: left;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); color: var(--fg); font-size: 13px; line-height: 1.4;
+}
+.mosaic-pane-notice .pack-review p { margin: 0 0 8px; }
+.mosaic-pane-notice .pack-review p.muted { color: var(--muted); font-size: 12px; }
+.mosaic-pane-notice .pack-review-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 6px; }

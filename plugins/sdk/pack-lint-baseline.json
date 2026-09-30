@@ -21,11 +21,6 @@
       "target": "declare-const-zoto"
     },
     {
-      "file": "plugins/src/cypher-cic/frontend/pack.ts",
-      "rule": "sandbox-escape",
-      "target": "parent."
-    },
-    {
       "file": "plugins/src/fluid-dyn/frontend/fluid.test.ts",
       "rule": "host-import",
       "target": "vitest"
@@ -39,11 +34,6 @@
       "file": "plugins/src/koi-pond/frontend/index.test.ts",
       "rule": "host-import",
       "target": "vitest"
-    },
-    {
-      "file": "plugins/src/koi-pond/frontend/index.test.ts",
-      "rule": "sandbox-escape",
-      "target": "parent."
     },
     {
       "file": "plugins/src/koi-pond/frontend/index.ts",
@@ -101,14 +91,14 @@
       "target": "declare-const-zoto"
     },
     {
-      "file": "plugins/src/nixie-clock/frontend/index.ts",
-      "rule": "sandbox-escape",
-      "target": "typeof parent"
+      "file": "plugins/src/packet-tunnel/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
     },
     {
-      "file": "plugins/src/nixie-clock/frontend/tubes.ts",
-      "rule": "sandbox-escape",
-      "target": "parent."
+      "file": "plugins/src/rf-constellation/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
     },
     {
       "file": "plugins/src/rocket-car-soccer/frontend/index.ts",
@@ -141,9 +131,14 @@
       "target": "vitest"
     },
     {
-      "file": "plugins/src/syscon/frontend/telemetry.ts",
-      "rule": "sandbox-escape",
-      "target": "parent."
+      "file": "plugins/src/sandbox-fixture-multi/frontend/module.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
+    },
+    {
+      "file": "plugins/src/talker-storm/frontend/pack.test.ts",
+      "rule": "host-import",
+      "target": "vitest"
     },
     {
       "file": "plugins/src/voxel-world/frontend/index.ts",
@@ -194,6 +189,11 @@
       "file": "plugins/src/fractal-zoom/frontend/pack.test.ts",
       "rule": "host-import",
       "target": "vitest"
+    },
+    {
+      "file": "web/src/graph/backdrop.ts",
+      "rule": "uniform-set-undeclared",
+      "target": "uPhoto"
     }
   ]
 }

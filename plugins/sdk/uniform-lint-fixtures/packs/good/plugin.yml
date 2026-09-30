@@ -1,0 +1,14 @@
+id: good
+name: Good (uniform lint fixture)
+version: 1
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  contract: 2
+  uniforms: [uBright, uAccent]
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts

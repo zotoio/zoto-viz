@@ -1,7 +1,8 @@
 import { monoMs } from "../../core/viz-time";
 import { describe, expect, it } from "vitest";
 import type { StateMsg } from "../../core/types";
-import { buildIdleVizFrame } from "./idle-viz-frame";
+import { buildIdleVizFrame, IDLE_VIZ_DEMO_HOSTS } from "./idle-viz-frame";
+import { goldenLanFixture } from "./golden-lan-state";
 import {
   buildVizFrame,
   buildVizFrameForPlugin,
@@ -18,6 +19,31 @@ describe("buildIdleVizFrame", () => {
     expect(frame.headlines.length).toBeGreaterThan(0);
     expect(frame.audio).toBeGreaterThan(0);
     expect(frame.t).toBe(12.5);
+  });
+});
+
+describe("IDLE_VIZ_DEMO_HOSTS (#181 arcade idle feed)", () => {
+  it("is the idle frame's talkers, with their link peers, read-only", () => {
+    const frame = buildIdleVizFrame(1, 0);
+    expect(IDLE_VIZ_DEMO_HOSTS.map((h) => [h.ip, h.role])).toEqual(frame.talkers.map((t) => [t.id, t.role]));
+    for (const h of IDLE_VIZ_DEMO_HOSTS) {
+      const peers = new Set(frame.links.flatMap((l) => (l.src === h.ip ? [l.dst] : l.dst === h.ip ? [l.src] : [])));
+      expect(new Set(h.peers), h.ip).toEqual(peers);
+      expect(h.opens, h.ip).toEqual(frame.links.filter((l) => l.src === h.ip).map((l) => l.dst));
+    }
+    expect(Object.isFrozen(IDLE_VIZ_DEMO_HOSTS) && IDLE_VIZ_DEMO_HOSTS.every((h) => Object.isFrozen(h))).toBe(true);
+  });
+
+  it("is a subset of the golden LAN state (golden-lan-state.ts): every ip, and its name where golden has one", () => {
+    const golden = goldenLanFixture().devices;
+    const off = IDLE_VIZ_DEMO_HOSTS.flatMap((h) => {
+      const g = golden.find((d) => d.ip === h.ip);
+      if (!g) return [`${h.ip} not in the golden LAN state`];
+      const names = g.names.filter((n) => n !== g.ip);
+      return names.length && !names.includes(h.name) ? [`${h.ip} "${h.name}" vs golden ${JSON.stringify(names)}`] : [];
+    });
+    expect(IDLE_VIZ_DEMO_HOSTS.length).toBeGreaterThan(0);
+    expect(off).toEqual([]);
   });
 });
 

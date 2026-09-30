@@ -19,6 +19,12 @@ export const TILE_HEALTH_PATCHES = 5;
 export const TILE_UNIFORM_SPREAD = 6;
 /** Luminance std-dev below this ⇒ near-uniform. */
 export const TILE_UNIFORM_STDDEV = 4;
+/**
+ * #180 confirm: side of the coarse read of the tile's sky alone (no floor, graph or labels),
+ * covering the whole tile. Five 16 px patches can all land on one dark area of a working pack
+ * (nixie-clock's wood between the tubes); a uniform verdict only stands if this read is flat too.
+ */
+export const TILE_SKY_CONFIRM_PX = 64;
 export const TILE_HEAL_PIN_WINDOW_MS = 10 * 60 * 1000;
 export const TILE_HEAL_PIN_COUNT = 3;
 export const TILE_HEAL_BACKOFF_BASE_MS = 2000;
@@ -59,12 +65,17 @@ export interface TileEmptyInput {
   patch: TilePatchBytes;
   signals: TileHealthSignals;
   lastCheckPictureSerial: number;
+  /**
+   * #180: the whole-tile sky read ({@link skyReadIsFlat}) when the five patches read uniform.
+   * `false` overrules the patches (the sky shows something elsewhere); undefined keeps their verdict.
+   */
+  skyFlat?: boolean;
 }
 
 /** True when this 2 s check should count as EMPTY. */
 export function classifyTileEmpty(input: TileEmptyInput): EmptyReason | null {
   if (input.signals.contextLost) return "context-lost";
-  if (patchesAreNearUniform(input.patch)) return "uniform";
+  if (patchesAreNearUniform(input.patch) && input.skyFlat !== false) return "uniform";
   if (input.signals.drawingNothing && input.signals.dataFramesArriving) return "drawing-nothing";
   if (!input.signals.mayBeStatic
     && input.signals.pictureSerial === input.lastCheckPictureSerial) {
@@ -95,6 +106,22 @@ export function patchIsNearUniform(
   const variance = Math.max(0, sumSq / n - mean * mean);
   const std = Math.sqrt(variance);
   return (hi - lo) < spreadThreshold || std < stdThreshold;
+}
+
+/**
+ * #180 confirm: the coarse whole-tile sky read is flat only when every sample's luminance is within
+ * {@link TILE_UNIFORM_SPREAD} of every other. No std-dev escape: a dark sky with a few small lit
+ * features (tubes, stars) is a working pack, not a blank tile.
+ */
+export function skyReadIsFlat(data: TilePatchBytes): boolean {
+  let lo = 255;
+  let hi = 0;
+  for (let i = 0; i + 2 < data.length; i += 4) {
+    const lum = 0.2126 * data[i]! + 0.7152 * data[i + 1]! + 0.0722 * data[i + 2]!;
+    if (lum < lo) lo = lum;
+    if (lum > hi) hi = lum;
+  }
+  return hi - lo < TILE_UNIFORM_SPREAD;
 }
 
 /** Reused 16×16 scratch (no per-check allocation). */

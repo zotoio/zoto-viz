@@ -637,85 +637,85 @@ export function fillPluginFields(
   refreshPluginHudCaption(spec, fields, values);
 }
 
-/** Modal: the operator wrote this plugin, or they examined the source (AI IDE suggested). */
-export function askPluginReview(
-  spec: PluginView,
-  opts?: { signal?: AbortSignal },
-): Promise<"reviewed" | "authored" | null> {
-  return new Promise((resolve) => {
-    const bits: string[] = [];
-    if (spec.runtime === "typescript" || spec.has_frontend) bits.push("sandboxed TypeScript");
-    if (spec.service) bits.push("a Python module loaded into the monitor process");
-    if (spec.has_sky_shader || spec.shader_sha256) bits.push("a custom GLSL sky shader");
-    const what = bits.join(" and ") || "executable code";
+export type PackReviewChoice = "reviewed" | "authored" | null;
 
-    const modal = document.createElement("div");
-    modal.className = "modal ask";
-    modal.setAttribute("role", "dialog");
-    modal.setAttribute("aria-modal", "true");
-    const back = document.createElement("div");
-    back.className = "backdrop";
-    const sheet = document.createElement("div");
-    sheet.className = "sheet";
-    const head = document.createElement("div");
-    head.className = "mhead";
-    const h = document.createElement("strong");
-    h.textContent = `Review “${spec.name}” before activating`;
-    head.appendChild(h);
-    const body = document.createElement("div");
-    body.className = "ask-body";
-    const p1 = document.createElement("p");
-    p1.textContent = `This plugin ships ${what}. That is not the same as a YAML look overlay — it can change how the monitor or graph behaves.`;
-    const p2 = document.createElement("p");
-    p2.textContent = "If you did not write it, examine the source for security issues before continuing. Open the plugin folder in an AI IDE (for example Cursor) and ask it to review the TypeScript, any service/*.py files, and sky/fragment.glsl.";
-    const p3 = document.createElement("p");
-    p3.className = "muted";
-    p3.textContent = spec.file ? `Source: ${spec.file}` : `id ${spec.id} · v${spec.version}`;
-    body.append(p1, p2, p3);
-    const row = document.createElement("div");
-    row.className = "ask-actions";
-    const finish = (kind: "reviewed" | "authored" | null) => {
-      document.body.classList.remove("modal-open");
-      modal.remove();
-      document.removeEventListener("keydown", onKey, true);
-      opts?.signal?.removeEventListener("abort", onAbort);
-      resolve(kind);
-    };
-    const onAbort = () => finish(null);
-    if (opts?.signal?.aborted) {
-      finish(null);
-      return;
+/**
+ * Inline source review inside a tile's Needs you notice (never a modal): what the pack ships, the
+ * advice to examine it, and three buttons. `null` is "Not now", which keeps the tile on Needs you.
+ * Returns a dispose that takes the panel down without a choice.
+ */
+export function renderPackReview(
+  host: HTMLElement,
+  spec: PluginView,
+  opts: { state?: "none" | "changed" | "stale" | "granted"; onChoice: (kind: PackReviewChoice) => void },
+): () => void {
+  const bits: string[] = [];
+  if (spec.runtime === "typescript" || spec.has_frontend) bits.push("sandboxed TypeScript");
+  if (spec.service) bits.push("a Python module loaded into the monitor process");
+  if (spec.has_sky_shader || spec.shader_sha256) bits.push("a custom GLSL sky shader");
+  const what = bits.join(" and ") || "executable code";
+  const name = spec.name || spec.id;
+
+  host.querySelector(":scope > .pack-review")?.remove();
+  const panel = document.createElement("div");
+  panel.className = "pack-review";
+  panel.setAttribute("role", "group");
+  panel.setAttribute("aria-label", `Review ${name}`);
+  const body = document.createElement("div");
+  body.className = "pack-review-body";
+  if (opts.state === "changed" || opts.state === "stale") {
+    const p0 = document.createElement("p");
+    p0.textContent =
+      opts.state === "changed"
+        ? "This version is not the one you approved, so it stays off until you OK it again."
+        : "Your earlier OK did not cover everything it ships now (such as meshes or textures), so it stays off until you OK it again.";
+    body.append(p0);
+  }
+  const p1 = document.createElement("p");
+  p1.textContent = `${name} ships ${what}, so it can change how the monitor or graph behaves.`;
+  const p2 = document.createElement("p");
+  p2.textContent = "If you did not write it, examine the source first: open the plugin folder in an AI IDE (for example Cursor) and ask it to review the TypeScript, any service/*.py files, and sky/fragment.glsl.";
+  const p3 = document.createElement("p");
+  p3.className = "muted";
+  p3.textContent = spec.file ? `Source: ${spec.file}` : `id ${spec.id} · v${spec.version}`;
+  body.append(p1, p2, p3);
+  const row = document.createElement("div");
+  row.className = "pack-review-actions";
+  let done = false;
+  const finish = (kind: PackReviewChoice, notify: boolean) => {
+    if (done) return;
+    done = true;
+    panel.remove();
+    if (notify) opts.onChoice(kind);
+  };
+  const button = (label: string, cls: string, kind: PackReviewChoice) => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = cls;
+    b.textContent = label;
+    // Tile camera / orbit handlers below must not take the press.
+    b.addEventListener("pointerdown", (e) => e.stopPropagation());
+    b.addEventListener("click", (e) => {
+      e.stopPropagation();
+      finish(kind, true);
+    });
+    return b;
+  };
+  const cancel = button("Not now", "btn pack-review-cancel", null);
+  row.append(
+    cancel,
+    button("I wrote this", "btn pack-review-authored", "authored"),
+    button("I examined the source", "btn primary pack-review-reviewed", "reviewed"),
+  );
+  panel.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopPropagation();
+      finish(null, true);
     }
-    opts?.signal?.addEventListener("abort", onAbort, { once: true });
-    const cancel = document.createElement("button");
-    cancel.type = "button";
-    cancel.className = "btn";
-    cancel.textContent = "Not now";
-    cancel.addEventListener("click", () => finish(null));
-    const wrote = document.createElement("button");
-    wrote.type = "button";
-    wrote.className = "btn";
-    wrote.textContent = "I wrote this";
-    wrote.addEventListener("click", () => finish("authored"));
-    const reviewed = document.createElement("button");
-    reviewed.type = "button";
-    reviewed.className = "btn primary";
-    reviewed.textContent = "I examined the source";
-    reviewed.addEventListener("click", () => finish("reviewed"));
-    row.append(cancel, wrote, reviewed);
-    sheet.append(head, body, row);
-    modal.append(back, sheet);
-    back.addEventListener("click", () => finish(null));
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); finish(null); }
-      if (e.key === "Enter" && !e.repeat && document.activeElement === cancel) {
-        e.preventDefault();
-        finish(null);
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    document.body.classList.add("modal-open");
-    document.body.appendChild(modal);
-    cancel.focus();
   });
+  panel.append(body, row);
+  host.append(panel);
+  cancel.focus();
+  return () => finish(null, false);
 }

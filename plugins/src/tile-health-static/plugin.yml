@@ -1,6 +1,7 @@
 id: tile-health-static
 name: Tile health — static detail
 version: 1
+picker: hidden
 hint: Host dogfood pack — mayBeStatic with a still but detailed sky.
 capabilities:
   - viz.read

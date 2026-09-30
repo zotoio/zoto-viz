@@ -7,8 +7,9 @@ import path from "node:path";
 import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowlist";
 import { hostTransportViolations, lintPackSource, scanPluginsSrc } from "./pack-lint";
 import { disallowedHostPackSrcImports, scanService, scanWebSrc } from "./pack-lint-host";
+import { scanUniformDeclarations, uniformTreeScanCount } from "./pack-lint-uniforms";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
-import { violationKey } from "./pack-lint-types";
+import { UNIFORM_BLOCKING_RULES, violationKey } from "./pack-lint-types";
 
 const SDK_ROOT = "plugins/sdk";
 
@@ -18,6 +19,7 @@ const SDK_SKIP_DIRS = new Set([
   "pack-bundle-fixtures",
   "fixtures",
   "starter-regression",
+  "uniform-lint-fixtures",
 ]);
 
 function listSdkModuleTsFiles(sdkRoot: string, rel = ""): string[] {
@@ -53,12 +55,25 @@ function scanSdkGuardrails(repoRoot: string): PackLintViolation[] {
   return violations;
 }
 
+/**
+ * Full-tree scans run so far in this test file's module instance (vitest isolates modules per
+ * file). Every full-tree scan the pack-lint tests run goes through the #171 (b) uniform tree scan:
+ * `scanAllGuardrails` calls it once, and the uniform tests call `scanUniformTree` /
+ * `scanUniformDeclarations` directly. Each pack-lint test file pins this at exactly 1: the rows
+ * share one `beforeAll` scan instead of re-walking the tree.
+ */
+export function fullTreeScanCount(): number {
+  return uniformTreeScanCount();
+}
+
+/** Every guardrail over the real tree (one full-tree scan; see {@link fullTreeScanCount}). */
 export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
   const merged = [
     ...scanPluginsSrc(repoRoot),
     ...scanSdkGuardrails(repoRoot),
     ...scanWebSrc(repoRoot),
     ...scanService(repoRoot),
+    ...scanUniformDeclarations(repoRoot),
   ];
   merged.sort((a, b) => {
     if (a.file !== b.file) return a.file.localeCompare(b.file);
@@ -96,11 +111,18 @@ export function assertBaselineGuard(
   staleViolations: PackLintViolation[];
   disallowedLegacyZoto: PackLintViolation[];
   disallowedHostPackSrc: PackLintViolation[];
+  /**
+   * #171 (b) blocking uniform rules ({@link UNIFORM_BLOCKING_RULES}: undeclared read, pack sky type
+   * conflict, writeUniform outside viz.uniforms). Never baselined.
+   */
+  disallowedUniformBlocking: PackLintViolation[];
   ok: boolean;
 } {
   const disallowedLegacyZoto = legacyZotoViolationsOnDisallowedPacks(current);
   const disallowedHostPackSrc = disallowedHostPackSrcImports(current);
-  const baselineTracked = (v: PackLintViolation) => v.rule !== "host-imports-pack-src";
+  const disallowedUniformBlocking = current.filter((v) => UNIFORM_BLOCKING_RULES.has(v.rule));
+  const baselineTracked = (v: PackLintViolation) =>
+    v.rule !== "host-imports-pack-src" && !UNIFORM_BLOCKING_RULES.has(v.rule);
   const baseSet = new Set(baseline.violations.filter(baselineTracked).map(violationKey));
   const curSet = new Set(current.filter(baselineTracked).map(violationKey));
   const newViolations = current.filter((v) => baselineTracked(v) && !baseSet.has(violationKey(v)));
@@ -112,9 +134,11 @@ export function assertBaselineGuard(
     staleViolations,
     disallowedLegacyZoto,
     disallowedHostPackSrc,
+    disallowedUniformBlocking,
     ok:
       disallowedLegacyZoto.length === 0 &&
       disallowedHostPackSrc.length === 0 &&
+      disallowedUniformBlocking.length === 0 &&
       newViolations.length === 0 &&
       staleViolations.length === 0,
   };
