@@ -983,3 +983,49 @@ describe("applyMode via main host", () => {
     });
   });
 });
+
+describe("wall view opens its wall (Syscon / Cypher CIC, #172)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+  afterEach(() => {
+    vi.advanceTimersByTime(6000);
+    vi.useRealTimers();
+    document.getElementById("apply-mode-test-root")?.replaceChildren();
+    resetModeSwitchStateForTests();
+    resetModeSwitchAttemptForTests();
+    resetPackConsentForTests();
+    resetModeSwitchCoordinatorForTests();
+    clearModeSwitchStatus();
+  });
+
+  it.each([
+    { name: "Syscon", id: "syscon", hero: "off" as const, tiles: ["plugin:cores", "plugin:memory"] },
+    { name: "Cypher CIC", id: "cypher-cic", hero: "center" as const, tiles: ["plugin:topology", "plugin:talkers", "plugin:protocols"] },
+  ])("$name: applyModeImpl does not swap the wall view into its own wall's focus tile", async (w) => {
+    const wallId = `plugin:${w.id}`;
+    const wallSpec: PluginView = {
+      id: w.id, name: w.name, version: 1, capabilities: ["viz.write"], consent: "authored",
+      look: { mosaic: "8", hero: w.hero, mosaicTiles: w.tiles },
+    };
+    const focus = w.tiles[w.hero === "off" ? 0 : 1]!;
+    const setPaneView = vi.fn(() => true);
+    const applyMosaicModeVisuals = vi.fn();
+    const host = buildHost({
+      ensureReviewed: async () => "ok",
+      // applyPluginWall has just laid the wall out (mosaic on, the wall's own tiles on screen).
+      mosaic: { on: true, heroPos: w.hero, heroMode: "", current: "8", tileIds: w.tiles, focusedId: focus, setPaneView, setSize: vi.fn() } as unknown as ApplyModeHost["mosaic"],
+      modeById: (id) => mode(id, id.replace("plugin:", ""), id === wallId ? w.name : id),
+      pluginSpecForMode: (id) => (id === wallId ? wallSpec : null),
+      mosaicHasTile: (id) => w.tiles.includes(id),
+      mosaicFocusSlot: () => focus,
+      mosaicSetPaneView: setPaneView,
+      applyMosaicModeVisuals,
+    });
+    runApply(host, wallId);
+    await flushMicrotasks();
+    expect(setPaneView, `setPaneView calls: ${JSON.stringify(setPaneView.mock.calls)}`).not.toHaveBeenCalled();
+    expect(host.getLiveMode()).toBe(wallId);
+    expect(applyMosaicModeVisuals).toHaveBeenCalledWith(expect.objectContaining({ id: wallId }), {}, wallSpec, false);
+  });
+});

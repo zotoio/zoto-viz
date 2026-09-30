@@ -1568,9 +1568,12 @@ function restoreMosaicAnimSnap(snap: MosaicAnimSnap, preferMode: string): void {
 }
 
 function applyMosaicModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
-  const focusId = mosaic!.tileIds.includes(m.id) ? m.id : mosaic!.tileIds[0] ?? m.id;
+  const onWall = mosaic!.tileIds.includes(m.id);
+  const focusId = onWall ? m.id : mosaic!.tileIds[0] ?? m.id;
   mosaic!.focus(focusId);
-  const target = mosaic!.graphScene(focusId);
+  // A wall view (Syscon, Cypher CIC) is not a tile of its wall: the first tile keeps its own mode (#172).
+  const wallView = !onWall && !!pluginWall(lookForMode(m.id) ?? spec?.look);
+  const target = wallView ? undefined : mosaic!.graphScene(focusId);
   if (target) {
     target.setMode(m, opts);
     target.setStageOnly(skyStage);
@@ -1686,7 +1689,12 @@ async function applyMosaicModeAsync(m: ViewMode, flags: ApplyModeFlags, signal: 
   const opts = optsFor(m);
   const prevMode = liveMode;
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  const sw = await runMosaicPaneSwitch(m.id, undefined, signal);
+  // A wall view is the wall applyPluginWall lays out below, not a pane: a pane switch would put it
+  // over its own wall's first tile (the onAfterSetSize re-entry lands here mid-layout, #172).
+  const wallView = !!pluginWall(lookForMode(m.id) ?? spec?.look);
+  const sw = wallView
+    ? { ok: (await ensureReviewed(spec, signal)) === "ok" }
+    : await runMosaicPaneSwitch(m.id, undefined, signal);
   if (signal.aborted) {
     settleConsentAndDrainAuto("aborted");
     return;
