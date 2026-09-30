@@ -36,7 +36,8 @@ function expectPackStartConsentBlocked(opts: {
 
 function host(over: Partial<SwitchPaneViewHost> & Pick<SwitchPaneViewHost, "tileIds">): SwitchPaneViewHost {
   return {
-    focusedId: null,
+    focusedId: "",
+    mainTileId: "",
     setPaneView: vi.fn(() => true),
     setPaneNotice: vi.fn(),
     focus: vi.fn(),
@@ -46,7 +47,7 @@ function host(over: Partial<SwitchPaneViewHost> & Pick<SwitchPaneViewHost, "tile
 
 function runSwitch(
   m: SwitchPaneViewHost,
-  mountView: ReturnType<typeof vi.fn>,
+  mountView: (viewId: string) => void | Promise<void>,
 ): (toViewId: string, fromViewId?: string) => Promise<SwitchPaneViewResult> {
   return (toViewId, fromViewId) =>
     switchPaneView(m, toViewId, {
@@ -104,7 +105,7 @@ function makeMosaic(
       panePickDeps,
     ),
   );
-  mosaic.setSize("2", "plugin:topology", "off", {
+  mosaic.setSize("4", "plugin:topology", "off", {
     tiles: ["plugin:topology", "plugin:wifi"],
   });
   mosaic.focus("plugin:topology");
@@ -209,7 +210,7 @@ describe("consent blocks pack start paths", () => {
     s.addAnimation(() => {}, { el: document.createElement("div") });
     s.applyAnim({
       ...DEFAULT_DREAM,
-      mosaic: "2",
+      mosaic: "4",
       mosaicTiles: ["plugin:topology", "plugin:wifi"],
     });
     s.open("view");

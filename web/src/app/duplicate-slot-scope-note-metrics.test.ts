@@ -4,6 +4,7 @@ import * as pluginUi from "../plugins/plugin-ui";
 import { loadSettingsDeclFixture } from "../plugins/test/load-settings-fixture";
 import { Settings } from "../ui/settings";
 import { applyWallLayoutPatch } from "./mosaic-wall-layout";
+import type { MosaicLayoutPatch } from "../graph/mosaic";
 
 const PACK = "plugin:settings-fixture";
 
@@ -38,7 +39,7 @@ describe("duplicate slot shared config > pack scope note write budget", () => {
     await openFixtureDrawer(settings);
 
     const twoTiles = [PACK, `${PACK}!1`, "plugin:topology", "plugin:memory"];
-    const patches = [
+    const patches: MosaicLayoutPatch[] = [
       { tree: null, maximized: PACK, tiles: twoTiles },
       { tree: null, maximized: null, tiles: twoTiles },
       {

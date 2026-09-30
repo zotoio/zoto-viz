@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { monoMs } from "../core/viz-time";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
   assertFlowWorkScaleBounded,
@@ -43,9 +44,9 @@ describe("viz build count gates", () => {
     const baseFlows = 300;
     const stateN = fatLanFixture({ flowCount: baseFlows, seed: 0x5a5a });
     const state4N = fatLanFixture({ flowCount: baseFlows * 4, seed: 0x5a5a });
-    buildVizFrame(stateN, 0, 0);
+    buildVizFrame(stateN, monoMs(0), 0);
     const workN = takeVizBuildWorkSnapshot();
-    buildVizFrame(state4N, 0, 0);
+    buildVizFrame(state4N, monoMs(0), 0);
     const work4N = takeVizBuildWorkSnapshot();
     expect(assertFlowWorkScaleBounded(baseFlows, workN, baseFlows * 4, work4N)).toBe(true);
     expect(flowWorkWithinCap(stateN.flows.length, workN)).toBe(true);
@@ -73,7 +74,7 @@ describe("viz build count gates", () => {
         items: Array.from({ length: 72 }, (_, i) => ({ title: `Item ${i}` })),
       },
     };
-    buildVizFrame(state, 0, 0);
+    buildVizFrame(state, monoMs(0), 0);
     const drops = takeVizDecimationDropStats();
     expect(drops.headlinesEligible).toBeGreaterThan(64);
     expect(drops.headlinesKept).toBeLessThanOrEqual(64);
@@ -82,7 +83,7 @@ describe("viz build count gates", () => {
 
   it("fat LAN seeded frame meets output caps and build work gates together", () => {
     const state = fatLanFixture();
-    const frame = buildVizFrame(state, 0, 0);
+    const frame = buildVizFrame(state, monoMs(0), 0);
     const work = takeVizBuildWorkSnapshot();
     const drops = takeVizDecimationDropStats();
     assertVizBuildWorkGates(state, work);
@@ -94,7 +95,7 @@ describe("viz build count gates", () => {
 
   it("output caps match decimation drop stats on seeded fat LAN", () => {
     const state = fatLanFixture();
-    const frame = buildVizFrame(state, 0, 0);
+    const frame = buildVizFrame(state, monoMs(0), 0);
     const drops = takeVizDecimationDropStats();
     expect(frame.talkers.length).toBeLessThanOrEqual(VIZ_MAX_TALKER_SAMPLES);
     expect(frame.packets.length).toBeLessThanOrEqual(VIZ_MAX_PACKET_SAMPLES);

@@ -83,7 +83,7 @@ describe("#175 app sky brightness reaches the pack sky uniform (frame-row calibr
     graph.setStageOnly(!!look.stageOnly);
     graph.setAnim(mergeLook(s.anim, look));
     const source = readFileSync(path.join(packs, id, "sky/fragment.glsl"), "utf8");
-    expect(graph.setPluginShader({ id, source }), `${id} sky binds`).toBeNull();
+    expect(graph.setPluginShader({ id, source }, { packId: id, packName: id }), `${id} sky binds`).toBeNull();
     expect(s.backdrop.pluginSkyId(), "pack sky is the drawn material").toBe(id);
     graph.setActive(true);
     let t = 1000;

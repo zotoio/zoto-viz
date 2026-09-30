@@ -1,16 +1,44 @@
+// @ts-check
 /**
  * Shared pack bundle import resolver (lint + esbuild must agree).
+ * #192: typed by the JSDoc here (web/tsconfig.test.json includes this file; allowJs, checkJs off);
+ * there is no separate .d.mts.
  */
 import fs from "node:fs";
 import path from "node:path";
 
+/**
+ * @typedef {"empty-specifier" | "remote-import" | "vite-fs-import" | "absolute-import" | "bare-module"
+ *   | "unknown-specifier" | "missing-file" | "outside-boundary"} PackBundleResolveCode
+ */
+/**
+ * @typedef {{ specifier: string, importerFile: string, packHome: string, sdkRoot: string, repoRoot?: string }}
+ *   ResolvePackBundleImportOptions
+ */
+/**
+ * @typedef {{ ok: true, path: string, zone: "pack" | "sdk" }
+ *   | { ok: true, external: true }
+ *   | { ok: false, code: PackBundleResolveCode, reason: string, resolved?: string }} PackBundleResolveResult
+ */
+/** @typedef {{ packName?: string, packId?: string, file?: string, import?: string }} BundleBoundaryPayload */
+
+/** Bare modules the pack bundle leaves external. */
 export const PACK_BUNDLE_EXTERNALS = new Set(["three", "d3-force-3d"]);
 
+/**
+ * `spec` without a `?query` suffix.
+ * @param {string} spec
+ * @returns {string}
+ */
 export function stripImportSuffix(spec) {
   const q = spec.indexOf("?");
   return q >= 0 ? spec.slice(0, q) : spec;
 }
 
+/**
+ * @param {string} abs
+ * @returns {string | null}
+ */
 function realpathSafe(abs) {
   try {
     return fs.realpathSync.native(abs);
@@ -19,6 +47,11 @@ function realpathSafe(abs) {
   }
 }
 
+/**
+ * @param {string} root
+ * @param {string} candidate
+ * @returns {boolean}
+ */
 function insideRoot(root, candidate) {
   const realRoot = realpathSafe(root);
   const realCand = realpathSafe(candidate);
@@ -27,6 +60,10 @@ function insideRoot(root, candidate) {
   return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
 }
 
+/**
+ * @param {string} baseAbs
+ * @returns {string}
+ */
 function resolveWithExtensions(baseAbs) {
   const tries = [
     baseAbs,
@@ -44,14 +81,26 @@ function resolveWithExtensions(baseAbs) {
   return baseAbs;
 }
 
+/**
+ * @param {string} spec
+ * @returns {boolean}
+ */
 function isRemoteSpecifier(spec) {
   return /^https?:\/\//i.test(stripImportSuffix(spec));
 }
 
+/**
+ * @param {string} spec
+ * @returns {boolean}
+ */
 function isViteFsSpecifier(spec) {
   return stripImportSuffix(spec).startsWith("/@fs/");
 }
 
+/**
+ * @param {string} spec
+ * @returns {boolean}
+ */
 function isBareModule(spec) {
   const bare = stripImportSuffix(spec);
   if (!bare || bare.startsWith(".") || bare.startsWith("/")) return false;
@@ -60,8 +109,8 @@ function isBareModule(spec) {
 }
 
 /**
- * @param {{ specifier: string, importerFile: string, packHome: string, sdkRoot: string, repoRoot?: string }} opts
- * @returns {{ ok: true, path: string, zone: 'pack'|'sdk' } | { ok: true, external: true } | { ok: false, reason: string, code: string }}
+ * @param {ResolvePackBundleImportOptions} opts
+ * @returns {PackBundleResolveResult}
  */
 export function resolvePackBundleImport(opts) {
   const { specifier, importerFile, packHome, sdkRoot, repoRoot } = opts;
@@ -86,6 +135,7 @@ export function resolvePackBundleImport(opts) {
   }
 
   const importerDir = path.dirname(importerFile);
+  /** @type {string} */
   let abs;
   const packSdkRel = bare.match(/^(?:\.\.\/)+sdk\/(.+)$/);
   if (packSdkRel) {
@@ -131,6 +181,8 @@ export function resolvePackBundleImport(opts) {
 /**
  * #185: same shape as service/pack_block_copy.py. The file, the import and the README link are
  * diagnostics (payload fields / the log), never user text.
+ * @param {BundleBoundaryPayload} payload
+ * @returns {string}
  */
 export function formatBundleBoundaryError(payload) {
   const { packName, packId } = payload;

@@ -1122,6 +1122,15 @@ export interface SceneOpts {
   panelId?: string;
 }
 
+/** The pack a tile's sky belongs to: the host tracks its compile, fallback and cant-draw state by it. */
+export type PackSkyMeta = {
+  packId: string;
+  packName: string;
+  look?: Record<string, string>;
+  packKey?: string;
+  isShaderPack?: boolean;
+};
+
 export class NetScene implements HostedView, RenderScalePane {
   readonly renderer: HostGpu;
   /** shared renderer this scene draws through, or null when it owns `renderer` */
@@ -2333,17 +2342,15 @@ export class NetScene implements HostedView, RenderScalePane {
     return this.pulse.resumeFromUserClick();
   }
 
-  /** Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program). */
-  setPluginShader(
-    opts: { id: string; source: string } | null,
-    meta?: {
-      packId: string;
-      packName: string;
-      look?: Record<string, string>;
-      packKey?: string;
-      isShaderPack?: boolean;
-    },
-  ): string | null {
+  /**
+   * Compile a plugin sky fragment onto the far-field sphere (or restore the shipped program).
+   * Installing a sky needs its pack (#171 c / #179): without it the host never begins the tile's
+   * pack or probes the compile, so a failing shader would never reach the tile's fallback and
+   * cant-draw state. Clearing (`null`) needs no pack.
+   */
+  setPluginShader(opts: null): string | null;
+  setPluginShader(opts: { id: string; source: string }, meta: PackSkyMeta): string | null;
+  setPluginShader(opts: { id: string; source: string } | null, meta?: PackSkyMeta): string | null {
     if (opts && meta && this.host) {
       this.host.beginTilePack(
         this.tileId,

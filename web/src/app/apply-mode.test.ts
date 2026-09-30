@@ -14,6 +14,8 @@ import * as pluginModule from "../plugins/plugin";
 import { attachPluginFrontend } from "../plugins/plugin";
 import { resetNeedsYouForTests, waitForTileReview } from "./needs-you";
 import { resetViewStatesForTests, viewStateOf } from "./view-state";
+import { bindCantDrawViewState } from "./cant-draw-state";
+import type { TileDrawEvent } from "../graph/render-host-tile-shader";
 import {
   addModeSwitchAbortListener,
   beginModeSwitchAttempt,
@@ -485,6 +487,54 @@ describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no
     expect(host.modeSel.value).toBe("plugin:packet-tunnel");
     expect(sceneEl().dataset.viewState).toBe("couldnt-start");
     expect(sceneNotice()?.textContent).toContain("Tunnel couldn't start.");
+  });
+
+  /** The host's draw events as bindCantDrawViewState hears them: a row emits a shader failure by hand. */
+  function drawEvents(): { emit: (e: TileDrawEvent) => void; off: () => void } {
+    const listeners = new Set<(e: TileDrawEvent) => void>();
+    const off = bindCantDrawViewState({
+      onDrawEvent: (fn) => { listeners.add(fn); return () => { listeners.delete(fn); }; },
+    });
+    return { emit: (e) => listeners.forEach((fn) => fn(e)), off };
+  }
+
+  it("the pick's own pack failed to compile: its cant-draw / shader stays, not a generic Couldn't start (#171 c)", async () => {
+    const draw = drawEvents();
+    onTestFinished(draw.off);
+    const host = buildHost({
+      ensureReviewed: async () => "ok",
+      syncPluginSky: async () => {
+        draw.emit({ type: "shader-failed", tileId: "main", packId: "packet-tunnel", log: "ERROR: 0:3: 'x' : undeclared identifier" });
+        throw new Error("shader failed");
+      },
+    });
+    runApply(host, "plugin:packet-tunnel");
+    await flushMicrotasks();
+    await vi.waitFor(() => {
+      expect(viewStateOf("main")).toEqual({ kind: "cant-draw", reason: "shader", packId: "packet-tunnel", log: "ERROR: 0:3: 'x' : undeclared identifier" });
+    });
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+  });
+
+  it("pack scope: another pack's stale shader failure landing during the pick never stands in for the pick's Couldn't start (#171 c)", async () => {
+    const draw = drawEvents();
+    onTestFinished(draw.off);
+    const host = buildHost({
+      ensureReviewed: async () => "ok",
+      // Stereo's sky failure from before lands on the tile while Tunnel is being picked, then
+      // Tunnel's own sky load fails for another reason (not a compile).
+      syncPluginSky: async () => {
+        draw.emit({ type: "shader-failed", tileId: "main", packId: "stereo-gram", log: "stale stereo compile error" });
+        throw new Error("sky fetch failed");
+      },
+    });
+    runApply(host, "plugin:packet-tunnel");
+    await flushMicrotasks();
+    await vi.waitFor(() => {
+      expect(viewStateOf("main"), "the pick's tile").toEqual({ kind: "couldnt-start", reason: "load-failed", packId: "packet-tunnel", log: "sky fetch failed" });
+    });
+    expect(sceneNotice()?.textContent).toContain("Tunnel couldn't start.");
+    expect(sceneNotice()?.querySelector("button")?.textContent).toBe("Retry");
   });
 
   it("dream-cycle while B consent open then accept records consent, HUD, and load", async () => {

@@ -24,7 +24,7 @@ function mountLive() {
   const spec = loadSettingsDeclFixture();
   setPluginModes([
     compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
-    ...(["topology", "memory", "disk"] as const).map((id) => compilePlugin({ id, packName: id, version: 1, engine: "graph", base: id })),
+    ...(["topology", "memory", "disk"] as const).map((id) => compilePlugin({ id, name: id, packName: id, version: 1, engine: "graph", base: id })),
   ]);
   const settings = new Settings({ storePrefix: "zoto-scope-note-live", onChange: () => {} });
   document.body.append(settings.el);
@@ -135,14 +135,14 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     g.focus();
     g.value = "9";
     g.dispatchEvent(new Event("input", { bubbles: true }));
-    expect(settings.pop.dataset.viewPluginDirty).toBe("1");
+    expect(settings["pop"].dataset.viewPluginDirty).toBe("1");
     const layoutTrigger = mosaicLayoutPickerTrigger(settings);
     pickMosaicSlot(settings, 1, "plugin:memory");
     pickMosaicSlot(settings, 0, "plugin:topology");
     await raf();
     expect(settings.isOpen).toBe(true);
     expect(errSpy).not.toHaveBeenCalled();
-    expect(viewDrawerStatusLine(settings)?.textContent).toBe(DISCARD(spec.packName));
+    expect(viewDrawerStatusLine(settings)?.textContent).toBe(DISCARD(spec.packName ?? ""));
     expect(document.activeElement).toBe(layoutTrigger);
     expect(layoutTrigger.getAttribute("aria-label")).toBe("Layout");
     expectVisibleFocusTarget(layoutTrigger);
