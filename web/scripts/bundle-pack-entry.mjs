@@ -144,7 +144,7 @@ async function runInstallLint() {
     lint = await import(`./${stamp.BUILT_LINT_FILE}`);
   } catch (err) {
     const missing = err?.code === "ERR_MODULE_NOT_FOUND" && String(err?.message || "").includes(stamp.BUILT_LINT_FILE);
-    refuseLintSetup(`built lint not importable: ${errCode(err)}`, missing ? SETUP_REASONS.missing : SETUP_REASONS.unloadable);
+    refuseLintSetup(`built lint not importable: ${errCode(err)}; ${stamp.REBUILD_HINT}`, missing ? SETUP_REASONS.missing : SETUP_REASONS.unloadable);
   }
   const stale = stamp.staleReason(lint.PACK_INSTALL_LINT_BUILD, scriptRepoRoot);
   if (stale) refuseLintSetup(stale, SETUP_REASONS.stale);

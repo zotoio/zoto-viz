@@ -187,7 +187,7 @@ describe("#186 the prebuilt install lint is the TS source, built", () => {
     const committed = readFileSync(BUILT_PATH, "utf8");
     expect(
       committed === fresh,
-      "web/scripts/pack-install-lint.built.mjs doesn't match plugins/sdk: run `pnpm install` in web/ (prepare rebuilds it) and commit it",
+      "web/scripts/pack-install-lint.built.mjs doesn't match plugins/sdk: run `pnpm run prepare` in web/ and commit it",
     ).toBe(true);
     const built = await importFile<BuiltLint>(BUILT_PATH);
     const { staleReason } = await importFile<StampModule>(path.join(webRoot, "scripts/pack-install-lint-stamp.mjs"));

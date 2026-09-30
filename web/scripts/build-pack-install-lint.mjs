@@ -8,7 +8,8 @@
  *   node scripts/build-pack-install-lint.mjs --check  exit 1 if the committed file is stale
  *
  * The built file is committed (a pull without a reinstall, or an `--ignore-scripts` install, still has
- * a correct one) and `prepare` regenerates it on every `pnpm install` in web/. Without esbuild (e.g.
+ * a correct one) and `prepare` regenerates it when `pnpm install` in web/ installs anything (pnpm skips
+ * it when node_modules is already up to date; `pnpm run prepare` always works). Without esbuild (e.g.
  * `pnpm install --prod`) `prepare` keeps the committed file and exits 0; bundle-pack-entry.mjs refuses
  * the install (exit 3) if that file is missing or doesn't match the sources.
  */
@@ -71,7 +72,7 @@ async function main() {
   const current = fs.existsSync(BUILT_LINT_PATH) ? fs.readFileSync(BUILT_LINT_PATH, "utf8") : null;
   if (current === text) return;
   if (check) {
-    console.error(`web/scripts/${BUILT_LINT_FILE} is ${current === null ? "missing" : "stale"}; run \`pnpm install\` in web/`);
+    console.error(`web/scripts/${BUILT_LINT_FILE} is ${current === null ? "missing" : "stale"}; run \`pnpm run prepare\` in web/`);
     process.exit(1);
   }
   fs.writeFileSync(BUILT_LINT_PATH, text);

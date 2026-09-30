@@ -10,6 +10,12 @@ import path from "node:path";
 
 export const BUILT_LINT_FILE = "pack-install-lint.built.mjs";
 
+/**
+ * For the diagnostic line only. A fresh `pnpm install` runs web/'s `prepare` (which rebuilds the file),
+ * but pnpm skips it when node_modules is already up to date, so name the command that always works.
+ */
+export const REBUILD_HINT = "rebuild it with `pnpm run prepare` in web/ (an up-to-date `pnpm install` skips prepare)";
+
 /** sha256 over `rel \0 bytes \0` for each input, in sorted order. */
 export function inputsDigest(root, inputs) {
   const h = createHash("sha256");
@@ -34,7 +40,7 @@ export function staleReason(build, root) {
     return `built lint sources unreadable: ${String(err?.code || err?.message || err)}`;
   }
   if (now !== build.sha256) {
-    return `built lint is stale: sources changed since it was built (${build.sha256.slice(0, 12)} -> ${now.slice(0, 12)})`;
+    return `built lint is stale: sources changed since it was built (${build.sha256.slice(0, 12)} -> ${now.slice(0, 12)}); ${REBUILD_HINT}`;
   }
   return null;
 }
