@@ -29,6 +29,7 @@ import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
 import { syncVizTileScope } from "./viz-tile-budget";
 import { validateVizWriteBatch, vizWriteBatchByteSize, type VizWriteBatchPayload } from "./viz-write-batch";
 import { notePackWriteBatch } from "../core/pack-host-perf";
+import { SKY_WAIT_DRIFT_MS } from "../app/sky-wait";
 
 /** Test hook: shorten sandbox handshake waits. */
 let sandboxMsgTimeoutMs = 15_000;
@@ -44,6 +45,41 @@ export function seedPackAssetFrameForTests(tileId = "main", frameId = TEST_FALLB
 
 export function sandboxMsgTimeoutForTests(): number {
   return sandboxMsgTimeoutMs;
+}
+
+/** Late fires a boot wait re-arms for; the next late fire (or any on-time expiry) rejects. */
+export const SANDBOX_BOOT_LATE_REARMS = 1;
+
+/**
+ * #216: a boot-wait deadline that fires more than SKY_WAIT_DRIFT_MS late means the host main
+ * thread was blocked (e.g. a synchronous sky compile), so the frame had no fair window. First
+ * yield one task: an answer the frame posted meanwhile is handled then, and the wait's finish()
+ * clears this timer (resolved, no re-arm, no log). Still waiting: start the window again, as
+ * sky-wait does, at most SANDBOX_BOOT_LATE_REARMS times. `expire` rejects the wait.
+ */
+function armBootDeadline(type: string, expire: () => void): () => void {
+  let timer = 0;
+  let rearms = 0;
+  const arm = (): void => {
+    const due = performance.now() + sandboxMsgTimeoutMs;
+    timer = window.setTimeout(() => {
+      if (performance.now() - due <= SKY_WAIT_DRIFT_MS) {
+        expire();
+        return;
+      }
+      timer = window.setTimeout(() => {
+        if (rearms >= SANDBOX_BOOT_LATE_REARMS) {
+          expire();
+          return;
+        }
+        rearms++;
+        console.info(`[zoto-viz plugin] wait=${type} step=deadline-restart reason=main-thread-blocked`);
+        arm();
+      }, 0);
+    }, sandboxMsgTimeoutMs);
+  };
+  arm();
+  return () => window.clearTimeout(timer);
 }
 
 let sandboxFramePostMessageCount = 0;
@@ -693,7 +729,7 @@ function waitPluginMsg(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const finish = (fn: () => void) => {
-      window.clearTimeout(timer);
+      clearDeadline();
       window.removeEventListener("message", onMsg);
       setBootWaitCancel(sandbox, null);
       fn();
@@ -701,9 +737,7 @@ function waitPluginMsg(
     const fail = (err: Error) => finish(() => reject(err));
     onReject?.(fail);
     setBootWaitCancel(sandbox, () => finish(() => resolve()));
-    const timer = window.setTimeout(() => {
-      finish(() => reject(new Error(`sandbox ${type} timeout`)));
-    }, sandboxMsgTimeoutMs);
+    const clearDeadline = armBootDeadline(type, () => finish(() => reject(new Error(`sandbox ${type} timeout`))));
     const onMsg = (ev: MessageEvent) => {
       if (ev.source !== iframe.contentWindow) return;
       const d = ev.data as PluginWindowMsg | undefined;
@@ -723,7 +757,7 @@ function waitPluginPortMsg(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     const finish = (fn: () => void) => {
-      window.clearTimeout(timer);
+      clearDeadline();
       port.removeEventListener("message", onMsg);
       setBootWaitCancel(sandbox, null);
       fn();
@@ -731,9 +765,7 @@ function waitPluginPortMsg(
     const fail = (err: Error) => finish(() => reject(err));
     onReject?.(fail);
     setBootWaitCancel(sandbox, () => finish(() => resolve()));
-    const timer = window.setTimeout(() => {
-      finish(() => reject(new Error(`sandbox ${type} timeout`)));
-    }, sandboxMsgTimeoutMs);
+    const clearDeadline = armBootDeadline(type, () => finish(() => reject(new Error(`sandbox ${type} timeout`))));
     const onMsg = (ev: MessageEvent) => {
       const d = ev.data as PluginPortMsg | undefined;
       if (d?.source !== PLUGIN_SOURCE) return;
