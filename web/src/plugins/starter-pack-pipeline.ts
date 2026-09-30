@@ -83,6 +83,23 @@ function runServicePython(python: string, script: string, cwd: string, env: Node
   }
 }
 
+export type StarterCiPythonGate = { ready: boolean; python: string; reason: string };
+
+/**
+ * #229: whether the starter CI compile/draw rows can run: the interpreter repoPython picks imports the
+ * service. `reason` names that interpreter when it cannot, so a skip says why.
+ */
+export function starterCiPythonReady(repoRoot: string, seams: RepoPythonSeams = {}): StarterCiPythonGate {
+  const python = repoPython(repoRoot, seams);
+  try {
+    runServicePython(python, "from service import plugins", repoRoot, { ...(seams.env ?? process.env), PYTHONPATH: repoRoot });
+    return { ready: true, python, reason: "" };
+  } catch (err) {
+    const first = (err instanceof Error ? err.message : String(err)).split("\n")[0];
+    return { ready: false, python, reason: first };
+  }
+}
+
 /** Run service.plugins.scan() on a staged plugins/src/<id> tree. */
 export function scanStarterPackCatalog(
   repoRoot: string,

@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,24 +16,12 @@ import {
   runStarterPackDrawPipeline,
   STARTER_CI_PACK_ID,
   stageStarterTree,
+  starterCiPythonReady,
 } from "./starter-pack-pipeline";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const esbuildBin = path.join(repoRoot, "web/node_modules/.bin/esbuild");
 const starterTemplate = path.join(repoRoot, "plugins/sdk/starter");
-
-function pythonDepsReady(): boolean {
-  try {
-    execFileSync("python3", ["-c", "from service import plugins"], {
-      cwd: repoRoot,
-      env: { ...process.env, PYTHONPATH: repoRoot },
-      stdio: "ignore",
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function lintStarterAsShippedPack(packRoot: string) {
   return scanPackDirectory(packRoot, repoRoot);
@@ -48,8 +35,13 @@ function withSysFailed(frame: VizDataFrame, failed: number): VizDataFrame {
   };
 }
 
-const ciDrawReady = existsSync(esbuildBin) && pythonDepsReady();
+// #229: gate on the interpreter the rows actually use (repoPython), not on bare python3.
+const pythonGate = starterCiPythonReady(repoRoot);
+const ciDrawReady = existsSync(esbuildBin) && pythonGate.ready;
 const ciCompileReady = ciDrawReady;
+if (!ciCompileReady) {
+  console.warn(`starter-pack-ci: compile/draw rows skipped: ${existsSync(esbuildBin) ? pythonGate.reason : `no ${esbuildBin}`}`);
+}
 
 describe("pack starter template CI", () => {
   afterAll(async () => {
@@ -149,6 +141,16 @@ describe("pack starter template CI", () => {
       rmSync(stageRoot, { recursive: true, force: true });
     }
   });
+
+  it("#229 gate: ready on ZOTO_VIZ_PYTHON when the repo .venv is hidden from the picker", () => {
+    const venvPython = path.join(repoRoot, ".venv/bin/python");
+    expect(existsSync(venvPython), `needs ${venvPython} with requirements.txt installed`).toBe(true);
+    const gate = starterCiPythonReady(repoRoot, {
+      env: { ...process.env, ZOTO_VIZ_PYTHON: venvPython },
+      exists: () => false,
+    });
+    expect(gate).toEqual({ ready: true, python: venvPython, reason: "" });
+  }, 60_000);
 
   it("idle vs idle-failed failure visuals differ (starter sim)", () => {
     const idleFrame = VIZ_FIXTURE_IDLE;
