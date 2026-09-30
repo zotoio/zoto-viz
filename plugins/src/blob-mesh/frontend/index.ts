@@ -11,7 +11,7 @@ host.onFrame = (frame: VizDataFrame) => {
   // stays inside the coverage budget (#174, plugins/sdk/blob-mesh-budget.ts). The host mirror
   // viz-pack-host.ts runPackFrameHandler("blob-mesh") writes the same slots from the same code.
   host.writeBuffer(0, packBlobMeshSlots(frame.talkers, frame.t).slot0);
-  host.writeUniform("uBright", 0.8 + Math.min(0.35, (frame.talkers[0]?.rate ?? 0) / 80) + frame.audio * 0.2);
+  host.writeUniform("uBright", 0.8 + frame.audio * 0.2); // #174 UX Pro: size is the only rate signal, no rate term
   host.writeUniform("uAudio", frame.audio);
   host.writeUniform("uAccent", [0.25, 0.75, 0.95]);
 };

@@ -224,7 +224,7 @@ export function runPackFrameHandler(
       handlers.setInfoNotice?.(
         blobMeshNoticeLatchFor(nixiePackTileId(opts)).update(blob.plan.shownIdx.length, blob.plan.hidden, Date.now(), blob.plan.tieAtCut),
       );
-      handlers.writeUniform("uBright", 0.8 + Math.min(0.35, (frame.talkers[0]?.rate ?? 0) / 80) + frame.audio * 0.2);
+      handlers.writeUniform("uBright", 0.8 + frame.audio * 0.2); // #174 UX Pro: size is the only rate signal, no rate term
       handlers.writeUniform("uAudio", frame.audio);
       handlers.writeUniform("uAccent", [0.25, 0.75, 0.95]);
       break;
