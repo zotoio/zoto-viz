@@ -11,6 +11,7 @@ The monitor WebSocket broadcast loop (`service/monitor.py` `broadcast_loop`) sti
 ## Instrumentation
 
 Enable with `?packPerf=1` or `localStorage.setItem('zoto-viz.packPerf', '1')`.
+The flag is read once at page load and cached (#196). Changing `?packPerf` needs a reload. A localStorage change applies live in other tabs (the `storage` event); in the same tab (e.g. devtools) it needs a reload, unless the code that writes the key calls `refreshPackPerfEnabled()`. Either source enables it (OR), so with `?packPerf` in the URL, clearing localStorage keeps it on until a reload.
 
 | Signal | Meaning |
 |--------|---------|
@@ -27,7 +28,7 @@ Enable with `?packPerf=1` or `localStorage.setItem('zoto-viz.packPerf', '1')`.
 - MCP: `tools/call` → `get_pack_perf` on `POST /mcp`
 - Debug panel (B): monitor log unchanged; perf JSON is via HTTP/MCP above
 
-Overhead when disabled: a single `packPerfEnabled()` boolean check on hot paths (see `packHostPerfOverheadProbe` in vitest).
+Overhead when disabled: a single cached `packPerfEnabled()` boolean check on hot paths, with 0 storage reads and 0 URL parses per frame (counted in `web/src/core/pack-host-perf.test.ts`; wall-clock timing belongs to the local GPU runner, reported, never asserted).
 
 ## Sandbox safety
 

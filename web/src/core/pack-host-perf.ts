@@ -1,6 +1,13 @@
 /**
  * Pack-host frame instrumentation (near-zero cost when disabled).
- * Enable with URL `?packPerf=1` or localStorage `zoto-viz.packPerf=1`.
+ * Enabled = localStorage `zoto-viz.packPerf` === "1" OR the boot URL has `?packPerf` (OR, as before #196).
+ * The flag is resolved once at module init and cached: hooks and caller gates read a boolean, never
+ * storage or the URL (#196).
+ * - `?packPerf` is read at init only: changing it needs a reload.
+ * - localStorage changes apply live in OTHER tabs (the `storage` event). In the SAME tab (e.g. a
+ *   devtools edit) they need a reload, unless the code that writes the key calls
+ *   {@link refreshPackPerfEnabled} (nothing in the app writes it today).
+ * - With `?packPerf` in the boot URL, turning localStorage off does not disable recording until a reload.
  */
 
 import { harvestGpu } from "./gpu-time";
@@ -61,18 +68,67 @@ function p50p99(samples: number[]): { p50: number; p99: number } {
   return { p50: percentile(sorted, 0.5), p99: percentile(sorted, 0.99) };
 }
 
-export function packPerfEnabled(): boolean {
-  if (typeof window === "undefined") return false;
+/** Boot `?packPerf`: read once at module init (changing it needs a reload). */
+let bootUrlOn = false;
+/** Last read of localStorage `zoto-viz.packPerf` === "1" (init, `storage` event, refresh). */
+let storeOn = false;
+/** Cached flag: storeOn OR bootUrlOn. */
+let flagOn = false;
+
+function readStoreOn(): boolean {
   try {
-    if (localStorage.getItem(PACK_PERF_STORE) === "1") return true;
+    return localStorage.getItem(PACK_PERF_STORE) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function readBootUrlOn(): boolean {
+  try {
     return new URLSearchParams(window.location.search).has("packPerf");
   } catch {
     return false;
   }
 }
 
+function applyFlag(): boolean {
+  const was = flagOn;
+  flagOn = storeOn || bootUrlOn;
+  if (was && !flagOn) resetPackHostPerf();
+  return flagOn;
+}
+
+/**
+ * Re-read localStorage `zoto-viz.packPerf` after a same-tab write (the `storage` event only fires in
+ * other tabs). Code that writes the key must call this; otherwise a same-tab change needs a reload.
+ * One storage read per call; never per frame.
+ */
+export function refreshPackPerfEnabled(): boolean {
+  if (typeof window === "undefined") return false;
+  storeOn = readStoreOn();
+  return applyFlag();
+}
+
+function onPackPerfStorage(ev: StorageEvent): void {
+  // key null: localStorage.clear() in another tab.
+  if (ev.key !== null && ev.key !== PACK_PERF_STORE) return;
+  refreshPackPerfEnabled();
+}
+
+if (typeof window !== "undefined") {
+  bootUrlOn = readBootUrlOn();
+  storeOn = readStoreOn();
+  flagOn = storeOn || bootUrlOn;
+  window.addEventListener("storage", onPackPerfStorage);
+}
+
+/** Cached flag: one boolean read (#196). */
+export function packPerfEnabled(): boolean {
+  return flagOn;
+}
+
 function ensureEnabled(): boolean {
-  const on = packPerfEnabled();
+  const on = flagOn;
   if (on && !enabled) {
     enabled = true;
     sinceMs = performance.now();
@@ -186,15 +242,5 @@ export function packHostPerfSnapshot(now = performance.now()): PackHostPerfSnaps
 
 /** Cheap no-op when disabled — one boolean read. */
 export function packHostPerfIsOn(): boolean {
-  return enabled || packPerfEnabled();
-}
-
-export function packHostPerfOverheadProbe(): number {
-  const t0 = performance.now();
-  if (!packPerfEnabled()) {
-    const t1 = performance.now();
-    return t1 - t0;
-  }
-  notePackHostPresentInterval(16.7);
-  return performance.now() - t0;
+  return enabled || flagOn;
 }

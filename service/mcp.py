@@ -406,8 +406,8 @@ GET_PACK_PERF_TOOL: dict[str, Any] = {
     "description": (
         "Read the latest pack frame timings the browser posted. Use when a view is slow "
         "or you need pack-level frame numbers, not the HUD fps. No arguments. The page "
-        "must have been opened with ?packPerf=1 or localStorage zoto-viz.packPerf=1 or "
-        "the buffer stays empty. Does not change settings."
+        "must have been loaded with ?packPerf=1 or localStorage zoto-viz.packPerf=1 (set before "
+        "load or from another tab) or the buffer stays empty. Does not change settings."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
