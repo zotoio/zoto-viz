@@ -175,10 +175,66 @@ export const MIN_UNMASKED = 0.4;
 /** Below this share there is too little content area to judge; the five-patch verdict stands (harness warning). */
 export const MIN_JUDGED = 0.05;
 
+/**
+ * Washed-out / wall verdict (zoto-viz#178). A tile the view lights edge to edge with no drawn
+ * structure: bright, lit against its own background, and nearly edge-free. v5 passed these silently
+ * (it only knew black, white and uniform); Blob Mesh at bbf8b77d is the case (a near-uniform cyan
+ * gradient, judged a wall by eye).
+ *   litVsBg   share of content pixels more than BG_STEP above the frame's own background (the 1st
+ *             percentile content luma). Must be >= LIT_VS_BG_MIN.
+ *   edge16    share of content pixels whose 3x3 Sobel gradient magnitude on luma (0-255, full
+ *             resolution, unnormalised) is above EDGE_T. Must be <= EDGE16_MAX.
+ *   medianLum content median luma. Must be >= MEDIAN_MIN, so flat dark or black tiles stay the job
+ *             of the black check (edge16 is 0 on a flat black frame too).
+ * Cuts, set from the batch C headed shots (UX Pro, lean on, tuneK 0.64-1.0; QE's v5 second opinion
+ * at /workspace/qe-logs/pick-every-view-v5-batchC-{fd97fbdb,bbf8b77d}):
+ *   EDGE16_MAX 0.008: Blob Mesh bbf8b77d, all 7 in-app shots, edge16 0.0000-0.0041 (wall by eye).
+ *     Nearest negative Ant Colony 0.0176 (soil), then Graph Cloth 0.099, Roto 0.60-0.73, Cypher
+ *     0.46-0.95. 0.008 is about the geometric midpoint of 0.0041 and 0.0176 (0.0085), so both
+ *     sides have about 2x: Blob max is 1.95x under it, Ant min 2.2x over it.
+ *   LIT_VS_BG_MIN 0.85: the issue's proposed value. Blob 0.899-0.971 (min 0.049 over). Roto 0.91-0.95
+ *     and Cypher 0.94-0.96 pass it too, so this cut alone does not separate: it only keeps the
+ *     verdict to tiles that are lit edge to edge (Blob at fd97fbdb, dim discs, was 0.07-0.53).
+ *   MEDIAN_MIN 40 (= LIT_LUM): Blob medians 104-154; flat black/stuck frames are 14-17.
+ * Not used: the five-patch spread the issue first proposed. It does not separate: Blob spreads are
+ * 10-73 (fresh 35s is 62) while Roto, which reads correctly, is 15-22 with litVsBg 0.91-0.95, so any
+ * spread cut that flags every Blob shot flags every Roto shot too.
+ */
+export const WASHED_OUT = Object.freeze({ LIT_VS_BG_MIN: 0.85, BG_STEP: 10, EDGE_T: 16, EDGE16_MAX: 0.008, MEDIAN_MIN: 40 });
+
 function clipRect(r, region) {
   const x0 = Math.max(region.x, r.x); const y0 = Math.max(region.y, r.y);
   const x1 = Math.min(region.x + region.w, r.x + r.w); const y1 = Math.min(region.y + region.h, r.y + r.h);
   return x1 > x0 && y1 > y0 ? { x: x0, y: y0, w: x1 - x0, h: y1 - y0 } : null;
+}
+
+/**
+ * Share of unmasked region pixels whose 3x3 Sobel gradient magnitude on luma (0-255) is above `t`.
+ * Full resolution; the region edge is replicated (so the frame border adds no edge); masked pixels
+ * are left out of the count but still feed their neighbours' gradients (the masks are padded).
+ */
+function edgeShare(img, rx, ry, rw, rh, covered, t) {
+  const L = new Float32Array(rw * rh);
+  for (let y = 0; y < rh; y++) {
+    for (let x = 0; x < rw; x++) {
+      const i = ((ry + y) * img.width + (rx + x)) * 4;
+      L[y * rw + x] = 0.2126 * img.data[i] + 0.7152 * img.data[i + 1] + 0.0722 * img.data[i + 2];
+    }
+  }
+  const t2 = t * t;
+  let n = 0; let e = 0;
+  for (let y = 0; y < rh; y++) {
+    const u = (y > 0 ? y - 1 : 0) * rw; const c = y * rw; const d = (y < rh - 1 ? y + 1 : rh - 1) * rw;
+    for (let x = 0; x < rw; x++) {
+      if (covered[c + x]) continue;
+      const l = x > 0 ? x - 1 : 0; const r = x < rw - 1 ? x + 1 : rw - 1;
+      const gx = (L[u + r] + 2 * L[c + r] + L[d + r]) - (L[u + l] + 2 * L[c + l] + L[d + l]);
+      const gy = (L[d + l] + 2 * L[d + x] + L[d + r]) - (L[u + l] + 2 * L[u + x] + L[u + r]);
+      n++;
+      if (gx * gx + gy * gy > t2) e++;
+    }
+  }
+  return n ? e / n : null;
 }
 
 /**
@@ -192,6 +248,10 @@ function clipRect(r, region) {
  *   varied         share of content pixels more than 16 away from the median luminance (structure)
  *   flatCells      share of content cells that are one flat colour near the median cell colour
  *   maskedFraction share of the region under a mask; remaining = 1 - maskedFraction
+ *   bgLum          the frame's own background: 1st-percentile content luminance
+ *   litVsBg        share of content pixels more than WASHED_OUT.BG_STEP above bgLum (#178)
+ *   edge16         share of content pixels (full resolution) with a 3x3 Sobel magnitude on luma
+ *                  above WASHED_OUT.EDGE_T (#178); null when `texture` is false
  * black:   dark (median lum < 24), contentLit < 1% and varied < 1% (no drawn structure left)
  * white:   90% of content pixels brighter than lum 235
  * uniform: not black, flatCells >= 95% and varied < 1% (one flat colour of any shade)
@@ -199,7 +259,7 @@ function clipRect(r, region) {
  * less than MIN_UNMASKED is left (a harness warning, not a view failure).
  * `png` is a PNG buffer or a decoded pngjs PNG.
  */
-export function maskedWallSample(png, region, masks = [], { pad = 2, stride = 2, cell = 16 } = {}) {
+export function maskedWallSample(png, region, masks = [], { pad = 2, stride = 2, cell = 16, texture = true } = {}) {
   const img = Buffer.isBuffer(png) || png instanceof Uint8Array ? PNG.sync.read(png) : png;
   const reg = clipRect(region, { x: 0, y: 0, w: img.width, h: img.height });
   if (!reg) return { region, masks: 0, maskedFraction: 1, remaining: 0, contentLit: null, ok: null, lowCoverage: true, reason: "region outside the screenshot" };
@@ -246,6 +306,12 @@ export function maskedWallSample(png, region, masks = [], { pad = 2, stride = 2,
   for (let v = 0; v < 256; v++) { acc += hist[v]; if (acc * 2 >= n) { median = v; break; } }
   let varied = 0;
   for (let v = 0; v < 256; v++) if (Math.abs(v - median) > 16) varied += hist[v];
+  // Own-background lit share (#178): background = 1st-percentile content luma.
+  let bgLum = 0;
+  for (let v = 0, a = 0; v < 256; v++) { a += hist[v]; if (a >= 0.01 * n) { bgLum = v; break; } }
+  let litBg = 0;
+  for (let v = bgLum + WASHED_OUT.BG_STEP + 1; v < 256; v++) litBg += hist[v];
+  const edge = texture ? edgeShare(img, rx, ry, rw, rh, covered, WASHED_OUT.EDGE_T) : null;
   const cells = [];
   for (let k = 0; k < cn.length; k++) {
     if (!ct[k] || cn[k] * 2 < ct[k]) continue; // a cell counts when at least half of it is content
@@ -268,6 +334,9 @@ export function maskedWallSample(png, region, masks = [], { pad = 2, stride = 2,
     meanLum: +(lumSum / n).toFixed(1),
     medianLum: median,
     median: { r: Math.round(mc.r), g: Math.round(mc.g), b: Math.round(mc.b) },
+    bgLum,
+    litVsBg: +(litBg / n).toFixed(4),
+    edge16: edge == null ? null : +edge.toFixed(4),
     black, white, uniform,
     ok: !black && !white && !uniform,
   };
@@ -306,6 +375,35 @@ export function carouselContentVerdict(image, imgSample) {
  */
 export const LIT_TO_CLEAR_BLACK = 0.01;
 
+const fmt4 = (x) => (x == null ? "?" : Number(x).toFixed(4));
+
+/**
+ * The washed-out reading of a content sample (see WASHED_OUT). Returns { flag, judged, litVsBg,
+ * edge16, medianLum, bgLum, margins, why }. flag is null (not judged) when the sample has no texture
+ * reading (a sample recorded by a harness older than #178) or is not an ok area sample.
+ * margins: litVsBg - LIT_VS_BG_MIN, EDGE16_MAX - edge16 (edgeRatio = edge16 / EDGE16_MAX),
+ * medianLum - MEDIAN_MIN. All three margins >= 0 means washed-out.
+ */
+export function washedOutCheck(content, cuts = WASHED_OUT) {
+  if (!content || content.ok !== true) return { flag: null, judged: false, why: "area sample not judged ok" };
+  if (content.edge16 == null || content.litVsBg == null) return { flag: null, judged: false, why: "no texture reading in this sample (recorded before #178): washed-out not judged" };
+  const lit = content.litVsBg; const edge = content.edge16; const med = content.medianLum;
+  const margins = { litVsBg: +(lit - cuts.LIT_VS_BG_MIN).toFixed(4), edge16: +(cuts.EDGE16_MAX - edge).toFixed(4), edgeRatio: +(edge / cuts.EDGE16_MAX).toFixed(3), medianLum: med - cuts.MEDIAN_MIN };
+  const flag = lit >= cuts.LIT_VS_BG_MIN && edge <= cuts.EDGE16_MAX && med >= cuts.MEDIAN_MIN;
+  const why = `litVsBg ${fmt4(lit)} ${lit >= cuts.LIT_VS_BG_MIN ? ">=" : "<"} ${cuts.LIT_VS_BG_MIN} (bg ${content.bgLum}), edge16 ${fmt4(edge)} ${edge <= cuts.EDGE16_MAX ? "<=" : ">"} ${cuts.EDGE16_MAX}, median ${med} ${med >= cuts.MEDIAN_MIN ? ">=" : "<"} ${cuts.MEDIAN_MIN}`;
+  return { flag, judged: true, litVsBg: lit, edge16: edge, medianLum: med, bgLum: content.bgLum, margins, why };
+}
+
+/** Perf-lean mode a verdict was judged in (#177): { lean: "on"|"off"|"unknown", tuneK, label }. */
+export function leanMode(mode) {
+  const m = mode && typeof mode === "object" ? mode : {};
+  const raw = m.lean && typeof m.lean === "object" ? m.lean : m; // UX Pro's shot.lean = { lean, k, ... }
+  const lean = raw.lean === true || raw.lean === "on" ? "on" : raw.lean === false || raw.lean === "off" ? "off" : "unknown";
+  const k = typeof raw.tuneK === "number" ? raw.tuneK : typeof raw.k === "number" ? raw.k : null;
+  const tuneK = k == null ? null : +k.toFixed(4);
+  return { lean, tuneK, label: `lean=${lean} tuneK=${tuneK ?? "?"}` };
+}
+
 /**
  * Wall score for a row. The content-area sample decides when it is trustworthy; the five-patch sample
  * is the fallback.
@@ -319,11 +417,15 @@ export const LIT_TO_CLEAR_BLACK = 0.01;
  *   "patch+area"  MIN_JUDGED (5%) to 40% left: either sample can fail it (the v4 rule); harness warning.
  *   "patch"       under 5% left (or no content sample): the area is not judged, the five-patch verdict
  *                 stands; harness warning.
+ * Washed-out (#178): when the content area is judged (area or patch+area) and nothing else failed the
+ * tile, a bright edge-free area (washedOutCheck) fails it as what "washed-out", by "content-texture".
+ * `washedOut: false` switches the verdict off (the revert proof). `mode` is the perf-lean state the
+ * shot was taken in ({ lean, tuneK } or UX Pro's shot.lean); every result records it (#177).
  * The carousel image rule (carouselContentVerdict) applies on top, unchanged.
  * Returns { ok, what, by, decidedBy, patchVerdict, areaVerdict, disagree, overruled, legacyOk,
- * contentOk, contentVerdict, remaining, carousel, warnings, note }.
+ * contentOk, contentVerdict, remaining, carousel, washedOut, mode, warnings, note }.
  */
-export function scoreWall({ five = null, content = null, carousel = null } = {}) {
+export function scoreWall({ five = null, content = null, carousel = null, mode = null, washedOut = true } = {}) {
   const legacyOk = five ? five.ok : null;
   const patchVerdict = sampleVerdict(five);
   const areaVerdict = sampleVerdict(content);
@@ -342,6 +444,9 @@ export function scoreWall({ five = null, content = null, carousel = null } = {})
     if (five && !five.ok) { ok = false; what = patchVerdict; by.push("five-patch"); }
     if (judged && content.ok === false) { ok = false; what ??= areaVerdict; by.push("content"); }
   }
+  const lm = leanMode(mode);
+  const wo = washedOut && judged ? washedOutCheck(content) : null;
+  if (ok && wo?.flag) { ok = false; what = "washed-out"; by.push("content-texture"); }
   const car = carousel ? carouselContentVerdict(carousel.image, carousel.imgSample) : null;
   if (car?.blank) { ok = false; what ??= "blank"; by.push("carousel-image"); }
   const warnings = [];
@@ -349,8 +454,9 @@ export function scoreWall({ five = null, content = null, carousel = null } = {})
   else if (content?.lowCoverage) warnings.push(`only ${Math.round((remaining ?? 0) * 100)}% of the tile left after masking ${content.masks ?? 0} overlay rect(s): five-patch and content both count`);
   if (carousel?.imgSample?.lowCoverage) warnings.push(`only ${Math.round((carousel.imgSample.remaining ?? 0) * 100)}% of the carousel image left after masking overlays`);
   const disagree = !!five && judged && five.ok !== content.ok;
-  const note = disagree ? `five-patch ${patchVerdict}, content ${areaVerdict} (contentLit ${content.contentLit}, varied ${content.varied}, ${Math.round(remaining * 100)}% judged); decided by ${decidedBy}${overruled ? `: ${overruled}` : ""}` : null;
-  return { ok, what, by: by.join("+") || null, decidedBy, patchVerdict, areaVerdict, disagree, overruled, legacyOk, contentOk: content ? content.ok : null, contentVerdict: areaVerdict, remaining, carousel: car, warnings, note };
+  const woNote = what === "washed-out" ? `washed-out: ${wo.why} [${lm.label}]` : null;
+  const note = [disagree ? `five-patch ${patchVerdict}, content ${areaVerdict} (contentLit ${content.contentLit}, varied ${content.varied}, ${Math.round(remaining * 100)}% judged); decided by ${decidedBy}${overruled ? `: ${overruled}` : ""}` : null, woNote].filter(Boolean).join("; ") || null;
+  return { ok, what, by: by.join("+") || null, decidedBy, patchVerdict, areaVerdict, disagree, overruled, legacyOk, contentOk: content ? content.ok : null, contentVerdict: areaVerdict, remaining, carousel: car, washedOut: wo, mode: lm, warnings, note };
 }
 
 const normName = (x) => String(x ?? "").toLowerCase().replace(/^(air|bt|cpu|net|src|sys|arc)\s+/, "").replace(/[^a-z0-9]+/g, " ").trim();

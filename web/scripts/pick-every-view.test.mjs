@@ -234,12 +234,16 @@ function pageState() {
   try { sky = s?.pluginSkyId ?? null; } catch { sky = "(threw)"; }
   let backdrop = null;
   try { backdrop = s?.dreamAnim?.backdrop ?? null; } catch { backdrop = null; }
+  // Perf lean (zoto-viz#177): window.zotoviz.tune is private and may move; null when absent.
+  let lean = null;
+  try { const k = s?.tune?.k; lean = typeof k === "number" ? { lean: k > 0, tuneK: k } : null; } catch { lean = null; }
   return {
     header: txt(document.querySelector("#mode .val .txt")),
     mode,
     lsMode: localStorage.getItem("zoto-viz.mode"),
     pluginSkyId: sky,
     backdrop,
+    lean,
     dice: document.querySelector("#dice") ? document.querySelector("#dice").checked : null,
     profile: txt(document.querySelector("#profile .val .txt")),
     brand: txt(document.querySelector("#brandProfile")),
@@ -342,7 +346,8 @@ function wallSamples(buf, stt, ov, v) {
     const imgRegion = rect ? intersect(rect, stt.region) : null;
     carousel = { image: c?.image ?? null, rect: imgRegion, imgSample: imgRegion && imgRegion.w > 20 && imgRegion.h > 20 ? maskedWallSample(png, imgRegion, rects) : null };
   }
-  return { five, content, carousel, score: scoreWall({ five, content, carousel }) };
+  // Perf-lean mode of the shot (#177/#178): the private tune read until the app has a supported one.
+  return { five, content, carousel, score: scoreWall({ five, content, carousel, mode: stt.lean ?? null }) };
 }
 
 async function main() {
@@ -783,7 +788,7 @@ async function main() {
     const c0 = ws?.content ?? null;
     row.contentLit = c0?.contentLit ?? null;
     row.maskedFraction = c0?.maskedFraction ?? null;
-    row.content = c0 ? { verdict: sampleVerdict(c0), contentLit: c0.contentLit, varied: c0.varied ?? null, flatCells: c0.flatCells ?? null, medianLum: c0.medianLum ?? null, maskedFraction: c0.maskedFraction, remaining: c0.remaining, masks: c0.masks, lowCoverage: c0.lowCoverage } : null;
+    row.content = c0 ? { verdict: sampleVerdict(c0), contentLit: c0.contentLit, varied: c0.varied ?? null, flatCells: c0.flatCells ?? null, medianLum: c0.medianLum ?? null, maskedFraction: c0.maskedFraction, remaining: c0.remaining, masks: c0.masks, lowCoverage: c0.lowCoverage, bgLum: c0.bgLum ?? null, litVsBg: c0.litVsBg ?? null, edge16: c0.edge16 ?? null } : null;
     row.imgLoaded = ws?.carousel ? ws.score.carousel.imgLoaded : null;
     if (ws?.carousel) {
       const im = ws.carousel.image; const is = ws.carousel.imgSample;
@@ -919,8 +924,8 @@ async function main() {
         if (by.length) {
           const what = sc?.what ?? (row.wall.black ? "black" : row.wall.white ? "white" : "uniform");
           const c = row.content;
-          const detail = [by.includes("five-patch") && row.wall.patches.join(" "), by.includes("content") && c && `content ${c.verdict}: contentLit ${c.contentLit}, varied ${c.varied}, ${Math.round(c.maskedFraction * 100)}% masked`, sc?.overruled, sc?.decidedBy && `decided by ${sc.decidedBy}`].filter(Boolean).join("; ");
-          if (row.longHold && what !== "white") dark = `wall ${what} after 35s (${detail})`;
+          const detail = [by.includes("five-patch") && row.wall.patches.join(" "), by.includes("content") && c && `content ${c.verdict}: contentLit ${c.contentLit}, varied ${c.varied}, ${Math.round(c.maskedFraction * 100)}% masked`, by.includes("content-texture") && sc?.washedOut?.why, by.includes("content-texture") && sc?.mode?.label, sc?.overruled, sc?.decidedBy && `decided by ${sc.decidedBy}`].filter(Boolean).join("; ");
+          if (row.longHold && what !== "white" && what !== "washed-out") dark = `wall ${what} after 35s (${detail})`;
           else fails.push(`wall ${what} (${detail})`);
         }
         if (sc?.carousel?.blank) carouselBlank = sc.carousel.why;

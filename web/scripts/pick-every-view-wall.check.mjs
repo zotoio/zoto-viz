@@ -19,6 +19,12 @@
  * Part C (when the files exist): UX Pro's batch C early-6b172413-*.png + .json (--batch-c DIR). Scored
  *   twice: from the samples the json recorded (overlays masked in the page) and re-sampled from the
  *   PNG over the recorded region (unmasked; the json has the rect count, not the rects).
+ * Washed-out (#178): synthetic rows A10-A12 (Blob-like bright edge-free wall -> washed-out, Roto-like
+ *   drawn floor at median ~113 -> ok, flat black -> still black) and, when the files exist, Part E:
+ *   UX Pro's bbf8b77d headed shots (--batch-c-bbf8 DIR): all 7 Blob Mesh in-app shots washed-out;
+ *   Ant, Roto and Cypher (open-full) ok. Regions from the shot json, masks from <stem>-mask.json.
+ *   Revert proof: --util <util with the washed-out line removed, or the util at cc2d4254> turns
+ *   exactly the Blob rows red.
  * Part D (--rescore DIR, repeatable): every view shot of a saved sweep (pickall.json + shots/). The
  *   region is the one that reproduces the five-patch values recorded in pickall.json; no overlay rects
  *   were recorded, so the content area is unmasked. The row flow is simulated: first shot, then the
@@ -42,11 +48,11 @@ const args = {
   util: path.join(here, "pick-every-view-util.mjs"), baselineUtil: null,
   apodBlank: "/workspace/zv-clips/batchD/down-site-apod-blank.png", eoBlank: "/tmp/uxpro-pickall/out-679dbf17-downsite/shots/03-carousel_earth-iotd-35s.png",
   litCarousel: "/workspace/qe-logs/pickall-20fa18a7-fresh/shots/62-carousel_met.png", topology: "/workspace/qe-logs/pickall-20fa18a7-fresh/shots/23-topology.png",
-  batchC: "/workspace/zv-clips/batchC", rescore: [], requireEvidence: false, json: null,
+  batchC: "/workspace/zv-clips/batchC", batchCbbf8: "/workspace/zv-clips/batchC/bbf8b77d", rescore: [], requireEvidence: false, json: null,
 };
 for (let i = 2; i < process.argv.length; i++) {
   const a = process.argv[i];
-  const key = { "--util": "util", "--baseline-util": "baselineUtil", "--apod-blank": "apodBlank", "--eo-blank": "eoBlank", "--lit-carousel": "litCarousel", "--topology": "topology", "--batch-c": "batchC", "--json": "json" }[a];
+  const key = { "--util": "util", "--baseline-util": "baselineUtil", "--apod-blank": "apodBlank", "--eo-blank": "eoBlank", "--lit-carousel": "litCarousel", "--topology": "topology", "--batch-c": "batchC", "--batch-c-bbf8": "batchCbbf8", "--json": "json" }[a];
   if (key) args[key] = process.argv[++i];
   else if (a === "--rescore") args.rescore.push(process.argv[++i]);
   else if (a === "--require-evidence") args.requireEvidence = true;
@@ -115,6 +121,25 @@ function synthetic() {
   // the patch points; no pixel reaches lum 40.
   const dim = canvas([18, 14, 14]); header(dim); rect(dim, feed, [30, 28, 26]);
   for (const [cx, cy] of [[120, 180], [360, 340], [600, 180], [850, 340], [360, 680], [850, 680], [120, 500], [600, 500]]) disc(dim, cx, cy, 34, [60, 25, 22]);
+  // A10: Blob-like washed-out wall (Blob Mesh at bbf8b77d: near-uniform cyan, lumas 109-204, lit
+  // 0.90-0.97 against its own background, no blob edge): a cyan sky with soft blobs, every slope
+  // well under 2 lum/px so no Sobel edge.
+  const wall = canvas([18, 14, 14]); header(wall); rect(wall, feed, [30, 28, 26]);
+  const blobs = [[300, 330, 150, 0.55], [640, 520, 170, 0.45], [800, 250, 130, 0.35], [150, 620, 140, 0.3]];
+  for (let y = BAR; y < 745; y++) for (let x = 0; x < 962; x++) {
+    let v = 0.62 + 0.12 * (x / 962);
+    for (const [cx, cy, s, a] of blobs) v += a * Math.exp(-((x - cx) ** 2 + (y - cy) ** 2) / (2 * s * s));
+    put(wall, x, y, [Math.round(Math.min(255, 70 * v)), Math.round(Math.min(255, 150 * v)), Math.round(Math.min(255, 165 * v))]);
+  }
+  // A11: Roto-like drawn floor (Roto Proto at bbf8b77d: median 112-114, reads correctly): a grey
+  // checker with dark grid lines, lit edge to edge but full of edges.
+  const roto = canvas([18, 14, 14]); header(roto); rect(roto, feed, [30, 28, 26]);
+  for (let y = BAR; y < 745; y++) for (let x = 0; x < 962; x++) {
+    const c = ((x >> 5) + (y >> 5)) & 1 ? 122 : 104;
+    put(roto, x, y, x % 32 < 2 || y % 32 < 2 ? [70, 70, 74] : [c, c + 2, c + 6]);
+  }
+  // A12: flat black frame (Backrooms at bbf8b77d, a flat 17): black, never washed-out.
+  const black = canvas([15, 15, 15]); header(black); rect(black, feed, [30, 28, 26]);
   const imgBroken = { src: "/api/sources/image?url=https%3A%2F%2Fapod.nasa.gov%2Fx.jpg", complete: true, naturalWidth: 0, errored: "error event" };
   const imgOk = { src: "/api/sources/image?url=https%3A%2F%2Fimages.metmuseum.org%2Fx.jpg", complete: true, naturalWidth: 1600, errored: null };
   const band = (keep) => [...maskAllBut(tile, keep), fps];
@@ -128,6 +153,9 @@ function synthetic() {
     { part: "A", name: "A7 lit spots, 20% of the tile left (patch + area)", png: spots, region: tile, masks: band(0.2), carousel: null, expect: { old: "black", score: false, decidedBy: "patch+area", warn: /left after masking/ } },
     { part: "A", name: "A8 flat floor, 3% left (area not judged, five-patch decides)", png: floor, region: tile, masks: band(0.03), carousel: null, expect: { old: "uniform", score: false, decidedBy: "patch", warn: /not judged/ } },
     { part: "A", name: "A9 lit picture, 3% left (area not judged, five-patch ok)", png: lit, region: tile, masks: band(0.03), carousel: null, expect: { old: "ok", score: true, decidedBy: "patch", warn: /not judged/ } },
+    { part: "A", name: "A10 Blob-like bright edge-free wall (#178: washed-out)", png: wall, region: tile, masks: [fps], carousel: null, mode: { lean: true, k: 0.9988 }, expect: { old: "ok", score: false, what: "washed-out", decidedBy: "area", washedOut: true } },
+    { part: "A", name: "A11 Roto-like drawn floor, median ~113 (#178: ok)", png: roto, region: tile, masks: [fps], carousel: null, mode: { lean: true, k: 0.9999 }, expect: { old: "ok", score: true, washedOut: false } },
+    { part: "A", name: "A12 flat black frame (#178: stays black)", png: black, region: tile, masks: [fps], carousel: null, expect: { old: "black", score: false, what: "black" } },
   ];
 }
 
@@ -205,17 +233,50 @@ function batchC() {
   return out;
 }
 
+/**
+ * UX Pro batch C at bbf8b77d (#178). Blob Mesh in-app shots (header NET Blob Mesh, 7) are the wall
+ * UX Pro judged by eye: washed-out. Ant Colony, Roto Proto and Cypher CIC open-full read correctly: ok.
+ * Region = the shot json's state.region; masks = <stem>-mask.json rects where recorded; lean/tuneK
+ * from the shot json (all lean on, tuneK 0.64-1.0).
+ */
+const BBF8_EXPECT = [
+  [/^blob-mesh-(fresh|shipped)-(35s|60s|pitch15-35s)\.png$|^ant-after-blob-(fresh|shipped)-blob-40s\.png$/, false, "washed-out", "Blob Mesh: near-uniform cyan wall by eye (UX Pro), lit 0.90-0.97, no blob edge"],
+  [/^ant-colony-(fresh|shipped)-(35|60|90)s\.png$|^ant-after-blob-(fresh|shipped)-(35|60)s\.png$/, true, null, "Ant Colony: soil with tunnels, lit40 about 56%"],
+  [/^roto-proto-/, true, null, "Roto Proto: drawn checker floor, median 112-114, reads correctly"],
+  [/^cypher-cic-openfull-/, true, null, "Cypher CIC single (open-full): drawn, not black"],
+];
+function batchCbbf8() {
+  const D = args.batchCbbf8;
+  if (!D || !existsSync(D)) return [{ part: "E", name: "batch C bbf8b77d", file: D, skipped: true }];
+  const reg = {}; const lean = {};
+  for (const j of readdirSync(D).filter((f) => f.endsWith(".json") && !f.endsWith("-mask.json"))) {
+    let d; try { d = JSON.parse(readFileSync(path.join(D, j), "utf8")); } catch { continue; }
+    const walk = (x) => { if (!x || typeof x !== "object") return; if (typeof x.file === "string" && x.file.endsWith(".png")) { const b = path.basename(x.file); if (x.state?.region) reg[b] ??= x.state.region; if (x.lean) lean[b] ??= x.lean; } for (const v of Object.values(x)) walk(v); };
+    walk(d);
+  }
+  const out = [];
+  for (const f of readdirSync(D).filter((x) => x.endsWith(".png")).sort()) {
+    const exp = BBF8_EXPECT.find(([re]) => re.test(f));
+    if (!exp) continue;
+    const mf = path.join(D, f.replace(/\.png$/, "-mask.json"));
+    const mj = existsSync(mf) ? JSON.parse(readFileSync(mf, "utf8")) : null;
+    const region = reg[f] ?? mj?.region ?? { x: 0, y: BAR, w: 968, h: 660 };
+    out.push({ part: "E", name: `${f} (bbf8b77d${mj ? `, ${mj.rects?.length ?? 0} rects masked` : ", unmasked"})`, file: path.join(D, f), png: PNG.sync.read(readFileSync(path.join(D, f))), region, masks: mj?.rects ?? [], carousel: null, mode: lean[f] ?? null, expect: { score: exp[1], ...(exp[2] ? { what: exp[2] } : {}) }, why: exp[3] });
+  }
+  return out;
+}
+
 function score(c, S) {
   const five = c.five ?? fivePatchSample(c.png, c.region);
   const content = c.content ?? maskedWallSample(c.png, c.region, c.masks);
   const carousel = c.carousel ? { image: c.carousel.image, rect: c.carousel.rect, imgSample: maskedWallSample(c.png, c.carousel.rect, c.masks) } : null;
-  return { five, content, carousel, sc: S.scoreWall({ five, content, carousel }) };
+  return { five, content, carousel, sc: S.scoreWall({ five, content, carousel, mode: c.mode ?? null }) };
 }
 const verdictOf = (sc) => (sc.ok ? "ok" : `${sc.what} (${sc.by})`);
 
 const rows = [];
 let failed = 0;
-for (const c of [...synthetic(), ...evidence(), ...batchC()]) {
+for (const c of [...synthetic(), ...evidence(), ...batchC(), ...batchCbbf8()]) {
   if (c.skipped) {
     rows.push({ part: c.part, name: c.name, skipped: true, file: c.file });
     if (args.requireEvidence) failed++;
@@ -228,6 +289,9 @@ for (const c of [...synthetic(), ...evidence(), ...batchC()]) {
   if (c.expect.old && oldV !== c.expect.old) bad.push(`five-patch ${oldV}, expected ${c.expect.old}`);
   if (sc.ok !== c.expect.score) bad.push(`score ${sc.ok ? "ok" : "fail"}, expected ${c.expect.score ? "ok" : "fail"}`);
   if (c.expect.decidedBy && isV5 && sc.decidedBy !== c.expect.decidedBy) bad.push(`decided by ${sc.decidedBy}, expected ${c.expect.decidedBy}`);
+  if (c.expect.what !== undefined && !sc.ok && (sc.what ?? null) !== c.expect.what) bad.push(`verdict ${sc.what}, expected ${c.expect.what}`);
+  if (c.expect.what !== undefined && sc.ok && c.expect.score === false) bad.push(`expected ${c.expect.what}${sc.washedOut?.why ? ` (${sc.washedOut.why})` : sc.washedOut === undefined ? " (this util has no washed-out verdict)" : ""}`);
+  if (c.expect.washedOut !== undefined && (sc.washedOut?.flag ?? null) !== c.expect.washedOut) bad.push(`washed-out reading ${sc.washedOut?.flag ?? "absent"}, expected ${c.expect.washedOut}`);
   if (c.expect.warn && !sc.warnings.some((w) => c.expect.warn.test(w))) bad.push(`no harness warning matching ${c.expect.warn}`);
   if (bad.length) failed++;
   rows.push({
@@ -235,7 +299,8 @@ for (const c of [...synthetic(), ...evidence(), ...batchC()]) {
     patch: oldV, patchLums: five.patches ? five.patches.map((p) => Math.round(p.lum)).join("/") : (five.lums ?? []).join("/"),
     area: sampleVerdict(content), contentLit: content.contentLit, varied: content.varied, flatCells: content.flatCells, medianLum: content.medianLum, maskedFraction: content.maskedFraction,
     before: before ? verdictOf(before) : null, after: verdictOf(sc), decidedBy: sc.decidedBy ?? null, overruled: sc.overruled ?? null, warnings: sc.warnings,
-    carouselWhy: sc.carousel?.why || null, pass: !bad.length, problems: bad,
+    carouselWhy: sc.carousel?.why || null, litVsBg: content.litVsBg ?? null, edge16: content.edge16 ?? null, mode: sc.mode?.label ?? null, washedOut: sc.washedOut ?? null,
+    pass: !bad.length, problems: bad,
   });
 }
 
@@ -345,10 +410,10 @@ for (const dir of args.rescore) {
 
 const pad = (x, n) => String(x ?? "–").padEnd(n);
 console.log(`rule under test: ${args.util}${isV5 ? " (v5: area decides at >= 40% judged)" : " (pre-v5 rule)"}${B ? `; before = ${args.baselineUtil}` : ""}\n`);
-console.log(`${pad("case", 78)} ${pad("patch", 8)} ${pad("lums", 16)} ${pad("area", 9)} ${pad("lit", 7)} ${pad("varied", 7)} ${pad("masked", 7)} ${B ? `${pad("before", 30)} ` : ""}after`);
+console.log(`${pad("case", 78)} ${pad("patch", 8)} ${pad("lums", 16)} ${pad("area", 9)} ${pad("lit", 7)} ${pad("varied", 7)} ${pad("masked", 7)} ${pad("litVsBg", 7)} ${pad("edge16", 7)} ${B ? `${pad("before", 30)} ` : ""}after`);
 for (const r of rows) {
   if (r.skipped) { console.log(`${pad(r.name, 78)} skipped (missing ${r.file})`); continue; }
-  console.log(`${pad(r.name, 78)} ${pad(r.patch, 8)} ${pad(r.patchLums, 16)} ${pad(r.area, 9)} ${pad(r.contentLit, 7)} ${pad(r.varied, 7)} ${pad(r.maskedFraction, 7)} ${B ? `${pad(r.before, 30)} ` : ""}${r.after}${r.decidedBy ? ` [${r.decidedBy}]` : ""}${r.pass ? "" : `   <-- FAIL: ${r.problems.join("; ")}`}`);
+  console.log(`${pad(r.name, 78)} ${pad(r.patch, 8)} ${pad(r.patchLums, 16)} ${pad(r.area, 9)} ${pad(r.contentLit, 7)} ${pad(r.varied, 7)} ${pad(r.maskedFraction, 7)} ${pad(r.litVsBg, 7)} ${pad(r.edge16, 7)} ${B ? `${pad(r.before, 30)} ` : ""}${r.after}${r.decidedBy ? ` [${r.decidedBy}]` : ""}${r.after.startsWith("washed-out") && r.mode ? ` {${r.mode}}` : ""}${r.pass ? "" : `   <-- FAIL: ${r.problems.join("; ")}`}`);
 }
 if (rowsD.length) {
   const sweeps = [...new Set(rowsD.map((d) => d.sweep))];
