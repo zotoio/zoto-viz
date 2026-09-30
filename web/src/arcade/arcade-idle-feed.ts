@@ -1,6 +1,6 @@
 import { displayName, usefulName, type Device } from "../core/types";
 import { rName } from "../core/redact";
-import { DEMO_DATA_LABEL, DEMO_LABEL_CLASS } from "../core/demo-source";
+import { ARCADE_DEMO_EVENT, DEMO_DATA_LABEL, DEMO_LABEL_CLASS, DEMO_RATE_CUE, type ArcadeDemoDetail } from "../core/demo-source";
 import { IDLE_VIZ_DEMO_HOSTS, IDLE_VIZ_DEMO_SEED, type IdleVizDemoHost } from "../plugins/fixtures/idle-viz-frame";
 
 /**
@@ -108,6 +108,14 @@ export function arcadeDemoLabelText(explicitPick: boolean, deviceName = ""): str
   return `Demo traffic around ${deviceName || ARCADE_DEMO_UNNAMED_PICK}`;
 }
 
+/**
+ * #182: the HUD rate. `demo` is the feed's {@link ArcadeIdleFeed.showing}, the same flag the badge follows, so the
+ * `· demo` cue is on the HUD exactly while the badge is visible. The counter itself is never hidden.
+ */
+export function arcadeHudRate(pps: number, demo: boolean): string {
+  return `${Math.round(pps)} pkt/s${demo ? ` · ${DEMO_RATE_CUE}` : ""}`;
+}
+
 /** The demo label element (same class and text as Tetris's), hidden until the feed shows demo rows. */
 export function mountArcadeDemoLabel(container: HTMLElement): HTMLElement {
   const el = document.createElement("span");
@@ -134,6 +142,8 @@ export class ArcadeIdleFeed<P extends TimedRow> {
   private empties = 0;
   private stepNo = 0;
   private deliveries = 0;
+  /** what was last broadcast with {@link ARCADE_DEMO_EVENT} (the feed panel's status line follows it) */
+  private told: ArcadeDemoDetail = { showing: false, text: "" };
 
   constructor(o: ArcadeIdleFeedOptions<P>) {
     this.shaper = o.shaper;
@@ -163,7 +173,11 @@ export class ArcadeIdleFeed<P extends TimedRow> {
     if (fresh && !this.isOn) { this.isOn = true; this.shown = 0; this.empties = 0; }
   }
   /** The view stopped: an empty-poll callback that lands afterwards (an in-flight poll) delivers nothing. */
-  stop(): void { this.active = false; }
+  stop(): void {
+    this.active = false;
+    // the view left the screen: the feed panel's status line drops the demo state with it
+    this.tell(false, "");
+  }
 
   /** One empty poll came back. On: deliver the next step. Off: count it, and come back on at the 3rd in a row. */
   pollEmpty(me = "", scope = me ? "" : "lan"): void {
@@ -209,9 +223,21 @@ export class ArcadeIdleFeed<P extends TimedRow> {
   }
 
   private syncLabel(): void {
-    if (!this.label) return;
-    this.label.classList.toggle("is-visible", this.showing);
-    if (this.showing) this.label.textContent = this.labelText(this.me);
+    const showing = this.showing;
+    const text = showing ? this.labelText(this.me) : "";
+    if (this.label) {
+      this.label.classList.toggle("is-visible", showing);
+      if (showing) this.label.textContent = text;
+    }
+    this.tell(showing, text);
+  }
+
+  /** #182: broadcast the badge state on change, so the feed panel's status line switches in the same poll. */
+  private tell(showing: boolean, text: string): void {
+    if (this.told.showing === showing && this.told.text === text) return;
+    this.told = { showing, text };
+    if (typeof document === "undefined") return;
+    document.dispatchEvent(new CustomEvent<ArcadeDemoDetail>(ARCADE_DEMO_EVENT, { detail: { showing, text } }));
   }
 }
 

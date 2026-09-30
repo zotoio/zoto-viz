@@ -480,7 +480,7 @@ export abstract class ArcadeView {
       if (this.lastT) url += `&since=${this.lastT}`;
       const r = await fetch(url);
       // an error answer (unknown device …) carries no traffic either: the idle feed takes it as an empty poll
-      if (!r.ok) { if (gen === this.gen) this.idle?.pollEmpty(this.idleMe()); return; }
+      if (!r.ok) { if (gen === this.gen) { this.pps *= 0.6; this.idle?.pollEmpty(this.idleMe()); } return; }
       const m = (await r.json()) as TrafficMsg;
       if (gen !== this.gen) return; // the query changed meanwhile: this is the old run's traffic
       const pk = m.packets.slice().reverse(); // oldest first
@@ -510,8 +510,13 @@ export abstract class ArcadeView {
     this.lastT = cursor;
   }
 
-  /** One idle batch, through the engine's real ingest (the poll cursor is left to live traffic). */
+  /**
+   * One idle batch, through the engine's real ingest (the poll cursor is left to live traffic). #182: the HUD rate
+   * counts the demo rows it ingests, on the same moving average as live rows (the empty poll already applied the
+   * 0.6 decay), so a busy demo board never reads 0 pkt/s. Takeover zeroes it in {@link reset}.
+   */
   private ingestIdle(rows: Packet[]): void {
+    this.pps += (rows.length / (POLL_MS / 1000)) * 0.4;
     this.fit();
     this.ingest(rows, rows[0][0], rows[rows.length - 1][0]);
   }

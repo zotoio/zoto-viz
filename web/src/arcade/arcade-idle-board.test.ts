@@ -8,6 +8,7 @@ import { IDLE_VIZ_DEMO_HOSTS } from "../plugins/fixtures/idle-viz-frame";
 import { FroggerView } from "./frogger";
 import { InvadersView } from "./invaders";
 import { PongView } from "./pong";
+import { LiveFeed } from "../ui/feed";
 
 /**
  * #181: on a clean HOME with no LAN traffic, frogger / netpong / invaders must still show a board (the standing
@@ -176,9 +177,23 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
     const label = () => el.querySelector<HTMLElement>(`.${DEMO_LABEL_CLASS}`);
     const badge = () => label()?.textContent ?? "";
     const labelShown = () => { const l = label(); return !!l && l.classList.contains("is-visible") && (badge() === DEMO_DATA_LABEL || badge().startsWith("Demo traffic around ")); };
+    // #182: the feed panel next to the board, with the stale "waiting for packets…" its last empty poll left
+    // behind before the arcade view opened (the feed panel does not poll while an arcade view is up)
+    const feedEl = document.createElement("div");
+    document.body.append(feedEl);
+    const feed = new LiveFeed(feedEl, scene);
+    (feed as unknown as { ingest(m: { packets: Packet[] }): void }).ingest({ packets: [] });
+    const feedStatus = () => feedEl.querySelector<HTMLElement>(".feed-hint")?.textContent ?? "";
+    /** the HUD rate row of the next drawn frame: its count and whether it carries the demo cue */
+    const hud = async () => {
+      rec.texts.length = 0;
+      await vi.advanceTimersByTimeAsync(40);
+      const row = [...rec.texts].reverse().find((t) => /^\d+ pkt\/s/.test(t)) ?? "";
+      return { row, pps: Number(/^(\d+) pkt\/s/.exec(row)?.[1] ?? NaN), demo: /^\d+ pkt\/s · demo\b/.test(row) };
+    };
     /** advance exactly one poll interval (one /api/traffic fetch) */
     const poll = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "one poll per interval").toBe(f + 1); };
-    return { el, view, ingest, demoCalls, allRows, labelShown, badge, poll };
+    return { el, view, ingest, demoCalls, allRows, labelShown, badge, poll, hud, feedStatus };
   }
 
   async function runEngine(engine: Engine) {
@@ -202,23 +217,50 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
   }
 
   for (const engine of ENGINES) {
-    it(`${engine}: UX — while the feed runs "waiting for packets…" is never drawn and the demo label is shown`, async () => {
-      const { labelShown, demoCalls } = mount(engine, cleanHomeState());
-      let labelFrames = 0;
-      for (let s = 0; s < 5; s++) { await vi.advanceTimersByTimeAsync(1000); if (labelShown()) labelFrames++; }
-      const waits = rec.texts.filter((t) => t === WAIT_TEXT).length;
+    it(`${engine}: UX — while the feed runs "waiting for packets…" is never drawn, the demo label is shown, and the HUD rate (> 0, "· demo") and the feed panel status line agree with it (#182)`, async () => {
+      const { labelShown, demoCalls, badge, hud, feedStatus } = mount(engine, cleanHomeState());
+      expect(feedStatus(), "stale feed status before the demo").toBe(WAIT_TEXT);
+      let labelFrames = 0, waits = 0;
+      for (let s = 0; s < 5; s++) {
+        await vi.advanceTimersByTimeAsync(1000);
+        if (labelShown()) labelFrames++;
+        waits += rec.texts.filter((t) => t === WAIT_TEXT).length;
+        const h = await hud();
+        // one row: the badge, the HUD counter and the feed panel status line can never disagree
+        expect(h.row, `HUD rate row drawn at poll ${s + 1}`).not.toBe("");
+        expect(h.demo, `HUD "· demo" cue iff the badge is visible (poll ${s + 1}: "${h.row}", badge ${labelShown()})`).toBe(labelShown());
+        expect(feedStatus() === badge() && feedStatus() !== "", `feed status iff the badge (poll ${s + 1}: "${feedStatus()}" vs "${badge()}")`).toBe(labelShown());
+        expect(h.pps, `HUD rate while demo rows are ingested (poll ${s + 1}: "${h.row}")`).toBeGreaterThan(0);
+      }
       expect(demoCalls(), "the feed ran").toBeGreaterThan(0);
       expect(waits, `"${WAIT_TEXT}" draws over 5 s of demo frames`).toBe(0);
       expect(labelFrames, "demo label shown at each of 5 polls").toBe(5);
     });
 
-    it(`${engine}: UX — after the first real non-empty poll the demo label is gone within one poll`, async () => {
-      const { labelShown, poll } = mount(engine, cleanHomeState());
+    it(`${engine}: UX — after the first real non-empty poll the demo label, the HUD "· demo" cue and the feed panel's demo status are all gone within one poll (#182)`, async () => {
+      const { labelShown, poll, hud, feedStatus, badge } = mount(engine, cleanHomeState());
       await poll(); await poll();
       expect(labelShown(), "label shown while the demo runs").toBe(true);
+      const d = await hud();
+      expect(d.demo, `HUD cue while the demo runs ("${d.row}")`).toBe(true);
+      expect(d.pps, `HUD rate while the demo runs ("${d.row}")`).toBeGreaterThan(0);
+      expect(feedStatus(), "feed status while the demo runs").toBe(badge());
       mode = "live";
       await poll();
       expect(labelShown(), "label after one live poll").toBe(false);
+      const l = await hud();
+      expect(l.row, "HUD rate row still drawn after takeover (the counter is never hidden)").not.toBe("");
+      expect(l.demo, `HUD cue after one live poll ("${l.row}")`).toBe(false);
+      expect(feedStatus(), "feed status after one live poll: no demo text, no stale waiting").toBe("");
+    });
+
+    it(`${engine}: view stop — the feed panel drops the demo status with the view (#182)`, async () => {
+      const { view, poll, feedStatus, badge, labelShown } = mount(engine, cleanHomeState());
+      await poll();
+      expect(labelShown(), "label shown while the demo runs").toBe(true);
+      expect(feedStatus(), "feed status while the demo runs").toBe(badge());
+      view.stop();
+      expect(feedStatus(), "feed status after the view stopped").toBe("");
     });
 
     it(`${engine}: (c) takeover — 0 feed calls while live traffic arrives; back only on the 3rd empty poll in a row`, async () => {

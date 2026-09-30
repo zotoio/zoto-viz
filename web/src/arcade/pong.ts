@@ -1,5 +1,5 @@
 import type { NetScene } from "../graph/scene";
-import { ArcadeIdleFeed, arcadeBadgeName, arcadeDemoLabelText, mountArcadeDemoLabel } from "./arcade-idle-feed";
+import { ArcadeIdleFeed, arcadeBadgeName, arcadeDemoLabelText, arcadeHudRate, mountArcadeDemoLabel } from "./arcade-idle-feed";
 import { shapePongIdle, type PongRow } from "./arcade-idle-shapers";
 import { Select, TextField, type SelectOption } from "../ui/ui";
 import { categorize, hashColor } from "../core/modes";
@@ -1118,7 +1118,8 @@ export class PongView {
     g.fillText(fitText(g, `→ ${this.targetLabel()}`, RIGHT_W - 10), x, y + 31);
     const s = this.stats;
     g.fillStyle = u.muted;
-    g.fillText(fitText(g, `${Math.round(s.pps)} pkt/s · ${s.hits} returned · ${s.misses} missed · ${s.other} other`, RIGHT_W - 10), x, y + 46);
+    // #182: demo rows already reach stats.pps through the real ingest (ingestIdle); the cue follows the badge's flag
+    g.fillText(fitText(g, `${arcadeHudRate(s.pps, this.idle.showing)} · ${s.hits} returned · ${s.misses} missed · ${s.other} other`, RIGHT_W - 10), x, y + 46);
 
     if (!this.balls.length && (this.srcIp || this.srcChoice === "match")) {
       const idle = !this.srcIp
