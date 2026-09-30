@@ -131,6 +131,7 @@ import {
   attachPluginFrontend,
   fetchPluginSky,
   pluginHasFrontend,
+  pluginHasSky,
   pluginNeedsReview,
   pluginViewId,
   viewSelectOptions,
@@ -268,7 +269,7 @@ import { createHostMeshBridge, tryApplyHostMeshBridge } from "./host-mesh-bridge
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
 import { hasKeptTileAnswer, showNeedsYou, waitForTileReview, type TileReviewRunner } from "./needs-you";
-import { clearViewState, setViewState, setViewStateTileResolver, viewStateOf, viewStatePickerSuffix } from "./view-state";
+import { clearViewState, setViewState, setViewStateTileResolver, viewStateOf, viewStatePickerSuffix, viewStateViewId } from "./view-state";
 import { packNeedsConsent, shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { livePatchIsConsentOnly, mergePluginConsentLivePatch } from "./plugin-consent-live";
@@ -1287,6 +1288,14 @@ function paintPluginNeedsReviewNotice(spec: PluginView, paneId?: string): void {
   // pack, its own review path grants it and then loads it, so nothing may paint Needs you here.
   if (willAutoConsent(spec) && getActiveModeSwitchSignal()) return;
   if (mosaic?.on) {
+    // The wall view's own pack (Syscon, Cypher CIC): Needs you names the wall view on its wall's
+    // main tile, and Review re-applies the wall view (#172), never the tile's own view.
+    const wall = wallOwner && !mosaic.tileIds.includes(wallOwner) && pluginSpecForMode(wallOwner)?.id === spec.id ? wallOwner : null;
+    const wallTile = wall ? wallMainTile() : null;
+    if (wall && wallTile) {
+      showNeedsYou({ tileId: wallTile, viewId: wall, spec, restart: () => applyMode(wall) });
+      return;
+    }
     const pane = paneId && mosaic.tileIds.includes(paneId) ? paneId : mosaicFocusSlot(mosaic);
     if (!pane) return;
     showNeedsYou({
@@ -1479,6 +1488,41 @@ function tileSkyStarting(tileId: string): boolean {
   return skyWaits.exempt(key);
 }
 
+/**
+ * While a wall view's own wall is up (Syscon, Cypher CIC) and it ships a plugin sky: that sky and
+ * the tile it goes on, the wall's main tile (the pane skySpecForMode picks). Null otherwise.
+ */
+function wallViewSky(): { tile: string; spec: PluginView } | null {
+  if (!mosaic?.on || !wallOwner || mosaic.tileIds.includes(wallOwner)) return null;
+  const spec = pluginSpecForMode(wallOwner);
+  if (!spec || !pluginHasSky(spec)) return null;
+  const main = wallMainTile();
+  return main ? { tile: main, spec } : null;
+}
+
+/** The wall's main tile: where a wall view's own sky and Needs you land (#172). */
+function wallMainTile(): string | null {
+  if (!mosaic?.on) return null;
+  const main = mosaic.mainTileId || mosaic.focusedId;
+  return main && mosaic.tileIds.includes(main) ? main : null;
+}
+
+/**
+ * A wall view's consent, asked without waiting (#172). Still needed or declined: its wall's main
+ * tile shows Needs you for it and Review there re-applies it; the header stays on the wall view.
+ */
+async function reviewWallView(m: ViewMode, spec: PluginView | null, signal: AbortSignal): Promise<SwitchPaneViewResult> {
+  const result = await ensureReviewed(spec, signal, { wait: false });
+  const tile = wallMainTile();
+  if (result === "ok") {
+    if (tile && viewStateOf(tile)?.kind === "needs-you" && viewStateViewId(tile) === m.id) clearViewState(tile);
+    return { ok: true, paneId: tile ?? m.id, viewId: m.id };
+  }
+  if (signal.aborted || !spec || !tile) return { ok: false, reason: "Not reviewed." };
+  showNeedsYou({ tileId: tile, viewId: m.id, spec, restart: () => applyMode(m.id) });
+  return { ok: false, reason: "Needs you.", needsYou: true };
+}
+
 /** A saved layout naming a view that is gone gets a plain notice, never a stand-in view. */
 function flagMissingMosaicViews(): void {
   if (!mosaic?.on || !catalogReady) return;
@@ -1495,12 +1539,17 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
   if (mosaic?.on) {
     flagMissingMosaicViews();
     mosaic.markSkyPending();
+    // The wall row's sky wins over its main tile's own; the other tiles keep theirs (#172c).
+    const wall = wallViewSky();
+    const tileSpec = (id: string): PluginView | null => (id === wall?.tile ? wall.spec : pluginSpecForMode(id));
+    const wantSky = (m: Mosaic, id: string): boolean =>
+      id === wall?.tile || mosaicPluginSkyPaneView(id, m.paneSky(id), lookForMode).wantPlugin;
     try {
       for (const id of mosaic.tileIds) {
         const target = mosaic.graphScene(id);
-        const pane = pluginSpecForMode(id);
+        const pane = tileSpec(id);
         if (!target || !pane || target.pluginSkyDrawn === pane.id) continue;
-        if (!mosaicPluginSkyPaneView(id, mosaic.paneSky(id), lookForMode).wantPlugin) continue;
+        if (!wantSky(mosaic, id)) continue;
         if (packNeedsConsent(pane)) continue;
         if (!(pane.has_sky_shader === true || !!pane.shader_sha256)) continue;
         beginSkyWait(id, target, pane, id, signal);
@@ -1511,9 +1560,8 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
       await loadTilesSettlingEach(m.tileIds, signal, async (id) => {
         const target = m.graphScene(id);
         if (!target) return;
-        const tileSky = m.paneSky(id);
-        const pane = pluginSpecForMode(id);
-        const wantPlugin = mosaicPluginSkyPaneView(id, tileSky, lookForMode).wantPlugin;
+        const pane = tileSpec(id);
+        const wantPlugin = wantSky(m, id);
         await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
       }, (id) => { if (m.on) m.settlePane(id); });
     } finally {
@@ -1692,9 +1740,12 @@ function restoreMosaicAnimSnap(snap: MosaicAnimSnap, preferMode: string): void {
 }
 
 function applyMosaicModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
-  const focusId = mosaic!.tileIds.includes(m.id) ? m.id : mosaic!.tileIds[0] ?? m.id;
+  const onWall = mosaic!.tileIds.includes(m.id);
+  const focusId = onWall ? m.id : mosaic!.tileIds[0] ?? m.id;
   mosaic!.focus(focusId);
-  const target = mosaic!.graphScene(focusId);
+  // A wall view (Syscon, Cypher CIC) is not a tile of its wall: the first tile keeps its own mode (#172).
+  const wallView = !onWall && !!pluginWall(lookForMode(m.id) ?? spec?.look);
+  const target = wallView ? undefined : mosaic!.graphScene(focusId);
   setSceneMode(target, m, opts, skyStage);
   document.body.classList.remove("arcade");
   scene.setActive(true);
@@ -1812,7 +1863,12 @@ async function applyMosaicModeAsync(m: ViewMode, flags: ApplyModeFlags, signal: 
   const opts = optsFor(m);
   const prevMode = liveMode;
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  const sw = await runMosaicPaneSwitch(m.id, undefined, signal, () => applyMode(m.id));
+  // A wall view is the wall applyPluginWall lays out below, not a pane: a pane switch would put it
+  // over its own wall's first tile (the onAfterSetSize re-entry lands here mid-layout, #172).
+  const wallView = !!pluginWall(lookForMode(m.id) ?? spec?.look);
+  const sw = wallView
+    ? await reviewWallView(m, spec, signal)
+    : await runMosaicPaneSwitch(m.id, undefined, signal, () => applyMode(m.id));
   if (signal.aborted) {
     settleConsentAndDrainAuto("aborted");
     return;
@@ -2297,6 +2353,7 @@ mosaic = new Mosaic({
     },
   }),
   pickSuffix: (modeId) => (pluginHasFrontend(pluginSpecForMode(modeId)) ? " (full view only)" : ""),
+  wallSkyTile: () => wallViewSky()?.tile ?? null,
   paneDice: (id) => makePaneDiceButton({
     pane: id,
     onClick: () => { rollPaneDice(id); },

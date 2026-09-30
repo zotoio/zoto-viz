@@ -324,6 +324,8 @@ export class Mosaic {
     pluginSpecForMode?: (modeId: string) => PluginView | null;
     /** Picker label suffix, e.g. " (full view only)" for sandboxed packs a pane can only preview. */
     pickSuffix?: (modeId: string) => string;
+    /** The tile carrying its wall view's own plugin sky (Syscon, Cypher CIC), which it draws. */
+    wallSkyTile?: () => string | null;
   }) {}
 
   private fillPanePick(pick: HTMLSelectElement, id: string): void {
@@ -1266,7 +1268,8 @@ export class Mosaic {
   }
 
   private animFor(id: string, wall: DreamAnim, pinLook = true): DreamAnim {
-    return mosaicAnimForTile(wall, id, this.tileSkies.get(id), pinLook);
+    const a = mosaicAnimForTile(wall, id, this.tileSkies.get(id), pinLook);
+    return this.cfg.wallSkyTile?.() === id ? { ...a, backdrop: "plugin" } : a;
   }
 
   /** One sky is off unless it was turned on. Distinct host skies are the default. */
