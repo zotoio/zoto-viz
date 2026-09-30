@@ -17,6 +17,7 @@ import {
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
 import { fillViewSelect, lookForMode, mergeLook, tileDisplayName } from "../plugins/plugin";
+import { unavailablePackForView, unavailableTileNotice } from "../plugins/plugin-unavailable";
 import { releasePanelView } from "./panel-view-lifecycle";
 import { bindVizDriveElement, clearVizDrive } from "../plugins/viz-drive";
 import { dropMosaicTileWriter } from "./mosaic-viz-feed";
@@ -805,6 +806,19 @@ export class Mosaic {
 
   private bindPaneView(pane: HTMLElement, id: string): void {
     this.cfg.testHooks?.onPaneRebind?.(id);
+    const unavailable = unavailablePackForView(id);
+    if (unavailable) {
+      // #169: a saved tile on a pack that can't load keeps its slot and says why. Nothing is
+      // mounted in its place (mosaicPaneMode would fall back to another pack).
+      pane.dataset.unavailable = unavailable.reason;
+      pane.classList.remove("warming");
+      this.paintPaneNotice(pane, unavailableTileNotice(unavailable), "default");
+      return;
+    }
+    if (pane.dataset.unavailable) {
+      delete pane.dataset.unavailable;
+      this.paintPaneNotice(pane, null);
+    }
     pane.classList.add("warming");
     if (this.mainId === id && this.cfg.sceneEl.parentElement !== pane) {
       pane.appendChild(this.cfg.sceneEl);

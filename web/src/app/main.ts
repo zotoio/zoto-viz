@@ -126,6 +126,8 @@ import {
   pluginNeedsReview,
   pluginViewId,
   viewSelectOptions,
+  viewPickerBanner,
+  viewPickerOptions,
   writePluginConfig,
   configStoreId,
   pluginSpecForStoreId as lookupPluginSpecForStoreId,
@@ -744,10 +746,17 @@ const modeSel = new Select({
   caption: "view",
   title: "view mode (keys 1–9, 0 for the 10th). Your last 10 picks stay at the top. Type to filter.",
   filterable: true,
-  options: viewSelectOptions(),
+  options: viewPickerOptions(),
   onChange: (id) => applyMode(id, {}, { channel: "user" }),
 });
 $("modeBox").append(modeSel.el);
+modeSel.setBanner(viewPickerBanner());
+
+/** #169: header picker rows (unavailable packs greyed out, after the rest) plus the setup banner. */
+function setHeaderPickerOptions(): void {
+  modeSel.setOptions(viewPickerOptions());
+  modeSel.setBanner(viewPickerBanner());
+}
 const blockedInstallPanel = new BlockedInstallPanel({
   onCatalogRefresh: () => syncPluginCatalog(),
 });
@@ -1507,7 +1516,7 @@ async function resumeMosaicConsentPending(): Promise<void> {
 
 async function refreshPluginCatalogAndResume(): Promise<void> {
   pluginSpecs = await installPlugins();
-  modeSel.setOptions(viewSelectOptions());
+  setHeaderPickerOptions();
   settings.refreshMosaicSlots();
   await resumeMosaicConsentPending();
 }
@@ -1780,7 +1789,7 @@ registerApplyModeTestBindings({
   setPluginSpecs: (specs) => { pluginSpecs = specs; catalogReady = true; },
   setLiveMode: (id) => { liveMode = id; },
   setModeSelValue: (id) => { modeSel.value = id; },
-  refreshModeOptions: () => modeSel.setOptions(viewSelectOptions()),
+  refreshModeOptions: () => setHeaderPickerOptions(),
   reattachModeSelect: () => {
     const modeBox = $("modeBox");
     if (modeBox && !modeBox.contains(modeSel.el)) modeBox.appendChild(modeSel.el);
@@ -2086,7 +2095,7 @@ settings.onPluginChange = (storeId, values) => {
 settings.onInstancesChange = () => {
   void (async () => {
     pluginSpecs = await installPlugins();
-    modeSel.setOptions(viewSelectOptions());
+    setHeaderPickerOptions();
     settings.refreshMosaicSlots();
     applyMode(modeSel.value, {}, { channel: "user" });
   })();
@@ -2318,7 +2327,7 @@ function syncHeaderViewChrome(): void {
 }
 
 function refreshViewMenus(): void {
-  modeSel.setOptions(viewSelectOptions());
+  setHeaderPickerOptions();
   mosaic?.refreshViewMenus();
   settings.refreshMosaicSlots();
 }
@@ -2694,7 +2703,7 @@ async function bootCatalogFromSession(): Promise<void> {
     agent.setControlFromServer(session.aiControl);
     pluginSpecs = await installPlugins();
     catalogReady = true;
-    modeSel.setOptions(viewSelectOptions());
+    setHeaderPickerOptions();
     settings.refreshMosaicSlots();
     settings.refreshRemixPicker(pluginSpecs);
     await hydrateRemixFromStorage();
