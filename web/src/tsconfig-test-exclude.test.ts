@@ -8,7 +8,8 @@
  *   scripts/revert-proof*, and are exempt from the shrink-only rule.
  *
  * The test-cast row: test code gets no new escape hatches: `as unknown as`, `as any`, `as never`,
- * `: any` annotations, or ts-ignore / ts-expect-error / ts-nocheck comments. Scope and matching live in
+ * `: any` annotations, `Object.create(` (returns `any`), or ts-ignore / ts-expect-error / ts-nocheck
+ * comments. Scope and matching live in
  * web/test-support/test-cast-scan.ts (test files and __tests__ under web/src, web/scripts, plugins/src,
  * plugins/sdk; all of web/test, web/test-support, web/typecheck, web/assembly and scripts/; test
  * helpers under web/src). Code patterns count only outside strings and comments. Partial fakes go

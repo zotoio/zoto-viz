@@ -1,5 +1,5 @@
 /**
- * #192: counts escape hatches in test code for the guard's test-cast row
+ * #192: counts escape hatches (casts, `any`, `Object.create(`, ts-comment directives) in test code for the guard's test-cast row
  * (web/src/tsconfig-test-exclude.test.ts). Code patterns are matched only outside strings and comments;
  * ts-comment directives only inside comments, so prose, string fixtures and regexes don't count.
  * Patterns are built from strings so this file's own source holds none of them.
@@ -12,6 +12,8 @@ const CODE_PATTERNS: Record<string, RegExp> = {
   "as any": new RegExp(String.raw`\bas\s+any\b`, "g"),
   "as never": new RegExp(String.raw`\bas\s+never\b`, "g"),
   ": any": new RegExp(String.raw`:\s*any\b(?!\s*[:(])`, "g"),
+  // Object.create(null) and friends return `any`.
+  "Object.create(": new RegExp(String.raw`\bObject\s*\.\s*create\s*\(`, "g"),
 };
 const COMMENT_PATTERNS: Record<string, RegExp> = {
   "ts-ignore": new RegExp("@" + String.raw`ts-ignore\b`, "g"),
