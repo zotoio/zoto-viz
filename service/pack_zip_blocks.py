@@ -315,14 +315,13 @@ def catalog_row_for_block(
             import_spec=str(row.get("import") or ""),
             detail=str(row.get("detail") or ""),
         )
-        ver = version
-        if ver is None and str(row.get("version") or "").strip():
-            raw_ver = str(row.get("version") or "").strip()
-            try:
-                ver = int(raw_ver)
-            except ValueError:
-                ver = raw_ver
-        return catalog_boundary_error(rel, block, upgrade=True, version=ver)
+        # #185: ``version`` is the installed (old) version; row["version"] is the blocked zip's.
+        from .pack_block_copy import SENTENCE_BOUNDARY, SENTENCE_CHECKS_FAILED
+
+        sentence = str(row.get("sentence") or "") or (
+            SENTENCE_BOUNDARY if (row.get("import") or row.get("error") == "pack_boundary") else SENTENCE_CHECKS_FAILED
+        )
+        return catalog_boundary_error(rel, block, upgrade=True, version=version, sentence=sentence)
     return out
 
 

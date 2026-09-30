@@ -2,11 +2,18 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass
 from typing import Any
 
-PACK_LINT_README = "plugins/sdk/starter/README.md#2-pack-lint"
+from .pack_block_copy import (
+    BLOCK_FIX_TAIL,
+    PACK_LINT_README,
+    SENTENCE_BOUNDARY,
+    block_message,
+    upgrade_block_message,
+)
 
 
 @dataclass
@@ -25,30 +32,28 @@ class PackBundleBoundary:
             "file": self.file,
             "import": self.import_spec,
             "message": format_blocked_message(self),
-            "hint": f"Ask the pack author to run pack lint — see {PACK_LINT_README}.",
+            "hint": BLOCK_FIX_TAIL,
+            # #185: diagnostics only (the log / pack author), never user text.
+            "details": boundary_details(self),
         }
 
 
-def format_upgrade_blocked_message(block: PackBundleBoundary, version: str | int | None = None) -> str:
-    from .plugin_install import format_v2_blocked_message
-
-    name = block.pack_name or block.pack_id or "Plugin"
-    ver = version if version is not None else "2"
+def boundary_details(block: PackBundleBoundary) -> str:
     file = block.file or "?"
     imp = block.import_spec or "?"
-    detail = f"({file} imports {imp})"
-    return format_v2_blocked_message(name, ver, detail)
+    extra = f" ({block.detail})" if block.detail else ""
+    return f"{file} imports {imp}{extra}; see {PACK_LINT_README}"
+
+
+def format_upgrade_blocked_message(block: PackBundleBoundary, old_version: str | int | None = None) -> str:
+    """Upgrade copy; ``old_version`` is the installed version (None: "the version you had")."""
+    name = block.pack_name or block.pack_id or "Plugin"
+    return upgrade_block_message(name, SENTENCE_BOUNDARY, old_version)
 
 
 def format_blocked_message(block: PackBundleBoundary) -> str:
     name = block.pack_name or block.pack_id or "Plugin"
-    loc = f" (`{block.file}`)" if block.file else ""
-    spec = f" (`{block.import_spec}`)" if block.import_spec else ""
-    return (
-        f"{name} was blocked: it imports a file outside its own folder{loc}{spec}. "
-        "Nothing was installed and the current wall is unchanged. "
-        f"Ask the pack author to run pack lint — see {PACK_LINT_README}."
-    )
+    return block_message(name, SENTENCE_BOUNDARY)
 
 
 _BOUNDARY_RE = re.compile(r"\{[^{}]*\"type\"\s*:\s*\"pack-bundle-boundary\"[^{}]*\}")
@@ -93,4 +98,5 @@ def boundary_from_compile(
 class PackBundleBoundaryError(ValueError):
     def __init__(self, block: PackBundleBoundary) -> None:
         self.block = block
+        logging.getLogger(__name__).warning("pack bundle boundary block (%s): %s", block.pack_id, boundary_details(block))
         super().__init__(format_blocked_message(block))

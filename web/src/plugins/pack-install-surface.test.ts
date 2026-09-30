@@ -13,8 +13,8 @@ describe("pack install blocked surface", () => {
     const { installPlugins, viewSelectOptions } = await import("./plugin");
     const orig = globalThis.fetch;
     const blocked =
-      "Probe was blocked: it imports a file outside its own folder (`frontend/index.ts`) (`./evil`). "
-      + "Nothing was installed and the current wall is unchanged.";
+      "Probe was blocked because it loads code from outside its own folder. "
+      + "Nothing was installed, and your wall is unchanged. If you made this pack, run pack lint to see what to fix.";
     const catalog = {
       ok: true,
       json: async () => ({
@@ -55,23 +55,23 @@ describe("pack install blocked surface", () => {
     syncBlockedCatalogFromErrors([{
       error: "pack_boundary",
       zip: "/data/plugins/local/evil.zip",
-      message: "Evil was blocked (frontend/index.ts imports ../escape); v1 is still running.",
+      message: "Evil was blocked because it loads code from outside its own folder. Nothing was updated, so version 3 is still installed. If you made this pack, run pack lint to see what to fix.",
     }]);
     const row = blockedViewSelectRow([{
       error: "pack_boundary",
       zipPath: "/data/plugins/local/evil.zip",
       zipDir: "/data/plugins/local",
-      message: "Evil was blocked (frontend/index.ts imports ../escape); v1 is still running.",
+      message: "Evil was blocked because it loads code from outside its own folder. Nothing was updated, so version 3 is still installed. If you made this pack, run pack lint to see what to fix.",
     }]);
     expect(row?.label).toBe("Blocked (1)");
     const text = formatBlockedCatalogNotice([{
       error: "pack_boundary",
       zipPath: "/data/plugins/local/evil.zip",
       zipDir: "/data/plugins/local",
-      message: "Evil was blocked (frontend/index.ts imports ../escape); v1 is still running.",
+      message: "Evil was blocked because it loads code from outside its own folder. Nothing was updated, so version 3 is still installed. If you made this pack, run pack lint to see what to fix.",
     }]);
     expect(text).toContain("Zip folder: /data/plugins/local");
-    expect(text).toContain("v1 is still running");
+    expect(text).toContain("so version 3 is still installed");
   });
 
   it("surfaces pack_sdk_contract like pack_boundary (older SDK label)", async () => {
@@ -79,7 +79,8 @@ describe("pack install blocked surface", () => {
     const { installPlugins, viewSelectOptions } = await import("./plugin");
     const orig = globalThis.fetch;
     const blocked =
-      "Stale was blocked: Built for an older zoto-viz SDK — needs an update from its author. Nothing else changed.";
+      "Stale was blocked because it was built for an older version of zoto-viz. Its author needs to update it. "
+      + "Nothing was installed, and your wall is unchanged.";
     globalThis.fetch = (async () => ({
       ok: true,
       json: async () => ({

@@ -34,6 +34,7 @@ import {
 } from "./pack-install-surface";
 import { PACK_LINT_PLAIN_FALLBACK, PACK_LINT_PLAIN_SUMMARY, plainBlockSummary } from "../../../plugins/sdk/pack-lint-hints";
 import type { PackLintRule } from "../../../plugins/sdk/pack-lint-types";
+import { formatBundleBoundaryError } from "../../../plugins/sdk/pack-bundle-resolve.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const webRoot = path.join(repoRoot, "web");
@@ -387,8 +388,12 @@ describe("#185 a lint block tells the user in plain words (no rule ids, paths or
   const RULE_IDS: PackLintRule[] = Object.keys(PACK_LINT_PLAIN_SUMMARY) as PackLintRule[];
   const expectPlain = (text: string) => {
     for (const id of RULE_IDS) expect(text, `no rule id ${id}`).not.toContain(id);
-    expect(text).not.toMatch(/parent|plugins\/src|:\d|`|\.ts\b|\.js\b/);
+    expect(text).not.toMatch(/parent|plugins\/|README|:\d|`|\.ts\b|\.js\b|\.mjs\b/);
   };
+  // #185 UX Pro copy review: one shape for every block (service/pack_block_copy.py).
+  const FIX_TAIL = "If you made this pack, run pack lint to see what to fix.";
+  const blocked = (name: string, sentence: string) =>
+    `${name} was blocked because ${sentence} Nothing was installed, and your wall is unchanged. ${FIX_TAIL}`;
 
   it("koi-pond (real pack, blocked): message is the plain sandbox sentence, exit 1, not the setup message", () => {
     const r = bundle(repoRoot, packHome(false, "koi-pond"));
@@ -402,9 +407,14 @@ describe("#185 a lint block tells the user in plain words (no rule ids, paths or
     expect(details(block[0]!), "raw findings stay in the diagnostic lines").toMatch(/plugins\/src\/koi-pond\/frontend\/\S+:\d+ sandbox-escape .*parent/);
     expect(r.stderr).not.toContain("Couldn't safety-check");
     expect(verdicts(r.stderr, "pack-install-lint-setup-error")).toEqual([]);
-    // The service composes "<Name> was blocked: <message> …"; the web surface shows it unchanged.
-    const serviceText = `Koi Pond was blocked: ${message} Nothing was installed and the current wall is unchanged. `
-      + "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint.";
+    // The service composes "<Name> was blocked because <message> …" (the pytest koi row pins the same
+    // text from the real service); the web surface shows it unchanged.
+    const serviceText = blocked("Koi Pond", message);
+    expect(serviceText).toBe(
+      "Koi Pond was blocked because it tries to reach outside its sandbox. Nothing was installed, and your wall "
+      + "is unchanged. If you made this pack, run pack lint to see what to fix.",
+    );
+    expectPlain(serviceText);
     // publish_local answers a fresh-install lint block as error "pack_boundary" + message.
     for (const error of ["pack_boundary", "pack_install_blocked"]) {
       const row = { ok: false as const, error, message: serviceText, zip: "koi-pond.zip" };
@@ -422,11 +432,50 @@ describe("#185 a lint block tells the user in plain words (no rule ids, paths or
       "it tries to reach outside its sandbox.",
     );
     expect(plainBlockSummary([{ rule: "sandbox-escape" }, { rule: "host-transport-escape" }, { rule: "sandbox-escape" }])).toBe(
-      "it tries to reach outside its sandbox. It tries to talk to the app directly instead of through the pack SDK.",
+      "it tries to reach outside its sandbox. It tries to talk to the app directly, which packs aren't allowed to do.",
+    );
+    expect(PACK_LINT_PLAIN_SUMMARY["host-transport-escape"]).toBe(
+      "it tries to talk to the app directly, which packs aren't allowed to do.",
     );
     expect(plainBlockSummary([{ rule: "no-such-rule" as PackLintRule }])).toBe(PACK_LINT_PLAIN_FALLBACK);
     expect(PACK_LINT_PLAIN_FALLBACK).toBe("it uses code the pack sandbox doesn't allow.");
   });
+
+  it("import-boundary block (web fallback and the SDK resolver): the one shape, no file, import or README", () => {
+    const want = blocked("Evil", "it loads code from outside its own folder.");
+    expect(want).toBe(
+      "Evil was blocked because it loads code from outside its own folder. Nothing was installed, and your wall "
+      + "is unchanged. If you made this pack, run pack lint to see what to fix.",
+    );
+    const payload = { ok: false as const, error: "pack_boundary", name: "Evil", file: "frontend/index.ts", import: "../../web/src/plugins/host" };
+    expect(formatPackInstallBlocked(payload)).toBe(want);
+    expect(formatBundleBoundaryError({ packName: "Evil", file: "frontend/index.ts", import: "../../web/src/plugins/host" })).toBe(want);
+    expectPlain(formatPackInstallBlocked(payload));
+  });
+
+  it("no block text carries plugins/, README, .ts, .mjs or a rule id; every block says \"was blocked\", the setup refusal never", () => {
+    const blocks = [
+      ...Object.values(PACK_LINT_PLAIN_SUMMARY).map((s) => blocked("Pack", s)),
+      blocked("Pack", PACK_LINT_PLAIN_FALLBACK),
+      formatPackInstallBlocked({ ok: false, error: "pack_boundary", name: "Pack", file: "frontend/a.ts", import: "../x.mjs" }),
+      formatBundleBoundaryError({ packId: "pack", file: "frontend/a.ts", import: "../x.mjs" }),
+    ];
+    for (const text of blocks) {
+      expectPlain(text);
+      expect(text).toContain("was blocked because ");
+      expect(text).not.toMatch(/was blocked[:.]/);
+    }
+    const setup = bundle(scriptTree({ tsx: false }), packHome());
+    const setupLines = verdicts(setup.stderr, "pack-install-lint-setup-error").map((v) => String(v.message));
+    expect(setupLines.length, why(setup)).toBeGreaterThan(0);
+    for (const s of setupLines) {
+      expect(s).toMatch(/^Couldn't safety-check/);
+      expect(s).not.toContain("was blocked");
+      // The setup copy names `pnpm install` in `web/` on purpose; the path / file-type / rule-id bar still holds.
+      for (const id of RULE_IDS) expect(s).not.toContain(id);
+      expect(s).not.toMatch(/plugins\/|README|\.ts\b|\.mjs\b/);
+    }
+  }, 60_000);
 });
 
 describe("#185 tsx is a pinned production dependency of web/", () => {

@@ -53,6 +53,8 @@ from .pack_runtime import (
     zip_block_cache_key,
 )
 from .plugin_install import InstallV2BlockedError
+from .pack_block_copy import PackBlockedError
+from .pack_zip_install_ux import installed_runtime_version
 from . import data_source_plugin as dsp
 import yaml
 from aiohttp import web
@@ -450,11 +452,8 @@ def _check_install_lint_verdict(
             raise PackBundleBoundaryError(block)
         lint_msg = _install_lint_block_from_compile(proc.stderr)
         if lint_msg:
-            raise ValueError(
-                f"{label} was blocked: {lint_msg} "
-                "Nothing was installed and the current wall is unchanged. "
-                "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
-            )
+            # #185: one shape for every block (pack_block_copy); raw findings are in the log only.
+            raise PackBlockedError(label, lint_msg)
         raise ValueError(proc.stderr.strip() or "esbuild failed")
     if not pil.install_lint_passed(proc.returncode, proc.stderr, nonce=nonce, pack=str(doc.get("id") or "")):
         # #185: fail closed. Only the nonce-bound pass line, last on stderr, is a pass.
@@ -1736,7 +1735,8 @@ def _attach_runtime(
                 rel,
                 e.block,
                 upgrade=upgrade,
-                version=doc.get("version"),
+                # #185: the installed version isn't known here ("the version you had").
+                version=None,
             ),
         )
         return None
@@ -1819,7 +1819,7 @@ def _materialize_zip_plugin(
             persisted,
             rel=rel,
             upgrade=runtime.is_dir(),
-            version=zip_version,
+            version=installed_runtime_version(runtime),
         )
         remember_zip_block(cache_key, row)
         errors.append(row)
@@ -1830,7 +1830,7 @@ def _materialize_zip_plugin(
             cached,
             rel=rel,
             upgrade=runtime.is_dir(),
-            version=zip_version,
+            version=installed_runtime_version(runtime),
         )
         errors.append(row)
         return None
@@ -1858,7 +1858,7 @@ def _materialize_zip_plugin(
         return None
     except PackBundleBoundaryError as e:
         upgrade = runtime.exists()
-        row = catalog_boundary_error(rel, e.block, upgrade=upgrade, version=zip_version)
+        row = catalog_boundary_error(rel, e.block, upgrade=upgrade, version=installed_runtime_version(runtime))
         remember_zip_block(cache_key, row)
         errors.append(row)
         cleanup_staging(runtime)
@@ -1872,6 +1872,8 @@ def _materialize_zip_plugin(
         elif "was blocked" in text:
             row["error"] = "pack_boundary"
             row["message"] = text
+            if isinstance(e, PackBlockedError):
+                row["sentence"] = e.sentence
         elif "v1 is still running" in text or "v1 was restored" in text:
             row["error"] = "pack_install_blocked"
             row["message"] = text

@@ -62,13 +62,14 @@ export function ruleMessage(rule: PackLintRule, v: PackLintViolation): string {
 }
 
 /**
- * #185: plain-words sentence per rule for the user-facing install block ("<Name> was blocked: …").
+ * #185: plain-words sentence per rule for the user-facing install block
+ * ("<Name> was blocked because <sentence> Nothing was installed, …"; service/pack_block_copy.py).
  * No rule ids, file paths, line numbers or code (`parent.`) — those stay in the diagnostic log.
  * Every rule is listed so a new rule can't silently fall back.
  */
 export const PACK_LINT_PLAIN_SUMMARY: Readonly<Record<PackLintRule, string>> = {
   "sandbox-escape": "it tries to reach outside its sandbox.",
-  "host-transport-escape": "it tries to talk to the app directly instead of through the pack SDK.",
+  "host-transport-escape": "it tries to talk to the app directly, which packs aren't allowed to do.",
   "inline-zoto-declare": "it connects to the visualiser in an old way that isn't allowed any more.",
   "pack-zoto-binding": "it connects to the visualiser in an old way that isn't allowed any more.",
   "host-import": "it loads code from outside its own folder.",

@@ -23,6 +23,7 @@ from . import plugin_zip as pz
 from . import plugins
 from .pack_boundary import PackBundleBoundaryError, format_upgrade_blocked_message
 from .pack_id import refuse_case_insensitive_id_collision
+from .pack_zip_install_ux import installed_runtime_version
 from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
 from .pack_install_lint import REASON_INSTALL_CHECK_UNAVAILABLE, PackInstallLintSetupError
 from . import pack_safe_zip as psz
@@ -491,7 +492,7 @@ def install_local_zip(
                     {
                         "ok": False,
                         "error": "pack_install_blocked",
-                        "message": format_upgrade_blocked_message(e.block, doc.get("version")),
+                        "message": format_upgrade_blocked_message(e.block, installed_runtime_version(runtime)),
                         "upgrade_blocked": "true",
                         **{k: v for k, v in e.block.to_dict().items() if k != "message"},
                     },

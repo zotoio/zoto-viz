@@ -55,12 +55,28 @@ _RULE_IDS = (
 )
 
 
+# #185 UX: user text never carries a repo / README path, a file path, an import specifier or a rule id.
+_NOT_IN_USER_TEXT = ("plugins/", "README", ".ts", ".mjs", *_RULE_IDS)
+_FIX_TAIL = "If you made this pack, run pack lint to see what to fix."
+
+
 def _assert_plain_block_text(text: str) -> None:
-    """#185 UX: after "<Name> was blocked:" only plain words; raw findings stay in the log."""
-    for rule in _RULE_IDS:
-        assert rule not in text, (rule, text)
-    assert "parent" not in text and "plugins/src/" not in text.replace("plugins/sdk/starter", ""), text
+    """#185 UX: "<Name> was blocked because <sentence> …" in plain words; raw findings stay in the log."""
+    for token in _NOT_IN_USER_TEXT:
+        assert token not in text, (token, text)
+    assert "parent" not in text and "`" not in text and "../" not in text, text
     assert not re.search(r":\d", text), text
+
+
+def _blocked(name: str, sentence: str) -> str:
+    return f"{name} was blocked because {sentence} Nothing was installed, and your wall is unchanged. {_FIX_TAIL}"
+
+
+def _upgrade_blocked(name: str, sentence: str, old: object) -> str:
+    return f"{name} was blocked because {sentence} Nothing was updated, so version {old} is still installed. {_FIX_TAIL}"
+
+
+KOI_BLOCK = _blocked("Koi Pond", "it tries to reach outside its sandbox.")
 
 
 def _stub_bundle(monkeypatch: pytest.MonkeyPatch, code: int, stderr: object, stdout: str = "export {};\n") -> None:
@@ -147,9 +163,8 @@ def test_compile_lint_block_keeps_its_message_and_is_not_a_setup_error(monkeypat
         plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
     assert not isinstance(e.value, PackInstallLintSetupError)
     text = str(e.value)
-    assert text.startswith("Pulse TS was blocked: it tries to reach outside its sandbox. Nothing was installed")
+    assert text == _blocked("Pulse TS", "it tries to reach outside its sandbox."), text
     _assert_plain_block_text(text)
-    assert "Nothing was installed and the current wall is unchanged." in text
     setup = format_install_lint_setup_message("Pulse TS")
     assert setup not in text and text not in setup
     assert "safety-check" not in text and "pnpm install" not in text
@@ -363,8 +378,7 @@ def test_bundle_false_pack_with_indexeddb_in_a_js_file_is_blocked_at_install(
     out = plugin_local.install_local_zip(_shipped_zip(tmp_path, "sandbox-fixture-multi", leak_js=True), overwrite=True)
     assert out.get("ok") is False, out
     text = str(out.get("message") or out.get("error"))
-    assert text.startswith("Sandbox Fixture Multi was blocked: "), out
-    assert text.startswith("Sandbox Fixture Multi was blocked: it tries to reach outside its sandbox. "), out
+    assert text == _blocked("Sandbox Fixture Multi", "it tries to reach outside its sandbox."), out
     _assert_plain_block_text(text)
     assert "safety-check" not in text
     assert not (paths.plugin_local_runtime_dir(create=True) / "sandbox-fixture-multi").exists()
@@ -440,10 +454,11 @@ def test_koi_pond_block_is_plain_words_and_the_raw_findings_are_logged(
     assert not isinstance(e.value, PackInstallLintSetupError)
     text = str(e.value)
     assert text == (
-        "Koi Pond was blocked: it tries to reach outside its sandbox. "
-        "Nothing was installed and the current wall is unchanged. "
-        "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
+        "Koi Pond was blocked because it tries to reach outside its sandbox. "
+        "Nothing was installed, and your wall is unchanged. "
+        "If you made this pack, run pack lint to see what to fix."
     ), text
+    assert text == KOI_BLOCK
     _assert_plain_block_text(text)
     assert "safety-check" not in text
     assert codes == [1], f"bundle-pack-entry.mjs exit codes {codes} (1 = lint block, 3 = setup)"
@@ -479,3 +494,156 @@ def test_setup_messages_and_the_lint_block_share_no_text(
         for token in ("safety-check", "pnpm install", "wasn't installed", "wasn't updated", "still on v"):
             assert token not in block_msg, (token, block_msg)
     assert fresh_msg != upgrade_msg and fresh_msg not in upgrade_msg and upgrade_msg not in fresh_msg
+
+
+# --- one shape for every block (UX Pro copy review, 2026-09-30) ----------------------------------
+
+
+def _bad_probe(tmp_path: Path, version: int, kind: str) -> bytes:
+    """Upgrade Probe at ``version`` with a lint finding ("lint") or an import outside its folder ("boundary")."""
+    src = tmp_path / f"probe-bad-{kind}-v{version}"
+    shutil.copytree(ROOT / "plugins/sdk/pack-bundle-fixtures/upgrade-probe", src)
+    yml = src / "plugin.yml"
+    text = yml.read_text(encoding="utf-8").replace("version: 1", f"version: {version}")
+    yml.write_text(text.replace("name: Upgrade probe v1", "name: Upgrade Probe"), encoding="utf-8")
+    entry = src / "frontend" / "index.ts"
+    if kind == "lint":
+        entry.write_text(entry.read_text(encoding="utf-8") + '\nexport function stash() { return indexedDB.open("x"); }\n', encoding="utf-8")
+    else:
+        shutil.copy2(ROOT / "plugins/sdk/pack-bundle-fixtures/json-escape/frontend/index.ts", entry)
+    return _zip_tree(src)
+
+
+def test_import_boundary_block_is_the_one_shape_and_the_path_is_only_in_details(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    _isolate_plugin_local: Path,
+) -> None:
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    caplog.set_level(logging.WARNING)
+    plugins.reset_bundles()
+    src = ROOT / "plugins/sdk/pack-bundle-fixtures/json-escape"
+    out = plugin_local.install_local_zip(_zip_tree(src), overwrite=True)
+    assert out.get("ok") is False and out.get("error") == "pack_boundary", out
+    text = str(out.get("message"))
+    assert text == (
+        "JSON escape probe was blocked because it loads code from outside its own folder. "
+        "Nothing was installed, and your wall is unchanged. "
+        "If you made this pack, run pack lint to see what to fix."
+    ), text
+    _assert_plain_block_text(text)
+    assert "frontend/index.ts imports ../../../../../schema/plugin.schema.json" in str(out.get("details")), out
+    assert "plugins/sdk/starter/README.md#2-pack-lint" in str(out.get("details")), out
+    assert _FIX_TAIL == out.get("hint"), out
+    logged = "\n".join(r.getMessage() for r in caplog.records if r.levelno == logging.WARNING)
+    assert "frontend/index.ts imports" in logged, logged
+
+
+@pytest.mark.parametrize(
+    ("kind", "sentence"),
+    [
+        pytest.param("lint", "it tries to reach outside its sandbox.", id="lint-block"),
+        pytest.param("boundary", "it loads code from outside its own folder.", id="import-boundary"),
+    ],
+)
+def test_upgrade_block_names_the_version_that_is_really_installed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+    kind: str,
+    sentence: str,
+) -> None:
+    """v3 installed, a blocked v4 dropped on top: "…so version 3 is still installed." (never "v1")."""
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    first = plugin_local.install_local_zip(_probe(tmp_path, 3), overwrite=True)
+    assert first.get("wrote") is True, first
+    runtime = paths.plugin_local_runtime_dir(create=True) / "upgrade-probe"
+    plugins.reset_bundles()
+    out = plugin_local.install_local_zip(_bad_probe(tmp_path, 4, kind), overwrite=True)
+    assert out.get("ok") is False, out
+    text = str(out.get("message"))
+    assert text == _upgrade_blocked("Upgrade Probe", sentence, 3), text
+    assert "v1" not in text and "version 1" not in text
+    _assert_plain_block_text(text)
+    assert "version: 3" in (runtime / "plugin.yml").read_text(encoding="utf-8"), "v3 is still installed"
+
+
+def test_sdk_contract_block_is_the_one_shape_without_the_pack_lint_tail(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    """An older-SDK pack is a block ("was blocked"); pack lint can't fix it, so no pack-lint tail."""
+    from service import pack_sdk_contract as psc
+
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    row = psc.catalog_sdk_contract_error("x.zip", {"id": "upgrade-probe", "name": "Upgrade Probe"}, 0, 1)
+    monkeypatch.setattr("service.plugin_install.assert_pack_sdk_compatible", lambda *_a, **_k: row)
+    out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
+    assert out.get("ok") is False, out
+    assert out.get("message") == (
+        "Upgrade Probe was blocked because it was built for an older version of zoto-viz. "
+        "Its author needs to update it. Nothing was installed, and your wall is unchanged."
+    ), out
+    _assert_plain_block_text(str(out.get("message")))
+
+
+def _every_block_and_setup_text() -> tuple[list[str], list[str]]:
+    from service.pack_block_copy import SENTENCE_CHECKS_FAILED, block_message, upgrade_block_message
+    from service.pack_boundary import PackBundleBoundary, format_blocked_message, format_upgrade_blocked_message
+    from service.pack_install_copy import blocked_message
+    from service.pack_runtime import catalog_boundary_error
+    from service.pack_sdk_contract import catalog_sdk_contract_error, format_sdk_older_message
+    from service.plugin_install import format_v2_blocked_message
+
+    b = PackBundleBoundary(
+        pack_id="koi-pond", pack_name="Koi Pond", file="frontend/index.ts", import_spec="../../../web/src/plugins/host"
+    )
+    blocks = [
+        KOI_BLOCK,
+        format_blocked_message(b),
+        format_upgrade_blocked_message(b, 3),
+        format_upgrade_blocked_message(b, None),
+        b.to_dict()["message"],
+        b.to_dict()["hint"],
+        catalog_boundary_error("x.zip", b)["message"],
+        catalog_boundary_error("x.zip", b, upgrade=True, version=3)["message"],
+        format_v2_blocked_message("Koi Pond", 3, SENTENCE_CHECKS_FAILED),
+        blocked_message("Koi Pond", "it loads code from another pack."),
+        block_message("Koi Pond", "it tries to talk to the app directly, which packs aren't allowed to do."),
+        upgrade_block_message("Koi Pond", "it reads its settings in a way that isn't allowed.", "2.1"),
+        format_sdk_older_message("Koi Pond"),
+        catalog_sdk_contract_error("plugins/src/koi/plugin.yml", {"id": "koi", "name": "Koi"}, 0, 1)["message"],
+    ]
+    setup = [
+        format_install_lint_setup_message("Koi Pond"),
+        format_install_lint_setup_upgrade_message("Koi Pond", 3),
+        str(PackInstallLintSetupError("Koi Pond")),
+    ]
+    return blocks, setup
+
+
+def test_no_user_text_carries_a_repo_path_a_file_type_or_a_rule_id() -> None:
+    blocks, setup = _every_block_and_setup_text()
+    for text in blocks + setup:
+        for token in _NOT_IN_USER_TEXT:
+            assert token not in text, (token, text)
+
+
+def test_every_block_says_was_blocked_and_the_setup_refusal_never_does() -> None:
+    """plugin_local / plugins branch on the substring "was blocked" (never "was blocked:")."""
+    blocks, setup = _every_block_and_setup_text()
+    for text in blocks:
+        if text == _FIX_TAIL:  # to_dict()["hint"] is the tail on its own
+            continue
+        assert "was blocked because " in text, text
+        assert "was blocked:" not in text and "was blocked." not in text, text
+    for text in setup:
+        assert text.startswith("Couldn't safety-check"), text
+        assert "was blocked" not in text and "blocked" not in text, text
