@@ -89,7 +89,7 @@ describe("koi-pond shipped pack", () => {
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
     expect(FRONT).toContain("KoiPondSim");
     expect(FRONT).not.toMatch(/\bparent\s*\.\s*document\b/);
-    expect(FRONT).not.toMatch(/zoto\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{[\s\S]*?getConfig/);
+    expect(FRONT).not.toMatch(/host\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{[\s\S]*?getConfig/);
     expect(VIS).toContain("Applies to all Koi Pond tiles");
     expect(VIS).toContain("moonlit_lotus");
     expect(MAPPING).toContain("pond-wide");

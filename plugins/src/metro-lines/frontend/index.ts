@@ -1,6 +1,6 @@
 /** Metro Lines — schematic transit map (sandbox entry). */
-
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+
 import {
   acquireMetroSim,
   isMetroDemoFrame,
@@ -16,32 +16,21 @@ import {
   releaseMetroSim,
   type MetroOptions,
 } from "./metro";
+import { getVizZoto } from "../../../sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  onTeardown?: (() => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-  writeParticles: (data: number[], stride?: number) => void;
-};
+const host = getVizZoto();
 
-let opts: MetroOptions = parseMetroOptions(zoto.getConfig?.());
-let tile = metroCanvasSize(zoto.getConfig?.());
+let opts: MetroOptions = parseMetroOptions(host.getConfig?.());
+let tile = metroCanvasSize(host.getConfig?.());
 const sim = acquireMetroSim();
 
-zoto.onConfig = (cfg) => {
+host.onConfig = (cfg) => {
   opts = parseMetroOptions(cfg);
   tile = metroCanvasSize(cfg);
   sim.runtime.resetLayoutState();
 };
 
-zoto.onTeardown = () => {
-  releaseMetroSim();
-};
-
-zoto.onFrame = (frame) => {
+host.onFrame = (frame: VizDataFrame) => {
   const net = sim.step(frame, opts);
   const slots = packMetroSlots(frame, net, opts, sim, tile);
   const demo = isMetroDemoFrame(frame);
@@ -56,13 +45,18 @@ zoto.onFrame = (frame) => {
   }
   for (let i = 0; i < slots.length; i++) {
     const data = slots[i];
-    if (data && data.length > 0) zoto.writeBuffer(i, data);
+    if (data && data.length > 0) host.writeBuffer(i, data);
   }
-  zoto.writeParticles(packMetroParticles(sim), 4);
+  host.writeParticles(packMetroParticles(sim), 4);
   const bright = opts.nightMode ? 0.88 + frame.audio * 0.15 : 0.95 + frame.audio * 0.08;
-  zoto.writeUniform("uBright", bright);
-  zoto.writeUniform("uOpacity", 1);
-  zoto.writeUniform("uAudio", frame.audio);
-  zoto.writeUniform("uAccent", metroAccent(opts, frame.audio));
-  zoto.writeUniform("uBg", metroBg(opts));
+  host.writeUniform("uBright", bright);
+  host.writeUniform("uOpacity", 1);
+  host.writeUniform("uAudio", frame.audio);
+  host.writeUniform("uAccent", metroAccent(opts, frame.audio));
+  host.writeUniform("uBg", metroBg(opts));
 };
+
+/** Release the shared sim (was the onTeardown hook, which the host never calls). */
+export function metroLinesTeardown(): void {
+  releaseMetroSim();
+}

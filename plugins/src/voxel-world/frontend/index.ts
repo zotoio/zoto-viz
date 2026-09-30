@@ -11,17 +11,10 @@ import {
   tickVoxelWorld,
   undoVoxConfig,
 } from "./engine";
-import type { VizDataFrame, VizPresentTick } from "../../../sdk/viz-contract";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "../../../sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  onPresent: ((tick: VizPresentTick) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-  setPluginConfig?: (cfg: Record<string, string>) => void;
-};
+const host = getVizZoto();
 
 let ready = false;
 let liveFrame: VizDataFrame | null = null;
@@ -48,23 +41,23 @@ function pushVizOut(frame: VizDataFrame, dt: number): void {
     liveAspect,
     dt,
   );
-  zoto.writeBuffer(0, out.slot0);
-  zoto.writeBuffer(1, out.slot1);
-  zoto.writeUniform("uBright", out.bright);
-  zoto.writeUniform("uAccent", out.accent);
-  zoto.writeUniform("uBg", out.bg);
-  zoto.writeUniform("uAudio", frame.audio);
+  host.writeBuffer(0, out.slot0);
+  host.writeBuffer(1, out.slot1);
+  host.writeUniform("uBright", out.bright);
+  host.writeUniform("uAccent", out.accent);
+  host.writeUniform("uBg", out.bg);
+  host.writeUniform("uAudio", frame.audio);
 }
 
-zoto.onConfig = (cfg) => boot(cfg);
+host.onConfig = (cfg) => boot(cfg);
 
-zoto.onFrame = (frame) => {
-  if (!ready) boot(zoto.getConfig?.() ?? {});
+host.onFrame = (frame) => {
+  if (!ready) boot(host.getConfig?.() ?? {});
   liveFrame = frame;
 };
 
-zoto.onPresent = (tick) => {
-  if (!ready) boot(zoto.getConfig?.() ?? {});
+host.onPresent = (tick) => {
+  if (!ready) boot(host.getConfig?.() ?? {});
   if (!liveFrame) return;
   if (typeof tick.aspect === "number" && tick.aspect > 0) liveAspect = tick.aspect;
   const dt = tick.frameMs > 0 ? tick.frameMs / 1000 : 1 / 60;

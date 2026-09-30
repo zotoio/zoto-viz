@@ -14,15 +14,9 @@ import {
   createColony,
 } from "./colony";
 import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { getVizZoto } from "../../../sdk/viz-zoto";
 
-declare const zoto: {
-  onFrame: ((frame: VizDataFrame) => void) | null;
-  onConfig: ((cfg: Record<string, string>) => void) | null;
-  onTeardown?: (() => void) | null;
-  getConfig?: () => Record<string, string>;
-  writeBuffer: (slot: number, data: number[]) => void;
-  writeUniform: (name: string, value: number | [number, number, number]) => void;
-};
+const host = getVizZoto();
 
 let look: AntColonyLook = parseAntColonyLook();
 let colony: AntColonySim | null = null;
@@ -49,23 +43,18 @@ function bindColony(next: AntColonyLook): void {
 }
 
 function boot(): void {
-  look = parseAntColonyLook(zoto.getConfig?.());
+  look = parseAntColonyLook(host.getConfig?.());
   if (!colony) colony = createColony(look);
 }
 
-const hostZoto = (globalThis as { zoto?: typeof zoto }).zoto;
-
-if (hostZoto) {
-  hostZoto.onConfig = (cfg) => {
+// The light tests import this module with no host (for cycleColonyTeardown and the re-exports), so
+// getVizZoto() can be undefined here; only bind the handlers when the sandbox host is present.
+if (host) {
+  host.onConfig = (cfg) => {
     bindColony(parseAntColonyLook(cfg));
   };
 
-  hostZoto.onTeardown = () => {
-    colony?.dispose();
-    colony = null;
-  };
-
-  hostZoto.onFrame = (frame) => {
+  host.onFrame = (frame: VizDataFrame) => {
   if (!colony) boot();
   if (!colony) colony = createColony(look);
   colony.setLook(look);
@@ -73,26 +62,32 @@ if (hostZoto) {
   if (warmFrames++ > 4) colony.markWarm();
 
   const slots = colony.packSlots(frame);
-  hostZoto.writeBuffer(SLOT_META, slots[0]!);
-  hostZoto.writeBuffer(SLOT_CHAMBERS, slots[1]!);
-  hostZoto.writeBuffer(SLOT_TUNNELS, slots[2]!);
-  hostZoto.writeBuffer(SLOT_PHERO_A, slots[3]!);
-  hostZoto.writeBuffer(SLOT_PHERO_B, slots[4]!);
-  hostZoto.writeBuffer(SLOT_PHERO_C, slots[5]!);
-  hostZoto.writeBuffer(SLOT_PHERO_D, slots[6]!);
-  hostZoto.writeBuffer(SLOT_ANTS, slots[7]!);
+  host.writeBuffer(SLOT_META, slots[0]!);
+  host.writeBuffer(SLOT_CHAMBERS, slots[1]!);
+  host.writeBuffer(SLOT_TUNNELS, slots[2]!);
+  host.writeBuffer(SLOT_PHERO_A, slots[3]!);
+  host.writeBuffer(SLOT_PHERO_B, slots[4]!);
+  host.writeBuffer(SLOT_PHERO_C, slots[5]!);
+  host.writeBuffer(SLOT_PHERO_D, slots[6]!);
+  host.writeBuffer(SLOT_ANTS, slots[7]!);
 
   const fail = frame.sys?.failed ?? 0;
   const accent = fail > 0.05 && look.mapFailures
     ? [1.0, 0.2, 0.33] as [number, number, number]
     : paletteAccent(look.palette);
 
-  hostZoto.writeUniform("uBright", 0.72 + frame.audio * 0.28);
-  hostZoto.writeUniform("uAudio", frame.audio);
-  hostZoto.writeUniform("uAccent", accent);
-  hostZoto.writeUniform("uBg", paletteBg(look.palette));
-  hostZoto.writeUniform("uOpacity", look.preset === "minimal" ? 0.92 : 1);
+  host.writeUniform("uBright", 0.72 + frame.audio * 0.28);
+  host.writeUniform("uAudio", frame.audio);
+  host.writeUniform("uAccent", accent);
+  host.writeUniform("uBg", paletteBg(look.palette));
+  host.writeUniform("uOpacity", look.preset === "minimal" ? 0.92 : 1);
   };
+}
+
+/** Drop the colony (was the onTeardown hook, which the host never calls). */
+export function antColonyTeardown(): void {
+  colony?.dispose();
+  colony = null;
 }
 
 /** Host-less teardown harness (light tests). */

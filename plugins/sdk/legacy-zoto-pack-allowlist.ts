@@ -1,17 +1,11 @@
 import type { PackLintRule, PackLintViolation } from "./pack-lint-types";
 
 /**
- * Shipped packs still on `declare const zoto` (added after PR C #55 migrated the rest to `getVizZoto()`).
- * Only ids on this list may carry baselined `inline-zoto-declare` rows; any other pack fails.
+ * Shipped packs still on `declare const zoto`. Empty since #210 moved the last six (ant-colony,
+ * aquarium, koi-pond, metro-lines, rocket-car-soccer, voxel-world) to `getVizZoto()`, so an
+ * `inline-zoto-declare` in any pack now fails pack lint and blocks pack install. Keep it empty.
  */
-export const LEGACY_DECLARE_ZOTO_PACK_IDS: readonly string[] = [
-  "ant-colony",
-  "aquarium",
-  "koi-pond",
-  "metro-lines",
-  "rocket-car-soccer",
-  "voxel-world",
-];
+export const LEGACY_DECLARE_ZOTO_PACK_IDS: readonly string[] = [];
 
 /** Only `declare const zoto` is allowlisted (not `const zoto = getVizZoto()`). */
 export const LEGACY_ZOTO_ALLOWLIST_RULES: ReadonlySet<PackLintRule> = new Set(["inline-zoto-declare"]);
