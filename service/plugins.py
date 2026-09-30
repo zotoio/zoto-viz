@@ -53,7 +53,12 @@ from .pack_runtime import (
     zip_block_cache_key,
 )
 from .pack_install_copy import REASON_UPDATE_REFUSED
-from .plugin_install import InstallV2BlockedError, update_refused_payload
+from .plugin_install import (
+    InstallCheckUnavailableError,
+    InstallV2BlockedError,
+    install_unchecked_payload,
+    update_refused_payload,
+)
 from .pack_block_copy import PackBlockedError
 from .pack_zip_install_ux import installed_runtime_version
 from . import data_source_plugin as dsp
@@ -1933,6 +1938,13 @@ def _materialize_zip_plugin(
             row["error"] = "pack_boundary"
         remember_zip_block(cache_key, row)
         errors.append(row)
+        cleanup_staging(runtime)
+        return None
+    except InstallCheckUnavailableError as e:
+        # #200: a fresh install whose check couldn't run: list this one pack as blocked with the
+        # fresh-install sentence (an upgrade never gets here: it's InstallV2BlockedError). Not cached,
+        # so the next scan checks it again.
+        errors.append({"file": rel, "zip": rel, **install_unchecked_payload(e)})
         cleanup_staging(runtime)
         return None
     except PackBundleBoundaryError as e:

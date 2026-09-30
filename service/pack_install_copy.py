@@ -17,6 +17,10 @@ REASON_BOUNDARY_BLOCKED = "pack_boundary"
 #: next to the row's ``error`` category (the reasonCode convention of plugin_manifest_block rows).
 #: Service and web branch on this code, never on the message, so the wording can change freely.
 REASON_UPDATE_REFUSED = "update_refused"
+#: #200: a fresh install whose safety check couldn't run (not a setup cause), so it wasn't installed.
+#: Carried as ``reasonCode`` next to ``error: pack_install_check_unavailable``; the message is the shared
+#: copy table's ``install_unchecked``.
+REASON_INSTALL_UNCHECKED = "install_unchecked"
 
 # UX Pro — zip install rejection copy (literal pins in tests; revert rows blank these).
 ZIP_UX_CORRUPT_TAIL = "The file isn't a valid pack or is damaged."

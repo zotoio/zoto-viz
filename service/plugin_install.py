@@ -28,7 +28,12 @@ from .pack_install_lint import (
 )
 from .pack_zip_blocks import record_zip_block, row_for_start_failure, zip_block_for_sha
 from .pack_install_blocked_store import record_blocked_zip
-from .pack_install_copy import REASON_PACK_INSTALL_BLOCKED, REASON_UPDATE_REFUSED, upgrade_rollback_user_message
+from .pack_install_copy import (
+    REASON_INSTALL_UNCHECKED,
+    REASON_PACK_INSTALL_BLOCKED,
+    REASON_UPDATE_REFUSED,
+    upgrade_rollback_user_message,
+)
 from .pack_sdk_contract import assert_pack_sdk_compatible, read_cached_sdk_manifest
 from .pack_zip_install_ux import installed_runtime_version
 from .pack_block_copy import (
@@ -129,6 +134,12 @@ class InstallUpdateRefusedError(ValueError):
 def update_refused_payload(zip_rel: str) -> dict[str, str]:
     """#111: the payload fields of a refused update. ``reasonCode`` is the stable code callers branch on."""
     return {"upgrade_blocked": "true", "zip": zip_rel, "reasonCode": REASON_UPDATE_REFUSED}
+
+
+def install_unchecked_payload(e: InstallCheckUnavailableError) -> dict[str, str]:
+    """#200: a fresh install whose check couldn't run: the fresh-install sentence (``str(e)``, the table's
+    ``install_unchecked``) with its codes. Nothing was installed; there is no old version to name."""
+    return {"error": REASON_INSTALL_CHECK_UNAVAILABLE, "message": str(e), "reasonCode": REASON_INSTALL_UNCHECKED}
 
 
 def update_refused_error(name: str, old_version: str | int | None, zip_rel: str) -> InstallV2BlockedError:
