@@ -1,7 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["vite/client", "vitest/globals"]
+    "types": ["vite/client", "vitest/globals"],
+    "paths": { "plugins/sdk/*": ["../plugins/sdk/*"] }
   },
   "include": [
     "src/core/d3-force-3d.d.ts",
@@ -13,6 +14,12 @@
     "src/graph/pack-mirror-lifecycle.test.ts",
     "src/graph/pack-mirror-rect-converters.test.ts",
     "src/graph/pack-mirror-readback.test.ts",
+    "src/plugins/blob-mesh-placement.test.ts",
+    "src/plugins/blob-mesh-sky.test.ts",
+    "src/plugins/blob-mesh-budget.test.ts",
+    "src/plugins/blob-mesh-devices-notice.test.ts",
+    "src/ui/viz-hud.test.ts",
+    "src/plugins/blob-mesh-dark-patches.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
     "test/node/pack-mirror-readback-vite.ts"
   ],

@@ -6,5 +6,5 @@ look:
   theme: ice
   backdrop: plugin
   skyOpacity: 0.96
-  skyBright: 1.18
+  skyBright: 0.65
   gridOpacity: 0.07

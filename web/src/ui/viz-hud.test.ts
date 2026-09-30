@@ -363,7 +363,7 @@ describe("viz hud helpers", () => {
     const visibleSeps = () =>
       [...hud.root.querySelectorAll<HTMLElement>(".viz-hud-sep")].filter((el) => !el.hidden);
     expect(visibleSeps().length).toBe(3);
-    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(true);
+    expect(host.querySelector<HTMLElement>(".viz-stage-fail-label")?.hidden).toBe(true);
     hud.tick({
       ...healthy,
       frame: {
@@ -477,7 +477,7 @@ describe("viz hud helpers", () => {
       now: 1000,
     });
     const expected = idleVizFrameFailedBadgeText();
-    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(true);
+    expect(host.querySelector<HTMLElement>(".viz-stage-fail-label")?.hidden).toBe(true);
     expect(a.querySelector(".pane-status")?.textContent).toBe(expected);
     expect(b.querySelector(".pane-status")?.textContent).toBe(expected);
     hud.syncStatusPanels([a]);
@@ -499,11 +499,11 @@ describe("viz hud helpers", () => {
       state: minimalState(),
       now: 1000,
     });
-    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(false);
+    expect(host.querySelector<HTMLElement>(".viz-stage-fail-label")?.hidden).toBe(false);
     hud.setActive(null, "");
-    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(false);
+    expect(host.querySelector<HTMLElement>(".viz-stage-fail-label")?.hidden).toBe(false);
     hud.clearStatus();
-    expect(host.querySelector(".viz-stage-fail-label")?.hidden).toBe(true);
+    expect(host.querySelector<HTMLElement>(".viz-stage-fail-label")?.hidden).toBe(true);
   });
 
   it("hides failure badge on healthy idle frames", () => {
