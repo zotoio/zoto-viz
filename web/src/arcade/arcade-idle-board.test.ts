@@ -405,6 +405,53 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       });
     }
 
+    // #199 (UX Pro): once the demo is playing it makes its own batch on every tick whether the server answers, fails
+    // or hangs; it never waits on the fetch, so the board can't drain under a "Demo data" label.
+    for (const path of ["away", "hold"] as const) {
+      it(`${engine}: demo already playing, then ${path === "away" ? "the server goes away (fetch rejects)" : "the fetch hangs"} — a demo batch on every one of 12 ticks, board not empty, "· demo" and "Demo data" stay; a live answer then takes over on its tick (#199)`, async () => {
+        const { view, poll, tick, hud, labelShown, badge, demoCalls } = mount(engine, cleanHomeState());
+        const rate = () => (view instanceof PongView ? view["stats"].pps : view["pps"]);
+        // reach the demo the natural way: the poll at start and 2 quiet (empty) polls
+        await vi.advanceTimersByTimeAsync(0);
+        await poll();
+        await poll();
+        expect(labelShown(), "demo playing before the server goes away").toBe(true);
+        const f0 = fetches, d0 = demoCalls();
+        mode = path;
+        const perTick: number[] = [];
+        for (let i = 1; i <= 12; i++) {
+          const d = demoCalls();
+          // a rejected fetch each tick; for the hang, tick 1 starts the fetch that stays in flight and 2..12 start none
+          await (path === "hold" && i > 1 ? tick() : poll());
+          perTick.push(demoCalls() - d);
+        }
+        expect(demoCalls() - d0, `demo batches over 12 ticks with the server ${path === "away" ? "away" : "hung"} (per tick: ${perTick.join(", ")})`).toBe(12);
+        expect(fetches - f0, "fetches started over the 12 ticks").toBe(path === "away" ? 12 : 1);
+        expect(entities(engine, view), "board entities after 12 ticks").toBeGreaterThan(0);
+        const h = await hud();
+        expect(h.demo, `HUD "· demo" cue after 12 ticks ("${h.row}")`).toBe(true);
+        expect(h.pps, `HUD rate after 12 ticks ("${h.row}")`).toBeGreaterThan(0);
+        expect(labelShown(), "demo label after 12 ticks").toBe(true);
+        expect(badge(), "demo label text after 12 ticks").toBe(DEMO_DATA_LABEL);
+        // the server is back with live packets: live takes over on that tick
+        liveK = 5;
+        mode = "live";
+        if (path === "hold") {
+          expect(held.length, "the one hung fetch").toBe(1);
+          const f = fetches;
+          held.forEach((res) => res(json(liveBody("")))); held = [];
+          await vi.advanceTimersByTimeAsync(0);
+          expect(fetches, "the hung fetch's answer starts no fetch").toBe(f);
+        } else {
+          await poll();
+        }
+        expect(labelShown(), "demo label on the live answer's tick").toBe(false);
+        const l = await hud();
+        expect(l.demo, `HUD after the live answer: no demo cue ("${l.row}")`).toBe(false);
+        expect(rate(), "live rate: 5 packets in one poll from a 0 start").toBeCloseTo(2, 9);
+      });
+    }
+
     it(`${engine}: view stop — the feed panel drops the demo status with the view (#182)`, async () => {
       const { view, poll, feedStatus, badge, labelShown } = mount(engine, cleanHomeState());
       await poll();
@@ -421,9 +468,14 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       liveK = 5; // 4.352 pkt/s after 4 live polls: the reading stays >= 1 through the held stretch below (#199)
       mode = "live";
       const before = demoCalls(), calls0 = ingest.mock.calls.length;
-      for (let i = 0; i < 4; i++) await poll();
-      expect(demoCalls() - before, "feed calls during 4 live polls").toBe(0);
-      expect(ingest.mock.calls.length - calls0, "ingest calls during 4 live polls (live only)").toBe(4);
+      // #199: the demo never waits on the fetch, so the first live poll's tick still plays its demo batch before the
+      // live answer lands; that answer takes over on the same tick (the batch leaves with the board). None after.
+      await poll();
+      expect(demoCalls() - before, "feed calls on the first live poll (its tick, before the answer)").toBe(1);
+      expect(labelShown(), "label after the first live poll").toBe(false);
+      for (let i = 0; i < 3; i++) await poll();
+      expect(demoCalls() - before, "feed calls during 4 live polls").toBe(1);
+      expect(ingest.mock.calls.length - calls0, "ingest calls during 4 live polls (4 live + that 1 demo batch)").toBe(5);
       mode = "empty";
       const off = demoCalls();
       await poll();

@@ -475,8 +475,12 @@ export abstract class ArcadeView {
     if (!this.useTraffic()) return;
     const q = this.query();
     if (!this.running || !q || !q.ip) return;
+    // #199: a playing demo makes its own batch on every tick, before (and whatever) the fetch answers: it never waits
+    // on the fetch, so a failed or hung one can't drain the board under the demo label. A live answer still takes over.
+    const stepped = tick && !!this.idle?.on;
+    if (stepped) this.emptyStep();
     // #199: the last fetch (same query) has not settled by the next tick (a hung request): a quiet poll, no second fetch
-    if (this.inflight) { if (tick && this.inflightGen === this.gen) this.noAnswer(); return; }
+    if (this.inflight) { if (tick && !stepped && this.inflightGen === this.gen) this.noAnswer(); return; }
     this.inflight = true;
     const gen = this.gen;
     this.inflightGen = gen;
@@ -486,11 +490,11 @@ export abstract class ArcadeView {
       if (this.lastT) url += `&since=${this.lastT}`;
       const r = await fetch(url);
       // an error answer (unknown device …) carries no traffic either: the idle feed takes it as an empty poll
-      if (!r.ok) { if (gen === this.gen) { this.pps *= 0.6; this.idle?.pollEmpty(this.idleMe()); } return; }
+      if (!r.ok) { if (gen === this.gen && !stepped) this.emptyStep(); return; }
       const m = (await r.json()) as TrafficMsg;
       if (gen !== this.gen) return; // the query changed meanwhile: this is the old run's traffic
       const pk = m.packets.slice().reverse(); // oldest first
-      if (!pk.length) { this.pps *= 0.6; this.idle?.pollEmpty(this.idleMe()); return; }
+      if (!pk.length) { if (!stepped) this.emptyStep(); return; }
       // live traffic: the demo stops at once, and its rows leave the board before the live ones go in
       if (this.idle?.pollLive()) this.reset();
       const newest = pk[pk.length - 1][0];
@@ -504,10 +508,16 @@ export abstract class ArcadeView {
       }
     } catch {
       // server away; the next tick retries. No packets this poll either: the rate falls back (#199, as netpong #197)
-      if (gen === this.gen) this.noAnswer();
+      if (gen === this.gen && !stepped) this.noAnswer();
     } finally {
       if (gen === this.gen) this.inflight = false;
     }
+  }
+
+  /** An empty poll: the rate falls back x0.6 and the idle feed takes its step (a demo batch while it is on). */
+  private emptyStep(): void {
+    this.pps *= 0.6;
+    this.idle?.pollEmpty(this.idleMe());
   }
 
   /**

@@ -618,8 +618,12 @@ export class PongView {
   /** `tick`: called by the poll interval (not by start / a retarget). */
   private async poll(tick = false): Promise<void> {
     if (!this.running || !this.srcIp) return;
+    // #199: a playing demo makes its own batch on every tick, before (and whatever) the fetch answers: it never waits
+    // on the fetch, so a failed or hung one can't drain the board under the demo label. A live answer still takes over.
+    const stepped = tick && this.idle.on;
+    if (stepped) this.idleStep();
     // #199: the last fetch has not settled by the next tick (a hung request): a quiet poll, no second fetch
-    if (this.inflight) { if (tick) this.noAnswer(); return; }
+    if (this.inflight) { if (tick && !stepped) this.noAnswer(); return; }
     this.inflight = true;
     const gen = this.gen;
     try {
@@ -631,16 +635,16 @@ export class PongView {
       if (this.lastT) url += `&since=${this.lastT}`;
       const r = await fetch(url);
       // an error answer (unknown device …) carries no traffic either: the idle feed takes it as an empty poll
-      if (!r.ok) { if (gen === this.gen) this.idleStep(); return; }
+      if (!r.ok) { if (gen === this.gen && !stepped) this.idleStep(); return; }
       const m = (await r.json()) as TrafficMsg;
       if (gen !== this.gen) return; // source / target changed meanwhile: this is the old run's traffic
-      if (!m.packets.length) { this.idleStep(); return; }
+      if (!m.packets.length) { if (!stepped) this.idleStep(); return; }
       // live traffic: the demo stops at once, and its rows leave the board before the live ones go in
       if (this.idle.pollLive()) this.reset();
       this.ingest(m);
     } catch {
       // server away; the next tick retries. No packets this poll either: the rate falls back (#197)
-      if (gen === this.gen) this.noAnswer();
+      if (gen === this.gen && !stepped) this.noAnswer();
     } finally {
       if (gen === this.gen) this.inflight = false;
     }
