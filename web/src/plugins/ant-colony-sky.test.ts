@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { wrapPluginSky } from "./plugin-sky-probe";
 import {
   closePluginSkySmokeBrowser,
+  PLUGIN_SKY_SMOKE_CLEAR,
   pluginSkySmokePngPath,
   smokeRenderPluginSky,
   type PluginSkySmokeResult,
@@ -290,14 +291,14 @@ describe("ant-colony on the app's production path (live LAN frame, host look uni
    * of its brightness and 45% over the ember clear.
    * Timeline: the real fps.ts trail + tickPerf at APP_FPS from boot, notePerfChange at each pick
    * (scene.ts:1996), then the real perfOverlay + skyLookFor. The draw is composited like the
-   * app's transparent sky over the clear (0x1a1412 on the default framebuffer): with a
-   * premultiplied-free SRC_ALPHA blend, out = sky * uOpacity + clear * (1 - uOpacity) per byte,
-   * so the luma composites the same way. Pass lines are the app's own: UX Pro five-patch
-   * (<= 2 of 5 below 24) and QE v5 area (>= 1% of the view at luma >= 40).
+   * app's transparent sky over a clear: since #188 the smoke harness itself blends SRC_ALPHA,
+   * out = sky * uOpacity + clear * (1 - uOpacity) per channel, over PLUGIN_SKY_SMOKE_CLEAR, so these
+   * rows use its read-back unchanged (#223: the hand blend on top of it blended twice below opacity 1).
+   * Pass lines are the app's own: UX Pro five-patch (<= 2 of 5 below 24) and QE v5 area (>= 1% of
+   * the view at luma >= 40).
    */
   const ANT_LOOK_SLIDERS = { skyBright: 1.05, skyOpacity: 1 };
   const APP_FPS = 6;
-  const APP_CLEAR_LUMA = 0.2126 * 0x1a + 0.7152 * 0x14 + 0.0722 * 0x12;
   const PERF_SRC: PerfSrc = {
     labelCount: 20, partAmt: 1, partCap: 400, partPeak: 24, partSize: 1, edgeGlowAmt: 1, skySpeed: 0.35,
     ...ANT_LOOK_SLIDERS,
@@ -321,13 +322,22 @@ describe("ant-colony on the app's production path (live LAN frame, host look uni
     return { ...look, stress };
   }
 
+  /**
+   * The app-path Ant wall (live LAN slots, host look, app lens) at the given sky sliders, per-pixel
+   * luma 0-255. The harness has already composited uOpacity over its clear (#188), so the read-back
+   * is the composited picture (#223).
+   */
+  async function appWallLuma(bright: number, opacity: number, png?: string, slots = appSlots()): Promise<number[]> {
+    const uniforms = { ...APP_LOOK, uBright: bright, uOpacity: opacity };
+    const frag = wrappedSky(parentedSkyRay("ant-colony", rawSky, 0), appLensSkySpan());
+    const r = await smokeRenderPluginSky(frag, slots, uniforms, { keepLuma: true, pngPath: png ? pluginSkySmokePngPath(png) : undefined });
+    return r.luma!;
+  }
+
   async function appWallAt(picks: number[], afterPickS: number, png: string) {
     const at = picks.at(-1)! + afterPickS;
     const look = appSkyLookAt(picks, at);
-    const uniforms = { ...APP_LOOK, uBright: look.bright, uOpacity: look.opacity };
-    const frag = wrappedSky(parentedSkyRay("ant-colony", rawSky, 0), appLensSkySpan());
-    const r = await smokeRenderPluginSky(frag, appSlots(), uniforms, { keepLuma: true, pngPath: pluginSkySmokePngPath(png) });
-    const luma = r.luma!.map((v) => v * look.opacity + APP_CLEAR_LUMA * (1 - look.opacity));
+    const luma = await appWallLuma(look.bright, look.opacity, png);
     const five = fivePatchSummary(appFivePatches(luma));
     const lit40 = luma.filter((v) => v >= 40).length / luma.length;
     const sorted = [...luma].sort((a, b) => a - b);
@@ -353,5 +363,38 @@ describe("ant-colony on the app's production path (live LAN frame, host look uni
 
   it("stays lit 60 s after Ant is picked after Blob Mesh in the same session", async () => {
     await appWallAt([10, 40], 60, "ant-colony-prod-lan-after-blob-60s");
+  }, 60_000);
+
+  /**
+   * #223: below opacity 1 the app-path wall is one composite over the harness clear,
+   * out = sky x a + clear x (1 - a), not a second blend on top of the harness's. Ant's look is
+   * opacity 1 since #177; the row draws it at 0.5 through appWallLuma, the path the rows above use.
+   * Revert: put the hand blend back in appWallLuma (luma x a + clear x (1 - a) again) -> red.
+   */
+  it("draws the app-path wall at opacity 0.5: one composite sky x a + clear x (1 - a) over PLUGIN_SKY_SMOKE_CLEAR", async () => {
+    const a = 0.5;
+    const clearLuma = 0.2126 * Math.round(255 * PLUGIN_SKY_SMOKE_CLEAR[0]) + 0.7152 * Math.round(255 * PLUGIN_SKY_SMOKE_CLEAR[1])
+      + 0.0722 * Math.round(255 * PLUGIN_SKY_SMOKE_CLEAR[2]);
+    // One live-LAN slot set for every draw: the pack's writer is not frame-to-frame identical.
+    const slots = appSlots();
+    const opaque = await appWallLuma(ANT_LOOK_SLIDERS.skyBright, 1, undefined, slots);
+    const again = await appWallLuma(ANT_LOOK_SLIDERS.skyBright, 1, undefined, slots);
+    const half = await appWallLuma(ANT_LOOK_SLIDERS.skyBright, a, undefined, slots);
+    expect(again, "the same slots and sliders draw the same wall").toEqual(opaque);
+    expect(half).toHaveLength(opaque.length);
+    let sum = 0;
+    let worst = 0;
+    for (let i = 0; i < opaque.length; i++) {
+      const d = Math.abs(half[i]! - (opaque[i]! * a + clearLuma * (1 - a)));
+      sum += d;
+      worst = Math.max(worst, d);
+    }
+    const mean = sum / opaque.length;
+    const median = (v: number[]) => [...v].sort((x, y) => x - y)[v.length >> 1]!;
+    const why = `a ${a}: mean |luma - composite| ${mean.toFixed(3)}, worst ${worst.toFixed(3)}; median opaque ${median(opaque).toFixed(2)} half ${median(half).toFixed(2)} clear ${clearLuma.toFixed(2)}`;
+    noteRowNumbers("ant-colony-prod-lan-opacity-0.5", why);
+    expect(median(opaque) - median(half), `the opacity shows in the read-back: ${why}`).toBeGreaterThan(10);
+    expect(mean, `single composite: ${why}`).toBeLessThanOrEqual(0.75);
+    expect(worst, `single composite: ${why}`).toBeLessThanOrEqual(2);
   }, 60_000);
 });
