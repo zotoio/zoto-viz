@@ -178,18 +178,47 @@ function glslFunction(src: string, name: string): string {
   }
   throw new Error(`backdrop sky GLSL: function ${name}() has no closing brace`);
 }
-const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ");
-/** Whitespace collapsed, and dropped wherever it is not between two identifier characters. */
-const squash = (src: string) => src.replace(/\s+/g, " ").replace(/ ?([^\w ]) ?/g, "$1").trim();
-/** Comments stripped, whitespace collapsed. */
-function normalizeGlsl(src: string): string {
-  return squash(stripComments(src));
+/** Comments stripped, and backslash-newline continuations spliced (so a continued directive is one line). */
+const stripComments = (src: string) => src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ").replace(/\\\n/g, "");
+const WORD_CH = /[A-Za-z0-9_.]/;
+const OP_CH = /[+\-*/%<>=!&|^]/;
+/**
+ * Code: whitespace runs collapsed to one space, and a space dropped only where it cannot carry meaning. It is
+ * kept between two word characters (`else if`) and between two operator characters, which it would otherwise
+ * fuse into another token (`a - -b` is not `a --b`, `+ +` is not `++`).
+ */
+function squash(src: string): string {
+  const s = src.replace(/\s+/g, " ").trim();
+  let out = "";
+  for (let i = 0; i < s.length; i++) {
+    const ch = s[i]!;
+    if (ch !== " ") { out += ch; continue; }
+    const a = out[out.length - 1] ?? "", b = s[i + 1] ?? "";
+    if ((WORD_CH.test(a) && WORD_CH.test(b)) || (OP_CH.test(a) && OP_CH.test(b))) out += " ";
+  }
+  return out;
 }
+/**
+ * A preprocessor line: whitespace runs collapsed to one space but never dropped, so `#define X (y)` (object-like)
+ * and `#define X(y)` (function-like) stay apart. The only change is that `#  define` reads `#define`.
+ */
+const squashDirective = (line: string) => line.replace(/\s+/g, " ").trim().replace(/^# /, "#");
 const isPreprocessor = (line: string) => line.trim().startsWith("#");
+/** Comments stripped; code squashed, and each preprocessor line kept on its own line and normalized as a directive. */
+function normalizeGlsl(src: string): string {
+  const out: string[] = [];
+  let code: string[] = [];
+  const flush = () => { const c = squash(code.join("\n")); if (c) out.push(c); code = []; };
+  for (const line of stripComments(src).split("\n")) {
+    if (isPreprocessor(line)) { flush(); out.push(squashDirective(line)); } else code.push(line);
+  }
+  flush();
+  return out.join("\n");
+}
 /** Top-level items in order: every preprocessor line (wherever it sits), each declaration, each function signature. */
 function glslTopLevel(src: string): string[] {
   const lines = stripComments(src).split("\n");
-  const items = lines.filter(isPreprocessor).map(squash);
+  const items = lines.filter(isPreprocessor).map(squashDirective);
   const code = lines.filter((l) => !isPreprocessor(l)).join("\n");
   let depth = 0, start = 0;
   for (let i = 0; i < code.length; i++) {
@@ -307,7 +336,34 @@ type Drawn = {
   blend: { transparent: boolean; blending: THREE.Blending; premultipliedAlpha: boolean; toneMapped: boolean };
 };
 
+/** The shipped shader with one edit at a formatting-independent anchor (throws if the anchor is gone). */
+function injectGlsl(src: string, at: RegExp, by: string): string {
+  if (!at.test(src)) throw new Error(`injectGlsl: anchor ${String(at)} not found in the shipped GLSL`);
+  return src.replace(at, by);
+}
+
 describe("#195 sky mirror parity: the TS copy is pinned to backdrop.ts's shipped GLSL (BACKDROP_SKY_FRAG + pluginSkyVertGlsl)", () => {
+  it("normalizer (A): a preprocessor line keeps its spaces, so `#define X (y)` (object-like) and `#define X(y)` (function-like) normalize and parse differently", () => {
+    const withDirective = (d: string) => injectGlsl(BACKDROP_SKY_FRAG, /(\bout\s+vec4\s+fragColor\s*;[^\n]*\n)/, `$1${d}\n`);
+    expect(normalizeGlsl("#define X (y)\n"), "directive: the space before ( is kept").not.toBe(normalizeGlsl("#define X(y)\n"));
+    expect(glslTopLevel("#define X (y)\nuniform float u;"), "top-level list").not.toEqual(glslTopLevel("#define X(y)\nuniform float u;"));
+    expect(skyGlslShape(withDirective("#define SKYK (1.0)"), pluginSkyVertGlsl).frag.topLevel, "parsed shape of the shipped FRAG plus the directive")
+      .not.toEqual(skyGlslShape(withDirective("#define SKYK(1.0)"), pluginSkyVertGlsl).frag.topLevel);
+    // whitespace / comment-only differences inside a directive still normalize the same
+    expect(normalizeGlsl("#  define   X   (y)   // note\n"), "directive whitespace / comment only").toBe(normalizeGlsl("#define X (y)\n"));
+  });
+
+  it("normalizer (B): a space between two operator characters is kept, so `a - -b` / `a --b` and `a + +b` / `a ++b` normalize and parse differently", () => {
+    const withStatement = (st: string) => injectGlsl(BACKDROP_SKY_FRAG, /(\n[ \t]*)(fragColor\s*=)/, `$1${st}$1$2`);
+    expect(normalizeGlsl("x = a - -b;"), "`- -` vs `--`").not.toBe(normalizeGlsl("x = a --b;"));
+    expect(normalizeGlsl("x = a + +b;"), "`+ +` vs `++`").not.toBe(normalizeGlsl("x = a ++b;"));
+    expect(skyGlslShape(withStatement("col = col - -col;"), pluginSkyVertGlsl).frag.main, "parsed shape of the shipped FRAG plus the statement")
+      .not.toEqual(skyGlslShape(withStatement("col = col --col;"), pluginSkyVertGlsl).frag.main);
+    // whitespace / comment-only differences around operators still normalize the same
+    expect(normalizeGlsl("x  =  a  -  b /* c */ ;\n\n"), "operator whitespace / comment only").toBe(normalizeGlsl("x=a-b;"));
+    expect(normalizeGlsl("else   if ( a )"), "word spacing collapses to one space").toBe("else if(a)");
+  });
+
   it("every structural value the TS copy uses (octave count, octave weight / frequency, hash, smoothstep, mix and speck coefficients, uBright use, luma weights, SKY_LUMA_CAP, every top-level item and main() statement of both shaders) equals the one parsed from the GLSL", () => {
     const parsed = skyGlslShape(BACKDROP_SKY_FRAG, pluginSkyVertGlsl);
     process.stdout.write(`[#195 parity] parsed ${JSON.stringify(parsed)}\n`);
@@ -371,7 +427,7 @@ describe("#195 lan-pong: every game piece >= 3:1 against its sky at full audio",
     if (!(world instanceof THREE.Scene) || !(camera instanceof THREE.PerspectiveCamera)) throw new Error("LookStage.frame did not render the world with its camera");
     const skies: THREE.Mesh[] = [];
     world.traverse((o) => {
-      if (o instanceof THREE.Mesh && o.visible && o.material instanceof THREE.ShaderMaterial && o.material.fragmentShader.includes("vec3 space(")) skies.push(o);
+      if (o instanceof THREE.Mesh && o.visible && o.material instanceof THREE.ShaderMaterial && /\bvec3\s+space\s*\(/.test(o.material.fragmentShader)) skies.push(o);
     });
     const mesh = skies[0];
     if (!mesh || !(mesh.material instanceof THREE.ShaderMaterial) || !(mesh.geometry instanceof THREE.SphereGeometry)) throw new Error("no visible space-sky sphere in the LookStage world");
