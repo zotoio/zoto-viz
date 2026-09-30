@@ -43,10 +43,16 @@ const SANDBOX_RULES: { target: string; re: RegExp }[] = [
   { target: "indexedDB", re: /\bindexedDB\b/ },
 ];
 
-function listPackIds(packsRoot: string): string[] {
+/**
+ * The pack folders under `packsRoot` (normally `<repo>/plugins/src`), sorted. Dot-folders are
+ * skipped: `plugins/src/.pack-sdk/` is a gitignored runtime cache that the service catalog scan and
+ * `pack-bundle-install.test.ts` write, not a pack. Every lint walk over `plugins/src` (this file's
+ * `scanPluginsSrc` and the #171 (b) uniform scan) and the pack-lint tests use this one list.
+ */
+export function listPackIds(packsRoot: string): string[] {
   return fs
     .readdirSync(packsRoot, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+    .filter((e) => e.isDirectory() && !e.name.startsWith("."))
     .map((e) => e.name)
     .sort();
 }

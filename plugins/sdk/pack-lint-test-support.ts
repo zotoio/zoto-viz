@@ -7,7 +7,7 @@ import path from "node:path";
 import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowlist";
 import { hostTransportViolations, lintPackSource, scanPluginsSrc } from "./pack-lint";
 import { disallowedHostPackSrcImports, scanService, scanWebSrc } from "./pack-lint-host";
-import { scanUniformDeclarations } from "./pack-lint-uniforms";
+import { scanUniformDeclarations, uniformTreeScanCount } from "./pack-lint-uniforms";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
 import { UNIFORM_BLOCKING_RULES, violationKey } from "./pack-lint-types";
 
@@ -55,6 +55,18 @@ function scanSdkGuardrails(repoRoot: string): PackLintViolation[] {
   return violations;
 }
 
+/**
+ * Full-tree scans run so far in this test file's module instance (vitest isolates modules per
+ * file). Every full-tree scan the pack-lint tests run goes through the #171 (b) uniform tree scan:
+ * `scanAllGuardrails` calls it once, and the uniform tests call `scanUniformTree` /
+ * `scanUniformDeclarations` directly. Each pack-lint test file pins this at exactly 1: the rows
+ * share one `beforeAll` scan instead of re-walking the tree.
+ */
+export function fullTreeScanCount(): number {
+  return uniformTreeScanCount();
+}
+
+/** Every guardrail over the real tree (one full-tree scan; see {@link fullTreeScanCount}). */
 export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
   const merged = [
     ...scanPluginsSrc(repoRoot),

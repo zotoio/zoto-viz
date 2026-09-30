@@ -2,7 +2,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSyn
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import {
   disallowedHostPackSrcImports,
   formatViolationMessage,
@@ -12,11 +12,13 @@ import {
   scanPackInstallLint,
   scanWebSrc,
   type PackLintRule,
+  type PackLintViolation,
 } from "../../../plugins/sdk/pack-lint";
 import {
   assertBaselineGuard,
   baselineCountsByPack,
   baselineCountsByRule,
+  fullTreeScanCount,
   loadBaseline,
   scanAllGuardrails,
   scanPackLintFixture,
@@ -311,10 +313,24 @@ function hostHits(targets: string[]) {
   }));
 }
 
+/**
+ * The one full-tree scan in this file (plugins/src, plugins/sdk, web/src, service and the #171 (b)
+ * uniform scan). It takes a few seconds, more under load, so it runs once here with its own
+ * explicit timeout and every real-tree row reads the result. Rows that lint fixtures or a temp
+ * tree keep their own small scans. The last row pins exactly one full-tree scan per file.
+ */
+const FULL_TREE_SCAN_TIMEOUT_MS = 30_000;
+let current: PackLintViolation[] = [];
+
 describe("pack lint guardrails", () => {
+  beforeAll(() => {
+    const t0 = performance.now();
+    current = scanAllGuardrails(repoRoot);
+    console.info(`pack-lint full-tree scan: ${Math.round(performance.now() - t0)} ms`);
+  }, FULL_TREE_SCAN_TIMEOUT_MS);
+
   it("write baseline when PACK_LINT_WRITE_BASELINE=1", () => {
     if (process.env.PACK_LINT_WRITE_BASELINE !== "1") return;
-    const current = scanAllGuardrails(repoRoot);
     const out = path.join(repoRoot, "plugins/sdk/pack-lint-baseline.json");
     const baselineRows = current
       .filter((v) => v.rule !== "host-imports-pack-src" && !UNIFORM_BLOCKING_RULES.has(v.rule))
@@ -323,7 +339,6 @@ describe("pack lint guardrails", () => {
   });
 
   it("plugins/src and web/src violations do not exceed the checked-in baseline", () => {
-    const current = scanAllGuardrails(repoRoot);
     const baseline = loadBaseline(repoRoot);
     const {
       ok,
@@ -555,5 +570,11 @@ describe("pack lint guardrails", () => {
       { fixture: "clean/plugin-yml-presets.ts (read plugin.yml via fs)", ci: "PASS" },
       { fixture: "inline /api/plugins/<id>/module.js import()", ci: "PASS" },
     ]);
+  });
+
+  // Keep this row last: it counts every full-tree scan the rows above ran.
+  it("runs exactly one full-tree scan (the shared beforeAll); no row re-scans the tree on its own", () => {
+    expect(current.length).toBeGreaterThan(0);
+    expect(fullTreeScanCount()).toBe(1);
   });
 });

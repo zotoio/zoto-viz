@@ -3,13 +3,14 @@
  * and a revert proof (switch the rule off and its red fixture lints clean). The real-tree rows
  * pin what the lint sees, the #171 Graph Cloth regression, and the catalog findings.
  */
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as THREE from "three";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import yaml from "yaml";
-import { formatViolationMessage, type PackLintViolation } from "../../../plugins/sdk/pack-lint";
+import { formatViolationMessage, listPackIds, type PackLintViolation } from "../../../plugins/sdk/pack-lint";
 import {
   CUSTOM_UNIFORM_RE,
   describeUniformPrograms,
@@ -20,12 +21,13 @@ import {
   manifestVizUniforms,
   pluginSkyUniformNames,
   readPackSkyInput,
-  scanUniformDeclarations,
+  scanUniformTree,
   UNIFORM_LINT_RULES,
   type UniformLintOptions,
   type UniformLintRule,
+  type UniformTreeScan,
 } from "../../../plugins/sdk/pack-lint-uniforms";
-import { assertBaselineGuard, loadBaseline } from "../../../plugins/sdk/pack-lint-test-support";
+import { assertBaselineGuard, fullTreeScanCount, loadBaseline } from "../../../plugins/sdk/pack-lint-test-support";
 import { UNIFORM_BLOCKING_RULES } from "../../../plugins/sdk/pack-lint-types";
 import { wrapPluginSky } from "./plugin-sky-probe";
 import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
@@ -33,6 +35,29 @@ import { parseVizContractResult } from "./viz-host";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const FIXTURES = "plugins/sdk/uniform-lint-fixtures";
+const packsRoot = path.join(repoRoot, "plugins/src");
+
+/** The shipped pack ids, as pinned for the service catalog (tests/shipped_catalog.py, 73 today). */
+function pinnedShippedPackIds(): string[] {
+  const py = readFileSync(path.join(repoRoot, "tests/shipped_catalog.py"), "utf8");
+  const body = py.match(/PINNED_SHIPPED_PLUGIN_IDS[^=]*=\s*\(([\s\S]*?)\)/)?.[1] ?? "";
+  return [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]!).sort();
+}
+
+/**
+ * The one full-tree scan in this file (web/src + every plugins/src pack). It takes a second or two,
+ * more under load, so it runs once here with its own explicit timeout; the catalog, coverage and
+ * manifest rows read the result. Fixture and single-file rows keep their own small lints. The last
+ * row pins exactly one full-tree scan per file.
+ */
+const FULL_TREE_SCAN_TIMEOUT_MS = 30_000;
+let tree: UniformTreeScan = { violations: [], packs: [] };
+
+beforeAll(() => {
+  const t0 = performance.now();
+  tree = scanUniformTree(repoRoot);
+  console.info(`uniform lint full-tree scan: ${Math.round(performance.now() - t0)} ms`);
+}, FULL_TREE_SCAN_TIMEOUT_MS);
 
 function lintTsFixture(rel: string, opts?: UniformLintOptions): PackLintViolation[] {
   const repoRel = `${FIXTURES}/${rel}`;
@@ -266,12 +291,14 @@ describe("uniform declaration lint (#171 b): assumptions pinned", () => {
       const r = parseVizContractResult(doc?.viz);
       return r && r.state === "ready" ? [...r.contract.uniforms] : [];
     };
-    const packsRoot = path.join(repoRoot, "plugins/src");
-    const packs = readdirSync(packsRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
-    const withYml = packs.filter((p) => existsSync(path.join(packsRoot, p, "plugin.yml")));
-    expect(withYml).toEqual(packs);
+    const packs = listPackIds(packsRoot);
+    expect(packs).toEqual(pinnedShippedPackIds());
+    // The shared scan walked exactly this list (no dot-folder cache, no missing pack).
+    expect(tree.packs.map((p) => p.packId)).toEqual(packs);
+    const manifests = tree.packs.flatMap((p) => (p.manifest ? [p.manifest] : []));
+    expect(manifests.map((m) => m.repoRel)).toEqual(packs.map((p) => `plugins/src/${p}/plugin.yml`));
     const texts = [
-      ...withYml.map((p) => readFileSync(path.join(packsRoot, p, "plugin.yml"), "utf8")),
+      ...manifests.map((m) => m.text),
       ...["bad-write-not-in-manifest", "good", "good-manifest-default"].map((p) =>
         readFileSync(path.join(repoRoot, FIXTURES, "packs", p, "plugin.yml"), "utf8"),
       ),
@@ -284,6 +311,32 @@ describe("uniform declaration lint (#171 b): assumptions pinned", () => {
       "id: x\nviz:\n  graphWalk: false\n  uniforms:\n    - uAudio # comment\n    - \"uBright\"\n  idle:\n    fixture: host\nfrontend:\n  entry: a.ts\n",
     ];
     for (const text of texts) expect(manifestVizUniforms(text, repoRoot).uniforms, text).toEqual(host(text));
+  });
+
+  it("the pack folder list skips dot-folders: a .pack-sdk/ cache (or any dot-folder) holding a plugin.yml is not a pack", () => {
+    // A temp mirror of plugins/src (every directory entry, dot-folders included, with its plugin.yml),
+    // plus the gitignored runtime cache the service catalog scan and pack-bundle-install.test.ts write.
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "pack-lint-dot-folders-"));
+    try {
+      for (const e of readdirSync(packsRoot, { withFileTypes: true })) {
+        if (!e.isDirectory()) continue;
+        mkdirSync(path.join(tmp, e.name));
+        const yml = path.join(packsRoot, e.name, "plugin.yml");
+        if (existsSync(yml)) writeFileSync(path.join(tmp, e.name, "plugin.yml"), readFileSync(yml));
+      }
+      for (const dot of [".pack-sdk", ".dot-folder-probe"]) {
+        mkdirSync(path.join(tmp, dot), { recursive: true });
+        writeFileSync(path.join(tmp, dot, "plugin.yml"), `id: ${dot.slice(1)}\nviz:\n  uniforms: [uTime]\n`);
+        writeFileSync(path.join(tmp, dot, "air-bt.json"), "{}\n");
+      }
+      const listed = listPackIds(tmp);
+      expect(listed.filter((p) => p.startsWith("."))).toEqual([]);
+      expect(listed).toEqual(pinnedShippedPackIds());
+      expect(listed).toHaveLength(73);
+      expect(listed.every((p) => existsSync(path.join(tmp, p, "plugin.yml")))).toBe(true);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
   });
 });
 
@@ -314,7 +367,7 @@ describe("uniform declaration lint (#171 b): real tree", () => {
   });
 
   it("catalog: web/src + every plugins/src pack (findings pinned; pack skies and pack writeUniform calls are clean)", () => {
-    const found = scanUniformDeclarations(repoRoot);
+    const found = tree.violations;
     expect(keyed(found)).toEqual([
       { file: "web/src/graph/backdrop.ts", rule: "uniform-set-undeclared", target: "uPhoto" },
       { file: "web/src/graph/scene.ts", rule: "uniform-set-undeclared", target: "uResolution" },
@@ -326,13 +379,12 @@ describe("uniform declaration lint (#171 b): real tree", () => {
   });
 
   it("catalog coverage: the pack rules had real input (preamble redeclarations type-checked, writeUniform calls checked against manifests)", () => {
-    const packsRoot = path.join(repoRoot, "plugins/src");
     const preamble = new Set(hostSkyPreambleDecls(repoRoot).map((d) => d.name));
     let redeclared = 0;
     let writes = 0;
     let manifests = 0;
-    for (const packId of readdirSync(packsRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)) {
-      const input = readPackSkyInput(path.join(packsRoot, packId), `plugins/src/${packId}`, packId);
+    expect(tree.packs.length).toBeGreaterThan(0);
+    for (const input of tree.packs) {
       if (input.manifest) manifests++;
       for (const sky of input.skies) redeclared += glslUniformDecls(sky.glsl).filter((d) => preamble.has(d.name)).length;
       for (const fe of input.frontend) writes += fe.text.match(/\bwriteUniform\s*\(\s*["']/g)?.length ?? 0;
@@ -341,5 +393,13 @@ describe("uniform declaration lint (#171 b): real tree", () => {
     expect(redeclared).toBeGreaterThan(0);
     expect(writes).toBeGreaterThan(0);
     console.info(`uniform lint coverage: ${manifests} manifests, ${redeclared} preamble redeclarations, ${writes} literal writeUniform calls`);
+  });
+});
+
+// Keep this block last: it counts every full-tree scan the rows above ran.
+describe("uniform declaration lint (#171 b): scan budget", () => {
+  it("runs exactly one full-tree scan (the shared beforeAll); no row re-scans the tree on its own", () => {
+    expect(tree.packs.length).toBeGreaterThan(0);
+    expect(fullTreeScanCount()).toBe(1);
   });
 });

@@ -22,6 +22,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { listPackIds } from "./pack-lint";
 import { lineColAt } from "./pack-lint-import";
 import type { PackLintViolation } from "./pack-lint-types";
 
@@ -1207,20 +1208,46 @@ export function readPackSkyInput(packDirAbs: string, repoPrefix: string, packId:
   return { packId, skies, frontend, manifest };
 }
 
-/** Uniform lint over `web/src` and every `plugins/src/<pack>`. */
-export function scanUniformDeclarations(repoRoot: string, opts: UniformLintOptions = {}): PackLintViolation[] {
+/** What one full uniform-lint tree scan saw: its findings and every pack it read. */
+export type UniformTreeScan = { violations: PackLintViolation[]; packs: PackSkyInput[] };
+
+let uniformTreeScans = 0;
+
+/**
+ * How many full uniform-lint tree scans ({@link scanUniformTree}, and so
+ * {@link scanUniformDeclarations} and the test-support `scanAllGuardrails`) this module instance
+ * has run. Test-only bookkeeping: the pack-lint test files pin one full-tree scan per file.
+ */
+export function uniformTreeScanCount(): number {
+  return uniformTreeScans;
+}
+
+/**
+ * Uniform lint over `web/src` and every `plugins/src/<pack>` ({@link listPackIds}, so dot-folders
+ * such as the `.pack-sdk/` cache are not packs). Also returns the pack inputs it read, so callers
+ * that need them (coverage and manifest rows) don't walk the tree again.
+ */
+export function scanUniformTree(repoRoot: string, opts: UniformLintOptions = {}): UniformTreeScan {
+  uniformTreeScans++;
   const out: PackLintViolation[] = [];
+  const packs: PackSkyInput[] = [];
   const ctx = defaultCtx(repoRoot);
   for (const rel of walkFiles(path.join(repoRoot, "web/src"), isLintedTs)) {
     const repoRel = `web/src/${rel}`;
     out.push(...lintTsFile(ctx, path.join(repoRoot, repoRel), repoRel, opts));
   }
   const packsRoot = path.join(repoRoot, "plugins/src");
-  for (const packId of fs.readdirSync(packsRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort()) {
+  for (const packId of listPackIds(packsRoot)) {
     const prefix = `plugins/src/${packId}`;
     const input = readPackSkyInput(path.join(packsRoot, packId), prefix, packId);
+    packs.push(input);
     for (const fe of input.frontend) out.push(...lintTsFile(ctx, path.join(repoRoot, fe.repoRel), fe.repoRel, opts));
     out.push(...lintPackUniforms(input, repoRoot, opts));
   }
-  return sortViolations(out);
+  return { violations: sortViolations(out), packs };
+}
+
+/** Uniform lint over `web/src` and every `plugins/src/<pack>` (findings only; see {@link scanUniformTree}). */
+export function scanUniformDeclarations(repoRoot: string, opts: UniformLintOptions = {}): PackLintViolation[] {
+  return scanUniformTree(repoRoot, opts).violations;
 }
