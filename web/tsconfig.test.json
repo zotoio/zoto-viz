@@ -136,7 +136,6 @@
     "src/plugins/nixie-wall-clock-source-rows.test.ts",
     "src/plugins/nixie-wall-clock.test.ts",
     "src/plugins/pack-asset-navigation-stop-clear.test.ts",
-    "src/plugins/pack-bundle-resolve.test.ts",
     "src/plugins/pack-frame-path.test.ts",
     "src/plugins/plugin-ui.test.ts",
     "src/plugins/plugin.test.ts",
