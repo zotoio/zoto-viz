@@ -141,11 +141,6 @@
       "target": "vitest"
     },
     {
-      "file": "plugins/src/syscon/frontend/telemetry.ts",
-      "rule": "sandbox-escape",
-      "target": "parent."
-    },
-    {
       "file": "plugins/src/voxel-world/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"

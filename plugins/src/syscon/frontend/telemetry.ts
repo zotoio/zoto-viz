@@ -16,12 +16,12 @@ export function sysAlert(sys: VizSysTelemetry): number {
 
 export const SYSCON_CANVAS_DEFAULT = { w: 1280, h: 800 };
 
-/** Prefer the host canvas; the sandbox iframe falls back to the default plate. */
+/**
+ * Canvas size from `doc` (or the pack's own document); the default plate otherwise.
+ * Never reaches into the host page: the sandbox iframe keeps the default plate.
+ */
 export function sysconCanvasSize(doc?: Document | null): { w: number; h: number } {
-  let root = doc ?? (typeof document !== "undefined" ? document : null);
-  try {
-    if (!doc && typeof parent !== "undefined" && parent.document) root = parent.document;
-  } catch { /* cross-origin / sandbox */ }
+  const root = doc ?? (typeof document !== "undefined" ? document : null);
   const canvas = (root?.querySelector?.("canvas.render-host")
     ?? root?.querySelector?.("#wall > canvas")
     ?? root?.querySelector?.("#scene canvas")) as { width?: number; height?: number } | null;
