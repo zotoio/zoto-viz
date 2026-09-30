@@ -2,11 +2,18 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import signal
+import sys
+from collections.abc import Iterator
 from types import SimpleNamespace
 from pathlib import Path
 
+import pytest
+
 from service import live
 from service import agent
+from service import cursor_agent
 from service import memory
 from service import plugins
 
@@ -131,11 +138,73 @@ def test_redact_state_masks_ip() -> None:
     assert skip["top"] == []
 
 
-def test_api_status_offline(monkeypatch) -> None:
+def _alive(pid: int) -> bool:
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def _survivors(spawned: list[asyncio.subprocess.Process]) -> list[int]:
+    return [p.pid for p in spawned if p.returncode is None or _alive(p.pid)]
+
+
+@pytest.fixture
+def bridge_children(monkeypatch) -> Iterator[list[asyncio.subprocess.Process]]:
+    """Record every child cursor_agent spawns; stop any the code under test left running (#190)."""
+    spawned: list[asyncio.subprocess.Process] = []
+    real = asyncio.create_subprocess_exec
+
+    async def spy(*args, **kwargs) -> asyncio.subprocess.Process:
+        proc = await real(*args, **kwargs)
+        spawned.append(proc)
+        return proc
+
+    monkeypatch.setattr(cursor_agent.asyncio, "create_subprocess_exec", spy)
+    yield spawned
+    for pid in _survivors(spawned):
+        try:
+            os.kill(pid, signal.SIGKILL)
+            os.waitpid(pid, 0)
+        except (ProcessLookupError, ChildProcessError):
+            pass
+
+
+def _hung_bridge(tmp_path: Path, monkeypatch) -> None:
+    """A Cursor bridge whose `list` never answers, like the real one when the SDK stalls."""
+    bridge = tmp_path / "cursor-bridge"
+    bridge.mkdir()
+    (bridge / "cli.mjs").write_text("import threading\nthreading.Event().wait()\n", encoding="utf-8")
+    monkeypatch.setattr(cursor_agent, "bridge_dir", lambda: bridge)
+    monkeypatch.setattr(cursor_agent, "node_bin", lambda: sys.executable)
+    monkeypatch.setenv("CURSOR_API_KEY", "test-key")
+
+
+def test_api_status_offline(monkeypatch, bridge_children) -> None:
     monkeypatch.setattr(agent, "OLLAMA", "http://8.8.8.8:11434")
     resp = asyncio.run(agent.api_status(Req()))
     assert resp.status == 200
     monkeypatch.setattr(agent, "OLLAMA", "http://127.0.0.1:11434")
+    assert _survivors(bridge_children) == [], f"cursor-bridge children outlived the test: {_survivors(bridge_children)}"
+
+
+def test_api_status_offline_reaps_hung_cursor_bridge(monkeypatch, tmp_path, bridge_children) -> None:
+    """#190: a bridge `list` that never answers must be killed and reaped before api_status returns."""
+    _hung_bridge(tmp_path, monkeypatch)
+    monkeypatch.setattr(cursor_agent, "LIST_TIMEOUT_S", 0)
+    monkeypatch.setattr(agent, "OLLAMA", "http://8.8.8.8:11434")
+    resp = asyncio.run(agent.api_status(Req()))
+    assert resp.status == 200
+    body = json.loads(resp.text)
+    assert body["cursor"]["ok"] is False
+    assert body["cursor"]["configured"] is True
+    assert [p.returncode is not None for p in bridge_children] == [True], (
+        f"cursor-bridge `list` child still running after api_status: pids {_survivors(bridge_children)}"
+    )
+    assert _survivors(bridge_children) == [], f"cursor-bridge children outlived the test: {_survivors(bridge_children)}"
 
 
 def test_api_chat_validation() -> None:

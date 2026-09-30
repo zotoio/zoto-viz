@@ -197,6 +197,20 @@ def remember_session(row: dict[str, Any]) -> None:
         pass
 
 
+LIST_TIMEOUT_S = 25
+
+
+async def _reap(proc: asyncio.subprocess.Process) -> None:
+    """Kill a bridge child that is still running and wait for it, so it never outlives the caller (#190)."""
+    if proc.returncode is not None:
+        return
+    try:
+        proc.kill()
+    except ProcessLookupError:
+        pass
+    await proc.wait()
+
+
 async def list_models(key: str, *, capture: bool = True) -> dict[str, Any]:
     cli = bridge_dir() / "cli.mjs"
     if not cli.is_file() or not key:
@@ -205,6 +219,7 @@ async def list_models(key: str, *, capture: bool = True) -> dict[str, Any]:
     env = _env(key)
     if not capture:
         env["ZOTO_VIZ_CURSOR_STATS_SKIP"] = "list"
+    proc: asyncio.subprocess.Process | None = None
     try:
         proc = await asyncio.create_subprocess_exec(
             node_bin(), str(cli), "list",
@@ -213,9 +228,12 @@ async def list_models(key: str, *, capture: bool = True) -> dict[str, Any]:
             env=env,
             cwd=str(bridge_dir()),
         )
-        out, err = await asyncio.wait_for(proc.communicate(), timeout=25)
+        out, err = await asyncio.wait_for(proc.communicate(), timeout=LIST_TIMEOUT_S)
     except (OSError, asyncio.TimeoutError) as e:
         return {"ok": False, "models": list(FALLBACK_MODELS), "default": DEFAULT_MODEL, "error": str(e)}
+    finally:
+        if proc is not None:
+            await _reap(proc)
     if proc.returncode != 0:
         msg = (err.decode("utf-8", "replace") or out.decode("utf-8", "replace")).strip() or "list failed"
         return {"ok": False, "models": list(FALLBACK_MODELS), "default": DEFAULT_MODEL, "error": msg[:400]}
