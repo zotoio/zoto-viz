@@ -21,11 +21,6 @@
       "target": "declare-const-zoto"
     },
     {
-      "file": "plugins/src/cypher-cic/frontend/pack.ts",
-      "rule": "sandbox-escape",
-      "target": "parent."
-    },
-    {
       "file": "plugins/src/fluid-dyn/frontend/fluid.test.ts",
       "rule": "host-import",
       "target": "vitest"
