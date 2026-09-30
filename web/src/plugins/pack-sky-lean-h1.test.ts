@@ -4,17 +4,22 @@
  * Backdrop.setLook path, with each pack's real onFrame writes forwarded through
  * NetScene.setPluginUniform (the app's writeUniform route).
  *
- * Order on db34704a: skyLookFor picks the host sliders first (stage-only views keep the look's own
- * sliders, graph views take the lean), applyLook scales them (thermal, visScale on graph views)
- * and hands them to setLook, and only then does syncPluginLook multiply in the pack's own write.
- * So on a stage-only view the lean never reaches the pack's dimming.
+ * Order: skyLookFor picks the host sliders first, applyLook scales them (thermal, visScale on
+ * graph views) and hands them to setLook, and only then does syncPluginLook multiply in the pack's
+ * own write. Since #177 the perf lean does not dim the sky on any view (perfOverlay passes the
+ * look's skyBright / skyOpacity through), so the lean never reaches the pack's dimming.
+ *
+ * The lean rows compare a leaned view (perf stress 1) with the same view un-leaned (stress 0, the
+ * overlay the running app computes every frame when it is not leaned), both measured in the row,
+ * so they do not depend on any pack's own numbers.
  *
  * Ant Colony floor (Pedant / PA): the idle frame writes uBright 0.72 (audio 0); the stage-only
  * sky must draw at >= 0.35 with the lean off and with the lean at its lowest (perf stress 1).
- * Revert row: drop the stage-only exemption in skyLookFor (the lean lands on the host value and
- * H1 multiplies after it) -> the lean-on row reads 0.4 x 0.72 = 0.288 and goes red.
+ * Revert: put the sky dim back into perfOverlay (skyBright -> 0.4, skyOpacity -> 0.45 at stress 1)
+ * and all three lean rows go red. On Ant's stage-only view the exemption in skyLookFor still keeps
+ * the drawn value, so there it is the overlay check that goes red.
  *
- * Talker Storm (uBright 0.4-0.9) and RF Constellation (uOpacity 0.65-0.9) are graph views with a
+ * Talker Storm (its own uBright, 0.8-1.2 since #184) and RF Constellation (uOpacity 0.65-0.9) are graph views with a
  * plugin sky: numbers only, for QE / UX Pro's headed re-shoot. No pass line. Set
  * PLUGIN_SKY_PNG_DIR to get the numbers in rows.txt there.
  */
@@ -104,7 +109,7 @@ function packWrites(id: string, frames: VizDataFrame[]): Record<string, number |
 type Case = {
   stageOnly: boolean;
   look: { skyBright: number; skyOpacity: number };
-  /** Perf stress 0..1 (1 = the lowest the lean goes: skyBright 0.4, skyOpacity 0.45); null = lean off. */
+  /** Perf stress 0..1 (0 = un-leaned overlay, 1 = fully leaned); null = no overlay at all. */
   stress: number | null;
 };
 
@@ -144,7 +149,7 @@ function effective(id: string, writes: Record<string, number | [number, number, 
     afterWrite,
     thermal: s.thermalSkyK(),
     visScale: s.visScale,
-    tune: s.tune ? { bright: s.tune.skyBright, opacity: s.tune.skyOpacity } : null,
+    tune: s.tune ? { k: s.tune.k, bright: s.tune.skyBright, opacity: s.tune.skyOpacity } : null,
   };
   noteRowNumbers(
     "pack-sky-lean-h1",
@@ -186,15 +191,21 @@ describe("#180 H1 × perf lean: Ant Colony's stage-only sky keeps its own bright
     expect(shown(e.afterWrite), "same value right after the pack's write").toBeCloseTo(shown(e), 9);
   });
 
-  it("lean at its lowest (perf stress 1 -> skyBright 0.4, skyOpacity 0.45): the lean does not land on the pack's 0.72", () => {
-    const w = antIdleWrites();
-    const off = effective("ant-colony", w, { stageOnly: true, look: ANT_LOOK, stress: null });
-    const e = effective("ant-colony", w, { stageOnly: true, look: ANT_LOOK, stress: 1 });
-    expect(e.tune!.bright, "the overlay is fully leaned").toBeCloseTo(0.4, 9);
-    expect(e.tune!.opacity, "the overlay is fully leaned").toBeCloseTo(0.45, 9);
-    expect(shown(e), "effective uBright x uOpacity with the lean on").toBeGreaterThanOrEqual(ANT_UBRIGHT_FLOOR);
-    expect(shown(e), "leaned = un-leaned on the same view (uBright x uOpacity)").toBeCloseTo(shown(off), 9);
-    expect(shown(e.afterWrite)).toBeCloseTo(shown(e), 9);
+  it("lean at its lowest (perf stress 1): brightness and opacity equal the same view un-leaned, so the lean does not land on the pack's dimming", () => {
+    const writes = antIdleWrites();
+    const off = effective("ant-colony", writes, { stageOnly: true, look: ANT_LOOK, stress: 0 });
+    const on = effective("ant-colony", writes, { stageOnly: true, look: ANT_LOOK, stress: 1 });
+    expect(off.tune!.k, "un-leaned overlay").toBe(0);
+    expect(on.tune!.k, "the overlay is fully leaned").toBeCloseTo(1, 9);
+    expect(on.tune!.bright, "leaned overlay skyBright = un-leaned (#177)").toBeCloseTo(off.tune!.bright, 9);
+    expect(on.tune!.opacity, "leaned overlay skyOpacity = un-leaned (#177)").toBeCloseTo(off.tune!.opacity, 9);
+    expect(on.bright, "leaned effective uBright = un-leaned").toBeCloseTo(off.bright, 9);
+    expect(on.opacity, "leaned effective uOpacity = un-leaned").toBeCloseTo(off.opacity, 9);
+    expect(on.bright, "effective uBright with the lean on").toBeGreaterThanOrEqual(ANT_UBRIGHT_FLOOR);
+    expect(on.afterWrite.bright).toBeCloseTo(on.bright, 9);
+    expect(shown(on), "effective uBright x uOpacity with the lean on").toBeGreaterThanOrEqual(ANT_UBRIGHT_FLOOR);
+    expect(shown(on), "leaned = un-leaned on the same view (uBright x uOpacity)").toBeCloseTo(shown(off), 9);
+    expect(shown(on.afterWrite)).toBeCloseTo(shown(on), 9);
   });
 
   it("host brightness at its lowest user setting (slider 0%): user x pack, never darker than the user's own choice", () => {
@@ -225,18 +236,23 @@ describe("#180 H1 × perf lean: effective values for Talker Storm and RF Constel
   /** Both looks are `backdrop: plugin` on a graph view with the scene's default sliders (1 / 1). */
   const DEFAULT_LOOK = { skyBright: 1, skyOpacity: 1 };
 
-  it("talker-storm: pack uBright 0.4 (silent) .. 0.9 (audio 1) at default host settings and at the lowest lean", () => {
+  it("talker-storm: the pack's own uBright (silent and audio 1) at default host settings and at the lowest lean", () => {
     const rows: string[] = [];
     for (const audio of [0, 1]) {
       const w = packWrites("talker-storm", [{ ...EMPTY, audio }]);
-      expect(w.uBright).toBeCloseTo(0.4 + audio * 0.5, 9);
+      // The pack's formula is pinned in plugins/src/talker-storm/frontend/pack.test.ts (#184); here only
+      // that it writes one, and what the sky makes of it (the host mirror no longer writes its own).
+      expect(w.uBright, "talker-storm writes its own uBright").toBeTypeOf("number");
       expect(w.uOpacity, "talker-storm writes no uOpacity").toBeUndefined();
-      for (const stress of [null, 1]) {
-        const e = effective("talker-storm", w, { stageOnly: false, look: DEFAULT_LOOK, stress });
-        const host = stress === null ? 1 : 0.4;
-        expect(e.bright).toBeCloseTo(host * e.thermal * e.visScale * (w.uBright as number), 9);
-        expect(e.opacity).toBeCloseTo(stress === null ? 1 : 0.45, 9);
-        rows.push(`audio ${audio} ${stress === null ? "default" : "lean k=1"}: uBright ${e.bright.toFixed(3)} uOpacity ${e.opacity.toFixed(3)}`);
+      const off = effective("talker-storm", w, { stageOnly: false, look: DEFAULT_LOOK, stress: 0 });
+      const on = effective("talker-storm", w, { stageOnly: false, look: DEFAULT_LOOK, stress: 1 });
+      expect(off.bright, "un-leaned: host x thermal x visScale x pack").toBeCloseTo(
+        DEFAULT_LOOK.skyBright * off.thermal * off.visScale * (w.uBright as number), 9);
+      expect(on.tune!.k, "the overlay is fully leaned").toBeCloseTo(1, 9);
+      expect(on.bright, `audio ${audio}: leaned effective uBright = un-leaned`).toBeCloseTo(off.bright, 9);
+      expect(on.opacity, `audio ${audio}: leaned effective uOpacity = un-leaned`).toBeCloseTo(off.opacity, 9);
+      for (const [label, e] of [["default", off], ["lean k=1", on]] as const) {
+        rows.push(`audio ${audio} ${label}: uBright ${e.bright.toFixed(3)} uOpacity ${e.opacity.toFixed(3)}`);
       }
     }
     noteRowNumbers("pack-sky-lean-h1", `talker-storm ${rows.join("; ")}`);
@@ -249,12 +265,14 @@ describe("#180 H1 × perf lean: effective values for Talker Storm and RF Constel
       const w = packWrites("rf-constellation", [{ ...EMPTY, rf }]);
       expect(w.uOpacity).toBeCloseTo(0.65 + (rssi ?? 0) * 0.25, 9);
       expect(w.uBright, "rf-constellation writes no uBright").toBeUndefined();
-      for (const stress of [null, 1]) {
-        const e = effective("rf-constellation", w, { stageOnly: false, look: DEFAULT_LOOK, stress });
-        const hostOp = stress === null ? 1 : 0.45;
-        expect(e.opacity).toBeCloseTo(hostOp * (w.uOpacity as number), 9);
-        expect(e.bright).toBeCloseTo((stress === null ? 1 : 0.4) * e.thermal * e.visScale, 9);
-        rows.push(`rssi ${rssi ?? "none"} ${stress === null ? "default" : "lean k=1"}: uBright ${e.bright.toFixed(3)} uOpacity ${e.opacity.toFixed(3)}`);
+      const off = effective("rf-constellation", w, { stageOnly: false, look: DEFAULT_LOOK, stress: 0 });
+      const on = effective("rf-constellation", w, { stageOnly: false, look: DEFAULT_LOOK, stress: 1 });
+      expect(off.opacity, "un-leaned: host x pack").toBeCloseTo(DEFAULT_LOOK.skyOpacity * (w.uOpacity as number), 9);
+      expect(on.tune!.k, "the overlay is fully leaned").toBeCloseTo(1, 9);
+      expect(on.opacity, `rssi ${rssi ?? "none"}: leaned effective uOpacity = un-leaned`).toBeCloseTo(off.opacity, 9);
+      expect(on.bright, `rssi ${rssi ?? "none"}: leaned effective uBright = un-leaned`).toBeCloseTo(off.bright, 9);
+      for (const [label, e] of [["default", off], ["lean k=1", on]] as const) {
+        rows.push(`rssi ${rssi ?? "none"} ${label}: uBright ${e.bright.toFixed(3)} uOpacity ${e.opacity.toFixed(3)}`);
       }
     }
     noteRowNumbers("pack-sky-lean-h1", `rf-constellation ${rows.join("; ")}`);

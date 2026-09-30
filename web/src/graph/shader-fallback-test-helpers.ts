@@ -1,6 +1,6 @@
 import * as THREE from "three";
 import { vi } from "vitest";
-import type { RenderHost } from "./render-host";
+import type { HostedView, RenderHost } from "./render-host";
 
 /** Drive Three.js compile failure through the real onShaderError hook. */
 export function failCompileWith(
@@ -48,3 +48,33 @@ export function trackTextWrites(el: HTMLElement): { readonly writes: number } {
 }
 
 export const FALLBACK_GRACE_FRAMES = 30;
+
+/**
+ * Draw one real host frame (a pane that presents through the renderer). After a context restore the
+ * wall notice clears only once a frame like this has drawn (#179 row 4), not on the restored event.
+ */
+export function drawOneHostFrame(host: RenderHost, wall: HTMLElement, ts = 16): void {
+  const rect = (w: number, h: number) => () =>
+    ({ left: 0, top: 0, width: w, height: h, right: w, bottom: h, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+  const pane = document.createElement("div");
+  pane.getBoundingClientRect = rect(160, 120);
+  wall.appendChild(pane);
+  const prevCanvasRect = host.canvas.getBoundingClientRect;
+  host.canvas.getBoundingClientRect = rect(320, 240);
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera();
+  const view: HostedView = {
+    viewEl: pane,
+    hostFrame: () => { host.present(view, 0x000000, scene, camera); },
+    hostContextLost: () => {},
+    hostContextRestored: () => {},
+  };
+  host.add(view);
+  try {
+    host.advanceFrame(ts);
+  } finally {
+    host.remove(view);
+    host.canvas.getBoundingClientRect = prevCanvasRect;
+    pane.remove();
+  }
+}

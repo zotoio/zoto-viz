@@ -24,9 +24,12 @@ export function deliverVizPluginFrame(input: {
   pluginSpecForMode: (modeId: string) => PluginView | null;
   optsFor: (m: ViewMode) => Record<string, string>;
   budgetStats: VizFrameBudgetStats;
+  /** Solo tile info caption (#173); null clears it. */
+  soloInfoNotice?: (text: string | null) => void;
 }): void {
   input.sandbox.frame(input.frame);
   if (input.mosaic?.on && input.mosaicDemoPacks) {
+    input.soloInfoNotice?.(null);
     deliverCoalescedMosaicPacks({
       mosaic: input.mosaic,
       frame: input.frame,
@@ -40,6 +43,9 @@ export function deliverVizPluginFrame(input: {
       writeBuffer: (slot, data) => input.sandbox.handlers.writeBuffer?.(slot, data),
       writeUniform: (name, value) => input.sandbox.handlers.writeUniform?.(name, value),
       writeParticles: (data, stride) => input.sandbox.handlers.writeParticles?.(data, stride),
+      setInfoNotice: input.soloInfoNotice,
     }, input.optsFor(input.activeMode));
+  } else {
+    input.soloInfoNotice?.(null);
   }
 }

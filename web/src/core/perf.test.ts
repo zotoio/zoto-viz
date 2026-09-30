@@ -4,7 +4,8 @@ import type { FrameTs } from "./time-ms";
 import { DEFAULT_DREAM } from "../graph/scene";
 import {
   PERF_FPS, PERF_HOLD_MS, PERF_RECOVER_FPS, PERF_RECOVER_MS,
-  notePerfChange, perfOverlay, perfStress, perfWant, resetPerf, tickPerf,
+  notePerfChange, perfLeanState, perfOverlay, perfPinFromSearch, perfPinnedOff, perfStress, perfWant, resetPerf,
+  setPerfPinnedOff, tickPerf,
 } from "./perf";
 
 function play(from: number, to: number, step: number, enabled = true, ease = 0.45): number {
@@ -119,5 +120,83 @@ describe("tickPerf", () => {
     expect(lean.labelCount).toBe(DEFAULT_DREAM.labelCount);
     expect(lean.partAmt).toBe(DEFAULT_DREAM.partAmt);
     expect(lean.dprK).toBe(0);
+  });
+});
+
+/** 5 fps from boot through the 30 s window and 24 s more: the lean's full-on case. */
+function slowSession(): number {
+  play(0, PERF_HOLD_MS, 200);
+  const s = play(PERF_HOLD_MS + 200, PERF_HOLD_MS + 24_000, 200);
+  expect(windowFps(PERF_HOLD_MS + 24_000, PERF_HOLD_MS)!, "the 30 s window reads < 10 fps").toBeLessThan(PERF_FPS);
+  return s;
+}
+
+describe("#177 the perf lean never dims the sky", () => {
+  afterEach(() => {
+    resetFps();
+    resetPerf();
+  });
+
+  it("fully leaned (tune.k >= 0.9): skyBright and skyOpacity are the look's own; the other knobs still lean", () => {
+    const look = { ...DEFAULT_DREAM, labelCount: 20, skyBright: 0.83, skyOpacity: 0.71 };
+    const tune = perfOverlay(look, slowSession());
+    expect(tune.k, "lean fully on").toBeGreaterThanOrEqual(0.9);
+    expect(tune.skyBright, "skyBright (the lean used to ease it to 0.4)").toBe(look.skyBright);
+    expect(tune.skyOpacity, "skyOpacity (the lean used to ease it to 0.45)").toBe(look.skyOpacity);
+    expect(tune.labelCount).toBeLessThan(look.labelCount);
+    expect(tune.partAmt).toBeLessThan(look.partAmt);
+    expect(tune.edgeGlowAmt).toBeLessThan(look.edgeGlowAmt);
+    expect(tune.skySpeed, "sky motion still eases toward 0.3").toBeCloseTo(look.skySpeed + (0.3 - look.skySpeed) * tune.k, 9);
+    expect(tune.dprK).toBe(tune.k);
+  });
+});
+
+describe("#177 pin and read: ?perf=off", () => {
+  afterEach(() => {
+    resetFps();
+    resetPerf();
+  });
+
+  it("reads the pin from the page query (perf=off only)", () => {
+    expect(perfPinFromSearch("?perf=off")).toBe(true);
+    expect(perfPinFromSearch("?view=graph&perf=off")).toBe(true);
+    for (const q of ["", "?perf=on", "?perf=", "?perf", "?perfx=off", "?perf=OFF"]) expect(perfPinFromSearch(q), q).toBe(false);
+  });
+
+  it("pinned off, tune.k stays 0 across a < 10 fps window; unpinned, the same session leans (k >= 0.9)", () => {
+    setPerfPinnedOff(perfPinFromSearch("?perf=off"));
+    expect(perfPinnedOff()).toBe(true);
+    let maxK = 0;
+    for (let t = 0; t <= PERF_HOLD_MS + 24_000; t += 200) {
+      markFrame(t as FrameTs);
+      tickPerf(t, true, 0.45);
+      maxK = Math.max(maxK, perfOverlay(DEFAULT_DREAM).k);
+    }
+    expect(windowFps(PERF_HOLD_MS + 24_000, PERF_HOLD_MS)!, "the 30 s window reads < 10 fps").toBeLessThan(PERF_FPS);
+    expect(maxK, "tune.k over the whole pinned session").toBe(0);
+    expect(perfWant()).toBe(0);
+    expect(perfLeanState()).toEqual({ pinnedOff: true, lean: "off", k: 0, want: 0 });
+
+    resetFps();
+    resetPerf();
+    const k = perfOverlay(DEFAULT_DREAM, slowSession()).k;
+    expect(k, "unpinned control: the lean still comes on").toBeGreaterThanOrEqual(0.9);
+    const st = perfLeanState();
+    expect(st.pinnedOff).toBe(false);
+    expect(st.lean).toBe("on");
+    expect(st.k).toBeCloseTo(k, 12);
+    expect(st.want).toBe(1);
+  });
+
+  it("pinning while leaned drops the lean at once and holds it at 0; unpinning lets it lean again", () => {
+    slowSession();
+    expect(perfLeanState().k).toBeGreaterThanOrEqual(0.9);
+    setPerfPinnedOff(true);
+    expect(perfLeanState()).toEqual({ pinnedOff: true, lean: "off", k: 0, want: 0 });
+    play(PERF_HOLD_MS + 24_200, PERF_HOLD_MS + 40_000, 200);
+    expect(perfLeanState().k, "still 0 after 16 s more at 5 fps").toBe(0);
+    setPerfPinnedOff(false);
+    play(PERF_HOLD_MS + 40_200, PERF_HOLD_MS + 60_000, 200);
+    expect(perfLeanState().k, "unpinned: leans again").toBeGreaterThanOrEqual(0.9);
   });
 });

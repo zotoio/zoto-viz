@@ -1241,7 +1241,7 @@
           "minimum": 0,
           "maximum": 8192,
           "default": 0,
-          "description": "Hard cap on particle records per frame (0 disables writeParticles)."
+          "description": "Hard cap on particle records per frame (0 disables writeParticles). writeParticles is deprecated (#184): no host renderer draws particles; use UBO slots."
         },
         "graphWalk": {
           "type": "boolean",

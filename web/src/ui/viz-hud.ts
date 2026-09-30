@@ -1,3 +1,4 @@
+import { planBlobMesh } from "../../../plugins/sdk/blob-mesh-budget";
 import type { StateMsg } from "../core/types";
 import { formatVizBudgetOverlay, vizBudgetOverlayFromStats } from "../plugins/viz-budget-overlay";
 import type { VizDataFrame, VizFrameBudgetStats, VizTalkerSample } from "../plugins/viz-host";
@@ -162,8 +163,14 @@ function vizHudMetricLive(
       return { label: "talkers", value: String(frame?.talkers.length ?? 0) };
     case "roto-proto":
       return { label: "flows", value: String(state.stats.active_flows) };
-    case "blob-mesh":
-      return { label: "blobs", value: String(Math.min(8, frame?.talkers.length ?? 0)) };
+    case "blob-mesh": {
+      // The shared blob plan (the same one the writers draw): shown count, or "7 of 11" when the
+      // quietest devices don't fit the coverage budget (#173).
+      const rates = (frame?.talkers ?? []).map((t) => t.rate);
+      const plan = planBlobMesh(rates);
+      const shown = plan.shownIdx.length;
+      return { label: "devices", value: plan.hidden > 0 ? `${shown} of ${rates.length}` : String(shown) };
+    }
     case "star-sines":
       return { label: "lanes", value: String(frame?.packets.length ?? 0) };
     case "hn-rain":

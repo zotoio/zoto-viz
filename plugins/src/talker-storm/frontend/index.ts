@@ -2,7 +2,7 @@
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { getVizZoto } from "plugins/sdk/viz-zoto";
-import { stormSlots } from "./storm";
+import { stormBright, stormSlots } from "./storm";
 const host = getVizZoto();
 
 // The storm travels in slot 1, which the sky reads (frontend/storm.ts), not writeParticles: the host
@@ -10,6 +10,6 @@ const host = getVizZoto();
 // [count, audio, t mod 1] every frame, so the pack never writes it.
 host.onFrame = (frame: VizDataFrame) => {
   host.writeBuffer(1, stormSlots(frame).slot1);
-  host.writeUniform("uBright", 0.4 + frame.audio * 0.5);
+  host.writeUniform("uBright", stormBright(frame.audio));
   host.writeUniform("uAudio", frame.audio);
 };

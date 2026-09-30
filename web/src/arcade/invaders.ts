@@ -4,7 +4,7 @@ import { categorize, hashColor, orgOf } from "../core/modes";
 import { rName } from "../core/redact";
 import { fmtBytes, type Packet } from "../core/types";
 import { ArcadeView, DevicePicker, MISS_RED, ROW_TTL_S, clamp, css, fade, fitText, isKnown, sizeOf, sprite } from "./arcade";
-import type { ArcadeIdleShaper } from "./arcade-idle-feed";
+import { arcadeHudRate, type ArcadeIdleShaper } from "./arcade-idle-feed";
 import { shapeInvadersIdle } from "./arcade-idle-shapers";
 
 /**
@@ -326,7 +326,7 @@ export class InvadersView extends ArcadeView {
     const w2 = g.measureText(`↑ ${fmtBytes(this.stats.up)}`).width;
     g.fillStyle = u.muted; g.font = `11px ${this.font}`; g.fillText("fired", x2 + w2 + 6, top + 31);
     let hosts = 0; for (const r of this.rows.values()) hosts += r.aliens.size;
-    g.fillText(`${Math.round(this.pps)} pkt/s · ${this.rows.size} organisation${this.rows.size === 1 ? "" : "s"} · ${hosts} host${hosts === 1 ? "" : "s"} · ${this.cannons.size} cannon${this.cannons.size === 1 ? "" : "s"}`, 16, top + 48);
+    g.fillText(`${arcadeHudRate(this.pps, this.idleShowing)} · ${this.rows.size} organisation${this.rows.size === 1 ? "" : "s"} · ${hosts} host${hosts === 1 ? "" : "s"} · ${this.cannons.size} cannon${this.cannons.size === 1 ? "" : "s"}`, 16, top + 48);
     g.textAlign = "right";
     g.font = `600 14px ${this.font}`; g.fillStyle = this.picker.isGroup ? this.roleCss("lan") : this.cannonColor(this.picker.ip());
     g.fillText(this.picker.label((ip) => this.nameOf(ip)), this.W - 16, top + 30);

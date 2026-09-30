@@ -129,6 +129,9 @@ function apiPath(input: RequestInfo | URL): string {
   }
 }
 
+/** Extra /api/plugins rows for one boot ({@link bootMainEntry}). */
+let extraPluginRows: Record<string, unknown>[] = [];
+
 function harnessFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const pathOnly = apiPath(input);
   const method = (init?.method || "GET").toUpperCase();
@@ -197,6 +200,7 @@ function harnessFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Res
           has_backend: false,
           has_datasource: false,
         },
+        ...extraPluginRows,
       ],
       errors: [],
     });
@@ -248,15 +252,16 @@ export type MainEntryHarness = {
   ws: MockWebSocket;
 };
 
-export async function importMainEntryModule(): Promise<void> {
+export async function importMainEntryModule(extraPlugins: Record<string, unknown>[] = []): Promise<void> {
   vi.resetModules();
   installMainEntryMocks();
+  extraPluginRows = extraPlugins;
   mountIndexDom();
   await import("../main");
 }
 
-export async function bootMainEntry(): Promise<MainEntryHarness> {
-  await importMainEntryModule();
+export async function bootMainEntry(extraPlugins: Record<string, unknown>[] = []): Promise<MainEntryHarness> {
+  await importMainEntryModule(extraPlugins);
   const { mainEntryTestConnect, mainEntryTestBootCatalog } = await import("../main-entry-test-host");
   mainEntryTestConnect();
   const ws = await vi.waitUntil(() => MockWebSocket.open.at(-1), { timeout: 8000 });

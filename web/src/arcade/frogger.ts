@@ -4,7 +4,7 @@ import { categorize, hashColor, orgOf } from "../core/modes";
 import { rName } from "../core/redact";
 import { type Device, type Packet } from "../core/types";
 import { ArcadeView, DevicePicker, FadeLog, MISS_RED, OK_GREEN, ROW_TTL_S, clamp, css, fade, fitText, isKnown, roundRect, sprite } from "./arcade";
-import type { ArcadeIdleShaper } from "./arcade-idle-feed";
+import { arcadeHudRate, type ArcadeIdleShaper } from "./arcade-idle-feed";
 import { shapeFroggerIdle } from "./arcade-idle-shapers";
 
 /**
@@ -520,7 +520,7 @@ export class FroggerView extends ArcadeView {
     for (const st of ["dns", "connect", "handshake", "data"] as Stage[]) put(`${this.stats[st]}✕`, LANE_LABEL[st], this.stats[st] ? MISS_RED : u.fg);
     g.font = `11px ${this.font}`; g.fillStyle = u.muted;
     const waiting = this.frogs.filter((f) => !f.dead && f.stage !== "home").length;
-    g.fillText(`${Math.round(this.pps)} pkt/s · ${waiting} frog${waiting === 1 ? "" : "s"} crossing · ${this.pads.size} pad${this.pads.size === 1 ? "" : "s"}`, 16, top + 48);
+    g.fillText(`${arcadeHudRate(this.pps, this.idleShowing)} · ${waiting} frog${waiting === 1 ? "" : "s"} crossing · ${this.pads.size} pad${this.pads.size === 1 ? "" : "s"}`, 16, top + 48);
     g.textAlign = "right";
     g.font = `600 14px ${this.font}`; g.fillStyle = this.picker.isGroup ? this.roleCss("lan") : this.devColor(this.picker.ip());
     g.fillText(this.picker.label((ip) => this.nameOf(ip)), this.W - 16, top + 30);
