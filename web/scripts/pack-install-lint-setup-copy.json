@@ -1,12 +1,13 @@
 {
-  "about": "#186: the one table for the install-lint setup-refusal copy. service/pack_install_lint.py and web/scripts/pack-install-lint-setup-copy.mjs (bundle-pack-entry.mjs) both read this file; neither has a copy of its own. `reasons` maps each machine-readable setup reason code to a `fixes` entry; a code that isn't listed (or none) uses `default`. Placeholders: {name}, {old}, {still}, {fix}. tests/test_pack_install_lint_setup_copy.py fails if the service and the script render any entry differently.",
+  "about": "#186: the one table for the install-lint setup-refusal copy. service/pack_install_lint.py and web/scripts/pack-install-lint-setup-copy.mjs (bundle-pack-entry.mjs) both read this file; neither has a copy of its own. `reasons` maps each machine-readable setup reason code to a `fixes` entry; a code that isn't listed (or none) uses `default`. `overrides` gives a reason its own `install` / `upgrade` template where the shared one doesn't fit (lint_timeout: \"in time\", and an upgrade that keeps the old version needs no fix); a template it doesn't list stays the shared one. Placeholders: {name}, {old}, {still}, {fix}. tests/test_pack_install_lint_setup_copy.py fails if the service and the script render any entry differently.",
   "install": "Couldn't safety-check {name}, so it wasn't installed. {fix}",
   "upgrade": "Couldn't safety-check the new version of {name}, so it wasn't updated. {still} {fix}",
   "still": "You're still on version {old}.",
   "still_unknown": "The version you had is still installed.",
   "fixes": {
     "pnpm_install": "Run `pnpm install` in `web/` and try again.",
-    "pnpm_run_prepare": "Run `pnpm run prepare` in `web/` and try again."
+    "pnpm_run_prepare": "Run `pnpm run prepare` in `web/` and try again.",
+    "try_again": "Try again, and if it keeps happening, the pack may be broken."
   },
   "default": "pnpm_install",
   "reasons": {
@@ -19,6 +20,13 @@
     "lint_prebuilt_stale": "pnpm_run_prepare",
     "lint_threw": "pnpm_install",
     "lint_no_verdict": "pnpm_install",
-    "no_pass_verdict": "pnpm_install"
+    "no_pass_verdict": "pnpm_install",
+    "lint_timeout": "try_again"
+  },
+  "overrides": {
+    "lint_timeout": {
+      "install": "Couldn't safety-check {name} in time, so it wasn't installed. {fix}",
+      "upgrade": "Couldn't safety-check the new version of {name} in time, so it wasn't updated. {still}"
+    }
   }
 }

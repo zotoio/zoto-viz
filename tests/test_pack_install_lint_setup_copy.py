@@ -1,7 +1,8 @@
 """#186: the install-lint setup-refusal copy has one source, and the service and the script agree on it.
 
 web/scripts/pack-install-lint-setup-copy.json is the table: reason code -> fix sentence, plus the
-fresh-install and upgrade templates. service/pack_install_lint.py and
+fresh-install and upgrade templates (and, for a reason whose sentence doesn't fit them, that reason's
+own templates in `overrides`: lint_timeout). service/pack_install_lint.py and
 web/scripts/pack-install-lint-setup-copy.mjs (which bundle-pack-entry.mjs uses) both read it. These rows
 fail if the two render any entry differently, if a reason the script can emit isn't in the table, or
 if either side carries a copy of the wording of its own.
@@ -69,6 +70,34 @@ def test_the_service_and_the_script_render_every_table_entry_the_same() -> None:
     assert not diffs, f"service and script disagree on setup copy (case, script, service): {diffs}"
 
 
+def _script_templates(cases: list[tuple[str, str]]) -> list[str]:
+    """The script module's template choice (setupTemplate) for each (kind, reason)."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    code = (
+        f"const m = await import({json.dumps(COPY_MODULE.as_uri())});"
+        "const cases = JSON.parse(process.argv[1]);"
+        "process.stdout.write(JSON.stringify(cases.map(([k, r]) => m.setupTemplate(k, r))));"
+    )
+    r = subprocess.run(
+        [node, "--input-type=module", "-e", code, json.dumps(cases)], capture_output=True, text=True, timeout=30
+    )
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_the_service_and_the_script_pick_the_same_template_for_every_reason() -> None:
+    """#186 lint_timeout: `overrides` is read the same way on both sides (install and upgrade)."""
+    reasons = [*_table()["reasons"], "", "not_a_reason"]
+    cases = [(kind, reason) for reason in reasons for kind in ("install", "upgrade")]
+    script = _script_templates(cases)
+    service = [pil.setup_template(kind, reason) for kind, reason in cases]
+    diffs = [(c, s, v) for c, s, v in zip(cases, script, service) if s != v]
+    assert not diffs, f"service and script pick different templates (case, script, service): {diffs}"
+    assert "in time" in pil.setup_template("upgrade", "lint_timeout")
+
+
 def test_both_sides_read_the_one_table_file() -> None:
     assert SETUP_COPY_PATH == TABLE, SETUP_COPY_PATH
     assert pil.SETUP_COPY == _table(), "the service's table is the file's"
@@ -88,6 +117,7 @@ def test_neither_side_carries_the_wording_of_its_own() -> None:
         "You're still on",
         "is still installed. Run",
         "The version you had is still installed",
+        "in time, so it wasn't",
     ]
     sources = [BUNDLE_SCRIPT, COPY_MODULE, *(ROOT / "service").glob("*.py")]
     hits = [(p.relative_to(ROOT).as_posix(), f) for p in sources for f in fragments if f in p.read_text(encoding="utf-8")]
@@ -103,19 +133,29 @@ def test_every_reason_the_script_or_service_emits_is_in_the_table() -> None:
 
 
 PREPARE_REASONS = ("lint_prebuilt_missing", "lint_prebuilt_stale", "lint_prebuilt_unloadable")
+TIMEOUT_REASONS = ("lint_timeout",)
 
 
 def test_the_table_says_what_ux_pro_decided() -> None:
-    """A missing, stale or unloadable built lint: `pnpm run prepare`. Everything else: `pnpm install`.
-    Upgrade: "You're still on version <old>." / "The version you had is still installed." (both fixes)."""
+    """A missing, stale or unloadable built lint: `pnpm run prepare`. The script's own timeout: "in time",
+    try again, and an upgrade that says only which version is still there. Everything else: `pnpm install`.
+    Upgrade: "You're still on version <old>." / "The version you had is still installed." (every fix)."""
     table = _table()
     for reason in PREPARE_REASONS:
         assert table["fixes"][table["reasons"][reason]] == "Run `pnpm run prepare` in `web/` and try again.", reason
     assert table["still"] == "You're still on version {old}."
     assert table["still_unknown"] == "The version you had is still installed."
     assert table["upgrade"] == "Couldn't safety-check the new version of {name}, so it wasn't updated. {still} {fix}"
+    assert table["fixes"][table["reasons"]["lint_timeout"]] == "Try again, and if it keeps happening, the pack may be broken."
+    assert table["overrides"] == {
+        "lint_timeout": {
+            "install": "Couldn't safety-check {name} in time, so it wasn't installed. {fix}",
+            "upgrade": "Couldn't safety-check the new version of {name} in time, so it wasn't updated. {still}",
+        }
+    }
+    assert "lint_timeout" in _script_reasons()
     for reason in (*_script_reasons(), *SERVICE_REASONS):
-        if reason in PREPARE_REASONS:
+        if reason in PREPARE_REASONS or reason in TIMEOUT_REASONS:
             continue
         assert table["fixes"][table["reasons"][reason]] == "Run `pnpm install` in `web/` and try again.", reason
     assert table["fixes"][table["default"]] == "Run `pnpm install` in `web/` and try again."

@@ -239,10 +239,12 @@ def test_bundle_false_zip_whose_js_imports_outside_the_pack_is_blocked(
     assert not (paths.plugin_local_runtime_dir(create=True) / "sandbox-fixture-multi").exists()
 
 
-def test_service_timeout_is_the_only_lint_bound() -> None:
-    """#185's 15 s runner timeout and --lint-timeout-ms went with the runner; the service's 20 s is it."""
+def test_service_timeout_is_the_backstop_to_the_scripts_lint_timeout() -> None:
+    """#185's runner (and its --lint-timeout-ms flag) went; the service's 20 s stays as the backstop to
+    the script's own 15 s lint_timeout (tests/test_pack_install_lint_timeout.py)."""
     script = (ROOT / "web" / "scripts" / "bundle-pack-entry.mjs").read_text(encoding="utf-8")
-    assert "lint-timeout" not in script and "setTimeout" not in script
+    assert "--lint-timeout-ms" not in script and "lint-timeout-ms" not in script
+    assert "const LINT_TIMEOUT_MS = 15_000;" in script
     assert not (ROOT / "web" / "scripts" / "pack-install-lint-gate.mjs").exists()
     assert not (ROOT / "web" / "scripts" / "pack-install-lint-run.ts").exists()
     assert plugins.PACK_BUNDLE_TIMEOUT_S == 20
