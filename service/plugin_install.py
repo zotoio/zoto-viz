@@ -20,6 +20,7 @@ from .pack_install_lint import (
     REASON_INSTALL_CHECK_UNAVAILABLE,
     PackInstallLintSetupError,
     format_install_lint_setup_upgrade_message,
+    format_update_refused_message,
     merge_lint_warnings,
     run_install_pack_lint,
 )
@@ -126,6 +127,12 @@ class InstallUpdateRefusedError(ValueError):
 def update_refused_payload(zip_rel: str) -> dict[str, str]:
     """#111: the payload fields of a refused update. ``reasonCode`` is the stable code callers branch on."""
     return {"upgrade_blocked": "true", "zip": zip_rel, "reasonCode": REASON_UPDATE_REFUSED}
+
+
+def update_refused_error(name: str, old_version: str | int | None, zip_rel: str) -> InstallV2BlockedError:
+    """#111: the new version couldn't be safety-checked, so the update was refused: UX Pro's sentence
+    (the shared copy table, with the installed version) and the payload with its reasonCode."""
+    return InstallV2BlockedError(format_update_refused_message(name, old_version), payload=update_refused_payload(zip_rel))
 
 
 def register_install_check(check: InstallCheck) -> None:
@@ -564,7 +571,7 @@ def _install_staged_to_runtime_locked(
             raise
         except InstallCheckUnavailableError as e:
             if upgrade:
-                raise InstallV2BlockedError(str(e), payload=update_refused_payload(rel)) from e
+                raise update_refused_error(name, installed_runtime_version(runtime), rel) from e
             raise
         except PackInstallLintSetupError as e:
             # #185: the install lint couldn't run (or gave no valid verdict). Never "was blocked";

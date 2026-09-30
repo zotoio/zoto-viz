@@ -132,11 +132,24 @@ def format_install_lint_setup_message(name: str, reason: str = "") -> str:
     return _fill(setup_template("install", reason), {"name": label, "fix": setup_fix(reason)})
 
 
+def _still(old_version: str | int | None) -> str:
+    """The table's "which version is still installed" sentence ("still_unknown" without a version)."""
+    old = str(old_version).strip() if old_version is not None else ""
+    return _fill(str(SETUP_COPY["still"]), {"old": old}) if old else str(SETUP_COPY["still_unknown"])
+
+
 def format_install_lint_setup_upgrade_message(name: str, old_version: str | int | None, reason: str = "") -> str:
     label = (name or "").strip() or "Plugin"
-    old = str(old_version).strip() if old_version is not None else ""
-    still = _fill(str(SETUP_COPY["still"]), {"old": old}) if old else str(SETUP_COPY["still_unknown"])
-    return _fill(setup_template("upgrade", reason), {"name": label, "still": still, "fix": setup_fix(reason)})
+    return _fill(setup_template("upgrade", reason), {"name": label, "still": _still(old_version), "fix": setup_fix(reason)})
+
+
+def format_update_refused_message(name: str, old_version: str | int | None) -> str:
+    """#111: an update refused because its safety check couldn't run at all (UX Pro's sentence: the
+    table's ``overrides.update_refused.upgrade``; no fix to offer). Sent with reasonCode
+    ``update_refused``; nothing branches on this text."""
+    label = (name or "").strip() or "Plugin"
+    template = str(SETUP_COPY["overrides"]["update_refused"]["upgrade"])
+    return _fill(template, {"name": label, "still": _still(old_version)})
 
 
 def _verdict_lines(stderr: str, kind: str) -> list[dict[str, Any]]:

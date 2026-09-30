@@ -22,6 +22,21 @@ PID = "upgrade-probe"
 FIXTURE = Path(__file__).resolve().parents[1] / "plugins/sdk/pack-bundle-fixtures" / PID
 
 
+@pytest.fixture(autouse=True)
+def _fresh_block_caches(_isolate_plugin_local: Path):
+    """Each row starts with no remembered zip blocks: the fixture zips are byte-identical across rows,
+    so a start-failure record from one row (cached in-process by sha) would answer for the next."""
+    from service.pack_runtime import _clear_zip_block_cache
+    from service.pack_zip_blocks import reset_zip_blocks_for_tests
+
+    reset_zip_blocks_for_tests()
+    _clear_zip_block_cache()
+    plugins.reset_scan_memo()
+    yield
+    reset_zip_blocks_for_tests()
+    _clear_zip_block_cache()
+
+
 def _repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     repo = tmp_path / "checkout"
     (repo / "plugins" / "src").mkdir(parents=True)
@@ -113,3 +128,52 @@ def test_catalog_row_for_a_refused_update_carries_the_code(
     assert row.get("reasonCode") == REASON_UPDATE_REFUSED, row
     assert row.get("error") == "pack_install_blocked", row
     assert row.get("message"), row
+
+
+# #111: UX Pro's sentence for an update refused because the new version couldn't be safety-checked.
+# It comes from the shared copy table (web/scripts/pack-install-lint-setup-copy.json,
+# overrides.update_refused); these are the exact strings the user sees.
+KNOWN_VERSION = "Couldn't safety-check the new version of {name}, so it wasn't updated. You're still on version {old}."
+UNKNOWN_VERSION = "Couldn't safety-check the new version of {name}, so it wasn't updated. The version you had is still installed."
+
+
+def test_refused_update_says_which_version_you_are_still_on(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    """Install path and catalog path, the installed version known (1): UX Pro's exact sentence."""
+    _install_v1(tmp_path, monkeypatch)
+    name = "Upgrade probe v1"  # the fixture's own name (plugins/sdk/pack-bundle-fixtures/upgrade-probe)
+    want = KNOWN_VERSION.format(name=name, old=1)
+    assert want == "Couldn't safety-check the new version of Upgrade probe v1, so it wasn't updated. You're still on version 1."
+    monkeypatch.setattr(plugins, "verify_pack_bundle_home", _check_unavailable)
+    info = plugin_local.install_local_zip(_pack(tmp_path, 2), overwrite=True)
+    assert info.get("message") == want, info
+    assert info.get("reasonCode") == REASON_UPDATE_REFUSED, info
+    (paths.plugin_local_dir() / f"{PID}.zip").write_bytes(_pack(tmp_path, 3))
+    rows = _catalog_errors()
+    assert [r.get("message") for r in rows] == [want], rows
+    from service.pack_install_lint import format_update_refused_message
+
+    assert format_update_refused_message("Star Sines", "2.1") == KNOWN_VERSION.format(name="Star Sines", old="2.1")
+
+
+def test_refused_update_when_the_old_version_is_unknown(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    """The installed version unknown: the second sentence is the table's still_unknown (as on main)."""
+    _install_v1(tmp_path, monkeypatch)
+    monkeypatch.setattr("service.plugin_install.installed_runtime_version", lambda _runtime: None)
+    monkeypatch.setattr(plugins, "verify_pack_bundle_home", _check_unavailable)
+    info = plugin_local.install_local_zip(_pack(tmp_path, 2), overwrite=True)
+    want = UNKNOWN_VERSION.format(name="Upgrade probe v1")
+    assert want == "Couldn't safety-check the new version of Upgrade probe v1, so it wasn't updated. The version you had is still installed."
+    assert info.get("message") == want, info
+    assert info.get("reasonCode") == REASON_UPDATE_REFUSED, info
+    from service.pack_install_lint import format_update_refused_message
+
+    for old in (None, "", "  "):
+        assert format_update_refused_message("Star Sines", old) == UNKNOWN_VERSION.format(name="Star Sines"), old

@@ -1,5 +1,5 @@
 {
-  "about": "#186: the one table for the install-lint setup-refusal copy. service/pack_install_lint.py and web/scripts/pack-install-lint-setup-copy.mjs (bundle-pack-entry.mjs) both read this file; neither has a copy of its own. `reasons` maps each machine-readable setup reason code to a `fixes` entry; a code that isn't listed (or none) uses `default`. `reason_overrides` points a reason at a named `overrides` entry, its own `install` / `upgrade` templates where the shared ones don't fit (`in_time`: \"in time\", and an upgrade that keeps the old version needs no fix); lint_timeout (the script's timer) and bundle_timeout (the service's backstop) share it, so the user sees one sentence for either kill. A template the entry doesn't list stays the shared one. Placeholders: {name}, {old}, {still}, {fix}. tests/test_pack_install_lint_setup_copy.py fails if the service and the script render any entry differently.",
+  "about": "#186: the one table for the install-lint setup-refusal copy. service/pack_install_lint.py and web/scripts/pack-install-lint-setup-copy.mjs (bundle-pack-entry.mjs) both read this file; neither has a copy of its own. `reasons` maps each machine-readable setup reason code to a `fixes` entry; a code that isn't listed (or none) uses `default`. `reason_overrides` points a reason at a named `overrides` entry, its own `install` / `upgrade` templates where the shared ones don't fit (`in_time`: \"in time\", and an upgrade that keeps the old version needs no fix); lint_timeout (the script's timer) and bundle_timeout (the service's backstop) share it, so the user sees one sentence for either kill. `update_refused` (#111) is the upgrade sentence for an update refused because its check couldn't run at all (no setup reason, so no fix); the service renders it (service/pack_install_lint.py format_update_refused_message) next to reasonCode \"update_refused\". A template the entry doesn't list stays the shared one. Placeholders: {name}, {old}, {still}, {fix}. tests/test_pack_install_lint_setup_copy.py fails if the service and the script render any entry differently.",
   "install": "Couldn't safety-check {name}, so it wasn't installed. {fix}",
   "upgrade": "Couldn't safety-check the new version of {name}, so it wasn't updated. {still} {fix}",
   "still": "You're still on version {old}.",
@@ -28,6 +28,9 @@
     "in_time": {
       "install": "Couldn't safety-check {name} in time, so it wasn't installed. {fix}",
       "upgrade": "Couldn't safety-check the new version of {name} in time, so it wasn't updated. {still}"
+    },
+    "update_refused": {
+      "upgrade": "Couldn't safety-check the new version of {name}, so it wasn't updated. {still}"
     }
   },
   "reason_overrides": {

@@ -181,7 +181,11 @@ def test_the_table_says_what_ux_pro_decided() -> None:
         "in_time": {
             "install": "Couldn't safety-check {name} in time, so it wasn't installed. {fix}",
             "upgrade": "Couldn't safety-check the new version of {name} in time, so it wasn't updated. {still}",
-        }
+        },
+        # #111: an update refused because its check couldn't run at all (reasonCode update_refused).
+        "update_refused": {
+            "upgrade": "Couldn't safety-check the new version of {name}, so it wasn't updated. {still}",
+        },
     }
     assert table["reason_overrides"] == {"lint_timeout": "in_time", "bundle_timeout": "in_time"}
     assert "lint_timeout" in _script_reasons()

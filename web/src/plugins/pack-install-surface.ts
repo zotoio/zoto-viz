@@ -41,7 +41,10 @@ export const PACK_INSTALL_CHECK_UNAVAILABLE = "pack_install_check_unavailable";
  * #111: the service refused an update and the version you had is still installed (the new version
  * couldn't be checked, or couldn't start and the old one was put back). service/pack_install_copy.py's
  * REASON_UPDATE_REFUSED, carried as `reasonCode`. The surface picks the refused branch from this code
- * alone; the service's message is shown as is and its wording can change without breaking this.
+ * alone; the service's message is shown as is and its wording can change without breaking this. When the
+ * new version couldn't be safety-checked at all, that message is UX Pro's "Couldn't safety-check the new
+ * version of <Name>, so it wasn't updated. You're still on version <old>." ("The version you had is still
+ * installed." when the old version isn't known), from the same table as the #185 sentences.
  */
 export const PACK_UPDATE_REFUSED = "update_refused";
 
