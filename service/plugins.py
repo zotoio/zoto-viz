@@ -337,8 +337,8 @@ def _install_lint_block_from_compile(stderr: str) -> str | None:
     return None
 
 
-# Service-side limit for one bundle-pack-entry.mjs run. The install lint runner has its own, lower
-# timeout inside the script (pack-install-lint-gate.mjs DEFAULT_LINT_TIMEOUT_MS = 15000 ms).
+# Service-side limit for one bundle-pack-entry.mjs run. #186: the install lint runs inside that
+# process (no runner child, no timeout of its own), so this is the one bound on a lint that hangs.
 PACK_BUNDLE_TIMEOUT_S = 20
 
 
@@ -370,8 +370,8 @@ def _run_pack_script(argv: list[str], env: dict[str, str]) -> subprocess.Complet
     try:
         out, err = proc.communicate(timeout=PACK_BUNDLE_TIMEOUT_S)
     except subprocess.TimeoutExpired as e:
-        # SIGTERM the group first so bundle-pack-entry.mjs can take the lint runner's own process
-        # group down with it; SIGKILL whatever is left.
+        # SIGTERM the group first (bundle-pack-entry.mjs and esbuild's service share it; #186: there
+        # is no lint runner child any more), then SIGKILL whatever is left.
         _signal_group(proc, signal.SIGTERM)
         try:
             proc.communicate(timeout=2)

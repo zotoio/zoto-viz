@@ -8,8 +8,10 @@ to PackInstallLintSetupError with the user-facing wording, keeps a real lint blo
 Unbundled (``frontend.bundle: false``) and no-frontend packs go through the same gate
 (``bundle-pack-entry.mjs --lint-only``).
 
-The install rows run the real bundle-pack-entry.mjs; the "unresolvable" rows point the repo root at a
-temp tree that has no tsx, so the lint runner really can't be resolved.
+The install rows run the real bundle-pack-entry.mjs. #186: the lint runs in that process from the
+prebuilt web/scripts/pack-install-lint.built.mjs (no tsx, no runner); the setup-refusal rows point
+the service at a temp copy of the scripts without the built lint, so it really can't be loaded.
+test_pack_install_lint_prebuilt.py has the #186 rows that replace #185's runner rows.
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ import pytest
 from service import paths
 from service import plugin_local
 from service import plugins
+from tests.pack_install_lint_tree_util import script_tree
 from service.pack_install_lint import (
     EXIT_LINT_SETUP,
     NONCE_ENV,
@@ -111,7 +114,7 @@ def test_setup_message_wording() -> None:
 
 def test_compile_maps_lint_setup_exit_to_setup_error(monkeypatch: pytest.MonkeyPatch) -> None:
     doc = _pulse_doc()
-    setup = json.dumps({"type": "pack-install-lint-setup-error", "message": "x", "detail": "tsx not resolvable"})
+    setup = json.dumps({"type": "pack-install-lint-setup-error", "message": "x", "detail": "built lint not importable"})
     _stub_bundle(monkeypatch, EXIT_LINT_SETUP, f"Couldn't safety-check Pulse TS\n{setup}\n")
     plugins.reset_bundles()
     with pytest.raises(PackInstallLintSetupError) as e:
@@ -174,7 +177,7 @@ def test_compile_lint_block_keeps_its_message_and_is_not_a_setup_error(monkeypat
     assert "was blocked" not in setup
 
 
-# --- install path through the real bundle-pack-entry.mjs, tsx really unresolvable --------------
+# --- install path through the real bundle-pack-entry.mjs, built lint really missing (#186) ------
 
 
 def _repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
@@ -185,16 +188,9 @@ def _repo(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return repo
 
 
-def _tree_without_tsx(tmp_path: Path) -> Path:
-    """Repo root for bundle-pack-entry.mjs: web/package.json, the lint runner, plugins/sdk; no tsx."""
-    tree = tmp_path / "tree-no-tsx"
-    (tree / "web" / "scripts").mkdir(parents=True)
-    (tree / "plugins").mkdir(parents=True)
-    shutil.copy2(ROOT / "web" / "package.json", tree / "web" / "package.json")
-    shutil.copy2(ROOT / "web" / "scripts" / "pack-install-lint-run.ts", tree / "web" / "scripts" / "pack-install-lint-run.ts")
-    os.symlink(ROOT / "plugins" / "sdk", tree / "plugins" / "sdk")
-    assert not (tree / "web" / "node_modules").exists()
-    return tree
+def _no_built_lint(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """#186: the service runs a copy of bundle-pack-entry.mjs whose built lint is missing."""
+    monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", script_tree(tmp_path, built=False, name="tree-no-built-lint"))
 
 
 def _zip_tree(src: Path) -> bytes:
@@ -220,14 +216,14 @@ def _needs_node_tree() -> None:
         pytest.skip("web/node_modules not installed")
 
 
-def test_install_local_zip_refused_when_lint_runner_unresolvable(
+def test_install_local_zip_refused_when_the_built_lint_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     _isolate_plugin_local: Path,
 ) -> None:
     _needs_node_tree()
     _repo(tmp_path, monkeypatch)
-    monkeypatch.setattr(plugins, "REPO", _tree_without_tsx(tmp_path))
+    _no_built_lint(tmp_path, monkeypatch)
     plugins.reset_bundles()
     out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
     assert out.get("ok") is False, out
@@ -236,7 +232,7 @@ def test_install_local_zip_refused_when_lint_runner_unresolvable(
     assert not (paths.plugin_local_runtime_dir(create=True) / "upgrade-probe").exists()
 
 
-def test_upgrade_refused_when_lint_runner_unresolvable_keeps_v1(
+def test_upgrade_refused_when_the_built_lint_is_missing_keeps_v1(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     _isolate_plugin_local: Path,
@@ -248,7 +244,7 @@ def test_upgrade_refused_when_lint_runner_unresolvable_keeps_v1(
     assert first.get("wrote") is True, first
     runtime = paths.plugin_local_runtime_dir(create=True) / "upgrade-probe"
     assert runtime.is_dir()
-    monkeypatch.setattr(plugins, "REPO", _tree_without_tsx(tmp_path))
+    _no_built_lint(tmp_path, monkeypatch)
     plugins.reset_bundles()
     out = plugin_local.install_local_zip(_probe(tmp_path, 2), overwrite=True)
     assert out.get("ok") is False, out
@@ -262,16 +258,7 @@ def test_upgrade_refused_when_lint_runner_unresolvable_keeps_v1(
     assert "version: 1" in (runtime / "plugin.yml").read_text(encoding="utf-8"), "v1 is still installed"
 
 
-# --- runner / service timeouts -----------------------------------------------------------------
-
-
-def test_default_lint_timeout_is_15s_and_below_the_service_timeout() -> None:
-    gate = (ROOT / "web" / "scripts" / "pack-install-lint-gate.mjs").as_uri()
-    js = subprocess.run(
-        ["node", "--input-type=module", "-e", f"import({json.dumps(gate)}).then((m) => console.log(m.DEFAULT_LINT_TIMEOUT_MS))"],
-        capture_output=True, text=True, check=True, timeout=30,
-    )
-    assert int(js.stdout.strip()) == 15000 and int(js.stdout.strip()) < plugins.PACK_BUNDLE_TIMEOUT_S * 1000 == 20000
+# --- service timeout (#186: the only bound; the in-process hang row is in test_pack_install_lint_prebuilt.py)
 
 
 def _gone(pid: int) -> bool:
@@ -323,38 +310,6 @@ def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
     out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
     assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}"
-
-
-def test_service_timeout_while_the_lint_runner_hangs_takes_the_runner_group_down(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """Real bundle-pack-entry.mjs, real tsx, a runner that hangs (and ignores SIGTERM) under the
-    15 s runner timeout; the service's shorter timeout here must still leave no runner behind."""
-    _needs_node_tree()
-    if not (ROOT / "web" / "node_modules" / "tsx").exists():
-        pytest.skip("tsx not installed")
-    pids = tmp_path / "runner.pids"
-    tree = _tree_without_tsx(tmp_path)
-    (tree / "web" / "node_modules").mkdir()
-    os.symlink((ROOT / "web" / "node_modules" / "tsx").resolve(), tree / "web" / "node_modules" / "tsx")
-    (tree / "web" / "scripts" / "pack-install-lint-run.ts").write_text(
-        "import { appendFileSync } from 'node:fs';\n"
-        "process.on('SIGTERM', () => {});\n"
-        f"appendFileSync({json.dumps(str(pids))}, `${{process.pid}} ${{process.ppid}}\\n`);\n"
-        "setInterval(() => {}, 1000);\n",
-        encoding="utf-8",
-    )
-    monkeypatch.setattr(plugins, "REPO", tree)
-    monkeypatch.setattr(plugins, "PACK_BUNDLE_TIMEOUT_S", 4)
-    doc = _pulse_doc()
-    plugins.reset_bundles()
-    with pytest.raises(PackInstallLintSetupError) as e:
-        plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
-    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL}"
-    assert pids.is_file(), "the runner really started and hung before the service timeout"
-    for pid in (int(p) for p in pids.read_text().split()):
-        assert _gone(pid), f"lint runner pid {pid} left running after the service timeout"
 
 
 # --- unbundled and no-frontend packs go through the same gate -----------------------------------
@@ -414,14 +369,14 @@ def test_no_frontend_pack_gets_an_explicit_pass_and_installs(
     assert verdict["type"] == "pack-install-lint-pass" and verdict["pack"] == "cores" and verdict["nonce"], verdict
 
 
-def test_no_frontend_pack_is_refused_when_the_runner_is_unresolvable(
+def test_no_frontend_pack_is_refused_when_the_built_lint_is_missing(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
     _isolate_plugin_local: Path,
 ) -> None:
     _needs_node_tree()
     _repo(tmp_path, monkeypatch)
-    monkeypatch.setattr(plugins, "REPO", _tree_without_tsx(tmp_path))
+    _no_built_lint(tmp_path, monkeypatch)
     plugins.reset_bundles()
     out = plugin_local.install_local_zip(_shipped_zip(tmp_path, "cores"), overwrite=True)
     assert out.get("ok") is False, out
@@ -434,7 +389,7 @@ def test_koi_pond_block_is_plain_words_and_the_raw_findings_are_logged(
     monkeypatch: pytest.MonkeyPatch,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Real pack, real runner, the service's install-lint check (verify_pack_bundle_home, what the
+    """Real pack, real in-process lint, the service's install-lint check (verify_pack_bundle_home, what the
     zip install's staging checks call): koi-pond as it is on main (d276d5df) has a `parent.` finding,
     so it's blocked. (koi-pond itself can't be shared as a zip — its .glb assets are disallowed — so no
     zip here.)"""
@@ -491,7 +446,7 @@ def test_setup_messages_and_the_lint_block_share_no_text(
     assert "was blocked" in block_msg, block
     first = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
     assert first.get("wrote") is True, first
-    monkeypatch.setattr(plugins, "REPO", _tree_without_tsx(tmp_path))
+    _no_built_lint(tmp_path, monkeypatch)
     plugins.reset_bundles()
     upgrade_msg = str(plugin_local.install_local_zip(_probe(tmp_path, 2), overwrite=True).get("message"))
     fresh_msg = str(plugin_local.install_local_zip(_shipped_zip(tmp_path, "cores"), overwrite=True).get("message"))
