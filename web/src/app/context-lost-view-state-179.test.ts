@@ -358,6 +358,13 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
       .toBe("Fluid couldn't draw. Pick another view, or reload to try again.");
   });
 
+  it("shader on the only pane of a wall (not main, one tile): viewStateTile counts 1, so the line drops 'Other tiles aren't affected' too", () => {
+    w = bootWall(["a"]);
+    enterCantDrawShader("a", "fluid");
+    expect(w.panes.get("a")!.querySelector(":scope > .tile-cant-draw")?.textContent)
+      .toBe("Fluid couldn't draw. Pick another view, or reload to try again.");
+  });
+
   it("a shader tile that already shows the pack's own fallback gets no second message", () => {
     w = bootWall(["a"]);
     const fallback = document.createElement("div");
