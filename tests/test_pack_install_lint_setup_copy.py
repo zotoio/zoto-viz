@@ -2,7 +2,7 @@
 
 web/scripts/pack-install-lint-setup-copy.json is the table: reason code -> fix sentence, plus the
 fresh-install and upgrade templates (and, for a reason whose sentence doesn't fit them, that reason's
-own templates in `overrides`: lint_timeout). service/pack_install_lint.py and
+own templates in `overrides`, named by `reason_overrides`: lint_timeout and bundle_timeout). service/pack_install_lint.py and
 web/scripts/pack-install-lint-setup-copy.mjs (which bundle-pack-entry.mjs uses) both read it. These rows
 fail if the two render any entry differently, if a reason the script can emit isn't in the table, or
 if either side carries a copy of the wording of its own.
@@ -25,8 +25,8 @@ SCRIPTS = ROOT / "web" / "scripts"
 TABLE = SCRIPTS / "pack-install-lint-setup-copy.json"
 COPY_MODULE = SCRIPTS / "pack-install-lint-setup-copy.mjs"
 BUNDLE_SCRIPT = SCRIPTS / "bundle-pack-entry.mjs"
-#: Reasons only the service emits (not on the script's setup-error line).
-SERVICE_REASONS = ("no_pass_verdict",)
+#: Reasons only the service emits (not on the script's setup-error line). bundle_timeout: the backstop.
+SERVICE_REASONS = ("no_pass_verdict", "bundle_timeout")
 NAMES = ("Star Sines", "", "  Upgrade Probe  ", "Pack {fix} {name}")
 
 
@@ -98,6 +98,35 @@ def test_the_service_and_the_script_pick_the_same_template_for_every_reason() ->
     assert "in time" in pil.setup_template("upgrade", "lint_timeout")
 
 
+def test_the_backstop_and_the_scripts_timeout_say_the_same_thing() -> None:
+    """#186: bundle_timeout (the service's backstop) and lint_timeout (the script's timer) are two codes
+    and one sentence, fresh install and upgrade, on each side that renders it: the script renders the
+    install sentence (and picks templates the same way); the service renders both."""
+    names = [*NAMES, "Upgrade Probe"]
+    cases = [(name, reason) for name in names for reason in ("lint_timeout", "bundle_timeout")]
+    script = dict(zip(cases, _script_sentences(cases)))
+    tpl_cases = [(kind, reason) for kind in ("install", "upgrade") for reason in ("lint_timeout", "bundle_timeout")]
+    script_tpl = dict(zip(tpl_cases, _script_templates(tpl_cases)))
+    diffs = []
+    for name in names:
+        if script[(name, "bundle_timeout")] != script[(name, "lint_timeout")]:
+            diffs.append(("script install", name, script[(name, "bundle_timeout")], script[(name, "lint_timeout")]))
+        a = format_install_lint_setup_message(name, "bundle_timeout")
+        b = format_install_lint_setup_message(name, "lint_timeout")
+        if a != b:
+            diffs.append(("service install", name, a, b))
+        for old in (3, "2.1", None, ""):
+            a = pil.format_install_lint_setup_upgrade_message(name, old, "bundle_timeout")
+            b = pil.format_install_lint_setup_upgrade_message(name, old, "lint_timeout")
+            if a != b:
+                diffs.append(("service upgrade", name, old, a, b))
+    for kind in ("install", "upgrade"):
+        if script_tpl[(kind, "bundle_timeout")] != script_tpl[(kind, "lint_timeout")]:
+            diffs.append(("script template", kind, script_tpl[(kind, "bundle_timeout")], script_tpl[(kind, "lint_timeout")]))
+    assert not diffs, f"bundle_timeout and lint_timeout render differently: {diffs}"
+    assert "in time" in format_install_lint_setup_message("Star Sines", "bundle_timeout")
+
+
 def test_both_sides_read_the_one_table_file() -> None:
     assert SETUP_COPY_PATH == TABLE, SETUP_COPY_PATH
     assert pil.SETUP_COPY == _table(), "the service's table is the file's"
@@ -133,7 +162,7 @@ def test_every_reason_the_script_or_service_emits_is_in_the_table() -> None:
 
 
 PREPARE_REASONS = ("lint_prebuilt_missing", "lint_prebuilt_stale", "lint_prebuilt_unloadable")
-TIMEOUT_REASONS = ("lint_timeout",)
+TIMEOUT_REASONS = ("lint_timeout", "bundle_timeout")
 
 
 def test_the_table_says_what_ux_pro_decided() -> None:
@@ -146,13 +175,15 @@ def test_the_table_says_what_ux_pro_decided() -> None:
     assert table["still"] == "You're still on version {old}."
     assert table["still_unknown"] == "The version you had is still installed."
     assert table["upgrade"] == "Couldn't safety-check the new version of {name}, so it wasn't updated. {still} {fix}"
-    assert table["fixes"][table["reasons"]["lint_timeout"]] == "Try again, and if it keeps happening, the pack may be broken."
+    for reason in TIMEOUT_REASONS:
+        assert table["fixes"][table["reasons"][reason]] == "Try again, and if it keeps happening, the pack may be broken.", reason
     assert table["overrides"] == {
-        "lint_timeout": {
+        "in_time": {
             "install": "Couldn't safety-check {name} in time, so it wasn't installed. {fix}",
             "upgrade": "Couldn't safety-check the new version of {name} in time, so it wasn't updated. {still}",
         }
     }
+    assert table["reason_overrides"] == {"lint_timeout": "in_time", "bundle_timeout": "in_time"}
     assert "lint_timeout" in _script_reasons()
     for reason in (*_script_reasons(), *SERVICE_REASONS):
         if reason in PREPARE_REASONS or reason in TIMEOUT_REASONS:

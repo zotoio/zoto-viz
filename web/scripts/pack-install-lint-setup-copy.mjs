@@ -29,9 +29,14 @@ export function setupFix(reason, copy = loadSetupCopy()) {
   return fix;
 }
 
-/** The table's `kind` template ("install" / "upgrade") for a reason: its `overrides` entry, else the shared one. */
+/**
+ * The table's `kind` template ("install" / "upgrade") for a reason: the `overrides` entry its
+ * `reason_overrides` names, else the shared one.
+ */
 export function setupTemplate(kind, reason, copy = loadSetupCopy()) {
-  const own = Object.hasOwn(copy.overrides ?? {}, reason ?? "") ? copy.overrides[reason] : null;
+  const names = copy.reason_overrides ?? {};
+  const name = Object.hasOwn(names, reason ?? "") ? names[reason] : null;
+  const own = name !== null && Object.hasOwn(copy.overrides ?? {}, name) ? copy.overrides[name] : null;
   return own && typeof own[kind] === "string" ? own[kind] : copy[kind];
 }
 

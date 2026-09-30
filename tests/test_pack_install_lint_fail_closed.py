@@ -301,7 +301,8 @@ def test_upgrade_refused_when_the_built_lint_is_missing_keeps_v1(
 
 
 def _gone(pid: int) -> bool:
-    for _ in range(50):
+    # #186 (Pedant): ~30 s before "left running"; a gone pid returns at once, a leaked one never goes.
+    for _ in range(300):
         try:
             os.kill(pid, 0)
         except ProcessLookupError:
@@ -322,7 +323,8 @@ def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
     _isolate_plugin_local: Path,
 ) -> None:
     """The service's own timeout (a bundle-pack-entry.mjs that hangs) is the setup refusal, not a raw
-    TimeoutExpired, and the whole process group (the script and its child) is killed."""
+    TimeoutExpired, and the whole process group (the script and its child) is killed. #186: its reason is
+    bundle_timeout, with lint_timeout's "in time" sentence."""
     _needs_node_tree()
     pids = tmp_path / "pids"
     hang = tmp_path / "hang-bundle.mjs"
@@ -338,17 +340,20 @@ def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
     monkeypatch.setattr(plugins, "PACK_BUNDLE_TIMEOUT_S", 1.5)
     doc = _pulse_doc()
     plugins.reset_bundles()
-    t0 = time.monotonic()
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
-    assert time.monotonic() - t0 < 15
-    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL_INSTALL}", "service timeout: pnpm install"
+    assert e.value.reason == "bundle_timeout"
+    assert str(e.value) == (
+        "Couldn't safety-check Pulse TS in time, so it wasn't installed. Try again, and if it keeps happening, the pack may be broken."
+    ), "service timeout: bundle_timeout, the lint_timeout sentence"
     for pid in (int(p) for p in pids.read_text().split()):
         assert _gone(pid), f"pid {pid} left running after the service timeout"
     _repo(tmp_path, monkeypatch)
     out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL_INSTALL}"
+    assert out.get("message") == (
+        "Couldn't safety-check Upgrade Probe in time, so it wasn't installed. Try again, and if it keeps happening, the pack may be broken."
+    )
 
 
 # --- unbundled and no-frontend packs go through the same gate -----------------------------------

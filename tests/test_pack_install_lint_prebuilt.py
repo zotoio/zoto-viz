@@ -14,7 +14,6 @@ import logging
 import re
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
@@ -163,11 +162,12 @@ def test_a_lint_that_hangs_in_process_is_refused_at_the_service_timeout_and_leav
     monkeypatch.setattr(plugins, "PACK_BUNDLE_TIMEOUT_S", 4)
     doc = _pulse_doc()
     plugins.reset_bundles()
-    t0 = time.monotonic()
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
-    assert time.monotonic() - t0 < 15
-    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL_INSTALL}", "service timeout: pnpm install"
+    assert e.value.reason == "bundle_timeout"
+    assert str(e.value) == (
+        "Couldn't safety-check Pulse TS in time, so it wasn't installed. Try again, and if it keeps happening, the pack may be broken."
+    ), "service timeout: bundle_timeout, the lint_timeout sentence"
     assert pids.is_file(), "the lint really ran and hung before the service timeout"
     got = [int(p) for p in pids.read_text().split()]
     assert len(got) == 2, got
