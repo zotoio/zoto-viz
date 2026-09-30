@@ -99,9 +99,13 @@ describe.skipIf(!pythonDepsReady())("pack bundle install gate (local zip path)",
       try {
         const packDir = path.join(repoRoot, "plugins/sdk/pack-bundle-fixtures", dir);
         const zipPath = packTreeToZip(packDir);
-        const { info, ids } = tryInstallLocalZip(zipPath, pluginLocalDir);
+        const { info, ids } = tryInstallLocalZip(zipPath, pluginLocalDir) as {
+          info: Record<string, unknown>;
+          ids: string[];
+        };
         expect(info.ok).toBe(false);
         expect(isPackInstallBlockedPayload(info)).toBe(true);
+        if (!isPackInstallBlockedPayload(info)) throw new Error("expected a pack-install blocked payload");
         const message = formatPackInstallBlocked(info);
         expect(message).toMatch(/ was blocked because /);
         expect(message).not.toMatch(/plugins\/|README|\.ts\b|\.mjs\b|`/);
