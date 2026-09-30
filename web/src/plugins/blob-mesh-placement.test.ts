@@ -3,38 +3,42 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
+  BLOB_MESH_DRIFT,
+  BLOB_MESH_FLOOR,
   BLOB_MESH_HOST_SPAN,
+  BLOB_MESH_SITES,
   BLOB_MESH_SKY_LIFT,
   BLOB_MESH_SKY_TILT,
+  BLOB_MESH_SLOT_BUDGET,
   BLOB_MESH_SLOT_TO_UV,
   BLOB_MESH_SPREAD,
   BLOB_MESH_SPREAD_MARGIN,
   blobMeshPlacement,
+  blobMeshStartSite,
   blobMeshVisibleRegion,
+  packBlobMeshSlots,
+  type BlobMeshSiteMap,
 } from "../../../plugins/sdk/blob-mesh-budget";
 import { appLensSkySpan } from "./pack-sky-host-camera-test-helper";
 import { lanFrames35s } from "./pack-sky-lan-frame-test-helper";
-import { runPackFrameHandler } from "./viz-pack-host";
+import { runPackFrameHandler, VIZ_PACK_TILE_ID_OPT } from "./viz-pack-host";
 import type { VizDataFrame } from "./viz-host";
 
 /**
- * Blob Mesh placement rows (#174 follow-up): every drawn blob stays where the default camera can
- * see it, the angle comes from the whole id (not its first character), and a device's place
- * depends on its id and t only (not its slot, its rank or the other devices).
+ * Blob Mesh placement rows (#174 follow-up, reworked for #193's lattice): every drawn blob stays
+ * where the default camera can see it; the busiest 4 drawn devices hold 4 lattice sites
+ * (BLOB_MESH_SITES) through a site map that keeps each holder where it is; a device's start site
+ * comes from its whole id (not its first character). Since #193 a place is no longer a function
+ * of id and t alone: it depends on the site the device holds, which depends on the history of the
+ * busiest set (the site map), so the old "depends only on id" rows are now site-map stability rows.
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SKY = readFileSync(path.resolve(here, "../../../plugins/src/blob-mesh/sky/fragment.glsl"), "utf8");
 const SPAN = appLensSkySpan();
 /** Fine sweep for the margin and spacing rows: every 0.5 s from 0 to 60 s. */
 const FINE = Array.from({ length: 121 }, (_, i) => i * 0.5);
-/**
- * Minimum pairwise centre distance (uv) on LAN7 and LAN11, 7 drawn, across FINE. The spread
- * achieves 0.032 there (172.30.0.22 and .23 at t = 47 s; homes are independent hashes, so the
- * closest pair is luck of the ids, and the shared drift keeps pair distances except for the
- * 2 x 0.015 wobble). 0.03 keeps a small margin under that. The old 0.18 uv knot reached 0.002,
- * and a first-character angle stacks the 172.x devices at 0.
- */
-const MIN_PAIR_UV = 0.03;
+/** Neighbour spacing of the lattice (uv): the rhombus side, sqrt(0.37^2 + 0.24^2). */
+const SITE_SPACING = Math.min(...BLOB_MESH_SITES.flatMap(([ax, ay], i) => BLOB_MESH_SITES.slice(i + 1).map(([bx, by]) => Math.hypot(ax - bx, ay - by))));
 
 const talker = (id: string, rate: number, role = "lan") => ({ id, rate, role });
 const frameOf = (talkers: VizDataFrame["talkers"], t = 35): VizDataFrame => ({ t, dt: 1 / 6, audio: 0, packets: [], rf: [], talkers, headlines: [] });
@@ -57,13 +61,14 @@ beforeAll(async () => {
   packOnFrame = (globalThis as unknown as { zoto: { onFrame: typeof packOnFrame } }).zoto.onFrame;
 });
 
-function hostSlot0(frame: VizDataFrame): number[] {
+/** Host mirror slot 0 on tile `tile` (each tile keeps its own site map; the default tile is "main"). */
+function hostSlot0(frame: VizDataFrame, tile = "main"): number[] {
   let slot0: number[] = [];
   runPackFrameHandler("blob-mesh", frame, {
     writeBuffer: (slot, data) => { if (slot === 0) slot0 = Array.from(data); },
     writeUniform: () => {},
     writeParticles: () => {},
-  });
+  }, { [VIZ_PACK_TILE_ID_OPT]: tile });
   return slot0;
 }
 function packSlot0Of(frame: VizDataFrame): number[] {
@@ -116,7 +121,7 @@ function onScreen(x: number, y: number): { ok: boolean; sx: number; sy: number }
   return { ok: cz < 0 && Math.abs(sx) <= SPAN[0] && Math.abs(sy) <= SPAN[1], sx: sx / SPAN[0], sy: sy / SPAN[1] };
 }
 
-describe("blob-mesh placement: on screen, whole-id angle, stable per device", () => {
+describe("blob-mesh placement: on screen, lattice sites, stable site map", () => {
   it("the writer's visible region comes from the shader's plane map and the host lens", () => {
     expect(SKY).toContain(`${BLOB_MESH_SKY_TILT} * (cam.y + cam.z)`);
     expect(SKY).toContain(`${BLOB_MESH_SKY_TILT} * (cam.z - cam.y)`);
@@ -168,15 +173,45 @@ describe("blob-mesh placement: on screen, whole-id angle, stable per device", ()
     expect(Math.min(ax, ay)).toBeGreaterThan(0.18);
   });
 
-  it("home inset: 400 hashed ids stay inside the spread ellipse and keep their margin disc on screen, every 0.5 s from 0 to 60 s", () => {
-    // Homes sit (drift + wobble) inside the ellipse, so the moving blob never leaves it. The fixture
-    // ids alone don't reach the rim, so this sweeps many ids through the SDK placement.
+  /**
+   * #193 lattice: the 4 sites plus the shared drift stay inside the safe ellipse (so every drawn
+   * centre does: extras sit on a site too), and the neighbour spacing covers the widest merge
+   * distance two drawn blobs can need when 7 or 8 are drawn: radii r1 + r2 at most
+   * sqrt(2 (budget - 5 floor^2)) (six or more at the floor inside the coverage budget), plus the
+   * shader's BLOB_GAP (read from fragment.glsl). The drift is shared, so it never closes a pair.
+   */
+  it("lattice sites: 4 sites plus the shared drift stay inside the safe ellipse, and their spacing covers r1 + r2 + BLOB_GAP for any two blobs of a 7- or 8-blob frame", () => {
+    const { cx, cy, ax, ay } = BLOB_MESH_SPREAD;
+    const gapM = /const float BLOB_GAP = ([0-9.]+);/.exec(SKY);
+    const gap = Number(gapM?.[1]);
+    expect(Number.isFinite(gap) && gap > 0, "BLOB_GAP read from fragment.glsl").toBe(true);
+    expect(BLOB_MESH_SITES).toHaveLength(4);
+    let worst = 0;
+    for (const [x, y] of BLOB_MESH_SITES) {
+      for (let k = 0; k < 64; k++) {
+        const a = (k / 64) * 2 * Math.PI;
+        worst = Math.max(worst, Math.hypot((x + BLOB_MESH_DRIFT * Math.cos(a) - cx) / ax, (y + BLOB_MESH_DRIFT * Math.sin(a) - cy) / ay));
+      }
+    }
+    const rSum = Math.sqrt(2 * (BLOB_MESH_SLOT_BUDGET - 5 * BLOB_MESH_FLOOR ** 2));
+    const text = `sites ${BLOB_MESH_SITES.map(([x, y]) => `(${x.toFixed(3)}, ${y.toFixed(3)})`).join(" ")}, drift ${BLOB_MESH_DRIFT}: worst ellipse radius ${worst.toFixed(4)} (1 = rim); neighbour spacing ${SITE_SPACING.toFixed(4)} vs widest merge ${rSum.toFixed(4)} + ${gap} = ${(rSum + gap).toFixed(4)}`;
+    process.stdout.write(`[sites] ${text}\n`);
+    expect(worst, text).toBeLessThanOrEqual(1 + 1e-12);
+    expect(SITE_SPACING, text).toBeGreaterThanOrEqual(rSum + gap);
+  });
+
+  it("home inset: 400 hashed ids' start sites (plus drift) stay inside the spread ellipse and keep their margin disc on screen, every 0.5 s from 0 to 60 s, and use all 4 sites", () => {
+    // Meaning change (#193): a device's home is no longer a hashed point in the ellipse but its
+    // start site (the lattice site it takes when free, and where it sits when it holds none), so
+    // this now checks the sites the hash reaches, plus that the whole-id hash spreads over all 4.
     const { cx, cy, ax, ay } = BLOB_MESH_SPREAD;
     let worstEllipse = 0;
     let worstRim = 0;
     let at = "";
+    const perSite = [0, 0, 0, 0];
     for (let i = 0; i < 400; i++) {
       const id = `10.${(i * 37) % 256}.${(i * 11) % 256}.${i % 250}`;
+      perSite[blobMeshStartSite(id)]!++;
       for (const t of FINE) {
         const [x, y] = blobMeshPlacement(id, t);
         const e = Math.hypot((x * 1.7 - cx) / ax, (y * 1.7 - cy) / ay);
@@ -185,79 +220,118 @@ describe("blob-mesh placement: on screen, whole-id angle, stable per device", ()
         worstRim = Math.max(worstRim, d.worst);
       }
     }
-    const text = `worst ellipse radius ${worstEllipse.toFixed(4)} (1 = rim) at ${at}, worst margin-rim |screen| ${worstRim.toFixed(4)}`;
+    const text = `worst ellipse radius ${worstEllipse.toFixed(4)} (1 = rim) at ${at}, worst margin-rim |screen| ${worstRim.toFixed(4)}, ids per start site ${perSite.join("/")}`;
     process.stdout.write(`[inset] ${text}\n`);
-    expect(worstEllipse, `inside the spread ellipse: ${text}`).toBeLessThanOrEqual(1);
+    expect(worstEllipse, `inside the spread ellipse: ${text}`).toBeLessThanOrEqual(1 + 1e-12);
     expect(worstRim, `margin disc on screen: ${text}`).toBeLessThanOrEqual(1);
+    for (const n of perSite) expect(n, `every start site used, none starved: ${text}`).toBeGreaterThanOrEqual(50);
   });
+
+  /** The busiest 4 drawn devices (rate desc, ties by input order), the ones that hold sites. */
+  const busiest4 = (frame: VizDataFrame): string[] =>
+    frame.talkers.map((d, i) => ({ d, i })).sort((a, b) => (b.d.rate - a.d.rate) || a.i - b.i).slice(0, 4).map((x) => x.d.id);
 
   for (const [who, slotsOf] of writers) {
     for (const [name, frame] of [["LAN7", LAN7], ["LAN11", LAN11]] as const) {
-      it(`${who}: ${name} keeps every pair of its 7 drawn blob centres >= ${MIN_PAIR_UV} uv apart, every 0.5 s from 0 to 60 s`, () => {
+      // Meaning change (#193): the old row asked every pair of the 7 to stay >= 0.03 uv apart
+      // (hashed homes). Now the busiest 4 hold distinct sites, pairwise >= the lattice spacing, and
+      // the other 3 sit exactly on a site (their start site), joining that lump rather than
+      // landing between two sites.
+      it(`${who}: ${name} keeps its busiest 4 drawn blob centres >= the ${SITE_SPACING.toFixed(4)} uv site spacing apart and the other 3 on a held site, every 0.5 s from 0 to 60 s`, () => {
         let min = Infinity;
         let at = "";
-        let meanSum = 0;
-        let pairs = 0;
-        let reach = 0;
-        const v = blobMeshVisibleRegion();
+        const top = busiest4(frame);
         for (const t of FINE) {
-          const slot0 = slotsOf({ ...frame, t });
-          expect(slot0.length / 4).toBe(7);
-          const p = Array.from({ length: 7 }, (_, j) => [slot0[j * 4]! * 1.7, slot0[j * 4 + 1]! * 1.7] as const);
-          for (let i = 0; i < 7; i++) {
-            reach = Math.max(reach, Math.hypot(p[i]![0] - v.cx, p[i]![1] - v.cy));
-            for (let j = i + 1; j < 7; j++) {
-              const d = Math.hypot(p[i]![0] - p[j]![0], p[i]![1] - p[j]![1]);
-              meanSum += d;
-              pairs++;
-              if (d < min) { min = d; at = `t=${t} slots ${i}/${j}`; }
-            }
+          const place = placements({ ...frame, t }, slotsOf);
+          expect(place.size).toBe(7);
+          const held = top.map((id) => place.get(id)!.map((c) => c * BLOB_MESH_SLOT_TO_UV));
+          for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) {
+            const d = Math.hypot(held[i]![0]! - held[j]![0]!, held[i]![1]! - held[j]![1]!);
+            if (d < min) { min = d; at = `t=${t} ${top[i]}/${top[j]}`; }
+          }
+          for (const [id, [x, y]] of place) {
+            if (top.includes(id)) continue;
+            const near = Math.min(...held.map(([hx, hy]) => Math.hypot(x * BLOB_MESH_SLOT_TO_UV - hx!, y * BLOB_MESH_SLOT_TO_UV - hy!)));
+            expect(near, `t=${t}: ${id} sits on a held site`).toBeLessThan(1e-9);
           }
         }
-        const text = `${name}: min pair ${min.toFixed(4)} uv at ${at}, mean pair ${(meanSum / pairs).toFixed(3)}, farthest from view centre ${reach.toFixed(3)}`;
+        const text = `${name}: busiest 4 ${top.join(" ")}, min pair ${min.toFixed(4)} uv at ${at}`;
         if (who === "host mirror") process.stdout.write(`[spacing] ${text}\n`);
-        expect(min, text).toBeGreaterThanOrEqual(MIN_PAIR_UV);
+        expect(min, text).toBeGreaterThanOrEqual(SITE_SPACING - 1e-9);
       });
     }
   }
 
-  it("distinct IPs that share a first character get distinct angles and places", () => {
+  it("start sites come from the whole id: 24 IPs that share a first character reach all 4 sites, and a lone device sits on its start site", () => {
+    // Meaning change (#193): only 4 places exist now, so "24 distinct angles" is gone; what stays
+    // is that the hash reads the whole id (a first-character hash would put all 24 on one site).
     const ids = Array.from({ length: 24 }, (_, i) => `192.168.${i % 4}.${10 + i}`);
-    const v = blobMeshVisibleRegion();
-    const seen = ids.map((id) => {
-      const [x, y] = placements(frameOf([talker(id, 300)], 0), hostSlot0).get(id)!;
-      return { id, x, y, ang: Math.atan2(y * 1.7 - v.cy, x * 1.7 - v.cx) };
+    const starts = new Set<number>();
+    ids.forEach((id, i) => {
+      const [x, y] = placements(frameOf([talker(id, 300)], 0), (f) => hostSlot0(f, `first-char-${i}`)).get(id)!;
+      const s = blobMeshStartSite(id);
+      starts.add(s);
+      const [sx, sy] = BLOB_MESH_SITES[s]!;
+      expect(Math.hypot(x * BLOB_MESH_SLOT_TO_UV - (sx + BLOB_MESH_DRIFT), y * BLOB_MESH_SLOT_TO_UV - sy), `${id} on start site ${s}`).toBeLessThan(1e-9);
     });
-    for (let a = 0; a < seen.length; a++) {
-      for (let b = a + 1; b < seen.length; b++) {
-        const A = seen[a]!;
-        const B = seen[b]!;
-        expect(Math.abs(A.ang - B.ang) + Math.hypot(A.x - B.x, A.y - B.y), `${A.id} vs ${B.id}`).toBeGreaterThan(1e-6);
-      }
-    }
-    const angles = new Set(seen.map((s) => s.ang.toFixed(4)));
-    expect(angles.size, "24 distinct angles").toBe(24);
+    expect(starts.size, "all 4 start sites").toBe(4);
   });
 
+  /**
+   * #193 site-map stability. A: raise a quiet device into the busiest 4 at a fixed t, so the 4th
+   * drops out: the 3 incumbents keep their places and the newcomer takes the freed site; drop it
+   * again and the returning device takes that site back while the 3 still don't move. B: add a
+   * quiet device and remove a drawn non-holder: the busiest 4 don't move. Holds whatever history
+   * the writer's map already has. Revert: reassigning sites by rank every frame -> red.
+   */
+  const RAISED = "142.250.66.14"; // LAN7's 5th busiest (40 pps), raised over the top
   for (const [who, slotsOf] of writers) {
-    it(`${who}: a device's place at a fixed t depends only on its id (same frame twice, reordered, one dropped, two added)`, () => {
-      const base = placements(LAN7, slotsOf);
-      expect(placements(LAN7, slotsOf)).toEqual(base);
+    it(`${who}: site map A: when the busiest set changes, the incumbents keep their sites and the newcomer takes the freed one`, () => {
+      const tile = (f: VizDataFrame) => (who === "host mirror" ? hostSlot0(f, "stability-a") : slotsOf(f));
+      const top = busiest4(LAN7);
+      const leaver = top[3]!;
+      const before = placements(LAN7, tile);
+      const raisedFrame = { ...LAN7, talkers: LAN7.talkers.map((d) => (d.id === RAISED ? { ...d, rate: 300 } : d)) };
+      expect(busiest4(raisedFrame), "raised device enters, the 4th leaves").toEqual([RAISED, ...top.slice(0, 3)]);
+      const raised = placements(raisedFrame, tile);
+      for (const id of top.slice(0, 3)) expect(raised.get(id), `raised: incumbent ${id} keeps its place`).toEqual(before.get(id));
+      expect(raised.get(RAISED), `raised: ${RAISED} takes ${leaver}'s freed site`).toEqual(before.get(leaver));
+      const back = placements(LAN7, tile);
+      for (const id of top.slice(0, 3)) expect(back.get(id), `back: incumbent ${id} keeps its place`).toEqual(before.get(id));
+      expect(back.get(leaver), `back: ${leaver} takes the freed site again`).toEqual(before.get(leaver));
+      if (who === "host mirror") process.stdout.write(`[site-map] A: incumbents ${top.slice(0, 3).join(" ")} unmoved; ${RAISED} took ${leaver}'s site, then gave it back\n`);
+    });
+
+    it(`${who}: site map B: adding a quiet device or removing a drawn non-holder doesn't move the busiest 4`, () => {
+      const tile = (f: VizDataFrame) => (who === "host mirror" ? hostSlot0(f, "stability-b") : slotsOf(f));
+      const top = busiest4(LAN7);
+      const before = placements(LAN7, tile);
       const variants: [string, VizDataFrame][] = [
-        ["reversed", { ...LAN7, talkers: [...LAN7.talkers].reverse() }],
-        ["dropped 172.30.0.22", { ...LAN7, talkers: LAN7.talkers.filter((d) => d.id !== "172.30.0.22") }],
-        ["added two", { ...LAN7, talkers: [talker("172.30.0.40", 300), ...LAN7.talkers, talker("172.30.0.41", 90)] }],
+        ["added quiet 172.30.0.40", { ...LAN7, talkers: [...LAN7.talkers, talker("172.30.0.40", 1)] }],
+        ["removed 172.30.0.23", { ...LAN7, talkers: LAN7.talkers.filter((d) => d.id !== "172.30.0.23") }],
+        ["both", { ...LAN7, talkers: [talker("172.30.0.41", 2), ...LAN7.talkers.filter((d) => d.id !== "104.18.32.7")] }],
+        ["back to LAN7", LAN7],
       ];
       for (const [what, frame] of variants) {
-        const got = placements(frame, slotsOf);
-        let common = 0;
-        for (const [id, xy] of got) {
-          if (!base.has(id)) continue;
-          common++;
-          expect(xy, `${what}: ${id}`).toEqual(base.get(id));
-        }
-        expect(common, what).toBeGreaterThanOrEqual(5);
+        expect(busiest4(frame), `${what}: same busiest 4`).toEqual(top);
+        const got = placements(frame, tile);
+        for (const id of top) expect(got.get(id), `${what}: ${id}`).toEqual(before.get(id));
       }
     });
   }
+
+  it("site map C: the same history gives the same map and slots (SDK and host mirror, fresh maps)", () => {
+    const raisedFrame = { ...LAN7, talkers: LAN7.talkers.map((d) => (d.id === RAISED ? { ...d, rate: 300 } : d)) };
+    const history = [LAN7, raisedFrame, LAN11, LAN7, raisedFrame].map((f, i) => ({ ...f, t: i * 5 }));
+    const run = () => {
+      const sites: BlobMeshSiteMap = new Map();
+      const slots = history.map((f) => packBlobMeshSlots(f.talkers, f.t, sites).slot0);
+      return { sites: [...sites], slots };
+    };
+    const a = run();
+    expect(run(), "SDK twice").toEqual(a);
+    const hostRun = (tile: string) => history.map((f) => hostSlot0(f, tile));
+    expect(hostRun("history-1"), "host tile 1 matches the SDK").toEqual(a.slots);
+    expect(hostRun("history-2"), "host tile 2 matches tile 1").toEqual(hostRun("history-3"));
+  });
 });

@@ -5,7 +5,10 @@ import { beforeAll, describe, expect, it } from "vitest";
 import {
   BLOB_MESH_FLOOR,
   BLOB_MESH_HALF_RATE_SHARE,
+  BLOB_MESH_GAP,
   BLOB_MESH_MAX_BLOBS,
+  BLOB_MESH_PAIR_REACH,
+  BLOB_MESH_SITES,
   BLOB_MESH_SLOT_BUDGET,
   planBlobMesh,
 } from "../../../plugins/sdk/blob-mesh-budget";
@@ -22,6 +25,19 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const SKY = readFileSync(path.resolve(here, "../../../plugins/src/blob-mesh/sky/fragment.glsl"), "utf8");
 
 const EPS = 1e-9;
+/**
+ * #193 pair reach, derived here: the closest two lattice sites minus the shader's BLOB_GAP (read
+ * from fragment.glsl). Two site holders whose radii sum to at most this stay apart at the merge
+ * distance, so the writers cap growth there.
+ */
+const SHADER_GAP = Number(/const float BLOB_GAP = ([0-9.]+);/.exec(SKY)?.[1]);
+const SITE_SPACING = Math.min(...BLOB_MESH_SITES.flatMap(([ax, ay], i) => BLOB_MESH_SITES.slice(i + 1).map(([bx, by]) => Math.hypot(ax - bx, ay - by))));
+const PAIR_REACH = SITE_SPACING - SHADER_GAP;
+/** Sum of the two biggest radii (0 for fewer than 2). */
+const topPair = (radii: readonly number[]): number => {
+  const big = [...radii].sort((a, b) => b - a);
+  return big.length >= 2 ? big[0]! + big[1]! : 0;
+};
 const talker = (ip: string, rate: number, role = "lan") => ({ id: ip, rate, role });
 const frameOf = (talkers: VizDataFrame["talkers"], t = 35): VizDataFrame => ({
   t, dt: 1 / 6, audio: 0, packets: [], rf: [], talkers, headlines: [],
@@ -101,7 +117,7 @@ function countFirst(rates: readonly number[]): number {
   return Math.min(1, sorted.length);
 }
 
-/** Independent: does the 25% half-rate share fit the leftover budget for these drawn rates? */
+/** Independent: does the 25% half-rate share fit the leftover budget (and, #193, the pair reach) for these drawn rates? */
 function shareFits(drawn: readonly number[]): boolean {
   const hi = Math.max(...drawn);
   const lo = Math.min(...drawn);
@@ -110,7 +126,9 @@ function shareFits(drawn: readonly number[]): boolean {
   const q = hi > lo && 2 * lo >= hi ? (0.75 * BLOB_MESH_FLOOR) / (1 - 0.25 * (1 + g)) : BLOB_MESH_FLOOR;
   const big = q * (1 + g);
   const need = drawn.reduce((s, r) => s + (r === hi ? big : 2 * r >= hi ? BLOB_MESH_FLOOR + 0.25 * (big - BLOB_MESH_FLOOR) : BLOB_MESH_FLOOR) ** 2, 0);
-  return need <= BLOB_MESH_SLOT_BUDGET + 1e-12;
+  const shape = drawn.map((r) => (r === hi ? big : 2 * r >= hi ? BLOB_MESH_FLOOR + 0.25 * (big - BLOB_MESH_FLOOR) : BLOB_MESH_FLOOR));
+  // #193: and the share shape's two biggest must fit the lattice pair reach
+  return need <= BLOB_MESH_SLOT_BUDGET + 1e-12 && topPair(shape) <= PAIR_REACH + 1e-12;
 }
 
 /** Rate-order fallback: monotonic, ties equal, 1.4x when >= 2x apart, sum r^2 <= B, floor kept. Failure text or null. */
@@ -121,7 +139,12 @@ function rateOrderRow(rates: readonly number[], radii: readonly number[]): strin
       if (rates[i]! > rates[j]! && !(radii[i]! > radii[j]!)) return `rate ${rates[i]} > ${rates[j]} but r ${radii[i]} <= ${radii[j]}`;
     }
   }
-  if (Math.max(...rates) >= 2 * Math.min(...rates) && Math.max(...radii) / Math.min(...radii) < 1.4 - 1e-9) return "1.4x lost";
+  // #193: two or more tied for busiest can't both be 1.4 x floor (2 x 0.168 > the pair reach); their
+  // pair is capped at the reach, so the contrast there is reach / 2 / floor (1.34x)
+  const tiedTop = rates.filter((r) => r === Math.max(...rates)).length;
+  const contrast = tiedTop >= 2 ? Math.min(1.4, (PAIR_REACH - 1e-5) / 2 / BLOB_MESH_FLOOR) : 1.4; // 1e-5: the writers' float margin
+  if (Math.max(...rates) >= 2 * Math.min(...rates) && Math.max(...radii) / Math.min(...radii) < contrast - 1e-9) return "1.4x lost";
+  if (topPair(radii) > PAIR_REACH + 1e-9) return "pair over the lattice reach";
   if (radii.reduce((s, r) => s + r * r, 0) > BLOB_MESH_SLOT_BUDGET + 1e-9) return "over budget";
   if (Math.min(...radii) < BLOB_MESH_FLOOR - 1e-9) return "under the floor";
   return null;
@@ -162,14 +185,18 @@ describe("blob-mesh coverage budget (#174)", () => {
 
   for (const [who, slotsOf] of writers) {
     for (const [name, frame] of Object.entries(FRAMES)) {
-      it(`${who}: ${name} draws ${DRAWN[name as keyof typeof FRAMES]} devices that use the whole slot budget (sum r^2 = B, never more)`, () => {
+      // Meaning change (#193): growth now stops at whichever comes first, the whole budget or the
+      // two biggest radii reaching the lattice pair reach (HALF and LOW_BESIDE_BUSY stop there).
+      it(`${who}: ${name} draws ${DRAWN[name as keyof typeof FRAMES]} devices that use the whole slot budget or stop at the lattice pair reach (sum r^2 <= B, two biggest <= reach)`, () => {
         const radii = radiiOf(slotsOf(frame));
         expect(radii.length).toBe(DRAWN[name as keyof typeof FRAMES]);
         const sumR2 = radii.reduce((s, r) => s + r * r, 0);
-        const text = `${name} radii=${radii.map((r) => r.toFixed(4)).join(",")} sumR2=${sumR2.toFixed(6)} ratio=${(Math.max(...radii) / Math.min(...radii)).toFixed(3)}`;
+        const pair = topPair(radii);
+        const text = `${name} radii=${radii.map((r) => r.toFixed(4)).join(",")} sumR2=${sumR2.toFixed(6)} ratio=${(Math.max(...radii) / Math.min(...radii)).toFixed(3)} pair=${pair.toFixed(4)} reach=${PAIR_REACH.toFixed(4)}`;
         if (who === "host mirror") process.stdout.write(`[radii] ${text}\n`);
         expect(sumR2, text).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + EPS);
-        expect(sumR2, text).toBeGreaterThanOrEqual(BLOB_MESH_SLOT_BUDGET - 1e-6);
+        expect(pair, text).toBeLessThanOrEqual(PAIR_REACH + EPS);
+        expect(sumR2 >= BLOB_MESH_SLOT_BUDGET - 1e-6 || Math.abs(pair - PAIR_REACH) < 1e-5, `whole budget or at the pair reach: ${text}`).toBe(true);
       });
 
       it(`${who}: ${name} never writes a radius below the floor (minimum applied before scaling)`, () => {
@@ -329,6 +356,14 @@ describe("blob-mesh coverage budget (#174)", () => {
       }
     }
     expect(checked).toBeGreaterThan(60);
+  });
+
+  it("#193 pair reach: the writers' gap is the shader's BLOB_GAP and their reach is the site spacing minus it", () => {
+    expect(Number.isFinite(SHADER_GAP) && SHADER_GAP > 0, "BLOB_GAP read from fragment.glsl").toBe(true);
+    expect(BLOB_MESH_GAP).toBe(SHADER_GAP);
+    expect(BLOB_MESH_PAIR_REACH, "at most the reach (a float margin under it)").toBeLessThan(PAIR_REACH);
+    expect(BLOB_MESH_PAIR_REACH, "within 1e-5 of the reach").toBeGreaterThan(PAIR_REACH - 1e-5);
+    process.stdout.write(`[pair-reach] site spacing ${SITE_SPACING.toFixed(4)} - BLOB_GAP ${SHADER_GAP} = ${PAIR_REACH.toFixed(4)}\n`);
   });
 
   it("host mirror and pack frontend write identical slot 0 on every frame", () => {
