@@ -83,8 +83,11 @@ class PackInstallLintSetupError(ValueError):
     :func:`format_install_lint_setup_upgrade_message` (they know the installed version).
     """
 
-    def __init__(self, pack_name: str) -> None:
+    def __init__(self, pack_name: str, reason: str = "") -> None:
         self.pack_name = (pack_name or "").strip() or "Plugin"
+        #: #186: machine-readable cause for the log and tests (``lint_prebuilt_missing``,
+        #: ``lint_prebuilt_stale``, ``esbuild_unresolvable``, …); never user text.
+        self.reason = reason
         super().__init__(format_install_lint_setup_message(self.pack_name))
 
 
@@ -116,6 +119,12 @@ def _verdict_lines(stderr: str, kind: str) -> list[dict[str, Any]]:
         if isinstance(raw, dict) and raw.get("type") == kind:
             out.append(raw)
     return out
+
+
+def install_lint_setup_reason(stderr: str) -> str:
+    """#186: the ``reason`` code of the script's setup-error line ("" when it has none)."""
+    lines = _verdict_lines(stderr, _LINT_SETUP)
+    return str(lines[-1].get("reason") or "") if lines else ""
 
 
 def install_lint_setup_failed(returncode: int, stderr: str) -> bool:

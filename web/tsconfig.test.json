@@ -37,7 +37,8 @@
     "src/plugins/dogfood.test.ts",
     "src/plugins/talker-storm-pack-bright-184.test.ts",
     "src/app/__tests__/main-entry.wall-view.test.ts",
-    "src/app/apply-mode.test.ts"
+    "src/app/apply-mode.test.ts",
+    "src/plugins/pack-install-lint-prebuilt.test.ts"
   ],
   "exclude": []
 }
