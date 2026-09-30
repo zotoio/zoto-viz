@@ -291,7 +291,59 @@ const lumaOf = (c: number[]) => {
  * - sky peak: the highest luma of any pixel in QE's app region that lies outside every drawn blob's
  *   radius (max(shader floor, r)), i.e. the lit field between and around the blobs.
  */
+/**
+ * blobVsSky's colours before shadePixel's last step (x uBright): the dimmest-blob probe at each drawn
+ * blob's centre and every sky pixel of the QE region outside the blobs. uBright only scales the
+ * finished colour, so skyGapAt(skyShades(f, look), ub) is exactly blobVsSky(f, { ...look, uBright: ub })
+ * (x 1 is exact, then the same multiply), and one shading pass serves every uBright.
+ */
+export type SkyShades = { blobCols: number[][]; skyCols: number[][] };
+export function skyShades(frame: VizDataFrame, look = packLook(frame).u, src = SKY): SkyShades {
+  const unit = { ...look, uBright: 1 }; // shadePixel multiplies by uBright last, so x 1 leaves the colour unchanged
+  const shape = mirrorShape(src);
+  const slots = hostSlots(frame);
+  const blobs: { x: number; y: number; r: number }[] = [];
+  for (let i = 0; i < 8; i++) if (slots[i * 4 + 2]! > 0) blobs.push({ x: slots[i * 4]! * 1.7, y: slots[i * 4 + 1]! * 1.7, r: Math.max(shape.floor, slots[i * 4 + 2]!) });
+  const blobCols = blobs.map((b) => shadePixel(rayAtUv(b.x, b.y), slots, unit, shape));
+  const r = APP_QE_REGION;
+  const x0 = Math.floor((r.x / r.viewW) * SIZE), x1 = Math.floor(((r.x + r.w) / r.viewW) * SIZE);
+  const y0 = Math.floor((r.y / r.viewH) * SIZE), y1 = Math.floor(((r.y + r.h) / r.viewH) * SIZE);
+  const m = RAY;
+  const skyCols: number[][] = [];
+  for (let py = y0; py < y1; py++) {
+    const gy = SIZE - 1 - py; // readPixels order: bottom row first
+    for (let gx = x0; gx < x1; gx++) {
+      const v = [((gx + 0.5) / SIZE * 2 - 1) * SPAN[0], ((gy + 0.5) / SIZE * 2 - 1) * SPAN[1], -1];
+      const cam = norm3([
+        m[0]! * v[0]! + m[3]! * v[1]! + m[6]! * v[2]!,
+        m[1]! * v[0]! + m[4]! * v[1]! + m[7]! * v[2]!,
+        m[2]! * v[0]! + m[5]! * v[1]! + m[8]! * v[2]!,
+      ]);
+      const dir = norm3([cam[0]!, 0.70710678 * (cam[1]! + cam[2]!), 0.70710678 * (cam[2]! - cam[1]!)]);
+      const k = 0.35 + Math.abs(dir[1]!);
+      const u = dir[0]! / k, w = dir[2]! / k;
+      if (blobs.some((b) => Math.hypot(u - b.x, w - b.y) <= b.r)) continue;
+      skyCols.push(shadePixel(cam, slots, unit, shape));
+    }
+  }
+  return { blobCols, skyCols };
+}
+
+/** blobVsSky's two lumas at uBright ub, from cached shades: the same last multiply, clamp and round. */
+export function skyGapAt(sh: SkyShades, ub: number): { skyPeak: number; dimmestBlob: number } {
+  const scaled = (c: number[]) => lumaOf(c.map((x) => x * ub));
+  let skyPeak = 0;
+  for (const c of sh.skyCols) skyPeak = Math.max(skyPeak, scaled(c));
+  return { skyPeak, dimmestBlob: Math.min(...sh.blobCols.map(scaled)) };
+}
+
+/** The sky's brightest pixel in the QE region (outside the blobs) and the dimmest drawn blob's centre, in luma. */
 export function blobVsSky(frame: VizDataFrame, look = packLook(frame).u, src = SKY): { skyPeak: number; dimmestBlob: number } {
+  return skyGapAt(skyShades(frame, look, src), look.uBright);
+}
+
+/** Uncached reference for the cache check: blobVsSky's lumas with shadePixel at the full uBright. */
+function blobVsSkyDirect(frame: VizDataFrame, look: PluginSkySmokeUniforms, src = SKY): { skyPeak: number; dimmestBlob: number } {
   const shape = mirrorShape(src);
   const slots = hostSlots(frame);
   const blobs: { x: number; y: number; r: number }[] = [];
@@ -546,36 +598,59 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
 
   /**
    * Uniform row (#195 pattern; UX Pro ruling after #193): the contrast rule unchanged at the yml
-   * skyBright (1.03). Drive the pack's onFrame at the audio peak on LAN7 and LAN11 at every 5 s step
-   * from 0 to 60 s, then re-shade each frame at every uBright on a 0.01 grid up to 3: the sky's
-   * brightest pixel stays >= 5 luma under the dimmest blob. The grid starts at UB_LO = 0.05, not 0:
-   * uBright scales the whole picture, so at 0 the frame is black and the gap is 0 (2.6 at 0.02), and
-   * no rule on a luma gap can hold there. The pack's own effective uBright (audio 0 to 1) must sit
-   * inside the grid. Replaces the "tightest skyBright" row: on the lattice no uBright up to 3 loses
-   * the gap, so there is no tightest value to pin. Revert: today's hashed placement -> red.
+   * skyBright (1.03). Drive the pack's onFrame at the audio peak on LAN7 and LAN11 at each sampled t,
+   * then re-shade each frame at every uBright on a 0.01 grid from UB_LO to UB_HI: the sky's brightest
+   * pixel stays >= 5 luma under the dimmest blob. The grid starts at UB_LO = 0.05, not 0: uBright
+   * scales the whole picture, so at 0 the frame is black and the gap is 0 (2.6 at 0.02), and no rule
+   * on a luma gap can hold there. The pack's own effective uBright (audio 0 to 1) must sit inside the
+   * grid. No uBright up to 3 loses the gap on the lattice, so there is no tightest value to pin.
+   * #204 slimming, same rule: t every 15 s (5 values, drift phases spread over its ~42 s turn) instead
+   * of every 5 s, always including LAN7 t=0, the known worst point (gap 5.3 at uBright 0.05); and one
+   * shading pass per frame (skyShades), rescaled per uBright (skyGapAt), which is exact because
+   * uBright only multiplies the finished colour (checked against the uncached path below).
+   * Revert: UB_LO 0.02 -> red at LAN7 t=0.
    */
   const UB_LO = 0.05;
-  it(`uniform: at skyBright ${lookNumber("skyBright")} the sky stays >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob on LAN7 and LAN11 at every 5 s step from 0 to 60 s, for every uBright from ${UB_LO} to 3 (0.01 grid), and the pack's own uBright is inside that range`, () => {
+  const UB_HI = 3;
+  /** The every-5-s grid the row used before #204 (13 values), kept only to assert the sparser sampling. */
+  const T_DENSE = Array.from({ length: 13 }, (_, i) => i * 5);
+  const T_SAMPLES = [0, 15, 30, 45, 60];
+  it(`uniform: at skyBright ${lookNumber("skyBright")} the sky stays >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob on LAN7 and LAN11 at t = ${T_SAMPLES.join(", ")} s (LAN7 t=0 always in), for every uBright from ${UB_LO} to ${UB_HI} (0.01 grid), and the pack's own uBright is inside that range`, () => {
     const live: [string, VizDataFrame][] = [["LAN7", LAN7], ["LAN11", LAN11]];
-    const frames = live.flatMap(([name, f]) => Array.from({ length: 13 }, (_, i) => ({ name, f: { ...f, t: i * 5, audio: AUDIO_PEAK } })));
+    const frames = live.flatMap(([name, f]) => T_SAMPLES.map((t) => ({ name, f: { ...f, t, audio: AUDIO_PEAK } })));
     const looks = frames.map(({ f }) => packLook(f));
+    const shades = frames.map(({ f }, i) => skyShades(f, looks[i]!.u));
+    const grid = Array.from({ length: Math.round((UB_HI - UB_LO) * 100) + 1 }, (_, k) => Math.round(UB_LO * 100 + k) / 100);
     const packRange = [0, AUDIO_PEAK].map((audio) => packLook({ ...LAN7, audio }).u.uBright);
     let worst = { gap: Infinity, at: "" };
     let fails = 0;
-    for (let k = Math.round(UB_LO * 100); k <= 300; k++) {
-      const uBright = k / 100;
+    let evals = 0;
+    for (const uBright of grid) {
       frames.forEach(({ name, f }, i) => {
-        const r = blobVsSky(f, { ...looks[i]!.u, uBright });
+        const r = skyGapAt(shades[i]!, uBright);
+        evals++;
         const gap = r.dimmestBlob - r.skyPeak;
         if (gap < SKY_UNDER_BLOB_MARGIN) fails++;
         if (gap < worst.gap) worst = { gap, at: `${name} t=${f.t} uBright=${uBright.toFixed(2)} skyPeak=${r.skyPeak.toFixed(1)} dimmestBlob=${r.dimmestBlob.toFixed(1)}` };
       });
     }
-    const text = `skyBright ${lookNumber("skyBright")}; pack uBright ${packRange.map((u) => u.toFixed(3)).join(" to ")} (audio 0 to ${AUDIO_PEAK}); worst gap ${worst.gap.toFixed(1)} at ${worst.at}; ${fails} (uBright, frame) pairs under ${SKY_UNDER_BLOB_MARGIN}`;
+    const text = `skyBright ${lookNumber("skyBright")}; pack uBright ${packRange.map((u) => u.toFixed(3)).join(" to ")} (audio 0 to ${AUDIO_PEAK}); worst gap ${worst.gap.toFixed(1)} at ${worst.at}; ${fails} (uBright, frame) pairs under ${SKY_UNDER_BLOB_MARGIN}; ${frames.length} frames x ${grid.length} uBright = ${evals} gap evaluations from ${shades.length} shading passes`;
     process.stdout.write(`[sky-uniform] ${text}\n`);
-    expect(lookNumber("skyBright"), text).toBe(1.03);
-    for (const u of packRange) expect(u >= UB_LO && u <= 3, `pack uBright inside the grid: ${text}`).toBe(true);
+    // the rule (first, so a moved grid start fails here, at the frame where it breaks)
     expect(worst.gap, text).toBeGreaterThanOrEqual(SKY_UNDER_BLOB_MARGIN);
+    expect(lookNumber("skyBright"), text).toBe(1.03);
+    for (const u of packRange) expect(u >= UB_LO && u <= UB_HI, `pack uBright inside the grid: ${text}`).toBe(true);
+    // the sampling, structurally: rule unchanged, fewer t, the known worst point always in
+    expect(SKY_UNDER_BLOB_MARGIN, "margin unchanged").toBe(5);
+    expect([grid[0], grid[grid.length - 1], grid.length], "uBright grid 0.05 to 3 in 0.01 steps").toEqual([0.05, 3, 296]);
+    expect(T_SAMPLES.length, "fewer t values than the every-5-s grid").toBeLessThan(T_DENSE.length);
+    expect(T_SAMPLES.every((t) => T_DENSE.includes(t)), "sampled t are on the old grid").toBe(true);
+    expect(frames.some(({ name, f }) => name === "LAN7" && f.t === 0), "LAN7 t=0 (the known worst point) is sampled").toBe(true);
+    // the cache is exact: the uncached path at both grid ends and the pack's uBright, LAN7 t=0
+    const i0 = frames.findIndex(({ name, f }) => name === "LAN7" && f.t === 0);
+    for (const ub of [grid[0]!, looks[i0]!.u.uBright, grid[grid.length - 1]!]) {
+      expect(skyGapAt(shades[i0]!, ub), `cached = uncached at uBright ${ub}`).toEqual(blobVsSkyDirect(frames[i0]!.f, { ...looks[i0]!.u, uBright: ub }));
+    }
   }, 600_000);
 
   /**
