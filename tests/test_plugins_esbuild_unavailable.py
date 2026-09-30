@@ -32,7 +32,8 @@ def _hidden_esbuild_web(tmp: Path) -> Path:
     (tmp / "web" / "node_modules").mkdir()
     (tmp / "plugins").mkdir()
     (tmp / "plugins" / "sdk").symlink_to(REPO / "plugins" / "sdk")
-    for name in ("bundle-pack-entry.mjs", "pack-install-lint-gate.mjs"):
+    # #186 removed pack-install-lint-gate.mjs; the install lint now runs in-process from the built file.
+    for name in ("bundle-pack-entry.mjs", "pack-install-lint-stamp.mjs", "pack-install-lint.built.mjs"):
         shutil.copy2(REPO / "web" / "scripts" / name, tmp / "web" / "scripts" / name)
     return tmp / "web" / "scripts" / "bundle-pack-entry.mjs"
 
