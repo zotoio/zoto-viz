@@ -15,6 +15,8 @@
     "src/graph/pack-mirror-readback.test.ts",
     "src/plugins/koi-pond-sandbox.test.ts",
     "src/plugins/nixie-clock-sandbox.test.ts",
+    "src/graph/h1-gap-rows.test.ts",
+    "src/plugins/pack-sky-lean-h1.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
     "test/node/pack-mirror-readback-vite.ts"
   ],
