@@ -285,6 +285,38 @@ def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
     assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}"
 
 
+def test_service_timeout_while_the_lint_runner_hangs_takes_the_runner_group_down(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Real bundle-pack-entry.mjs, real tsx, a runner that hangs (and ignores SIGTERM) under the
+    15 s runner timeout; the service's shorter timeout here must still leave no runner behind."""
+    _needs_node_tree()
+    if not (ROOT / "web" / "node_modules" / "tsx").exists():
+        pytest.skip("tsx not installed")
+    pids = tmp_path / "runner.pids"
+    tree = _tree_without_tsx(tmp_path)
+    (tree / "web" / "node_modules").mkdir()
+    os.symlink((ROOT / "web" / "node_modules" / "tsx").resolve(), tree / "web" / "node_modules" / "tsx")
+    (tree / "web" / "scripts" / "pack-install-lint-run.ts").write_text(
+        "import { appendFileSync } from 'node:fs';\n"
+        "process.on('SIGTERM', () => {});\n"
+        f"appendFileSync({json.dumps(str(pids))}, `${{process.pid}} ${{process.ppid}}\\n`);\n"
+        "setInterval(() => {}, 1000);\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(plugins, "REPO", tree)
+    monkeypatch.setattr(plugins, "PACK_BUNDLE_TIMEOUT_S", 4)
+    doc = _pulse_doc()
+    plugins.reset_bundles()
+    with pytest.raises(PackInstallLintSetupError) as e:
+        plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
+    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL}"
+    assert pids.is_file(), "the runner really started and hung before the service timeout"
+    for pid in (int(p) for p in pids.read_text().split()):
+        assert _gone(pid), f"lint runner pid {pid} left running after the service timeout"
+
+
 # --- unbundled and no-frontend packs go through the same gate -----------------------------------
 
 

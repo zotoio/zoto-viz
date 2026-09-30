@@ -12,6 +12,7 @@
 import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import fs from "node:fs";
+import os from "node:os";
 import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
@@ -91,12 +92,20 @@ export async function runInstallLint({ repoRoot, packHome, packId, timeoutMs = D
       }
     };
     const onParentExit = () => killTree();
+    // bundle-pack-entry.mjs itself told to stop (the service's timeout sends SIGTERM to its group
+    // first): take the runner's group down with it rather than orphaning it.
+    const STOP_SIGNALS = ["SIGTERM", "SIGINT", "SIGHUP"];
+    const onParentSignal = (sig) => {
+      killTree();
+      process.exit(128 + (os.constants.signals[sig] ?? 15));
+    };
     const finish = (verdict) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       killTree();
       process.removeListener("exit", onParentExit);
+      for (const sig of STOP_SIGNALS) process.removeListener(sig, onParentSignal);
       resolve(verdict);
     };
     const timer = setTimeout(() => {
@@ -114,6 +123,7 @@ export async function runInstallLint({ repoRoot, packHome, packId, timeoutMs = D
       return;
     }
     process.once("exit", onParentExit);
+    for (const sig of STOP_SIGNALS) process.once(sig, onParentSignal);
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (d) => {

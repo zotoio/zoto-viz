@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import os
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -335,6 +336,16 @@ class _PackScriptTimeout(Exception):
     pass
 
 
+def _signal_group(proc: subprocess.Popen[str], sig: int) -> None:
+    try:
+        if os.name == "posix":
+            os.killpg(proc.pid, sig)
+        else:
+            proc.kill()
+    except OSError:
+        pass
+
+
 def _run_pack_script(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
     """Run bundle-pack-entry.mjs in its own session; on timeout kill the whole group (esbuild's
     service process, node) and raise :class:`_PackScriptTimeout`."""
@@ -349,14 +360,15 @@ def _run_pack_script(argv: list[str], env: dict[str, str]) -> subprocess.Complet
     try:
         out, err = proc.communicate(timeout=PACK_BUNDLE_TIMEOUT_S)
     except subprocess.TimeoutExpired as e:
+        # SIGTERM the group first so bundle-pack-entry.mjs can take the lint runner's own process
+        # group down with it; SIGKILL whatever is left.
+        _signal_group(proc, signal.SIGTERM)
         try:
-            if os.name == "posix":
-                os.killpg(proc.pid, 9)
-            else:
-                proc.kill()
-        except OSError:
-            pass
-        proc.communicate()
+            proc.communicate(timeout=2)
+        except subprocess.TimeoutExpired:
+            _signal_group(proc, getattr(signal, "SIGKILL", signal.SIGTERM))
+            proc.communicate()
+        _signal_group(proc, getattr(signal, "SIGKILL", signal.SIGTERM))  # stragglers in the group (esbuild's service)
         raise _PackScriptTimeout(str(e)) from e
     return subprocess.CompletedProcess(argv, proc.returncode, out, err)
 
