@@ -13,7 +13,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost, type HostedView } from "../graph/render-host";
 import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
 import { bindCantDrawViewState } from "./cant-draw-state";
+import { bindCantDrawSurface } from "./cant-draw-surface";
 import {
+  enterCantDrawShader,
+  leaveCantDrawShader,
   resetViewStatesForTests,
   setViewState,
   setViewStateTileResolver,
@@ -92,7 +95,9 @@ function bootWall(tileIds: string[], opts: { software?: boolean } = {}): Wall {
     host.add(view);
   }
   setViewStateTileResolver((id) => panes.get(id) ?? null);
-  const stop = bindCantDrawViewState(host);
+  const stopState = bindCantDrawViewState(host);
+  const stopSurface = bindCantDrawSurface((_viewId, packId) => (packId === "fluid" ? "Fluid" : packId));
+  const stop = () => { stopState(); stopSurface(); };
   let ts = 0;
   return {
     host,
@@ -246,3 +251,105 @@ describe("#179 UX Pro: contextRecovery agrees with the wall, and no visible stri
     expect(viewStateOf("main")).toEqual({ kind: "ready" });
   });
 });
+
+/** Every `role="status"` region on the wall that carries a graphics-loss message. */
+const lossStatusRegions = (w: Wall) =>
+  [...w.wall.querySelectorAll('[role="status"]')].filter((el) => /graphics/i.test(el.textContent ?? ""));
+/** Every button on the wall labelled "Reload". */
+const reloadLabelled = (w: Wall) => [...w.wall.querySelectorAll("button")].filter((b) => (b.textContent ?? "").trim() === "Reload");
+const tileSurfaces = (w: Wall) => w.wall.querySelectorAll(".tile-cant-draw");
+
+describe("#179 part (c) surface: a loss is said once, on the wall; only a shader failure paints its own tile", () => {
+  let w: Wall | null = null;
+
+  beforeEach(() => {
+    expect.hasAssertions();
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date", "performance"] });
+    resetViewStatesForTests();
+  });
+
+  afterEach(() => {
+    w?.stop();
+    w?.host.dispose();
+    w?.wall.remove();
+    w = null;
+    resetViewStatesForTests();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("mosaic of 3 in a loss: exactly one role=status region says it, no Reload before reload:true, exactly one Reload after, never Restoring under it", () => {
+    w = bootWall(["a", "b", "c"]);
+    for (const id of ["a", "b", "c"]) setViewState(id, `plugin:${id}`, { kind: "ready" });
+    w.frame();
+    w.lose();
+    for (const id of ["a", "b", "c"]) expect(viewStateOf(id), `tile ${id}`).toEqual(LOST);
+    expect(lossStatusRegions(w).length, "one status region for the loss, not one per tile").toBe(1);
+    expect(reloadLabelled(w).length, "no Reload before reload:true").toBe(0);
+    expect(tileSurfaces(w).length, "no per-tile loss surface").toBe(0);
+
+    vi.advanceTimersByTime(9_999);
+    expect(reloadLabelled(w).length, "still no Reload at 9.999 s").toBe(0);
+    for (const id of ["a", "b", "c"]) expect(viewStateOf(id)).toEqual(LOST);
+
+    vi.advanceTimersByTime(1);
+    for (const id of ["a", "b", "c"]) expect(viewStateOf(id), `tile ${id} once Reload shows`).toEqual({ ...LOST, reload: true });
+    expect(lossStatusRegions(w).length, "still one status region").toBe(1);
+    expect(reloadLabelled(w).length, "exactly one Reload once reload:true").toBe(1);
+    expect(lossStatusRegions(w)[0]!.contains(reloadLabelled(w)[0]!), "the Reload lives in that status region").toBe(true);
+    expect(w.wall.textContent ?? "", "nothing visible says Restoring once Reload is up").not.toMatch(/restoring/i);
+    expect(tileSurfaces(w).length).toBe(0);
+  });
+
+  it("the loss message leaves with the restore plus a drawn frame, not on the restored event alone", () => {
+    w = bootWall(["a", "b", "c"]);
+    w.lose();
+    w.restore();
+    expect(lossStatusRegions(w).length, "restored, nothing drawn yet").toBe(1);
+    w.frame();
+    expect(lossStatusRegions(w).length, "after the drawn frame").toBe(0);
+    expect(reloadLabelled(w).length).toBe(0);
+    expect(tileSurfaces(w).length).toBe(0);
+  });
+
+  it("shader: only the failed tile paints its own couldn't-draw line (shader copy, never the log), and it goes when the shader clears", () => {
+    w = bootWall(["a", "b", "c"]);
+    for (const id of ["a", "b", "c"]) setViewState(id, `plugin:${id}`, { kind: "ready" });
+    enterCantDrawShader("b", "fluid", "ERROR: 0:12: 'uFoo' : undeclared identifier");
+    const b = w.panes.get("b")!;
+    const surface = b.querySelector(":scope > .tile-cant-draw");
+    expect(surface?.getAttribute("role")).toBe("status");
+    expect(surface?.textContent).toBe("Fluid couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.");
+    expect(surface?.textContent ?? "", "the shader log is console-only").not.toMatch(/uFoo|ERROR/);
+    expect(surface?.querySelectorAll("button").length, "no tile button").toBe(0);
+    expect(tileSurfaces(w).length, "a and c are unaffected").toBe(1);
+    expect(lossStatusRegions(w).length, "no wall loss notice for a shader failure").toBe(0);
+    leaveCantDrawShader("b");
+    expect(tileSurfaces(w).length, "gone once the shader clears").toBe(0);
+  });
+
+  it("shader then loss: the tile's line gives way to the one wall message while lost, and comes back after the restore plus a drawn frame", () => {
+    w = bootWall(["a", "b"]);
+    setViewState("a", "plugin:a", { kind: "ready" });
+    enterCantDrawShader("b", "fluid");
+    expect(tileSurfaces(w).length).toBe(1);
+    w.lose();
+    expect(tileSurfaces(w).length, "while lost only the wall speaks").toBe(0);
+    expect(lossStatusRegions(w).length).toBe(1);
+    w.restore();
+    w.frame();
+    expect(lossStatusRegions(w).length).toBe(0);
+    expect(viewStateOf("b")).toEqual({ kind: "cant-draw", reason: "shader", packId: "fluid" });
+    expect(tileSurfaces(w).length, "b's own shader failure still stands").toBe(1);
+  });
+
+  it("a shader tile that already shows the pack's own fallback gets no second message", () => {
+    w = bootWall(["a"]);
+    const fallback = document.createElement("div");
+    fallback.className = "tile-shader-fallback";
+    w.panes.get("a")!.appendChild(fallback);
+    enterCantDrawShader("a", "fluid");
+    expect(tileSurfaces(w).length).toBe(0);
+  });
+});
+
