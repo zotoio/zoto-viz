@@ -1,13 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { perfOverlay, resetPerf } from "../core/perf";
-import { resetFps } from "../core/fps";
+import { perfOverlay, perfStress, resetPerf, tickPerf } from "../core/perf";
+import { markFrame, resetFps } from "../core/fps";
+import type { FrameTs } from "../core/time-ms";
 import { NetScene } from "./scene";
 
 /**
- * Wiring guard for bbf8b77d: scene.ts applyLook must hand backdrop.setLook the look's own sky
- * sliders on a stage-only view even while the perf lean (core/perf.ts perfOverlay: skyBright
- * 0.4, skyOpacity 0.45) is on, and the leaned sliders on a graph view. The Ant Colony rows call
- * skyLookFor directly; this row goes through the real NetScene.applyLook.
+ * Wiring guard for bbf8b77d and #177: scene.ts applyLook must hand backdrop.setLook the look's own
+ * sky sliders while the perf lean is fully on (tune.k >= 0.9), on a stage-only view (bbf8b77d) and,
+ * since #177, on a graph view too: perfOverlay no longer eases skyBright to 0.4 / skyOpacity to 0.45.
+ * The Ant Colony rows call skyLookFor directly; this row goes through the real NetScene.applyLook.
  */
 type SceneInternals = {
   anim: { backdrop: string; skyBright: number; skyOpacity: number; skyAudio: boolean };
@@ -33,6 +34,15 @@ describe("NetScene applyLook: stage-only plugin sky under the perf lean", () => 
     hosts.length = 0;
   });
 
+  /** The real fps trail + tickPerf at 5 fps for 54 s from boot: the lean fully on. */
+  function leanFully(): number {
+    for (let t = 0; t <= 54_000; t += 200) {
+      markFrame(t as FrameTs);
+      tickPerf(t, true, 0.45);
+    }
+    return perfStress();
+  }
+
   /** A NetScene on the Ant Colony look (plugin backdrop, skyBright 1.05, skyOpacity 0.96), fully leaned. */
   function leanedScene(stageOnly: boolean) {
     const el = document.createElement("div");
@@ -47,9 +57,10 @@ describe("NetScene applyLook: stage-only plugin sky under the perf lean", () => 
     graph.setStageOnly(stageOnly);
     const s = graph as unknown as SceneInternals;
     Object.assign(s.anim, { backdrop: "plugin", skyBright: 1.05, skyOpacity: 0.96 });
-    s.tune = perfOverlay(s.anim as unknown as Parameters<typeof perfOverlay>[0], 1);
-    expect(s.tune.skyBright, "overlay leaned").toBeCloseTo(0.4, 9);
-    expect(s.tune.skyOpacity, "overlay leaned").toBeCloseTo(0.45, 9);
+    s.tune = perfOverlay(s.anim as unknown as Parameters<typeof perfOverlay>[0], leanFully());
+    expect(s.tune.k, "lean fully on").toBeGreaterThanOrEqual(0.9);
+    expect(s.tune.skyBright, "#177: the leaned overlay keeps the look's skyBright").toBe(s.anim.skyBright);
+    expect(s.tune.skyOpacity, "#177: the leaned overlay keeps the look's skyOpacity").toBe(s.anim.skyOpacity);
     const setLook = vi.spyOn(s.backdrop, "setLook");
     s.applyLook(1 / 60);
     expect(setLook).toHaveBeenCalledTimes(1);
@@ -66,10 +77,11 @@ describe("NetScene applyLook: stage-only plugin sky under the perf lean", () => 
       .toBeCloseTo(s.anim.skyBright * thermal, 6);
   });
 
-  it("graph view: setLook still gets the leaned skyOpacity 0.45 and skyBright 0.4 x thermalSkyK x visScale", () => {
+  it("graph view (#177): setLook gets the look's own skyOpacity and skyBright x thermalSkyK x visScale, not 0.45 / 0.4", () => {
     const { s, opacity, brightness } = leanedScene(false);
     const thermal = s.thermalSkyK();
-    expect(opacity).toBeCloseTo(s.tune!.skyOpacity, 6);
-    expect(brightness, `brightness = 0.4 x thermal ${thermal} x visScale ${s.visScale}`).toBeCloseTo(s.tune!.skyBright * thermal * s.visScale, 6);
+    expect(opacity, "opacity (the lean used to give 0.45)").toBeCloseTo(s.anim.skyOpacity, 6);
+    expect(brightness, `brightness = ${s.anim.skyBright} x thermal ${thermal} x visScale ${s.visScale} (the lean used to give 0.4 x those)`)
+      .toBeCloseTo(s.anim.skyBright * thermal * s.visScale, 6);
   });
 });

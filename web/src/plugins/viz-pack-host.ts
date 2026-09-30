@@ -12,6 +12,8 @@ import { HnTermFrameDriver } from "../../../plugins/src/hn-term/frontend/frame";
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
+import { packBlobMeshSlots } from "../../../plugins/sdk/blob-mesh-budget";
+import { blobMeshNoticeLatchFor } from "./blob-mesh-devices-notice";
 import {
   CANVAS_DEFAULT,
   NIXIE_LOOK_KEYS,
@@ -113,21 +115,21 @@ export interface VizPackHandlers {
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: VizUniformValue) => void;
   writeParticles: (data: number[], stride?: number) => void;
+  /** Tile info caption (paintPackInfoCaption); null clears it. Called every frame. */
+  setInfoNotice?: (text: string | null) => void;
 }
 
-/** Same hues as plugins/src/blob-mesh/frontend/index.ts roleHue. */
-function blobMeshRoleHue(role: string): number {
-  if (role === "gateway") return 0.08;
-  if (role === "internet") return 0.78;
-  if (role === "lan") return 0.45;
-  return 0.22;
-}
-
-function roleHue(role: string): number {
-  if (role === "gateway") return 0.9;
-  if (role === "internet") return 0.75;
-  if (role === "lan") return 0.45;
-  return 0.2;
+/**
+ * talker-storm slot 0 `.x`: the storm's talker weight, the count the old host particle loop produced
+ * (up to 8 per talker by rate / 40, capped at 512). The HUD's estimateTalkerParticles uses the same rule.
+ */
+export function talkerStormSlot0Count(talkers: readonly { rate: number }[]): number {
+  let count = 0;
+  for (const t of talkers) {
+    count += Math.max(0, Math.min(8, Math.ceil(t.rate / 40)));
+    if (count >= 512) return 512;
+  }
+  return count;
 }
 
 /** ASCII 32–126 packed as (code-32)/95 so the sky can draw a 5×7 font. */
@@ -157,6 +159,8 @@ export function runPackFrameHandler(
   handlers: VizPackHandlers,
   opts?: Record<string, string>,
 ): void {
+  // Only blob-mesh sets a tile info caption today; any other pack clears a stale one.
+  if (packId !== "blob-mesh") handlers.setInfoNotice?.(null);
   switch (packId) {
     case "packet-tunnel": {
       const sample = packetTunnelSample(frame);
@@ -180,24 +184,10 @@ export function runPackFrameHandler(
       break;
     }
     case "talker-storm": {
-      const particles: number[] = [];
-      let count = 0;
-      for (const talker of frame.talkers) {
-        const n = Math.min(8, Math.ceil(talker.rate / 40));
-        for (let i = 0; i < n && count < 512; i++, count++) {
-          const hash = (talker.id.charCodeAt(0) + i * 17) % 97;
-          particles.push(
-            (hash / 97) * 2 - 1,
-            roleHue(talker.role),
-            (frame.t % 1) + i * 0.01,
-            Math.min(1, talker.rate / 200),
-          );
-        }
-      }
-      handlers.writeParticles(particles, 4);
-      handlers.writeBuffer(0, [count, frame.audio, frame.t % 1]);
-      handlers.writeUniform("uBright", 0.4 + frame.audio * 0.5);
-      handlers.writeUniform("uAudio", frame.audio);
+      // #184: slot 0 only ([count, audio, t mod 1]; the sky reads its audio). The pack owns uBright and
+      // uAudio (its writes survive syncPluginLook since H1) and draws the storm from slot 1. The old
+      // host copy of those uniforms raced the pack's own values, and its writeParticles had no renderer.
+      handlers.writeBuffer(0, [talkerStormSlot0Count(frame.talkers), frame.audio, frame.t % 1]);
       break;
     }
     case "kefrens-bars": {
@@ -224,21 +214,16 @@ export function runPackFrameHandler(
     }
     case "blob-mesh": {
       // Mirror of plugins/src/blob-mesh/frontend/index.ts (#161). This case runs right before
-      // the draw (viz-frame-tick.ts), so its slot 0 is what the app shows: the old fixed
-      // radius-0.1 row at x = (i/8)*2-1 sat outside the dome view and left the wall black.
-      const buf: number[] = [];
-      const n = Math.min(8, frame.talkers.length);
-      const peak = frame.talkers.reduce((m, t) => Math.max(m, t.rate), 0);
-      const busy = Math.min(1, peak / 60);
-      for (let i = 0; i < n; i++) {
-        const t = frame.talkers[i]!;
-        const h = (t.id.charCodeAt(0) + i * 19) % 97;
-        const ang = (h / 97) * 6.283 + frame.t * (0.15 + i * 0.03);
-        const r = 0.25 + (h % 20) / 50;
-        const share = peak > 0 ? t.rate / peak : 0;
-        buf.push(Math.cos(ang) * r, Math.sin(ang) * r, 0.16 + 0.1 * share * busy, blobMeshRoleHue(t.role));
-      }
-      handlers.writeBuffer(0, buf);
+      // the draw (viz-frame-tick.ts), so its slot 0 is what the app shows. Both writers share
+      // plugins/sdk/blob-mesh-budget.ts: floor first, then growth up to the whole coverage
+      // budget (#174); placement from the device id, always in view.
+      const blob = packBlobMeshSlots(frame.talkers, frame.t);
+      handlers.writeBuffer(0, blob.slot0);
+      // #173: when the minimums don't all fit, the quietest devices are dropped (never a silent
+      // overlap) and the tile says how many, with ~3 s hysteresis each way.
+      handlers.setInfoNotice?.(
+        blobMeshNoticeLatchFor(nixiePackTileId(opts)).update(blob.plan.shownIdx.length, blob.plan.hidden, Date.now(), blob.plan.tieAtCut),
+      );
       handlers.writeUniform("uBright", 0.8 + Math.min(0.35, (frame.talkers[0]?.rate ?? 0) / 80) + frame.audio * 0.2);
       handlers.writeUniform("uAudio", frame.audio);
       handlers.writeUniform("uAccent", [0.25, 0.75, 0.95]);

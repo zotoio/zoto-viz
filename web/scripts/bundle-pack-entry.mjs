@@ -3,25 +3,32 @@
  * Bundle a pack frontend entry for the service catalog.
  * Every resolved file must stay inside the pack home or plugins/sdk (realpath).
  *
- *   bundle-pack-entry.mjs [--lint-timeout-ms=N] <entry.ts> <plugins/sdk/abs> <packHome/abs> [repoRoot]
- *   bundle-pack-entry.mjs --lint-only [--lint-timeout-ms=N] <packHome/abs> <repoRoot>
+ *   bundle-pack-entry.mjs <entry.ts> <plugins/sdk/abs> <packHome/abs> [repoRoot]
+ *   bundle-pack-entry.mjs --lint-only <packHome/abs> <repoRoot>
  *
  * Install lint (#185) runs with ZOTO_PACK_INSTALL_LINT=1 (bundle mode) or --lint-only (packs that
- * aren't bundled: `frontend.bundle: false` or no frontend). It fails closed — see
- * pack-install-lint-gate.mjs. Exit codes: 0 pass, 1 lint block / build error, 2 usage,
- * 3 setup refusal (the check couldn't run or gave no valid verdict; the user message never carries
- * the raw cause, only the `pack-install-lint-setup-error` diagnostic line does). On a pass the LAST
+ * aren't bundled: `frontend.bundle: false` or no frontend). #186: it runs in this process, from the
+ * prebuilt plain-JS pack-install-lint.built.mjs (no TypeScript runner); its verdict is a return
+ * value. --lint-only also runs esbuild's import-boundary check over the unbundled scripts. It fails
+ * closed. Exit codes: 0 pass, 1 lint block / boundary block / build error, 2 usage, 3 setup refusal
+ * (the check couldn't run: esbuild, plugins/sdk or the built lint missing, a built lint that doesn't
+ * match its sources, or a lint that threw or gave no verdict; the user message never carries the
+ * raw cause, only the `pack-install-lint-setup-error` diagnostic line does). On a pass the LAST
  * stderr line is {"type":"pack-install-lint-pass","nonce":$ZOTO_PACK_INSTALL_LINT_NONCE,"pack":<id>},
  * which the service requires.
  */
 import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
-// Mirrors pack-install-lint-gate.mjs; kept here so a gate module that can't load still refuses.
+const EXIT_LINT_BLOCK = 1;
 const EXIT_LINT_SETUP = 3;
 const LINT_SETUP = "pack-install-lint-setup-error";
 const LINT_PASS = "pack-install-lint-pass";
+const LINT_BLOCK = "pack-install-lint-block";
+/** The checkout this script (and its built lint) belongs to: the built lint's sources are here. */
+const scriptRepoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 
 const flags = new Map();
 const pos = [];
@@ -35,14 +42,6 @@ for (const arg of process.argv.slice(2)) {
 }
 const lintOnly = flags.has("lint-only");
 const lintMode = lintOnly || process.env.ZOTO_PACK_INSTALL_LINT === "1";
-let lintTimeoutMs;
-if (flags.has("lint-timeout-ms")) {
-  lintTimeoutMs = Number(flags.get("lint-timeout-ms"));
-  if (!Number.isInteger(lintTimeoutMs) || lintTimeoutMs <= 0) {
-    console.error("--lint-timeout-ms must be a positive integer (milliseconds)");
-    process.exit(2);
-  }
-}
 
 const entry = lintOnly ? "" : pos[0];
 const sdkRoot = lintOnly ? "" : path.resolve(pos[1] ?? "");
@@ -51,8 +50,8 @@ const repoArg = lintOnly ? pos[1] : pos[3];
 const repoRoot = repoArg ? path.resolve(repoArg) : undefined;
 
 if (lintOnly ? !pos[0] || !pos[1] : !entry || !pos[1] || !pos[2]) {
-  console.error("usage: bundle-pack-entry.mjs [--lint-timeout-ms=N] <entry.ts> <plugins/sdk/abs> <packHome/abs> [repoRoot]");
-  console.error("       bundle-pack-entry.mjs --lint-only [--lint-timeout-ms=N] <packHome/abs> <repoRoot>");
+  console.error("usage: bundle-pack-entry.mjs <entry.ts> <plugins/sdk/abs> <packHome/abs> [repoRoot]");
+  console.error("       bundle-pack-entry.mjs --lint-only <packHome/abs> <repoRoot>");
   process.exit(2);
 }
 
@@ -79,10 +78,26 @@ const packId = manifestField(manifest, "id") || path.basename(packHome);
 /** plugin.yml display name (top-level `name:`), else `id:`, else the pack folder name. */
 const packName = manifestField(manifest, "name") || packId;
 
-function refuseLintSetup(detail) {
+/**
+ * #186: `reason` is a machine-readable code for the log and the rows (never user text): which setup
+ * step failed. The user sentence is the same for all of them — `pnpm install` in web/ fixes each.
+ */
+const SETUP_REASONS = Object.freeze({
+  noRepoRoot: "no_repo_root",
+  esbuild: "esbuild_unresolvable",
+  sdk: "sdk_unresolvable",
+  stampModule: "lint_stamp_unresolvable",
+  missing: "lint_prebuilt_missing",
+  unloadable: "lint_prebuilt_unloadable",
+  stale: "lint_prebuilt_stale",
+  threw: "lint_threw",
+  noVerdict: "lint_no_verdict",
+});
+
+function refuseLintSetup(detail, reason) {
   const message = `Couldn't safety-check ${packName}, so it wasn't installed. Run \`pnpm install\` in \`web/\` and try again.`;
   console.error(message);
-  console.error(JSON.stringify({ type: LINT_SETUP, message, detail }));
+  console.error(JSON.stringify({ type: LINT_SETUP, message, reason, detail }));
   process.exit(EXIT_LINT_SETUP);
 }
 
@@ -96,39 +111,67 @@ function emitServicePass() {
 }
 
 /** A module the bundle needs (esbuild after `pnpm install --prod`, plugins/sdk) can't load. */
-async function importOrRefuse(spec, what) {
+async function importOrRefuse(spec, what, reason) {
   try {
     return await import(spec);
   } catch (err) {
-    if (lintMode) refuseLintSetup(`${what} not importable: ${errCode(err)}`);
+    if (lintMode) refuseLintSetup(`${what} not importable: ${errCode(err)}`, reason);
     console.error(`${what} not importable (${errCode(err)}); run \`pnpm install\` in \`web/\``);
     process.exit(1);
   }
 }
 
-const esbuild = lintOnly ? null : await importOrRefuse("esbuild", "esbuild");
+const esbuild = lintOnly ? null : await importOrRefuse("esbuild", "esbuild", SETUP_REASONS.esbuild);
 const bundleResolve = lintOnly
   ? null
-  : await importOrRefuse("../../plugins/sdk/pack-bundle-resolve.mjs", "plugins/sdk/pack-bundle-resolve.mjs");
+  : await importOrRefuse("../../plugins/sdk/pack-bundle-resolve.mjs", "plugins/sdk/pack-bundle-resolve.mjs", SETUP_REASONS.sdk);
 
-if (lintMode) {
-  if (!repoRoot) refuseLintSetup("no repo root passed to bundle-pack-entry.mjs");
-  let gate;
+/**
+ * #186: the install lint, in this process. The built lint is plain JS (no tsx); a missing or stale one
+ * is the setup refusal, and `pnpm install` in web/ rebuilds it (web/ `prepare`), so the setup sentence
+ * stays true. Only a `{kind: "pass"}` return value lets the install go ahead.
+ */
+async function runInstallLint() {
+  if (!repoRoot) refuseLintSetup("no repo root passed to bundle-pack-entry.mjs", SETUP_REASONS.noRepoRoot);
+  let lint;
+  let stamp;
   try {
-    gate = await import("./pack-install-lint-gate.mjs");
+    stamp = await import("./pack-install-lint-stamp.mjs");
   } catch (err) {
-    refuseLintSetup(`lint gate not importable: ${errCode(err)}`);
+    refuseLintSetup(`lint stamp check not importable: ${errCode(err)}`, SETUP_REASONS.stampModule);
   }
-  const verdict = await gate.runInstallLint({
-    repoRoot,
-    packHome,
-    packId,
-    timeoutMs: lintTimeoutMs ?? gate.DEFAULT_LINT_TIMEOUT_MS,
-  });
-  if (verdict.stderr) process.stderr.write(verdict.stderr.endsWith("\n") ? verdict.stderr : `${verdict.stderr}\n`);
-  if (verdict.kind === "block") process.exit(gate.EXIT_LINT_BLOCK);
-  if (verdict.kind !== "pass") refuseLintSetup(verdict.detail || "lint gave no verdict");
+  try {
+    lint = await import(`./${stamp.BUILT_LINT_FILE}`);
+  } catch (err) {
+    const missing = err?.code === "ERR_MODULE_NOT_FOUND" && String(err?.message || "").includes(stamp.BUILT_LINT_FILE);
+    refuseLintSetup(`built lint not importable: ${errCode(err)}; ${stamp.REBUILD_HINT}`, missing ? SETUP_REASONS.missing : SETUP_REASONS.unloadable);
+  }
+  const stale = stamp.staleReason(lint.PACK_INSTALL_LINT_BUILD, scriptRepoRoot);
+  if (stale) refuseLintSetup(stale, SETUP_REASONS.stale);
+  let verdict;
+  try {
+    verdict = lint.runPackInstallLint(packHome, repoRoot, { unbundled: lintOnly });
+  } catch (err) {
+    refuseLintSetup(`lint threw: ${errCode(err)}`, SETUP_REASONS.threw);
+  }
+  const kind = verdict && typeof verdict === "object" ? verdict.kind : undefined;
+  for (const w of Array.isArray(verdict?.warnings) ? verdict.warnings : []) console.warn(String(w));
+  if (kind === "block") {
+    const details = Array.isArray(verdict.details) ? verdict.details.map(String) : [];
+    for (const line of details) console.error(line);
+    // #185: `message` is the <sentence> in "<Name> was blocked because <sentence> …" — plain words only.
+    console.error(JSON.stringify({ type: LINT_BLOCK, message: String(verdict.message || ""), details }));
+    process.exit(EXIT_LINT_BLOCK);
+  }
+  if (kind === "boundary") {
+    // #186: the same payload esbuild's boundary plugin gives the service (pack_boundary.py).
+    console.error(JSON.stringify({ type: "pack-bundle-boundary", file: verdict.file, import: verdict.import, reason: verdict.reason }));
+    process.exit(EXIT_LINT_BLOCK);
+  }
+  if (kind !== "pass") refuseLintSetup(`lint gave no verdict (${kind === undefined ? typeof verdict : JSON.stringify(kind)})`, SETUP_REASONS.noVerdict);
 }
+
+if (lintMode) await runInstallLint();
 
 if (lintOnly) {
   emitServicePass();

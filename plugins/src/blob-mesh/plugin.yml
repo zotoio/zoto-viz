@@ -1,7 +1,7 @@
 id: blob-mesh
 name: Blob Mesh
 version: 1
-hint: 90s metaballs. Top talkers are blobs that merge when rates climb.
+hint: 90s-style metaballs. Each blob is one of your busiest devices, and the busier it is, the bigger it grows and the more it melts into its neighbours.
 capabilities:
   - viz.read
   - viz.write

@@ -20,6 +20,7 @@ export interface VizZoto {
   setNodeColor?: (id: string, hex: number) => void;
   writeBuffer: (slot: number, data: number[] | Float32Array) => void;
   writeUniform: (name: string, value: VizZotoUniformValue) => void;
+  /** @deprecated #184: no host renderer draws pack particles; draw from the sky's UBO slots (writeBuffer + zotoVizSlots). */
   writeParticles: (data: number[] | Float32Array, stride?: number) => void;
   getConfig?: () => Record<string, string>;
 }

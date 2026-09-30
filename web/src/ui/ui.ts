@@ -18,6 +18,8 @@ export interface SelectOption {
   swatch?: string;
   /** optional section header; consecutive options with the same group share one label */
   group?: string;
+  /** shown greyed out; can't be picked by click, Enter or `value =` (#169 unavailable packs) */
+  disabled?: boolean;
 }
 
 export interface SelectConfig {
@@ -73,6 +75,7 @@ export class Select {
   private current = "";
   private active = -1;
   private filter = "";
+  private banner: string | null = null;
   private readonly filterable: boolean;
   private readonly menuId: string;
   onChange: (value: string, opt: SelectOption) => void;
@@ -148,7 +151,7 @@ export class Select {
   }
   /** Set the value without firing onChange. */
   set value(v: string) {
-    const opt = this.options.find((o) => o.value === v) ?? this.options[0];
+    const opt = this.options.find((o) => o.value === v && !o.disabled) ?? this.options.find((o) => !o.disabled);
     if (!opt) { this.current = ""; this.valEl.innerHTML = CHEVRON; return; }
     this.current = opt.value;
     this.valEl.innerHTML = "";
@@ -164,7 +167,17 @@ export class Select {
   setOptions(options: SelectOption[]): void {
     this.options = options;
     this.renderMenu();
-    if (this.current && options.some((o) => o.value === this.current)) this.value = this.current;
+    if (this.current && options.some((o) => o.value === this.current && !o.disabled)) this.value = this.current;
+  }
+
+  /** One note at the top of the menu (not an option), or none (#169 setup banner). */
+  setBanner(text: string | null): void {
+    this.banner = text || null;
+    this.renderMenu();
+  }
+
+  get bannerText(): string | null {
+    return this.banner;
   }
 
   private visibleOptions(): SelectOption[] {
@@ -207,6 +220,13 @@ export class Select {
       filterLi.appendChild(input);
       this.menu.appendChild(filterLi);
     }
+    if (this.banner) {
+      const note = document.createElement("li");
+      note.className = "menu-banner";
+      note.setAttribute("role", "note");
+      note.textContent = this.banner;
+      this.menu.appendChild(note);
+    }
     let lastGroup = "";
     const visible = this.visibleOptions();
     visible.forEach((o, i) => {
@@ -222,6 +242,10 @@ export class Select {
       li.setAttribute("role", "option");
       li.id = `${this.menuId}-${i}`;
       li.dataset.value = o.value;
+      if (o.disabled) {
+        li.setAttribute("aria-disabled", "true");
+        li.classList.add("disabled");
+      }
       if (o.swatch) li.appendChild(swatch(o.swatch));
       const txt = document.createElement("span");
       txt.className = "txt";
@@ -305,6 +329,7 @@ export class Select {
   private pick(i: number): void {
     const value = this.items[i]?.dataset.value;
     const opt = this.options.find((o) => o.value === value);
+    if (opt?.disabled) return;
     this.close();
     if (!opt || opt.value === this.current) return;
     this.value = opt.value;

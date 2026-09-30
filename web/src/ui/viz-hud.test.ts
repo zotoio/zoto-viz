@@ -293,6 +293,21 @@ describe("viz hud helpers", () => {
     expect(vizHudMetric("hn-rain", mixed, state)).toEqual({ label: "headlines", value: "demo" });
   });
 
+  it("blob-mesh counts devices from the blob plan: all shown, or \"7 of 11\" when the quietest don't fit (#173)", () => {
+    const state = minimalState();
+    const frameOf = (n: number) => ({
+      t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
+      talkers: Array.from({ length: n }, (_, i) => ({ id: `10.0.0.${10 + i}`, rate: [125, 118, 50, 45, 40, 35, 25, 8, 6, 5, 4][i]!, role: "lan" })),
+    });
+    expect(vizHudMetric("blob-mesh", frameOf(7), state)).toEqual({ label: "devices", value: "7" });
+    expect(vizHudMetric("blob-mesh", frameOf(8), state)).toEqual({ label: "devices", value: "7 of 8" });
+    expect(vizHudMetric("blob-mesh", frameOf(11), state)).toEqual({ label: "devices", value: "7 of 11" });
+    expect(vizHudMetric("blob-mesh", frameOf(0), state)).toEqual({ label: "devices", value: "0" });
+    const equal = (n: number) => ({ ...frameOf(n), talkers: frameOf(n).talkers.map((t) => ({ ...t, rate: 60 })) });
+    expect(vizHudMetric("blob-mesh", equal(8), state), "8 equal devices all fit").toEqual({ label: "devices", value: "8" });
+    expect(vizHudMetric("blob-mesh", equal(9), state)).toEqual({ label: "devices", value: "8 of 9" });
+  });
+
   it("picks pack-specific metrics from host state", () => {
     const state = minimalState();
     expect(vizHudMetric("packet-tunnel", null, state)).toEqual({ label: "flows", value: "3" });
@@ -309,7 +324,7 @@ describe("viz hud helpers", () => {
     expect(vizHudMetric("blob-mesh", {
       t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
       talkers: [{ id: "10.0.0.1", rate: 80, role: "lan" }],
-    }, state)).toEqual({ label: "blobs", value: "1" });
+    }, state)).toEqual({ label: "devices", value: "1" });
     expect(vizHudMetric("hn-rain", {
       t: 0, dt: 0, audio: 0, packets: [], rf: [], talkers: [],
       headlines: [{ id: "hn:0", label: "HN", text: "Jemalloc" }],

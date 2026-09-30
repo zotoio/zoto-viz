@@ -3,6 +3,14 @@ import type { VizDataFrame } from "../../../sdk/viz-contract";
 /** Storm cells the sky draws (slot 1 holds 4 floats per talker, 64 floats max). */
 export const TS_MAX_TALKERS = 16;
 
+/**
+ * The pack's uBright (#184, UX Pro): 0.8 in silence, 1.2 at full audio. Since H1 the pack's write is
+ * what the sky draws with (times the host look), and the host no longer writes its own copy.
+ */
+export function stormBright(audio: number): number {
+  return 0.8 + audio * 0.4;
+}
+
 export function roleHue(role: string): number {
   if (role === "gateway") return 0.9;
   if (role === "internet") return 0.75;

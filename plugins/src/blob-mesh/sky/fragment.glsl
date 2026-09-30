@@ -8,12 +8,17 @@ void main() {
   vec2 uv = vec2(dir.x, dir.z) / (0.35 + abs(dir.y));
   float field = 0.0;
   vec3 tint = uAccent;
+  // #174: once any device is written (radius > 0), empty slots draw nothing; the idle blobs
+  // only fill a tile that has no device data yet.
+  float live = 0.0;
+  for (int i = 0; i < 8; i++) live = max(live, step(0.001, zotoVizSlots[i].z));
   for (int i = 0; i < 8; i++) {
     vec4 b = zotoVizSlots[i];
     float fi = float(i);
     vec2 idle = vec2(sin(uTime * 0.35 + fi * 1.1), cos(uTime * 0.28 + fi * 0.7)) * 0.55;
     vec2 pos = mix(idle, b.xy * 1.7, step(0.02, length(b.xy)));
-    float rad = max(0.16, b.z);
+    float drawn = max(step(0.001, b.z), 1.0 - live);
+    float rad = max(0.12, b.z) * drawn;
     vec2 d = uv - pos;
     float contrib = rad * rad / max(0.0012, dot(d, d));
     field += contrib;

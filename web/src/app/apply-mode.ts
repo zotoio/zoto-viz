@@ -2,6 +2,7 @@ import type { ViewMode } from "../core/modes";
 import type { DreamAnim } from "../graph/scene";
 import type { ConsentReviewResult } from "./pack-consent";
 import type { PluginView } from "../plugins/plugin";
+import { lookForMode, pluginWall } from "../plugins/plugin";
 import { packNeedsConsent } from "./plugin-consent-mount";
 import type { Select } from "../ui/ui";
 import type { Mosaic } from "../graph/mosaic";
@@ -319,7 +320,10 @@ export function applyModeImpl(
       mosaicSnap = host.captureMosaicSnap();
       host.mosaicSetSizeForMode(m.id, mosaicSnap);
     }
-    if (!host.mosaicHasTile(m.id)) {
+    // A wall view (Syscon, Cypher CIC) is the wall applyPluginWall just laid out, not a pane:
+    // swapping it into the focus slot evicts the wall's own first tile (#172).
+    const wallView = !!pluginWall(lookForMode(m.id) ?? spec?.look);
+    if (!wallView && !host.mosaicHasTile(m.id)) {
       const slot = host.mosaicFocusSlot();
       if (!mosaicSnap) mosaicSnap = host.captureMosaicSnap();
       if (!slot || !host.mosaicSetPaneView(slot, m.id)) {
