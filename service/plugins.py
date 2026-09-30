@@ -364,8 +364,10 @@ def _install_lint_block_from_compile(stderr: str) -> str | None:
     return None
 
 
-# Service-side limit for one bundle-pack-entry.mjs run. #186: the install lint runs inside that
-# process (no runner child, no timeout of its own), so this is the one bound on a lint that hangs.
+# Service-side limit for one bundle-pack-entry.mjs run. #186: the script bounds the install lint itself
+# (LINT_TIMEOUT_MS, 15 s, reason lint_timeout); this is the backstop for when it can't (no /proc on
+# macOS, a native call it can't get past, an older script). Its install-lint verdict is bundle_timeout
+# (same sentence as lint_timeout).
 PACK_BUNDLE_TIMEOUT_S = 20
 
 
@@ -435,9 +437,26 @@ def run_install_lint_only(doc: dict[str, Any], home: Path) -> None:
             [cursor_agent.node_bin(), str(_PACK_BUNDLE_SCRIPT), "--lint-only", str(home.resolve()), str(REPO)],
             env,
         )
-    except (_PackScriptTimeout, OSError) as e:
+    except _PackScriptTimeout as e:
+        raise _install_lint_backstop(doc, label, e) from e
+    except OSError as e:
         raise pil.PackInstallLintSetupError(label) from e
     _check_install_lint_verdict(proc, doc, label, nonce)
+
+
+def _install_lint_backstop(doc: dict[str, Any], label: str, e: _PackScriptTimeout) -> pil.PackInstallLintSetupError:
+    """#186: the service's timeout fired (and killed the group) during an install lint: reason
+    bundle_timeout (not the script's lint_timeout, so reports can tell which kill fired), with the same
+    sentence from SETUP_COPY; still a refusal."""
+    _LOG.warning(
+        "pack install lint setup refusal (%s) for %s: service timeout after %s s",
+        pil.REASON_BUNDLE_TIMEOUT,
+        doc.get("id"),
+        PACK_BUNDLE_TIMEOUT_S,
+    )
+    err = pil.PackInstallLintSetupError(label, pil.REASON_BUNDLE_TIMEOUT)
+    err.__cause__ = e
+    return err
 
 
 def _check_install_lint_verdict(
@@ -543,8 +562,8 @@ def compile_typescript(
         proc = _run_pack_script(argv, bundle_env)
     except _PackScriptTimeout as e:
         if install_lint:
-            # #185: a timeout is "couldn't check", never a raw TimeoutExpired.
-            raise pil.PackInstallLintSetupError(label) from e
+            # #185: a timeout is "couldn't check", never a raw TimeoutExpired. #186: bundle_timeout.
+            raise _install_lint_backstop(doc, label, e) from e
         raise PackBundleUnavailable(
             UNAVAILABLE_BUNDLE_FAILED, f"pack bundle timed out after {PACK_BUNDLE_TIMEOUT_S} s"
         ) from e

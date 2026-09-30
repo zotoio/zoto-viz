@@ -69,6 +69,12 @@ def merge_lint_warnings(doc: dict[str, Any], warnings: list[str]) -> dict[str, A
 
 EXIT_LINT_SETUP = 3
 REASON_INSTALL_CHECK_UNAVAILABLE = "pack_install_check_unavailable"
+#: #186: the lint ran out of time. lint_timeout: bundle-pack-entry.mjs's own timer (on its setup-error
+#: line). bundle_timeout: the service's backstop (PACK_BUNDLE_TIMEOUT_S) killed the group because the
+#: script never said so. Two codes so reports can tell which kill fired; one sentence (the table's
+#: reason_overrides points both at the same templates).
+REASON_LINT_TIMEOUT = "lint_timeout"
+REASON_BUNDLE_TIMEOUT = "bundle_timeout"
 _LINT_PASS = "pack-install-lint-pass"
 _LINT_SETUP = "pack-install-lint-setup-error"
 
@@ -95,6 +101,16 @@ def setup_fix(reason: str | None) -> str:
     return str(SETUP_COPY["fixes"][key])
 
 
+def setup_template(kind: str, reason: str | None) -> str:
+    """The table's ``kind`` template ("install" / "upgrade") for a reason: the ``overrides`` entry its
+    ``reason_overrides`` names, else the shared one."""
+    name = SETUP_COPY.get("reason_overrides", {}).get(reason or "")
+    own = SETUP_COPY.get("overrides", {}).get(name) if isinstance(name, str) else None
+    if isinstance(own, dict) and isinstance(own.get(kind), str):
+        return str(own[kind])
+    return str(SETUP_COPY[kind])
+
+
 class PackInstallLintSetupError(ValueError):
     """The install lint couldn't run (or gave no valid verdict), so the install was refused.
 
@@ -113,14 +129,14 @@ class PackInstallLintSetupError(ValueError):
 
 def format_install_lint_setup_message(name: str, reason: str = "") -> str:
     label = (name or "").strip() or "Plugin"
-    return _fill(str(SETUP_COPY["install"]), {"name": label, "fix": setup_fix(reason)})
+    return _fill(setup_template("install", reason), {"name": label, "fix": setup_fix(reason)})
 
 
 def format_install_lint_setup_upgrade_message(name: str, old_version: str | int | None, reason: str = "") -> str:
     label = (name or "").strip() or "Plugin"
     old = str(old_version).strip() if old_version is not None else ""
     still = _fill(str(SETUP_COPY["still"]), {"old": old}) if old else str(SETUP_COPY["still_unknown"])
-    return _fill(str(SETUP_COPY["upgrade"]), {"name": label, "still": still, "fix": setup_fix(reason)})
+    return _fill(setup_template("upgrade", reason), {"name": label, "still": still, "fix": setup_fix(reason)})
 
 
 def _verdict_lines(stderr: str, kind: str) -> list[dict[str, Any]]:

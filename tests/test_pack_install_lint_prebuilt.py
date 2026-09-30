@@ -14,7 +14,6 @@ import logging
 import re
 import shutil
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
@@ -32,6 +31,7 @@ from tests.test_pack_install_lint_fail_closed import (
     _bad_probe,
     _blocked,
     _gone,
+    _kill_groups_after,
     _needs_node_tree,
     _probe,
     _pulse_doc,
@@ -143,12 +143,14 @@ def test_zip_install_setup_refusal_names_its_own_cause(
 def test_a_lint_that_hangs_in_process_is_refused_at_the_service_timeout_and_leaves_no_process(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
     """The built lint blocks bundle-pack-entry.mjs's event loop (and has started a child of its own):
     the service's timeout (the one bound now) refuses with the setup sentence, and neither the script
-    nor any descendant is left running."""
+    nor any descendant is left running. #186: reason bundle_timeout, lint_timeout's sentence."""
     _needs_node_tree()
     pids = tmp_path / "pids"
+    _kill_groups_after(request, pids)
     hang = (
         "import { spawn } from 'node:child_process';\n"
         "import { appendFileSync } from 'node:fs';\n"
@@ -163,11 +165,12 @@ def test_a_lint_that_hangs_in_process_is_refused_at_the_service_timeout_and_leav
     monkeypatch.setattr(plugins, "PACK_BUNDLE_TIMEOUT_S", 4)
     doc = _pulse_doc()
     plugins.reset_bundles()
-    t0 = time.monotonic()
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
-    assert time.monotonic() - t0 < 15
-    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL_INSTALL}", "service timeout: pnpm install"
+    assert e.value.reason == "bundle_timeout"
+    assert str(e.value) == (
+        "Couldn't safety-check Pulse TS in time, so it wasn't installed. Try again, and if it keeps happening, the pack may be broken."
+    ), "service timeout: bundle_timeout, the lint_timeout sentence"
     assert pids.is_file(), "the lint really ran and hung before the service timeout"
     got = [int(p) for p in pids.read_text().split()]
     assert len(got) == 2, got
@@ -239,10 +242,12 @@ def test_bundle_false_zip_whose_js_imports_outside_the_pack_is_blocked(
     assert not (paths.plugin_local_runtime_dir(create=True) / "sandbox-fixture-multi").exists()
 
 
-def test_service_timeout_is_the_only_lint_bound() -> None:
-    """#185's 15 s runner timeout and --lint-timeout-ms went with the runner; the service's 20 s is it."""
+def test_service_timeout_is_the_backstop_to_the_scripts_lint_timeout() -> None:
+    """#185's runner (and its --lint-timeout-ms flag) went; the service's 20 s stays as the backstop to
+    the script's own 15 s lint_timeout (tests/test_pack_install_lint_timeout.py)."""
     script = (ROOT / "web" / "scripts" / "bundle-pack-entry.mjs").read_text(encoding="utf-8")
-    assert "lint-timeout" not in script and "setTimeout" not in script
+    assert "--lint-timeout-ms" not in script and "lint-timeout-ms" not in script
+    assert "const LINT_TIMEOUT_MS = 15_000;" in script
     assert not (ROOT / "web" / "scripts" / "pack-install-lint-gate.mjs").exists()
     assert not (ROOT / "web" / "scripts" / "pack-install-lint-run.ts").exists()
     assert plugins.PACK_BUNDLE_TIMEOUT_S == 20
