@@ -28,8 +28,8 @@ export const PACK_BLOCKED_SELECT_VALUE = "__pack_blocked_catalog__";
  * verdict, or timed out). The UI shows the service's message as is:
  * - fresh install: "Couldn't safety-check <Name>, so it wasn't installed. <fix>"
  * - upgrade: "Couldn't safety-check the new version of <Name>, so it wasn't updated. You're still on
- *   v<old>. <fix>"
- * where <fix> is "Run `pnpm run prepare` in `web/` and try again." for a missing or stale built lint
+ *   version <old>. <fix>" ("The version you had is still installed." when the old version isn't known)
+ * where <fix> is "Run `pnpm run prepare` in `web/` and try again." for a missing, stale or unloadable built lint
  * (#186) and "Run `pnpm install` in `web/` and try again." otherwise. The wording is the service's,
  * from web/scripts/pack-install-lint-setup-copy.json; nothing here depends on it.
  */

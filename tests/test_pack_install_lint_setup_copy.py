@@ -81,7 +81,14 @@ def test_both_sides_read_the_one_table_file() -> None:
 def test_neither_side_carries_the_wording_of_its_own() -> None:
     """The sentence's words live only in the table: not in the service, the script or its module."""
     table = _table()
-    fragments = [*table["fixes"].values(), "so it wasn't installed", "so it wasn't updated", "You're still on"]
+    fragments = [
+        *table["fixes"].values(),
+        "so it wasn't installed",
+        "so it wasn't updated",
+        "You're still on",
+        "is still installed. Run",
+        "The version you had is still installed",
+    ]
     sources = [BUNDLE_SCRIPT, COPY_MODULE, *(ROOT / "service").glob("*.py")]
     hits = [(p.relative_to(ROOT).as_posix(), f) for p in sources for f in fragments if f in p.read_text(encoding="utf-8")]
     assert not hits, f"setup copy outside {TABLE.relative_to(ROOT)}: {hits}"
@@ -95,12 +102,20 @@ def test_every_reason_the_script_or_service_emits_is_in_the_table() -> None:
     assert set(table["reasons"].values()) | {table["default"]} <= set(table["fixes"]), table
 
 
+PREPARE_REASONS = ("lint_prebuilt_missing", "lint_prebuilt_stale", "lint_prebuilt_unloadable")
+
+
 def test_the_table_says_what_ux_pro_decided() -> None:
+    """A missing, stale or unloadable built lint: `pnpm run prepare`. Everything else: `pnpm install`.
+    Upgrade: "You're still on version <old>." / "The version you had is still installed." (both fixes)."""
     table = _table()
-    assert table["fixes"][table["reasons"]["lint_prebuilt_missing"]] == "Run `pnpm run prepare` in `web/` and try again."
-    assert table["fixes"][table["reasons"]["lint_prebuilt_stale"]] == "Run `pnpm run prepare` in `web/` and try again."
+    for reason in PREPARE_REASONS:
+        assert table["fixes"][table["reasons"][reason]] == "Run `pnpm run prepare` in `web/` and try again.", reason
+    assert table["still"] == "You're still on version {old}."
+    assert table["still_unknown"] == "The version you had is still installed."
+    assert table["upgrade"] == "Couldn't safety-check the new version of {name}, so it wasn't updated. {still} {fix}"
     for reason in (*_script_reasons(), *SERVICE_REASONS):
-        if reason in ("lint_prebuilt_missing", "lint_prebuilt_stale"):
+        if reason in PREPARE_REASONS:
             continue
         assert table["fixes"][table["reasons"][reason]] == "Run `pnpm install` in `web/` and try again.", reason
     assert table["fixes"][table["default"]] == "Run `pnpm install` in `web/` and try again."

@@ -44,7 +44,7 @@ const sdkRoot = path.join(repoRoot, "plugins/sdk");
 const PACK_NAME = "Star Sines";
 /**
  * UX Pro's fix sentences, pinned here as literals (the source is web/scripts/pack-install-lint-setup-copy.json):
- * #186 split them by setup reason; a missing or stale built lint says `pnpm run prepare`.
+ * #186 split them by setup reason; a missing, stale or unloadable built lint says `pnpm run prepare`.
  */
 const FIX_INSTALL = "Run `pnpm install` in `web/` and try again.";
 const FIX_PREPARE = "Run `pnpm run prepare` in `web/` and try again.";
@@ -60,7 +60,7 @@ const setupMsg = (name: string, fix: Fix) => `Couldn't safety-check ${name}, so 
 const SETUP_MSG_MISSING = setupMsg(PACK_NAME, FIX_PREPARE);
 /** UX Pro's upgrade copy (the service builds it; it knows the installed version). */
 const upgradeSetupMsg = (name: string, old: string, fix: Fix) =>
-  `Couldn't safety-check the new version of ${name}, so it wasn't updated. You're still on v${old}. ${fix}`;
+  `Couldn't safety-check the new version of ${name}, so it wasn't updated. You're still on version ${old}. ${fix}`;
 const EXIT_LINT_BLOCK = 1;
 const EXIT_LINT_SETUP = 3;
 const BARE_PASS = '{"type":"pack-install-lint-pass"}';
@@ -279,7 +279,7 @@ describe("#185 pack install lint fails closed (bundle-pack-entry.mjs)", () => {
       expect(blockMsg).not.toContain(s);
       expect(s).not.toMatch(/sandbox-escape|was blocked|indexedDB/);
     }
-    expect(blockMsg).not.toMatch(/safety-check|pnpm install|pnpm run prepare|wasn't (installed|updated)|still on v/);
+    expect(blockMsg).not.toMatch(/safety-check|pnpm install|pnpm run prepare|wasn't (installed|updated)|still on version/);
     expect(setup.stderr, "setup output carries none of the block's text").not.toContain(blockMsg);
     expect(setup.stderr).not.toMatch(/sandbox-escape|pack-install-lint-block|was blocked/);
     expect(block.stderr, "block output carries none of the setup text").not.toContain(setupText);
@@ -445,10 +445,10 @@ describe("#185 the install UI shows the setup refusal in the service's words", (
       expect(localPluginPublishChatLine(row, "frontend/index.ts"), "agent chat").toBe(message);
     }
     expect(upgradeSetupMsg(PACK_NAME, "3", FIX_INSTALL)).toBe(
-      "Couldn't safety-check the new version of Star Sines, so it wasn't updated. You're still on v3. Run `pnpm install` in `web/` and try again.",
+      "Couldn't safety-check the new version of Star Sines, so it wasn't updated. You're still on version 3. Run `pnpm install` in `web/` and try again.",
     );
     expect(upgradeSetupMsg(PACK_NAME, "3", FIX_PREPARE)).toBe(
-      "Couldn't safety-check the new version of Star Sines, so it wasn't updated. You're still on v3. Run `pnpm run prepare` in `web/` and try again.",
+      "Couldn't safety-check the new version of Star Sines, so it wasn't updated. You're still on version 3. Run `pnpm run prepare` in `web/` and try again.",
     );
   });
 });

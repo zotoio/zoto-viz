@@ -124,7 +124,7 @@ def test_zip_install_setup_refusal_names_its_own_cause(
     """Built lint deleted / stale (plugins/sdk edited after the build) / esbuild unresolvable: no
     install, the script's refusal code is 3 (what #169's ``bundle_setup_missing`` keys on), the log
     names this cause's own reason, and the user gets that reason's own sentence (``pnpm run prepare``
-    for a missing or stale built lint, ``pnpm install`` for esbuild)."""
+    for a missing or stale built lint (and an unloadable one), ``pnpm install`` for esbuild)."""
     _needs_node_tree()
     _repo(tmp_path, monkeypatch)
     monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", script_tree(tmp_path, **tree))

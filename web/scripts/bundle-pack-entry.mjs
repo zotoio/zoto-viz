@@ -80,9 +80,9 @@ const packName = manifestField(manifest, "name") || packId;
 
 /**
  * #186: `reason` is a machine-readable code for the log and the rows (never user text): which setup
- * step failed. The user sentence's fix depends on it (`pnpm run prepare` for a missing or stale built
- * lint, `pnpm install` otherwise); the wording lives in one table, pack-install-lint-setup-copy.json,
- * which the service reads too.
+ * step failed. The user sentence's fix depends on it (`pnpm run prepare` for a missing, stale or
+ * unloadable built lint, `pnpm install` otherwise); the wording lives in one table,
+ * pack-install-lint-setup-copy.json, which the service reads too.
  */
 const SETUP_REASONS = Object.freeze({
   noRepoRoot: "no_repo_root",

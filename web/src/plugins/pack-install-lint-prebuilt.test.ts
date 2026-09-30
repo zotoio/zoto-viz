@@ -39,8 +39,8 @@ const BUILT_PATH = path.join(webRoot, "scripts", BUILT);
 const PACK_NAME = "Star Sines";
 /**
  * The setup sentence by reason, pinned as literals (the source is web/scripts/pack-install-lint-setup-copy.json,
- * which service/pack_install_lint.py and bundle-pack-entry.mjs both read): a missing or stale built
- * lint says `pnpm run prepare` (an up-to-date `pnpm install` skips prepare); everything else keeps
+ * which service/pack_install_lint.py and bundle-pack-entry.mjs both read): a missing, stale or
+ * unloadable built lint says `pnpm run prepare` (an up-to-date `pnpm install` skips prepare); everything else keeps
  * #185's `pnpm install`.
  */
 const FIX_INSTALL = "Run `pnpm install` in `web/` and try again.";
@@ -160,10 +160,17 @@ function expectSandboxBlock(r: Run): void {
 }
 
 /** #186: bundle-pack-entry.mjs's machine-readable setup reasons (diagnostic line only, never user text). */
-type SetupReason = "lint_prebuilt_missing" | "lint_prebuilt_stale" | "esbuild_unresolvable" | "lint_threw" | "lint_no_verdict";
+type SetupReason =
+  | "lint_prebuilt_missing"
+  | "lint_prebuilt_stale"
+  | "lint_prebuilt_unloadable"
+  | "esbuild_unresolvable"
+  | "lint_threw"
+  | "lint_no_verdict";
 const FIX_FOR: Record<SetupReason, string> = {
   lint_prebuilt_missing: FIX_PREPARE,
   lint_prebuilt_stale: FIX_PREPARE,
+  lint_prebuilt_unloadable: FIX_PREPARE,
   esbuild_unresolvable: FIX_INSTALL,
   lint_threw: FIX_INSTALL,
   lint_no_verdict: FIX_INSTALL,
@@ -306,6 +313,14 @@ describe("#186 the built lint fails closed at install (exit 3, the reason's own 
     expect(String(setup[0]!.detail)).toMatch(/built lint not importable: .*; setup copy unavailable: ENOENT/);
     expect(r.stderr).not.toMatch(/Couldn't safety-check|\n\s+at .+:\d+:\d+/);
     expect(verdicts(r.stderr, "pack-install-lint-pass")).toEqual([]);
+  }, 60_000);
+
+  it("built lint unloadable (present but not valid JS): refused with the prepare sentence, the error only in the diagnostic line", () => {
+    const r = bundle(scriptTree({ built: "export const = ;\n" }), packHome());
+    expectSetupRefusal(r, "lint_prebuilt_unloadable", /built lint not importable: .*SyntaxError|built lint not importable: .*Unexpected/);
+    expect(setupMsg(PACK_NAME, "lint_prebuilt_unloadable")).toBe(
+      "Couldn't safety-check Star Sines, so it wasn't installed. Run `pnpm run prepare` in `web/` and try again.",
+    );
   }, 60_000);
 
   it("a built lint that throws: refused with the setup sentence, the error only in the diagnostic line", async () => {
