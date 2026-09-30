@@ -1,6 +1,8 @@
 /**
  * Pack-host frame instrumentation (near-zero cost when disabled).
- * Enabled = localStorage `zoto-viz.packPerf` === "1" OR the boot URL has `?packPerf` (OR, as before #196).
+ * Enabled = localStorage `zoto-viz.packPerf` === "1" OR the boot URL turns it on (OR, as before #196).
+ * - Boot URL (#199): `?packPerf=0` / `?packPerf=false` (any case) mean off; a bare `?packPerf` or any other
+ *   value means on. The OR stays: `?packPerf=0` with the stored key on still reads on.
  * The flag is resolved once at module init and cached: hooks and caller gates read a boolean, never
  * storage or the URL (#196).
  * - `?packPerf` is read at init only: changing it needs a reload.
@@ -85,7 +87,8 @@ function readStoreOn(): boolean {
 
 function readBootUrlOn(): boolean {
   try {
-    return new URLSearchParams(window.location.search).has("packPerf");
+    const v = new URLSearchParams(window.location.search).get("packPerf");
+    return v !== null && !/^(?:0|false)$/i.test(v);
   } catch {
     return false;
   }

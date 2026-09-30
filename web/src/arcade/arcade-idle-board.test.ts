@@ -119,7 +119,7 @@ function boardHosts(engine: Engine, view: unknown): string[] {
   return [...v.sources.rows.keys(), ...[...v.lanes.rows.values()].map((l) => l.host)];
 }
 
-type FetchMode = "empty" | "live" | "hold" | "error";
+type FetchMode = "empty" | "live" | "hold" | "error" | "away" | "hang";
 
 describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () => {
   let rec: Recorder;
@@ -128,14 +128,19 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
   let held: ((r: Response) => void)[] = [];
   let liveSeq = 0;
   let livePeer = "93.184.216.34";
+  /** real packets per live poll (#199 drives the rate to a pinned r0 with more) */
+  let liveK = 1;
 
   const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-  /** one real packet per poll, newer each time (a device on the LAN talking to a web host) */
+  /** liveK real packets per poll (newest first), newer each time (a device on the LAN talking to a web host) */
   const liveBody = (ip: string) => {
-    liveSeq++;
     const t = Date.now() / 1000;
-    const p: Packet = [t, "out", livePeer, "TCP", "tcp/443", 74, "eth0", "[SYN] Seq=0", `${50000 + liveSeq}→443`, "192.168.1.50"];
-    return { ip, peer: null, ts: t, packets: [p], window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] } };
+    const packets: Packet[] = [];
+    for (let i = 0; i < liveK; i++) {
+      liveSeq++;
+      packets.push([t - i * 0.001, "out", livePeer, "TCP", "tcp/443", 74, "eth0", "[SYN] Seq=0", `${50000 + liveSeq}→443`, "192.168.1.50"]);
+    }
+    return { ip, peer: null, ts: t, packets, window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] } };
   };
 
   beforeEach(() => {
@@ -144,11 +149,13 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
     rec = recordingCtx();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(rec.ctx as never);
-    fetches = 0; mode = "empty"; held = []; liveSeq = 0; livePeer = "93.184.216.34";
+    fetches = 0; mode = "empty"; held = []; liveSeq = 0; livePeer = "93.184.216.34"; liveK = 1;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       fetches++;
       const ip = new URL(url, "http://x").searchParams.get("ip") ?? "";
       if (mode === "hold") return new Promise<Response>((res) => held.push(res));
+      if (mode === "away") throw new TypeError("Failed to fetch");
+      if (mode === "hang") return new Promise<Response>(() => {}); // never settles
       if (mode === "error") return new Response(JSON.stringify({ error: "unknown device" }), { status: 404, headers: { "Content-Type": "application/json" } });
       return json(mode === "live" ? liveBody(ip) : { ip, packets: [] });
     }));
@@ -195,7 +202,9 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
     };
     /** advance exactly one poll interval (one /api/traffic fetch) */
     const poll = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "one poll per interval").toBe(f + 1); };
-    return { el, view, ingest, demoCalls, allRows, labelShown, badge, poll, hud, feedStatus };
+    /** one poll interval that must not start a fetch (the previous one is still in flight) */
+    const tick = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "no second fetch while one is in flight").toBe(f); };
+    return { el, view, ingest, demoCalls, allRows, labelShown, badge, poll, tick, hud, feedStatus };
   }
 
   async function runEngine(engine: Engine) {
@@ -274,6 +283,175 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       expect(demoCalls() - off, "no demo batch before the 3rd empty/failed poll in a row").toBe(0);
     });
 
+    // #199: with the server away (fetch rejects) the rate falls back x0.6 per failed poll, as netpong's does (#197).
+    // First HUD zero pinned (Math.round): from 4.352 on failed poll 5, from 50 on 10, from 200 on 12.
+    if (engine !== "netpong") for (const r of [{ r0: 4.352, k: 5, polls: 4, n: 5 }, { r0: 50, k: 125, polls: 1, n: 10 }, { r0: 200, k: 500, polls: 1, n: 12 }]) {
+      it(`${engine}: server away (fetch rejects) from ${r.r0} pkt/s — the HUD first reads 0 on failed poll ${r.n} (poll ${r.n - 1} still >= 1) (#199)`, async () => {
+        const { view, poll, hud, labelShown, demoCalls, ingest } = mount(engine, cleanHomeState());
+        if (view instanceof PongView) throw new Error("ArcadeView engines only");
+        const pps = () => view["pps"];
+        liveK = r.k;
+        mode = "live";
+        for (let i = 0; i < r.polls; i++) await poll();
+        expect(labelShown(), "live traffic: no demo").toBe(false);
+        expect(pps(), `r0 after ${r.polls} live poll(s) of ${r.k} packets`).toBeCloseTo(r.r0, 9);
+        const off = demoCalls();
+        mode = "away";
+        const seen: number[] = [];
+        for (let i = 1; i <= r.n; i++) {
+          await poll();
+          expect(pps(), `after ${i} failed fetch(es): r0 x 0.6^${i}`).toBeCloseTo(r.r0 * 0.6 ** i, 9);
+          expect(demoCalls() - off, `no demo batch by failed poll ${i} (up to the first zero)`).toBe(0);
+          const h = await hud();
+          expect(h.row, `HUD rate row drawn after failed poll ${i}`).not.toBe("");
+          seen.push(h.pps);
+        }
+        expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before failed poll ${r.n}: ${seen.join(", ")}`).toBe(true);
+        expect(seen[r.n - 1], `HUD reading on failed poll ${r.n} (all: ${seen.join(", ")})`).toBe(0);
+        expect(labelShown(), "no demo while the server is away").toBe(false);
+        // #199 (UX Pro, an empty board is a Fail): the tick after the first zero hands the board to the demo
+        await poll();
+        expect(demoCalls() - off, `demo batches on failed poll ${r.n + 1}, the tick after the first zero`).toBe(1);
+        expect(labelShown(), `demo label on failed poll ${r.n + 1}`).toBe(true);
+        const d = await hud();
+        expect(d.row, `HUD on failed poll ${r.n + 1}: the demo cue`).toMatch(/· demo\b/);
+        // the demo's own rate: the batch it just ingested (the live rows left with the board), not a made-up one
+        const batch = rowsOf(engine, ingest.mock.calls[ingest.mock.calls.length - 1]);
+        expect(pps(), `HUD rate on the demo: its ${batch.length}-row batch x 0.4`).toBeCloseTo(batch.length * 0.4, 9);
+        expect(d.pps, "HUD reading on the demo").toBe(Math.round(batch.length * 0.4));
+      });
+    }
+
+    // #199: a fetch that never settles: each interval tick that finds it still in flight is a quiet poll (x0.6) and
+    // starts no second fetch, as netpong's hung rows (pong-pps-decay.test.ts): first HUD zero on quiet tick 5 / 10 / 12.
+    if (engine !== "netpong") for (const r of [{ r0: 4.352, k: 5, polls: 4, n: 5 }, { r0: 50, k: 125, polls: 1, n: 10 }, { r0: 200, k: 500, polls: 1, n: 12 }]) {
+      it(`${engine}: hung fetch (never settles) from ${r.r0} pkt/s — each tick that finds it in flight is a quiet poll, no second fetch, and the HUD first reads 0 on quiet tick ${r.n} (#199)`, async () => {
+        const { view, poll, tick, hud, labelShown, demoCalls, ingest } = mount(engine, cleanHomeState());
+        if (view instanceof PongView) throw new Error("ArcadeView engines only");
+        const pps = () => view["pps"];
+        liveK = r.k;
+        mode = "live";
+        for (let i = 0; i < r.polls; i++) await poll();
+        expect(labelShown(), "live traffic: no demo").toBe(false);
+        expect(pps(), `r0 after ${r.polls} live poll(s) of ${r.k} packets`).toBeCloseTo(r.r0, 9);
+        const off = demoCalls();
+        mode = "hang";
+        await poll(); // this tick starts the fetch that never settles: nothing is known about it yet
+        expect(pps(), "the tick that starts the hung fetch").toBeCloseTo(r.r0, 9);
+        const f0 = fetches;
+        const seen: number[] = [];
+        for (let i = 1; i <= r.n; i++) {
+          await tick();
+          expect(pps(), `after ${i} tick(s) with the fetch still in flight: r0 x 0.6^${i}`).toBeCloseTo(r.r0 * 0.6 ** i, 9);
+          expect(demoCalls() - off, `no demo batch by quiet tick ${i} (up to the first zero)`).toBe(0);
+          const h = await hud();
+          expect(h.row, `HUD rate row drawn after quiet tick ${i}`).not.toBe("");
+          seen.push(h.pps);
+        }
+        expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before quiet tick ${r.n}: ${seen.join(", ")}`).toBe(true);
+        expect(seen[r.n - 1], `HUD reading on quiet tick ${r.n} (all: ${seen.join(", ")})`).toBe(0);
+        expect(fetches - f0, "fetches started while the hung one is in flight").toBe(0);
+        expect(labelShown(), "no demo while the fetch hangs").toBe(false);
+        // #199 (UX Pro, an empty board is a Fail): the tick after the first zero hands the board to the demo
+        await tick();
+        expect(demoCalls() - off, `demo batches on quiet tick ${r.n + 1}, the tick after the first zero`).toBe(1);
+        expect(labelShown(), `demo label on quiet tick ${r.n + 1}`).toBe(true);
+        const d = await hud();
+        expect(d.row, `HUD on quiet tick ${r.n + 1}: the demo cue`).toMatch(/· demo\b/);
+        // the demo's own rate: the batch it just ingested (the live rows left with the board), not a made-up one
+        const batch = rowsOf(engine, ingest.mock.calls[ingest.mock.calls.length - 1]);
+        expect(pps(), `HUD rate on the demo: its ${batch.length}-row batch x 0.4`).toBeCloseTo(batch.length * 0.4, 9);
+        expect(d.pps, "HUD reading on the demo").toBe(Math.round(batch.length * 0.4));
+        // the demo keeps playing locally on the next quiet tick, still with no second fetch
+        await tick();
+        expect(demoCalls() - off, "demo batches over 2 quiet ticks after the first zero").toBe(2);
+        expect(fetches - f0, "fetches started after the demo took over").toBe(0);
+      });
+    }
+
+    // #199: live takes over again from a demo that a failed or a hung fetch brought in, within that poll
+    if (engine !== "netpong") for (const path of ["away", "hold"] as const) {
+      it(`${engine}: ${path === "away" ? "server away" : "hung fetch"} → demo after the first zero → live answer: live takes over at once (no demo cue, live rate) (#199)`, async () => {
+        const { view, poll, tick, hud, labelShown, demoCalls } = mount(engine, cleanHomeState());
+        if (view instanceof PongView) throw new Error("ArcadeView engines only");
+        const pps = () => view["pps"];
+        liveK = 5;
+        mode = "live";
+        for (let i = 0; i < 4; i++) await poll();
+        expect(pps(), "r0 after 4 live polls of 5 packets").toBeCloseTo(4.352, 9);
+        const off = demoCalls();
+        mode = path;
+        if (path === "hold") await poll(); // starts the fetch that hangs until the row answers it
+        for (let i = 1; i <= 6; i++) await (path === "hold" ? tick() : poll());
+        expect(demoCalls() - off, "demo batches: one, on quiet tick 6 (the tick after the first zero)").toBe(1);
+        expect(labelShown(), "demo label on quiet tick 6").toBe(true);
+        expect((await hud()).demo, "HUD demo cue on quiet tick 6").toBe(true);
+        const f = fetches;
+        mode = "live";
+        if (path === "hold") {
+          expect(held.length, "the one hung fetch").toBe(1);
+          held.forEach((res) => res(json(liveBody("")))); held = [];
+          await vi.advanceTimersByTimeAsync(0);
+          expect(fetches, "the hung fetch's answer starts no fetch").toBe(f);
+        } else {
+          await poll();
+        }
+        expect(labelShown(), "demo label after the live answer").toBe(false);
+        const l = await hud();
+        expect(l.demo, `HUD after the live answer: no demo cue ("${l.row}")`).toBe(false);
+        expect(pps(), "live rate: 5 packets in one poll from a 0 start").toBeCloseTo(2, 9);
+        await poll(); // and polling carries on
+        expect(labelShown(), "demo label after the next live poll").toBe(false);
+      });
+    }
+
+    // #199 (UX Pro): once the demo is playing it makes its own batch on every tick whether the server answers, fails
+    // or hangs; it never waits on the fetch, so the board can't drain under a "Demo data" label.
+    for (const path of ["away", "hold"] as const) {
+      it(`${engine}: demo already playing, then ${path === "away" ? "the server goes away (fetch rejects)" : "the fetch hangs"} — a demo batch on every one of 12 ticks, board not empty, "· demo" and "Demo data" stay; a live answer then takes over on its tick (#199)`, async () => {
+        const { view, poll, tick, hud, labelShown, badge, demoCalls } = mount(engine, cleanHomeState());
+        const rate = () => (view instanceof PongView ? view["stats"].pps : view["pps"]);
+        // reach the demo the natural way: the poll at start and 2 quiet (empty) polls
+        await vi.advanceTimersByTimeAsync(0);
+        await poll();
+        await poll();
+        expect(labelShown(), "demo playing before the server goes away").toBe(true);
+        const f0 = fetches, d0 = demoCalls();
+        mode = path;
+        const perTick: number[] = [];
+        for (let i = 1; i <= 12; i++) {
+          const d = demoCalls();
+          // a rejected fetch each tick; for the hang, tick 1 starts the fetch that stays in flight and 2..12 start none
+          await (path === "hold" && i > 1 ? tick() : poll());
+          perTick.push(demoCalls() - d);
+        }
+        expect(demoCalls() - d0, `demo batches over 12 ticks with the server ${path === "away" ? "away" : "hung"} (per tick: ${perTick.join(", ")})`).toBe(12);
+        expect(fetches - f0, "fetches started over the 12 ticks").toBe(path === "away" ? 12 : 1);
+        expect(entities(engine, view), "board entities after 12 ticks").toBeGreaterThan(0);
+        const h = await hud();
+        expect(h.demo, `HUD "· demo" cue after 12 ticks ("${h.row}")`).toBe(true);
+        expect(h.pps, `HUD rate after 12 ticks ("${h.row}")`).toBeGreaterThan(0);
+        expect(labelShown(), "demo label after 12 ticks").toBe(true);
+        expect(badge(), "demo label text after 12 ticks").toBe(DEMO_DATA_LABEL);
+        // the server is back with live packets: live takes over on that tick
+        liveK = 5;
+        mode = "live";
+        if (path === "hold") {
+          expect(held.length, "the one hung fetch").toBe(1);
+          const f = fetches;
+          held.forEach((res) => res(json(liveBody("")))); held = [];
+          await vi.advanceTimersByTimeAsync(0);
+          expect(fetches, "the hung fetch's answer starts no fetch").toBe(f);
+        } else {
+          await poll();
+        }
+        expect(labelShown(), "demo label on the live answer's tick").toBe(false);
+        const l = await hud();
+        expect(l.demo, `HUD after the live answer: no demo cue ("${l.row}")`).toBe(false);
+        expect(rate(), "live rate: 5 packets in one poll from a 0 start").toBeCloseTo(2, 9);
+      });
+    }
+
     it(`${engine}: view stop — the feed panel drops the demo status with the view (#182)`, async () => {
       const { view, poll, feedStatus, badge, labelShown } = mount(engine, cleanHomeState());
       await poll();
@@ -287,11 +465,17 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       const { demoCalls, labelShown, poll, ingest } = mount(engine, cleanHomeState());
       await poll();
       expect(demoCalls(), "demo before live").toBeGreaterThan(0);
+      liveK = 5; // 4.352 pkt/s after 4 live polls: the reading stays >= 1 through the held stretch below (#199)
       mode = "live";
       const before = demoCalls(), calls0 = ingest.mock.calls.length;
-      for (let i = 0; i < 4; i++) await poll();
-      expect(demoCalls() - before, "feed calls during 4 live polls").toBe(0);
-      expect(ingest.mock.calls.length - calls0, "ingest calls during 4 live polls (live only)").toBe(4);
+      // #199: the demo never waits on the fetch, so the first live poll's tick still plays its demo batch before the
+      // live answer lands; that answer takes over on the same tick (the batch leaves with the board). None after.
+      await poll();
+      expect(demoCalls() - before, "feed calls on the first live poll (its tick, before the answer)").toBe(1);
+      expect(labelShown(), "label after the first live poll").toBe(false);
+      for (let i = 0; i < 3; i++) await poll();
+      expect(demoCalls() - before, "feed calls during 4 live polls").toBe(1);
+      expect(ingest.mock.calls.length - calls0, "ingest calls during 4 live polls (4 live + that 1 demo batch)").toBe(5);
       mode = "empty";
       const off = demoCalls();
       await poll();
@@ -299,10 +483,11 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       expect(labelShown(), "label after 1 empty poll").toBe(false);
       await poll();
       expect(demoCalls() - off, "feed calls after 2 empty polls").toBe(0);
-      // time alone does not bring it back: a long stretch with the poll held produces nothing
+      // time alone does not bring it back: a stretch with the poll held produces nothing while the reading is >= 1
+      // (#199: once a no-answer tick finds it at 0, the demo takes the board on that tick; see the hung-fetch rows)
       mode = "hold";
-      await vi.advanceTimersByTimeAsync(5000);
-      expect(demoCalls() - off, "feed calls after 5 s with no poll result").toBe(0);
+      await vi.advanceTimersByTimeAsync(3000);
+      expect(demoCalls() - off, "feed calls after 3 ticks with no poll result").toBe(0);
       held.forEach((res) => res(json({ ip: "", packets: [] }))); held = [];
       await vi.advanceTimersByTimeAsync(0);
       expect(demoCalls() - off, "feed calls after the 3rd empty poll in a row").toBe(1);
@@ -320,19 +505,30 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       expect(demoCalls(), `feed ingest calls over ${frames} frames and ${polls} polls`).toBeLessThanOrEqual(polls);
     });
 
-    it(`${engine}: (a) stillness — zero feed calls and zero extra renders while the demo state holds still`, async () => {
+    it(`${engine}: (a) stillness — over one full poll interval (tick included) exactly one feed call, the top-of-tick demo step, and zero extra renders while the demo state holds still`, async () => {
       const step = vi.spyOn(protoOf(engine), "step");
       const render = vi.spyOn(protoOf(engine), engine === "netpong" ? "drawHud" : "draw");
       const { view, demoCalls } = mount(engine, cleanHomeState());
       await vi.advanceTimersByTimeAsync(1000);
       expect(entities(engine, view), "demo board up").toBeGreaterThan(0);
       mode = "hold"; // no poll result lands: the demo state holds still
-      await vi.advanceTimersByTimeAsync(1000);
-      const d0 = demoCalls(), s0 = step.mock.calls.length, r0 = render.mock.calls.length;
-      for (let i = 0; i < 60; i++) await vi.advanceTimersByTimeAsync(17);
+      const d0 = demoCalls(), s0 = step.mock.calls.length, r0 = render.mock.calls.length, f0 = fetches;
+      // one full poll interval, from just after a tick up to and including the next tick (1000 ms, the boundary in):
+      // frame by frame, 17 ms at a time, the last advance landing exactly on the tick. #199: a playing demo makes its
+      // own batch at the top of every tick, before (and whatever) the fetch does, so exactly that one step lands in the
+      // window, on the tick that starts the fetch that then hangs. Nothing in between.
+      const perAdvance: number[] = [];
+      for (let t = 0; t < 1000; t += 17) {
+        const d = demoCalls();
+        await vi.advanceTimersByTimeAsync(Math.min(17, 1000 - t));
+        perAdvance.push(demoCalls() - d);
+      }
       const frames = step.mock.calls.length - s0, renders = render.mock.calls.length - r0;
-      expect(frames, "frames in the still stretch").toBeGreaterThanOrEqual(60);
-      expect(demoCalls() - d0, "feed calls while still").toBe(0);
+      const at = perAdvance.flatMap((n, i) => (n ? [`${n} by ${Math.min(1000, (i + 1) * 17)} ms`] : []));
+      expect(fetches - f0, "fetches in the window (the tick at its end starts the one that hangs)").toBe(1);
+      expect(frames, "frames in the still stretch").toBeGreaterThanOrEqual(55);
+      expect(demoCalls() - d0, `feed calls in one full interval, tick included (${at.join(", ") || "none"})`).toBe(1);
+      expect(perAdvance[perAdvance.length - 1], "the one feed call is the tick's top-of-tick demo step").toBe(1);
       expect(renders, "renders while still (one per frame, no extra)").toBe(frames);
     });
 
