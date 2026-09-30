@@ -1,0 +1,106 @@
+"""#186: the install-lint setup-refusal copy has one source, and the service and the script agree on it.
+
+web/scripts/pack-install-lint-setup-copy.json is the table: reason code -> fix sentence, plus the
+fresh-install and upgrade templates. service/pack_install_lint.py and
+web/scripts/pack-install-lint-setup-copy.mjs (which bundle-pack-entry.mjs uses) both read it. These rows
+fail if the two render any entry differently, if a reason the script can emit isn't in the table, or
+if either side carries a copy of the wording of its own.
+"""
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import subprocess
+from pathlib import Path
+
+import pytest
+
+from service import pack_install_lint as pil
+from service.pack_install_lint import SETUP_COPY_PATH, format_install_lint_setup_message
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "web" / "scripts"
+TABLE = SCRIPTS / "pack-install-lint-setup-copy.json"
+COPY_MODULE = SCRIPTS / "pack-install-lint-setup-copy.mjs"
+BUNDLE_SCRIPT = SCRIPTS / "bundle-pack-entry.mjs"
+#: Reasons only the service emits (not on the script's setup-error line).
+SERVICE_REASONS = ("no_pass_verdict",)
+NAMES = ("Star Sines", "", "  Upgrade Probe  ", "Pack {fix} {name}")
+
+
+def _table() -> dict:
+    return json.loads(TABLE.read_text(encoding="utf-8"))
+
+
+def _script_reasons() -> list[str]:
+    """The values of bundle-pack-entry.mjs's SETUP_REASONS (every reason code it can emit)."""
+    src = BUNDLE_SCRIPT.read_text(encoding="utf-8")
+    m = re.search(r"const SETUP_REASONS = Object\.freeze\(\{(.*?)\}\);", src, re.S)
+    assert m, "SETUP_REASONS in bundle-pack-entry.mjs"
+    reasons = re.findall(r':\s*"(\w+)"', m.group(1))
+    assert len(reasons) >= 9, reasons
+    return reasons
+
+
+def _script_sentences(cases: list[tuple[str, str]]) -> list[str]:
+    """What the script's renderer (the module bundle-pack-entry.mjs imports) says for each case."""
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not on PATH")
+    code = (
+        f"const m = await import({json.dumps(COPY_MODULE.as_uri())});"
+        "const cases = JSON.parse(process.argv[1]);"
+        "process.stdout.write(JSON.stringify(cases.map(([n, r]) => m.setupSentence(n, r))));"
+    )
+    r = subprocess.run(
+        [node, "--input-type=module", "-e", code, json.dumps(cases)], capture_output=True, text=True, timeout=30
+    )
+    assert r.returncode == 0, r.stderr
+    return json.loads(r.stdout)
+
+
+def test_the_service_and_the_script_render_every_table_entry_the_same() -> None:
+    reasons = [*_table()["reasons"], "", "not_a_reason"]
+    cases = [(name, reason) for reason in reasons for name in NAMES]
+    script = _script_sentences(cases)
+    service = [format_install_lint_setup_message(name, reason) for name, reason in cases]
+    diffs = [(c, s, v) for c, s, v in zip(cases, script, service) if s != v]
+    assert not diffs, f"service and script disagree on setup copy (case, script, service): {diffs}"
+
+
+def test_both_sides_read_the_one_table_file() -> None:
+    assert SETUP_COPY_PATH == TABLE, SETUP_COPY_PATH
+    assert pil.SETUP_COPY == _table(), "the service's table is the file's"
+    src = COPY_MODULE.read_text(encoding="utf-8")
+    assert re.search(r'SETUP_COPY_FILE = "pack-install-lint-setup-copy\.json"', src), "the script's module reads the same file"
+    assert "path.join(here, SETUP_COPY_FILE)" in src
+    assert re.search(r'import\("\./pack-install-lint-setup-copy\.mjs"\)', BUNDLE_SCRIPT.read_text(encoding="utf-8"))
+
+
+def test_neither_side_carries_the_wording_of_its_own() -> None:
+    """The sentence's words live only in the table: not in the service, the script or its module."""
+    table = _table()
+    fragments = [*table["fixes"].values(), "so it wasn't installed", "so it wasn't updated", "You're still on"]
+    sources = [BUNDLE_SCRIPT, COPY_MODULE, *(ROOT / "service").glob("*.py")]
+    hits = [(p.relative_to(ROOT).as_posix(), f) for p in sources for f in fragments if f in p.read_text(encoding="utf-8")]
+    assert not hits, f"setup copy outside {TABLE.relative_to(ROOT)}: {hits}"
+
+
+def test_every_reason_the_script_or_service_emits_is_in_the_table() -> None:
+    """No reason silently falls to the default; TSE's lint_timeout gets its own entry the same way."""
+    table = _table()
+    missing = [r for r in (*_script_reasons(), *SERVICE_REASONS) if r not in table["reasons"]]
+    assert not missing, f"reason codes without a table entry: {missing}"
+    assert set(table["reasons"].values()) | {table["default"]} <= set(table["fixes"]), table
+
+
+def test_the_table_says_what_ux_pro_decided() -> None:
+    table = _table()
+    assert table["fixes"][table["reasons"]["lint_prebuilt_missing"]] == "Run `pnpm run prepare` in `web/` and try again."
+    assert table["fixes"][table["reasons"]["lint_prebuilt_stale"]] == "Run `pnpm run prepare` in `web/` and try again."
+    for reason in (*_script_reasons(), *SERVICE_REASONS):
+        if reason in ("lint_prebuilt_missing", "lint_prebuilt_stale"):
+            continue
+        assert table["fixes"][table["reasons"][reason]] == "Run `pnpm install` in `web/` and try again.", reason
+    assert table["fixes"][table["default"]] == "Run `pnpm install` in `web/` and try again."
