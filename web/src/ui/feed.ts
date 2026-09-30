@@ -2,6 +2,7 @@ import { isSysBase } from "../core/modes";
 import { oneLineTitle, type SourceHeadline } from "../core/sources";
 import { decodePacket, type FeedKind } from "../inspect/decode";
 import { idsOf, type Packet, type TrafficMsg } from "../core/types";
+import { ARCADE_DEMO_EVENT, type ArcadeDemoDetail } from "../core/demo-source";
 import type { NetScene } from "../graph/scene";
 import { markFrame } from "../core/fps";
 import { frameTsFromRaf } from "../core/time-ms";
@@ -18,6 +19,8 @@ const POLL_MS = 800;
 const BAR_N = 20;
 const BAR_S = 1;
 const LINE_CAP = 400;
+/** The status line while a traffic poll has found nothing yet. */
+export const FEED_WAITING_TEXT = "waiting for packets…";
 
 export type FeedLayout = "ticker" | "bars" | "both";
 export type FeedScope = "lan" | "selected" | "any";
@@ -131,6 +134,8 @@ export class LiveFeed {
   private stickToBottom = true;
   private followTick = false;
   private lastScrollTop = 0;
+  /** #182: the status line shows an arcade view's demo badge text (not an operator notice) */
+  private demoHint = false;
 
   /** Operator-facing install / catalog copy in the feed chrome (not ticker rows). */
   showOperatorNotice(text: string): void {
@@ -173,6 +178,28 @@ export class LiveFeed {
       if (e.deltaY < 0) this.stickToBottom = false;
     }, { passive: true });
     this.loop = this.loop.bind(this);
+    document.addEventListener(ARCADE_DEMO_EVENT, (e) => {
+      const d = (e as CustomEvent<ArcadeDemoDetail>).detail;
+      if (d) this.setArcadeDemo(d.showing, d.text);
+    });
+  }
+
+  /**
+   * #182: while an arcade idle feed shows demo rows, the status line shows the badge's text instead of a stale
+   * "waiting for packets…"; it clears when the badge goes (live traffic took over, or the view stopped). Operator
+   * notices keep the line.
+   */
+  setArcadeDemo(showing: boolean, text: string): void {
+    if (showing && text) {
+      const cur = this.hint.textContent ?? "";
+      if (!this.demoHint && cur && cur !== FEED_WAITING_TEXT) return;
+      this.demoHint = true;
+      this.hint.textContent = text;
+      this.hint.hidden = false;
+    } else if (this.demoHint) {
+      this.demoHint = false;
+      this.hint.textContent = "";
+    }
   }
 
   /** RSS / HTTP / file headlines from the host sources registry. */
@@ -319,7 +346,7 @@ export class LiveFeed {
   private ingest(m: TrafficMsg): void {
     const pk = m.packets.slice().reverse();
     if (!pk.length) {
-      if (!this.lastT && !this.lines.length) this.hint.textContent = "waiting for packets…";
+      if (!this.lastT && !this.lines.length && !this.demoHint) this.hint.textContent = FEED_WAITING_TEXT;
       return;
     }
     const newest = pk[pk.length - 1]![0];
@@ -327,6 +354,7 @@ export class LiveFeed {
     const fresh = pk.filter((p) => p[0] > this.lastT);
     this.lastT = newest;
     if (!fresh.length) return;
+    this.demoHint = false;
     this.hint.textContent = "";
     let added = false;
     for (const p of fresh) {
