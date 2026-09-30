@@ -48,15 +48,16 @@ describe("main entry: consent change refreshes the header picker through one pat
     document.body.innerHTML = "";
   });
 
+  // 30 s hook: a load accommodation, not a behaviour change (booting main.ts overran 10 s on a loaded box).
   beforeEach(async () => {
     expect.hasAssertions();
     document.body.innerHTML = bodyHtml;
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.resetModules();
     await import("./main");
-    await vi.waitFor(() => document.querySelector("#modeBox #mode button") !== null, { timeout: 10_000, interval: 20 });
+    await vi.waitFor(() => document.querySelector("#modeBox #mode button") !== null, { timeout: 25_000, interval: 20 });
     await ticks(48);
-  });
+  }, 30_000);
 
   it("after a consent change, the header picker's options and its unavailable banner both refresh", { timeout: 20_000 }, async () => {
     // Same module instances main.ts bound to (imported after it, no reset in between).
