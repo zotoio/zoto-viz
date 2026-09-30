@@ -53,7 +53,7 @@ describe("mosaic panel view switch teardown", () => {
         aliasMap: new Map(),
       }),
     });
-    mosaic.setSize("2", "plugin:topology", "off", {
+    mosaic.setSize("4", "plugin:topology", "off", {
       tiles: ["plugin:topology", "plugin:wifi"],
     });
     let active = "plugin:topology";
@@ -106,7 +106,7 @@ describe("mosaic panel view switch teardown", () => {
         aliasMap: new Map(),
       }),
     });
-    mosaic.setSize("2", "plugin:topology", "off", {
+    mosaic.setSize("4", "plugin:topology", "off", {
       tiles: ["plugin:topology", "plugin:wifi"],
     });
     let active = "plugin:topology";

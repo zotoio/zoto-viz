@@ -4,6 +4,7 @@ import * as THREE from "three";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NetScene } from "./scene";
 import { RenderHost } from "./render-host";
+import { mockPartial } from "../../test-support/mock-partial";
 import { mosaicSceneOpts } from "./mosaic";
 import { failCompileWith } from "./shader-fallback-test-helpers";
 
@@ -33,13 +34,14 @@ describe("shader fallback mosaic tiles", () => {
     const host = new RenderHost(wall);
     Object.defineProperty(host, "software", { value: false });
     const rd = host.renderer as THREE.WebGLRenderer;
-    const gl = {
+    const gl = mockPartial<WebGL2RenderingContext>({
       getShaderInfoLog: () => "err",
       getProgramInfoLog: () => "",
-    } as unknown as WebGL2RenderingContext;
-    rd.compile = vi.fn(() => {
+    });
+    rd.compile = vi.fn((): Set<THREE.Material> => {
       rd.debug!.onShaderError!(gl, {} as never, {} as never, {} as never);
-    }) as typeof rd.compile;
+      return new Set();
+    });
     const s1 = new NetScene(paneT1, mosaicSceneOpts("t1", host));
     const s2 = new NetScene(paneT2, mosaicSceneOpts("t2", host));
     s1.setPluginShader(

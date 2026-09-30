@@ -240,6 +240,16 @@ function readTemplateLiteral(
   return null;
 }
 
+/**
+ * #194: a literal is the whole argument only if `)` or `,` (import attributes) follows it; anything
+ * else (`'./a' + b`, `` `./a`.concat(x) ``) makes the argument an expression.
+ */
+function literalIsWholeArgument(source: string, end: number): boolean {
+  let i = end;
+  while (i < source.length && /\s/.test(source[i]!)) i++;
+  return source[i] === ")" || source[i] === ",";
+}
+
 function parseRuntimeCall(
   source: string,
   index: number,
@@ -255,7 +265,13 @@ function parseRuntimeCall(
   const ch = source[i];
   if (ch === "'" || ch === '"') {
     const lit = readStringLiteral(source, i);
-    if (lit) return { kind: call === "import" ? "dynamic" : "require", specifier: lit.value, index };
+    if (lit && literalIsWholeArgument(source, lit.end)) {
+      return { kind: call === "import" ? "dynamic" : "require", specifier: lit.value, index };
+    }
+    if (lit) {
+      // Host reverse-boundary scans keep seeing the literal prefix, as before #194.
+      return { kind: "unverified", call, raw: rawCall(source, i, call), index, hostSpec: lit.value };
+    }
   }
   if (ch === "`") {
     const lit = readTemplateLiteral(source, i);
@@ -265,14 +281,21 @@ function parseRuntimeCall(
       if (lit.hasExpr) {
         return { kind: "unverified", call, raw: `${call}(\`…\${…}\`)`, index, hostSpec };
       }
-      return { kind: call === "import" ? "dynamic" : "require", specifier: lit.value, index };
+      if (literalIsWholeArgument(source, lit.end)) {
+        return { kind: call === "import" ? "dynamic" : "require", specifier: lit.value, index };
+      }
+      return { kind: "unverified", call, raw: rawCall(source, i, call), index, hostSpec: lit.value };
     }
   }
   if (ch === ")") {
     return { kind: "unverified", call, raw: `${call}()`, index };
   }
-  const rest = source.slice(i, Math.min(source.length, i + 40)).replace(/\s+/g, " ");
-  return { kind: "unverified", call, raw: `${call}(${rest.split(")")[0] ?? "?"})`, index };
+  return { kind: "unverified", call, raw: rawCall(source, i, call), index };
+}
+
+function rawCall(source: string, argStart: number, call: "import" | "require"): string {
+  const rest = source.slice(argStart, Math.min(source.length, argStart + 40)).replace(/\s+/g, " ");
+  return `${call}(${rest.split(")")[0] ?? "?"})`;
 }
 
 /** Extract pack-relevant import sites (comment-masked). */

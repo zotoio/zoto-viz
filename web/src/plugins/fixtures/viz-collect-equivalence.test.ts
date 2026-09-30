@@ -143,7 +143,7 @@ describe("viz collector rewrite allocation", () => {
       collectMod.applyVizFrameContractV2(collectEquivalenceVizFrame(state), state, opts);
     }
     const state = buildCollectEquivalenceState(300);
-    const frame = {
+    const frame: VizDataFrame = {
       contract: 2 as const,
       t: 0,
       dt: 0,
