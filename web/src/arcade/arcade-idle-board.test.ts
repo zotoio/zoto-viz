@@ -119,7 +119,7 @@ function boardHosts(engine: Engine, view: unknown): string[] {
   return [...v.sources.rows.keys(), ...[...v.lanes.rows.values()].map((l) => l.host)];
 }
 
-type FetchMode = "empty" | "live" | "hold" | "error" | "away";
+type FetchMode = "empty" | "live" | "hold" | "error" | "away" | "hang";
 
 describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () => {
   let rec: Recorder;
@@ -155,6 +155,7 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       const ip = new URL(url, "http://x").searchParams.get("ip") ?? "";
       if (mode === "hold") return new Promise<Response>((res) => held.push(res));
       if (mode === "away") throw new TypeError("Failed to fetch");
+      if (mode === "hang") return new Promise<Response>(() => {}); // never settles
       if (mode === "error") return new Response(JSON.stringify({ error: "unknown device" }), { status: 404, headers: { "Content-Type": "application/json" } });
       return json(mode === "live" ? liveBody(ip) : { ip, packets: [] });
     }));
@@ -201,7 +202,9 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
     };
     /** advance exactly one poll interval (one /api/traffic fetch) */
     const poll = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "one poll per interval").toBe(f + 1); };
-    return { el, view, ingest, demoCalls, allRows, labelShown, badge, poll, hud, feedStatus };
+    /** one poll interval that must not start a fetch (the previous one is still in flight) */
+    const tick = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "no second fetch while one is in flight").toBe(f); };
+    return { el, view, ingest, demoCalls, allRows, labelShown, badge, poll, tick, hud, feedStatus };
   }
 
   async function runEngine(engine: Engine) {
@@ -304,6 +307,37 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
         expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before failed poll ${r.n}: ${seen.join(", ")}`).toBe(true);
         expect(seen[r.n - 1], `HUD reading on failed poll ${r.n} (all: ${seen.join(", ")})`).toBe(0);
         expect(labelShown(), "no demo while the server is away").toBe(false);
+      });
+    }
+
+    // #199: a fetch that never settles: each interval tick that finds it still in flight is a quiet poll (x0.6) and
+    // starts no second fetch, as netpong's hung rows (pong-pps-decay.test.ts): first HUD zero on quiet tick 5 / 10 / 12.
+    if (engine !== "netpong") for (const r of [{ r0: 4.352, k: 5, polls: 4, n: 5 }, { r0: 50, k: 125, polls: 1, n: 10 }, { r0: 200, k: 500, polls: 1, n: 12 }]) {
+      it(`${engine}: hung fetch (never settles) from ${r.r0} pkt/s — each tick that finds it in flight is a quiet poll, no second fetch, and the HUD first reads 0 on quiet tick ${r.n} (#199)`, async () => {
+        const { view, poll, tick, hud, labelShown } = mount(engine, cleanHomeState());
+        if (view instanceof PongView) throw new Error("ArcadeView engines only");
+        const pps = () => view["pps"];
+        liveK = r.k;
+        mode = "live";
+        for (let i = 0; i < r.polls; i++) await poll();
+        expect(labelShown(), "live traffic: no demo").toBe(false);
+        expect(pps(), `r0 after ${r.polls} live poll(s) of ${r.k} packets`).toBeCloseTo(r.r0, 9);
+        mode = "hang";
+        await poll(); // this tick starts the fetch that never settles: nothing is known about it yet
+        expect(pps(), "the tick that starts the hung fetch").toBeCloseTo(r.r0, 9);
+        const f0 = fetches;
+        const seen: number[] = [];
+        for (let i = 1; i <= r.n; i++) {
+          await tick();
+          expect(pps(), `after ${i} tick(s) with the fetch still in flight: r0 x 0.6^${i}`).toBeCloseTo(r.r0 * 0.6 ** i, 9);
+          const h = await hud();
+          expect(h.row, `HUD rate row drawn after quiet tick ${i}`).not.toBe("");
+          seen.push(h.pps);
+        }
+        expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before quiet tick ${r.n}: ${seen.join(", ")}`).toBe(true);
+        expect(seen[r.n - 1], `HUD reading on quiet tick ${r.n} (all: ${seen.join(", ")})`).toBe(0);
+        expect(fetches - f0, "fetches started while the hung one is in flight").toBe(0);
+        expect(labelShown(), "no demo while the fetch hangs").toBe(false);
       });
     }
 

@@ -350,6 +350,8 @@ export abstract class ArcadeView {
   private raf = 0;
   private timer: number | null = null;
   private inflight = false;
+  /** the run ({@link gen}) the in-flight fetch belongs to */
+  private inflightGen = -1;
   private gen = 0;
   private lastFrame = 0;
   private dataKey = "";
@@ -396,7 +398,7 @@ export abstract class ArcadeView {
     this.onSnapshot();
     this.idle?.start(this.lastT === 0);
     if (this.useTraffic()) {
-      if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
+      if (this.timer === null) this.timer = window.setInterval(() => void this.poll(true), POLL_MS);
       void this.poll();
     }
     cancelAnimationFrame(this.raf);
@@ -468,12 +470,16 @@ export abstract class ArcadeView {
 
   // ---- data
 
-  private async poll(): Promise<void> {
+  /** `tick`: called by the poll interval (not by start / a retarget). */
+  private async poll(tick = false): Promise<void> {
     if (!this.useTraffic()) return;
     const q = this.query();
-    if (!this.running || !q || !q.ip || this.inflight) return;
+    if (!this.running || !q || !q.ip) return;
+    // #199: the last fetch (same query) has not settled by the next tick (a hung request): a quiet poll, no second fetch
+    if (this.inflight) { if (tick && this.inflightGen === this.gen) this.pps *= 0.6; return; }
     this.inflight = true;
     const gen = this.gen;
+    this.inflightGen = gen;
     try {
       let url = `/api/traffic?ip=${encodeURIComponent(q.ip)}`;
       if (q.peer) url += `&peer=${encodeURIComponent(q.peer)}`;
