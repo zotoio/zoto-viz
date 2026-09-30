@@ -7,16 +7,24 @@
  * once, and owns the only Reload button, shown exactly when the tiles' state carries `reload: true`
  * (UX Pro, #179 c).
  *
- * A tile whose shader pack already shows its own simple-view fallback (`.tile-shader-fallback`,
- * painted by the host's tile-shader latch) is left to that fallback, so no tile carries two messages.
+ * When the host's tile-shader latch has also mounted its fallback (`.tile-shader-fallback`), the tile
+ * still carries one message: a pack's own simple view (the fallback's "Simple view" chip) is left as
+ * it is; otherwise the latch's generic line ("can't run its graphics on this device", which is
+ * capability copy) is replaced by this surface's "couldn't draw" sentence, painted into the fallback.
  * The shader copy offers no button ("Pick another view, or reload to try again": both live elsewhere).
+ * While the line shows, the tile's floating graph labels (`.label`) are hidden: the tile carries
+ * `data-cant-draw-surface`, and style.css hides `.label` under it (only that tile's labels).
+ * The name goes through `sanitizePackDisplayName` (empty: viewStateCopy says "This view") and reaches
+ * the DOM as textContent only.
  * Where it lands comes from TSE's `viewStateTile(tileId, el)`: "main" is the solo wall (1 tile), a
  * mosaic pane counts the panes on its wall, so a solo tile drops "Other tiles aren't affected".
  */
 
+import { sanitizePackDisplayName } from "../graph/sanitize-pack-name";
 import { onViewStateChange, viewStateCopy, viewStateOf, viewStateTile, viewStateTileEl, viewStateViewId } from "./view-state";
 
 const SURFACE = "tile-cant-draw";
+const FALLBACK = "tile-shader-fallback";
 
 /** Display name for a tile's view (the copy falls back to "This view" when empty). */
 export type CantDrawViewName = (viewId: string, packId: string) => string;
@@ -28,11 +36,21 @@ export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName)
   const found = el.querySelector(`:scope > .${SURFACE}`);
   const existing = found instanceof HTMLElement ? found : null;
   const state = viewStateOf(tileId);
-  if (state?.kind !== "cant-draw" || state.reason !== "shader" || el.querySelector(".tile-shader-fallback")) {
+  const fallback = el.querySelector(`.${FALLBACK}`);
+  if (state?.kind !== "cant-draw" || state.reason !== "shader" || fallback?.querySelector(`.${FALLBACK}-chip`)) {
     existing?.remove();
+    delete el.dataset.cantDrawSurface;
     return;
   }
-  const copy = viewStateCopy(state, viewName(viewStateViewId(tileId) ?? tileId, state.packId), viewStateTile(tileId, el));
+  const name = sanitizePackDisplayName(viewName(viewStateViewId(tileId) ?? tileId, state.packId));
+  const line = viewStateCopy(state, name, viewStateTile(tileId, el)).text ?? "";
+  el.dataset.cantDrawSurface = state.reason;
+  const fallbackText = fallback?.querySelector(`.${FALLBACK}__text`);
+  if (fallbackText) {
+    existing?.remove();
+    fallbackText.textContent = line;
+    return;
+  }
   const box = existing ?? document.createElement("div");
   if (!existing) {
     box.className = SURFACE;
@@ -44,7 +62,7 @@ export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName)
   box.dataset.reason = state.reason;
   const text = document.createElement("span");
   text.className = `${SURFACE}__text`;
-  text.textContent = copy.text ?? "";
+  text.textContent = line;
   box.replaceChildren(text);
 }
 

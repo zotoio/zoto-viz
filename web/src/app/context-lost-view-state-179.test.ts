@@ -8,10 +8,13 @@
  * Observable: `viewStateOf` per tile, each tile element's `data-view-state`, the wall notice's text,
  * and `host.contextRecovery`.
  */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost, type HostedView } from "../graph/render-host";
-import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
+import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE, genericShaderFallbackMessage } from "../graph/shader-fallback-copy";
+import { TileShaderFallback } from "../graph/tile-shader-fallback";
 import { bindCantDrawViewState } from "./cant-draw-state";
 import { bindCantDrawSurface } from "./cant-draw-surface";
 import {
@@ -357,6 +360,10 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
     enterCantDrawShader("main", "fluid");
     expect(w.panes.get("main")!.querySelector(":scope > .tile-cant-draw")?.textContent)
       .toBe("Fluid couldn't draw. Pick another view, or reload to try again.");
+    leaveCantDrawShader("main");
+    enterCantDrawShader("main", ""); // a pack with no name: sanitized to nothing, viewStateCopy says "This view"
+    expect(w.panes.get("main")!.querySelector(":scope > .tile-cant-draw")?.textContent)
+      .toBe("This view couldn't draw. Pick another view, or reload to try again.");
   });
 
   it("shader on the only pane of a wall (not main, one tile): viewStateTile counts 1, so the line drops 'Other tiles aren't affected' too", () => {
@@ -366,13 +373,73 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
       .toBe("Fluid couldn't draw. Pick another view, or reload to try again.");
   });
 
-  it("a shader tile that already shows the pack's own fallback gets no second message", () => {
+  it("a shader tile showing the pack's own simple view (the fallback's chip) gets no second message, and its line stays the pack's", () => {
     w = bootWall(["a"]);
-    const fallback = document.createElement("div");
-    fallback.className = "tile-shader-fallback";
-    w.panes.get("a")!.appendChild(fallback);
+    const simple = new TileShaderFallback(w.panes.get("a")!, { packName: "Nixie Clock", showChip: true, initialText: "12:34:56" });
     enterCantDrawShader("a", "fluid");
     expect(tileSurfaces(w).length).toBe(0);
+    expect(w.panes.get("a")!.textContent).toBe("12:34:56Simple view");
+    simple.dispose();
+  });
+
+  it("the latch's generic fallback in a mosaic pane: its line becomes the one 'couldn't draw' sentence, not 'can't run its graphics on this device'", () => {
+    w = bootWall(["a", "b", "c"]);
+    const b = w.panes.get("b")!;
+    const generic = new TileShaderFallback(b, { packName: "Fluid", showChip: false, initialText: genericShaderFallbackMessage("Fluid") });
+    enterCantDrawShader("b", "fluid");
+    expect(b.textContent).toBe("Fluid couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.");
+    expect(b.textContent).not.toMatch(/on this device/);
+    expect(tileSurfaces(w).length, "one message: painted into the fallback, no second box").toBe(0);
+    generic.dispose();
+  });
+
+  it("mosaic labels: only the failed tile's graph labels hide while its line shows; they come back when it clears", () => {
+    const css = document.createElement("style");
+    css.textContent = readFileSync(resolve(import.meta.dirname, "../style.css"), "utf8");
+    document.head.appendChild(css);
+    try {
+      w = bootWall(["a", "b", "c"]);
+      const labels = new Map<string, HTMLElement>();
+      for (const [id, pane] of w.panes) {
+        const layer = document.createElement("div");
+        const label = document.createElement("div");
+        label.className = "label";
+        label.textContent = `node-${id}`;
+        layer.appendChild(label);
+        pane.appendChild(layer);
+        labels.set(id, label);
+      }
+      const hidden = () => [...labels].filter(([, l]) => labelVisibility(l) === "hidden").map(([id]) => id);
+      expect(hidden()).toEqual([]);
+      enterCantDrawShader("b", "fluid");
+      expect(hidden(), "b's labels only, while b's line shows").toEqual(["b"]);
+      leaveCantDrawShader("b");
+      expect(hidden(), "back once it clears").toEqual([]);
+    } finally {
+      css.remove();
+    }
+  });
+
+  it("capability: with no WebGL (the Canvas 2D host) a shader pack's tile never goes cant-draw / shader or says 'couldn't draw'; the capability copy still says 'on this device'", () => {
+    w = bootWall(["main"], { software: true });
+    setViewState("main", "plugin:fluid", { kind: "ready" });
+    w.host.beginTilePack("main", "plugin:fluid", "fluid", w.panes.get("main")!, "Fluid", true);
+    expect(w.host.probeTileSky("main", new THREE.Scene(), new THREE.PerspectiveCamera()), "no GPU compile to fail").toBeNull();
+    expect(viewStateOf("main")).toEqual({ kind: "ready" });
+    expect(w.wall.textContent ?? "").not.toMatch(/couldn't draw/);
+    expect(genericShaderFallbackMessage("Fluid")).toBe("Fluid can't run its graphics on this device. Other tiles aren't affected.");
   });
 });
+
+/**
+ * The label's visibility as the page's CSS gives it now. happy-dom caches an element's computed style and does
+ * not drop it when an ancestor's attribute changes (a browser does), so this reads a fresh copy in the same spot.
+ */
+function labelVisibility(label: HTMLElement): string {
+  const probe = label.cloneNode(true);
+  label.after(probe);
+  const vis = probe instanceof Element ? getComputedStyle(probe).visibility : "";
+  probe.parentNode?.removeChild(probe);
+  return vis;
+}
 
