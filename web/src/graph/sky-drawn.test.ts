@@ -4,10 +4,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SkyWaits, landWhenDrawn } from "../app/sky-wait";
 import { skyStartingShown } from "./sky-starting-card";
 import { SkyDrawnSignal } from "./sky-drawn";
-import { DEFAULT_DREAM, NetScene } from "./scene";
+import { DEFAULT_DREAM, NetScene, type PackSkyMeta } from "./scene";
 import { RenderHost } from "./render-host";
 import { PaneChangeProbe } from "./pane-change";
 import { mosaicSceneOpts } from "./mosaic";
+
+/** The pack the sky belongs to, as main.ts passes it (#171 c / #179). */
+const BACKROOMS: PackSkyMeta = { packId: "backrooms", packName: "NET Backrooms", packKey: "backrooms:" };
 
 /**
  * Spy WebGL2 context for the production rows. three's WebGLRenderer is replaced (module mock) by a
@@ -198,7 +201,7 @@ describe("NetScene.present on a spy GL (production path: RenderHost frame → an
     let events = 0;
     scene.onPluginSkyDrawn(() => { events++; });
     waits.begin("main");
-    expect(scene.setPluginShader({ id: "backrooms", source: OK_FRAG })).toBeNull();
+    expect(scene.setPluginShader({ id: "backrooms", source: OK_FRAG }, BACKROOMS)).toBeNull();
     landWhenDrawn(waits, "main", scene, "backrooms");
     expect(skyOf(scene).listenerCount).toBe(2);
     browserFrame(); // draws with the sky; the event waits for the next animation frame
@@ -229,7 +232,7 @@ describe("NetScene.present on a spy GL (production path: RenderHost frame → an
     const waits = waitFor(scenes[0]!.el);
     for (const { id, scene } of scenes) {
       waits.begin(id);
-      expect(scene.setPluginShader({ id: "backrooms", source: OK_FRAG })).toBeNull();
+      expect(scene.setPluginShader({ id: "backrooms", source: OK_FRAG }, BACKROOMS)).toBeNull();
       landWhenDrawn(waits, id, scene, "backrooms");
     }
     browserFrame();
@@ -254,7 +257,7 @@ describe("NetScene.present on a spy GL (production path: RenderHost frame → an
   it("skyDrawn.frame() is only called from present(), once per presented frame, and makes no GL call", () => {
     const { scenes, browserFrame } = mountWall(1);
     const { scene } = scenes[0]!;
-    expect(scene.setPluginShader({ id: "backrooms", source: OK_FRAG })).toBeNull();
+    expect(scene.setPluginShader({ id: "backrooms", source: OK_FRAG }, BACKROOMS)).toBeNull();
     for (let i = 0; i < 602; i++) browserFrame();
     expect(spy.state.renders).toBe(602);
     expect(skyFrames).toBe(602);
@@ -265,7 +268,7 @@ describe("NetScene.present on a spy GL (production path: RenderHost frame → an
   it("the only reads in a frame are fenced pixel-pack-buffer reads polled with timeout 0; in present() only the pane-change probe reads", () => {
     const { scenes, browserFrame } = mountWall(1);
     const { scene } = scenes[0]!;
-    expect(scene.setPluginShader({ id: "backrooms", source: OK_FRAG })).toBeNull();
+    expect(scene.setPluginShader({ id: "backrooms", source: OK_FRAG }, BACKROOMS)).toBeNull();
     browserFrame();
     browserFrame();
     const mark = spy.state.calls.length;

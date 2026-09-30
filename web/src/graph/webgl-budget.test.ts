@@ -10,7 +10,7 @@ function installWebGLMock() {
   const onLost = (e: Event) => lostEvents.push(e);
   document.addEventListener("webglcontextlost", onLost, true);
 
-  const loseContext = vi.fn(function (this: object) {
+  const loseContext = vi.fn(function (this: object, _gl?: unknown) {
     loseCalls.push(this);
   });
 
@@ -45,7 +45,7 @@ function installWebGLMock() {
   };
 
   const orig = HTMLCanvasElement.prototype.getContext;
-  HTMLCanvasElement.prototype.getContext = function (type: string, ...rest: unknown[]) {
+  HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string, ...rest: unknown[]) {
     if (String(type).includes("webgl")) return makeGl(this) as never;
     return orig.call(this, type as never, ...rest);
   } as typeof orig;

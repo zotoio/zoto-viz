@@ -104,7 +104,7 @@ describe("marble-run shipped pack", () => {
 
     const hostDelivers = clampManifestWorkBudgetToCeilings(
       { ...shippedWorkBudget(), maxSimStepsPerFrame: 99 },
-      ceilings as typeof shippedWorkBudget,
+      ceilings,
     );
     applyPackWorkBudget(hostDelivers);
     expect(marbleWorkBudget().maxSimStepsPerFrame).toBe(4);

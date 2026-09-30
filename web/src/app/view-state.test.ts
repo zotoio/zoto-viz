@@ -15,7 +15,11 @@ import {
   viewStateOf,
   viewStatePickerSuffix,
   type ViewState,
+  type ViewStateCopyTile,
 } from "./view-state";
+
+/** These kinds' copy doesn't depend on the tile; the solo wall is the real tile they land on. */
+const SOLO: ViewStateCopyTile = { tileId: "main", tileCount: 1 };
 
 describe("viewStateCopy: one switch, plain words, at most one button", () => {
   const rows: Array<[ViewState, string, string | null]> = [
@@ -31,14 +35,16 @@ describe("viewStateCopy: one switch, plain words, at most one button", () => {
   ];
   for (const [state, text, button] of rows) {
     it(`${state.kind}${"reason" in state ? `/${state.reason}` : ""}`, () => {
-      const copy = viewStateCopy(state, "Backrooms");
+      const copy = viewStateCopy(state, "Backrooms", SOLO);
       expect(copy.text ?? "").toContain(text);
       expect(copy.button).toBe(button);
     });
   }
 
   it("an unknown kind is a thrown error, not blank copy (assertNever)", () => {
-    expect(() => viewStateCopy({ kind: "cant-draw" } as unknown as ViewState, "Backrooms")).toThrow(/unhandled view state/);
+    // A persisted or foreign state the union doesn't know (cant-draw with no reason), as it would arrive at runtime.
+    const unknownKind: ViewState = JSON.parse('{"kind":"cant-draw"}');
+    expect(() => viewStateCopy(unknownKind, "Backrooms", SOLO)).toThrow(/unhandled view state/);
     expect(() => assertNever("x" as never)).toThrow(/unhandled view state/);
   });
 

@@ -38,7 +38,7 @@ import {
   totalTalkerRate,
   unpackKoiMeta,
 } from "./koi-pond";
-import type { VizDataFrame, VizSysTelemetry } from "../../../sdk/viz-contract";
+import { EMPTY_SYS_TELEMETRY, type VizDataFrame, type VizSysTelemetry } from "../../../sdk/viz-contract";
 import { probePluginSkyCompile, wrapPluginSky } from "./sky-compile";
 
 const talkers = [
@@ -53,14 +53,16 @@ const frame = (over: Partial<{
   audio: number;
   talkers: typeof talkers;
   packets: { proto: string; size: number; field: number }[];
-  sys?: { failed: number };
+  sys?: VizSysTelemetry;
   demo?: boolean;
-}> = {}) => ({
+}> = {}): VizDataFrame => ({
   t: 1,
   dt: 1 / 60,
   audio: 0.1,
   talkers,
   packets: [] as { proto: string; size: number; field: number }[],
+  rf: [],
+  headlines: [],
   demo: false,
   ...over,
 });
@@ -129,7 +131,7 @@ describe("koi-pond shipped pack", () => {
     const hi = FAIL_MURK_THRESHOLD + 0.25;
     expect(failureVisuals({ failed: hi }).banner).toBe(1);
     const sim = new KoiPondSim(DEFAULT_OPTIONS);
-    const packed = sim.advance(frame({ sys: { failed: hi } }));
+    const packed = sim.advance(frame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: hi } }));
     expect(packed.murk).toBeGreaterThan(0.1);
     expect(packed.failBanner).toBe(1);
   });

@@ -39,7 +39,7 @@ describe("pack bundle resolver", () => {
     if (!r.ok) expect(r.code).toBe("outside-boundary");
     const built = bundlePack(home);
     expect(built.ok).toBe(false);
-    expect(built.stderr).toContain("pack-bundle-boundary");
+    if (!built.ok) expect(built.stderr).toContain("pack-bundle-boundary");
   });
 
   it("allows a pack-local sdk/ folder (not repo plugins/sdk)", () => {
@@ -53,16 +53,16 @@ describe("pack bundle resolver", () => {
       repoRoot,
     });
     expect(r.ok).toBe(true);
-    if (r.ok && !("external" in r && r.external)) expect(r.zone).toBe("pack");
+    if (r.ok && !("external" in r)) expect(r.zone).toBe("pack");
     const built = bundlePack(home);
     expect(built.ok).toBe(true);
-    expect(built.js).toContain("pack-local-sdk");
+    if (built.ok) expect(built.js).toContain("pack-local-sdk");
   });
 
   it("rejects json outside pack and sdk", () => {
     const home = fixtureHome("json-escape");
     const built = bundlePack(home);
     expect(built.ok).toBe(false);
-    expect(built.stderr).toContain("pack-bundle-boundary");
+    if (!built.ok) expect(built.stderr).toContain("pack-bundle-boundary");
   });
 });

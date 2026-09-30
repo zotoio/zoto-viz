@@ -84,7 +84,7 @@ export function bindMosaicHostSettings(
       const spec = pm.pluginId ? host.pluginSpecForMode(pm.id) : null;
       if (!(await host.ensureReviewed(spec))) return;
       if (pm.standalone || host.arcadeSlotFor(pm) !== "carousel") {
-        void host.syncPluginSky(paneSpec);
+        void host.syncPluginSky(paneSpec).catch(() => {});
       }
     })();
     return true;

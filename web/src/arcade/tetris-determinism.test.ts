@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { NetScene } from "../graph/scene";
+import { mockPartial } from "../../test-support/mock-partial";
 import { resetVizClockInjectors, setVizClockInjector } from "../core/viz-clock";
 import { TetrisView } from "./tetris";
 import { bindTetrisStandaloneHost } from "./tetris-standalone-host";
@@ -9,7 +10,12 @@ const FRAME_MS = 16;
 const FRAMES = 600;
 
 function mockScene(): NetScene {
-  return { pulseNow: { level: 0 }, selectedIp: "", deviceOf: () => undefined, selectIp: () => {} } as NetScene;
+  return mockPartial<NetScene>({
+    pulseNow: mockPartial<NetScene["pulseNow"]>({ level: 0 }),
+    selectedIp: "",
+    deviceOf: () => undefined,
+    selectIp: () => {},
+  });
 }
 
 class TetrisHarness extends TetrisView {

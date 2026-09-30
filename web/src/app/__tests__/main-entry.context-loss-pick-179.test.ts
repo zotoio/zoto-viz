@@ -250,20 +250,20 @@ describe("#179 app level: Backrooms saved as the boot mode, context lost, then a
   });
 
   /**
-   * Pending #171 (c): the per-tile `{ kind: "cant-draw", reason: "context-lost" }` view state does not exist yet --
-   * not on main @ 37adacad (merged here): app/view-state.ts from #171 (b) has
-   * starting | ready | needs-you | couldnt-start only. Enable this row once #171 (c) lands. It expects, from
+   * #171 (c) landed on tse/issue-171c: app/view-state.ts has the per-tile `{ kind: "cant-draw", reason: "context-lost" }`
+   * view state, written from the host's draw events by app/cant-draw-state.ts. This row uses, from
    * web/src/app/view-state.ts:
    *   - `viewStateOf(tileId: string): ViewState | null`
    *   - a `ViewState` member `{ kind: "cant-draw"; reason: "context-lost" }` (the reason is part of the union)
    * and tile ids from each drawn view's `Scene.tileId` on the shared host.
    */
-  it.skip("pending #171 (c): every tile enters cant-draw / context-lost on a loss and leaves it on restore plus a drawn frame", { timeout: 30_000 }, async () => {
+  it("pending #171 (c): every tile enters cant-draw / context-lost on a loss and leaves it on restore plus a drawn frame", { timeout: 30_000 }, async () => {
+    await bootOnBackrooms();
+    // Imported after the boot: bootMainEntry resets modules, so only now is this the view-state main.ts writes to.
     const viewStateModule = `../${"view-state"}.ts`;
     const vs = (await import(/* @vite-ignore */ viewStateModule)) as {
       viewStateOf(tileId: string): { kind: string; reason?: string } | null;
     };
-    await bootOnBackrooms();
     frame();
     const tileIds = (t.host as unknown as { views: { tileId: string }[] }).views.map((v) => v.tileId);
     expect(tileIds.length, "tiles on the shared host").toBeGreaterThan(0);

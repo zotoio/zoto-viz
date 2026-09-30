@@ -62,7 +62,7 @@ describe("shader fallback gl context", () => {
     Object.defineProperty(host, "software", { value: false });
     failCompileWith(host, "dead", scene, camera, { shaderLog: "shader failed" });
     host.onTileShaderCompileFailed("dead");
-    const compile = vi.spyOn(host.renderer as THREE.WebGLRenderer, "compile").mockImplementation(() => {});
+    const compile = vi.spyOn(host.renderer as THREE.WebGLRenderer, "compile").mockImplementation(() => new Set());
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     host.canvas.dispatchEvent(new Event("webglcontextrestored"));
     drawOneHostFrame(host, wall); // the notice clears on the first drawn frame after the restore (#179)

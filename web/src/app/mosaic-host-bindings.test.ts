@@ -3,7 +3,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_DREAM } from "../graph/scene";
 import { lookForMode } from "../plugins/plugin";
 import { Settings } from "../ui/settings";
-import { setPluginModes, talkers, topology } from "../core/modes";
+import { setPluginModes, talkers, topology, type ViewMode } from "../core/modes";
+import type { Mosaic } from "../graph/mosaic";
+import type { PluginView } from "../plugins/plugin";
+import { mockPartial } from "../../test-support/mock-partial";
 import {
   agentPatchTilesWhenViewOffWall,
   bindMosaicHostSettings,
@@ -120,5 +123,46 @@ describe("mosaic host bindings", () => {
       expect.objectContaining({ id: "plugin:topology" }),
       { k: "v" },
     );
+  });
+
+  it("pane pick whose sky sync rejects: the rejection is caught (no unhandled rejection), the pane keeps the pick (#171 c)", async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => { unhandled.push(reason); };
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const setPaneView = vi.fn(() => true);
+      const focus = vi.fn();
+      const mosaic = mockPartial<Mosaic>({ on: true, tileIds: ["plugin:talkers", "plugin:topology"], setPaneView, focus });
+      const spec = mockPartial<PluginView>({ id: "topology", name: "Topology", version: 1 });
+      // The pane's pack sky fails (a compile error or a failed fetch): installPluginSky logs it and rejects.
+      // A plain function, not vi.fn: a spy tracks settled results, which would itself handle the rejection.
+      const synced: (PluginView | null)[] = [];
+      const syncPluginSky = async (s: PluginView | null): Promise<void> => {
+        synced.push(s);
+        throw new Error("shader failed");
+      };
+      const settings = new Settings({ storePrefix: "zoto-viz-bindings-reject", onChange: () => {} });
+      bindMosaicHostSettings(settings, {
+        getMosaic: () => mosaic,
+        modeById: (id) => mockPartial<ViewMode>({ id, pluginId: id.slice(7), label: id, standalone: false }),
+        optsFor: () => ({}),
+        pluginSpecForMode: () => spec,
+        ensureReviewed: async () => true,
+        skySpecForMode: (_id, fb) => fb,
+        syncPluginSky,
+        arcadeSlotFor: () => null,
+      });
+      expect(settings.onMosaicPanePick!("plugin:talkers", "plugin:topology")).toBe(true);
+      await vi.waitFor(() => expect(synced).toEqual([spec]));
+      // Node reports an unhandled rejection after the microtask queue drains: give it two macrotasks.
+      await new Promise((r) => setTimeout(r, 0));
+      await new Promise((r) => setTimeout(r, 0));
+      expect(unhandled.map(String), "unhandled rejections from the pane pick's sky sync").toEqual([]);
+      expect(setPaneView).toHaveBeenCalledWith("plugin:talkers", "plugin:topology");
+      expect(focus).toHaveBeenCalledWith("plugin:topology");
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+      setPluginModes([]);
+    }
   });
 });
