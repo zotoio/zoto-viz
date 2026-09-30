@@ -10,7 +10,9 @@
  * When the host's tile-shader latch has also mounted its fallback (`.tile-shader-fallback`), the tile
  * still carries one message: a pack's own simple view (the fallback's "Simple view" chip) is left as
  * it is; otherwise the latch's generic line ("can't run its graphics on this device", which is
- * capability copy) is replaced by this surface's "couldn't draw" sentence, painted into the fallback.
+ * capability copy) is hidden (style.css: `[data-cant-draw-surface] > .tile-shader-fallback`) and this
+ * surface's own "couldn't draw" line shows. The surface never writes into the latch's element, so the
+ * latch's 5 s fallback tick (refreshShaderFallbackText) can't overwrite the sentence.
  * The shader copy offers no button ("Pick another view, or reload to try again": both live elsewhere).
  * While the line shows, the tile's floating graph labels (`.label`) are hidden: the tile carries
  * `data-cant-draw-surface`, and style.css hides `.label` under it (only that tile's labels).
@@ -45,12 +47,6 @@ export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName)
   const name = sanitizePackDisplayName(viewName(viewStateViewId(tileId) ?? tileId, state.packId));
   const line = viewStateCopy(state, name, viewStateTile(tileId, el)).text ?? "";
   el.dataset.cantDrawSurface = state.reason;
-  const fallbackText = fallback?.querySelector(`.${FALLBACK}__text`);
-  if (fallbackText) {
-    existing?.remove();
-    fallbackText.textContent = line;
-    return;
-  }
   const box = existing ?? document.createElement("div");
   if (!existing) {
     box.className = SURFACE;

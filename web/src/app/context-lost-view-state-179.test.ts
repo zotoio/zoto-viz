@@ -14,6 +14,7 @@ import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost, type HostedView } from "../graph/render-host";
 import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE, genericShaderFallbackMessage } from "../graph/shader-fallback-copy";
+import * as shaderPackFallback from "../graph/shader-pack-fallback";
 import { TileShaderFallback } from "../graph/tile-shader-fallback";
 import { bindCantDrawViewState } from "./cant-draw-state";
 import { bindCantDrawSurface } from "./cant-draw-surface";
@@ -382,22 +383,47 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
     simple.dispose();
   });
 
-  it("the latch's generic fallback in a mosaic pane: its line becomes the one 'couldn't draw' sentence, not 'can't run its graphics on this device'", () => {
-    w = bootWall(["a", "b", "c"]);
-    const b = w.panes.get("b")!;
-    const generic = new TileShaderFallback(b, { packName: "Fluid", showChip: false, initialText: genericShaderFallbackMessage("Fluid") });
-    enterCantDrawShader("b", "fluid");
-    expect(b.textContent).toBe("Fluid couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.");
-    expect(b.textContent).not.toMatch(/on this device/);
-    expect(tileSurfaces(w).length, "one message: painted into the fallback, no second box").toBe(0);
-    generic.dispose();
+  it("the latch's generic fallback in a mosaic pane: 'can't run its graphics on this device' gives way to the one 'couldn't draw' line", () => {
+    withPageCss(() => {
+      w = bootWall(["a", "b", "c"]);
+      const b = w.panes.get("b")!;
+      const generic = new TileShaderFallback(b, { packName: "Fluid", showChip: false, initialText: genericShaderFallbackMessage("Fluid") });
+      enterCantDrawShader("b", "fluid");
+      expect(b.querySelector(":scope > .tile-cant-draw")?.textContent).toBe("Fluid couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.");
+      expect(visibilityNow(b.querySelector(".tile-shader-fallback")!), "the capability line is not shown").toBe("hidden");
+      expect(tileSurfaces(w).length, "one line on the wall").toBe(1);
+      generic.dispose();
+    });
+  });
+
+  it("QE: the latch's 5 s fallback tick rewrites its own line when the pack's line changes, and the tile still says 'couldn't draw'", () => {
+    let packLine = "";
+    const real = shaderPackFallback.shaderPackForId;
+    vi.spyOn(shaderPackFallback, "shaderPackForId").mockImplementation((id) => (id === "flaky" ? { fallbackText: () => packLine } : real(id)));
+    try {
+      withPageCss(() => {
+        w = bootWall(["main"]);
+        setViewState("main", "plugin:flaky", { kind: "ready" });
+        const main = w.panes.get("main")!;
+        // The latch's own entry for a failed tile (as its shader-fallback-hook rows drive the tick): the pack's
+        // hook has no line yet, so the latch mounts its generic line with no chip, and its 5 s tick is running.
+        w.host.beginTilePack("main", "plugin:flaky", "flaky", main, "Flaky", true);
+        w.host.onTileShaderCompileFailed("main");
+        const sentence = "flaky couldn't draw. Pick another view, or reload to try again.";
+        expect(main.querySelector(":scope > .tile-cant-draw")?.textContent).toBe(sentence);
+        packLine = "Simple view 12:00";
+        vi.advanceTimersByTime(5001);
+        expect(main.querySelector(".tile-shader-fallback__text")?.textContent, "the tick ran and rewrote the latch's line").toBe("Simple view 12:00");
+        expect(main.querySelector(":scope > .tile-cant-draw")?.textContent, "still the couldn't-draw line").toBe(sentence);
+        expect(visibilityNow(main.querySelector(".tile-shader-fallback")!), "the latch's line stays hidden under it").toBe("hidden");
+      });
+    } finally {
+      vi.restoreAllMocks();
+    }
   });
 
   it("mosaic labels: only the failed tile's graph labels hide while its line shows; they come back when it clears", () => {
-    const css = document.createElement("style");
-    css.textContent = readFileSync(resolve(import.meta.dirname, "../style.css"), "utf8");
-    document.head.appendChild(css);
-    try {
+    withPageCss(() => {
       w = bootWall(["a", "b", "c"]);
       const labels = new Map<string, HTMLElement>();
       for (const [id, pane] of w.panes) {
@@ -409,15 +435,13 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
         pane.appendChild(layer);
         labels.set(id, label);
       }
-      const hidden = () => [...labels].filter(([, l]) => labelVisibility(l) === "hidden").map(([id]) => id);
+      const hidden = () => [...labels].filter(([, l]) => visibilityNow(l) === "hidden").map(([id]) => id);
       expect(hidden()).toEqual([]);
       enterCantDrawShader("b", "fluid");
       expect(hidden(), "b's labels only, while b's line shows").toEqual(["b"]);
       leaveCantDrawShader("b");
       expect(hidden(), "back once it clears").toEqual([]);
-    } finally {
-      css.remove();
-    }
+    });
   });
 
   it("capability: with no WebGL (the Canvas 2D host) a shader pack's tile never goes cant-draw / shader or says 'couldn't draw'; the capability copy still says 'on this device'", () => {
@@ -431,13 +455,25 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
   });
 });
 
+/** Run `fn` with the page's own stylesheet loaded (the rows read computed visibility from it). */
+function withPageCss(fn: () => void): void {
+  const css = document.createElement("style");
+  css.textContent = readFileSync(resolve(import.meta.dirname, "../style.css"), "utf8");
+  document.head.appendChild(css);
+  try {
+    fn();
+  } finally {
+    css.remove();
+  }
+}
+
 /**
- * The label's visibility as the page's CSS gives it now. happy-dom caches an element's computed style and does
+ * An element's visibility as the page's CSS gives it now. happy-dom caches an element's computed style and does
  * not drop it when an ancestor's attribute changes (a browser does), so this reads a fresh copy in the same spot.
  */
-function labelVisibility(label: HTMLElement): string {
-  const probe = label.cloneNode(true);
-  label.after(probe);
+function visibilityNow(el: Element): string {
+  const probe = el.cloneNode(true);
+  el.after(probe);
   const vis = probe instanceof Element ? getComputedStyle(probe).visibility : "";
   probe.parentNode?.removeChild(probe);
   return vis;

@@ -109,6 +109,13 @@ async function bootOn(id: string, packs: Array<[string, string]>, failing: boole
 }
 
 const tile = () => document.getElementById("scene")!;
+/** The tile's own couldn't-draw line (the surface's role=status box). */
+const surfaceLine = () => tile().querySelector(":scope > .tile-cant-draw")?.textContent ?? "";
+/** The host latch's fallback line, when it is mounted and shown (hidden while the tile's own line shows). */
+const shownFallbackLine = () => {
+  const fb = tile().querySelector(".tile-shader-fallback");
+  return fb && visibilityNow(fb) !== "hidden" ? fb.textContent ?? "" : "";
+};
 
 /** main.ts's sky install failed on the GPU and the tile says so (waits for the async install and switch). */
 async function waitCouldntDraw(sentence: string): Promise<void> {
@@ -129,12 +136,12 @@ function graphLabel(): HTMLElement {
 }
 
 /**
- * The label's visibility as the page's CSS gives it now. happy-dom caches an element's computed style and does
+ * An element's visibility as the page's CSS gives it now. happy-dom caches an element's computed style and does
  * not drop it when an ancestor's attribute changes (a browser does), so this reads a fresh copy in the same spot.
  */
-function labelVisibility(label: HTMLElement): string {
-  const probe = label.cloneNode(true);
-  label.after(probe);
+function visibilityNow(el: Element): string {
+  const probe = el.cloneNode(true);
+  el.after(probe);
   const vis = probe instanceof Element ? getComputedStyle(probe).visibility : "";
   probe.parentNode?.removeChild(probe);
   return vis;
@@ -159,23 +166,23 @@ describe("#179 part (c) UX Pro: a solo wall whose pack shader fails (production 
   it("copy: a shader failure the tile-shader latch caught says 'couldn't draw' (viewStateCopy), never 'can't run its graphics on this device'", { timeout: 30_000 }, async () => {
     await bootOn("fluid-dyn", [["fluid-dyn", "Fluid Dynamics"]], true);
     await waitCouldntDraw("Fluid Dynamics couldn't draw. Pick another view, or reload to try again.");
-    expect(tile().querySelectorAll(".tile-shader-fallback").length, "the host's latch caught it (its fallback is up)").toBe(1);
-    const text = tile().textContent ?? "";
-    expect(text, "capability copy is not a shader failure").not.toMatch(/can't run its graphics|on this device/);
-    expect(text, "solo wall: no 'other tiles'").not.toMatch(/other tiles/i);
-    expect(text, "apply-mode keeps cant-draw: no generic couldn't-start over it").not.toMatch(/couldn't start/);
+    expect(tile().querySelectorAll(".tile-shader-fallback").length, "the host's latch caught it (its fallback is mounted)").toBe(1);
+    expect(surfaceLine(), "the tile's own line").toBe("Fluid Dynamics couldn't draw. Pick another view, or reload to try again.");
+    expect(shownFallbackLine(), "capability copy ('can't run its graphics on this device') is not shown for a shader failure").toBe("");
+    expect(tile().querySelector(":scope > .tile-cant-draw")?.getAttribute("role")).toBe("status");
+    expect(tile().textContent ?? "", "apply-mode keeps cant-draw: no generic couldn't-start over it").not.toMatch(/couldn't start/);
   });
 
   it("labels: the tile's graph labels are hidden while the couldn't-draw line shows, and come back when it clears", { timeout: 45_000 }, async () => {
     const packs: Array<[string, string]> = [["calm-sky", "Calm Sky"], ["fluid-dyn", "Fluid Dynamics"]];
     await bootOn("calm-sky", packs, false);
     const label = graphLabel();
-    expect(labelVisibility(label), "before the failure").not.toBe("hidden");
+    expect(visibilityNow(label), "before the failure").not.toBe("hidden");
     // Pick the pack whose sky fails: main.ts installs it, the host's probe fails the compile.
     t.failLog = FAIL_LOG;
     await pickModeFromUi("plugin:fluid-dyn");
     await waitCouldntDraw("Fluid Dynamics couldn't draw.");
-    expect(labelVisibility(label), "while the line shows").toBe("hidden");
+    expect(visibilityNow(label), "while the line shows").toBe("hidden");
     // Back to the pack whose sky compiled: the tile leaves cant-draw / shader, and its labels come back.
     // (main.ts does not reinstall that sky -- its failed install left skyLoaded on it -- so the host's fallback
     // element stays mounted; reported to TSE. This row is about the labels.)
@@ -183,7 +190,7 @@ describe("#179 part (c) UX Pro: a solo wall whose pack shader fails (production 
     t.failLog = null;
     await pickModeFromUi("plugin:calm-sky");
     await vi.waitFor(() => expect(vs.viewStateOf("main")?.kind).toBe("ready"), { timeout: 8000 });
-    expect(labelVisibility(label), "after it clears").not.toBe("hidden");
+    expect(visibilityNow(label), "after it clears").not.toBe("hidden");
   });
 
   it("name: a pack name with markup reaches the tile in literal, sanitized text (no element), and an empty name is 'This view'", { timeout: 60_000 }, async () => {
@@ -191,11 +198,11 @@ describe("#179 part (c) UX Pro: a solo wall whose pack shader fails (production 
     await bootOn("xss-pack", [["xss-pack", raw]], true);
     await waitCouldntDraw("couldn't draw");
     expect(tile().querySelectorAll("img").length, "no element injected from the pack name").toBe(0);
-    expect(tile().textContent ?? "").toContain("img src=x onerror=alert(1) couldn't draw. Pick another view, or reload to try again.");
+    expect(surfaceLine()).toBe("img src=x onerror=alert(1) couldn't draw. Pick another view, or reload to try again.");
     await new Promise((r) => setTimeout(r, 200));
     // A name that sanitizes to nothing (the catalog won't take an empty one): viewStateCopy says "This view".
     await bootOn("nameless", [["nameless", "<>"]], true);
     await waitCouldntDraw("couldn't draw");
-    expect(tile().textContent ?? "").toContain("This view couldn't draw. Pick another view, or reload to try again.");
+    expect(surfaceLine()).toBe("This view couldn't draw. Pick another view, or reload to try again.");
   });
 });
