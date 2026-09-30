@@ -24,6 +24,7 @@ import {
   nixiePackActiveCanvas,
 } from "./viz-pack-host";
 import type { VizDataFrame } from "./viz-host";
+import { EMPTY_SYS_TELEMETRY } from "../../../plugins/sdk/viz-contract";
 
 const SYDNEY = "Australia/Sydney";
 const UTC = "UTC";
@@ -37,7 +38,8 @@ function emptyFrame(): VizDataFrame {
     rf: [],
     talkers: [],
     headlines: [],
-    sys: { cpu: 0, mem: 0, load: 0, temp: 0, disk: 0, net: 0 },
+    // Nixie reads no gauges; the zeroed contract shape stands in for the old load / net keys.
+    sys: { ...EMPTY_SYS_TELEMETRY },
   };
 }
 

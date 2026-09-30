@@ -115,7 +115,9 @@ describe("pack navigation stop clear UX", () => {
       label: id,
     })));
     const mosaic = mosaicWall(tileId);
-    mosaic.setSize("1", tileId);
+    // A one-tile wall, then a size change that keeps the same one tile: the wall rebuilds its panes
+    // (the size differs, so it is not the same wall) around the stopped tile.
+    mosaic.setSize("4", tileId, "off", { tiles: [tileId] });
     let pane = mosaicPane(mosaic, tileId);
     markPackNavigationStopped(tileId);
     paintPackAssetPaneNotice(pane, packNavigationStopped("Wi-Fi"), "fail", {
@@ -125,7 +127,7 @@ describe("pack navigation stop clear UX", () => {
     beginActivePackLoad(tileId, "Wi-Fi");
     const clearSpy = vi.spyOn(packNav, "clearPackNavigationStopped");
 
-    mosaic.setSize("2", tileId);
+    mosaic.setSize("6", tileId, "off", { tiles: [tileId] });
     pane = mosaicPane(mosaic, tileId);
 
     expect(clearSpy).not.toHaveBeenCalled();
@@ -169,7 +171,7 @@ describe("pack navigation stop clear UX", () => {
     expect(newStops).toBe(1);
 
     const origFetch = globalThis.fetch;
-    globalThis.fetch = vi.fn(async (url: string) => {
+    globalThis.fetch = vi.fn(async (url: RequestInfo | URL) => {
       const u = String(url);
       if (u.includes(oldTok)) {
         return {

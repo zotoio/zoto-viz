@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { tickVoxelWorld, initVoxelWorld, setVoxConfig } from "../../../plugins/src/voxel-world/frontend/engine";
 import { VOX_SLOT } from "../../../plugins/src/voxel-world/frontend/slots";
+import { EMPTY_SYS_TELEMETRY } from "../../../plugins/sdk/viz-contract";
 
 describe("voxel present cadence", () => {
   it("advances camera slot sim time each tick with real dt", () => {
@@ -12,7 +13,8 @@ describe("voxel present cadence", () => {
       packets: [],
       talkers: [],
       headlines: [],
-      sys: { cpu: 0, mem: 0, load: 0, failed: 0 },
+      // The engine reads only cpu and failed (both 0, as before); `load` is not a contract gauge.
+      sys: { ...EMPTY_SYS_TELEMETRY },
     };
     const a = tickVoxelWorld(frame, 1.6, 1 / 60).slot0.slice();
     const b = tickVoxelWorld(frame, 1.6, 1 / 60).slot0.slice();

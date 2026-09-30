@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Flow } from "../core/types";
+import type { Flow, StateMsg } from "../core/types";
+import type { VizDataFrame } from "./viz-host";
 import {
   applyVizFrameContractV2,
   collectVizLinks,
@@ -137,7 +138,7 @@ describe("viz link index R1 pruning", () => {
         flows,
         host: { vizFrame: { links: true, linksMax: 8 } },
       };
-      const frame = {
+      const frame: VizDataFrame = {
         contract: 2 as const,
         t: batch,
         dt: 0.016,
@@ -254,7 +255,7 @@ describe("viz link index R7 syncTalkerIds production path", () => {
       rate_pkt_ab: 42,
       rate_pkt_ba: 0,
     };
-    const state = {
+    const state: StateMsg = {
       type: "state" as const,
       ts: 0,
       iface: "eth0",
@@ -275,10 +276,10 @@ describe("viz link index R7 syncTalkerIds production path", () => {
       },
       devices: [],
       flows: [flow],
-      sources: [],
+      sources: {},
       host: { vizFrame: { links: true, linksMax: 8 } },
     };
-    const frameBefore = {
+    const frameBefore: VizDataFrame = {
       contract: 2 as const,
       t: 0,
       dt: 0.016,
@@ -293,7 +294,7 @@ describe("viz link index R7 syncTalkerIds production path", () => {
     };
     mod.applyVizFrameContractV2(frameBefore, state, opts);
     expect(frameBefore.links?.map((l) => `${l.src}>${l.dst}@${l.rate}`)).toEqual(["10.0.0.1>10.0.0.2@42"]);
-    const frameAfter = {
+    const frameAfter: VizDataFrame = {
       ...frameBefore,
       t: 1,
       talkers: [

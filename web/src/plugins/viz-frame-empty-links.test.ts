@@ -7,7 +7,8 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { describe, expect, it, beforeEach } from "vitest";
-import type { StateMsg } from "../core/types";
+import type { Device, StateMsg } from "../core/types";
+import { mockPartial } from "../../test-support/mock-partial";
 import type { VizDataFrame, VizLinkSample } from "./viz-host";
 import { EMPTY_VIZ_LINKS } from "../../../plugins/sdk/viz-contract";
 import { applyVizFrameContractV2, resolveVizFrameCollectOpts } from "./viz-frame-collect";
@@ -30,13 +31,13 @@ function baseFrame(): VizDataFrame {
 }
 
 function linksOnEmptyState(): StateMsg {
-  return {
+  return mockPartial<StateMsg>({
     ts: 1,
-    devices: [{ ip: "10.0.0.1", packets: 1, bytes: 1, role: "lan" }],
+    devices: [mockPartial<Device>({ ip: "10.0.0.1", packets: 1, role: "lan" })],
     flows: [],
-    sources: [],
+    sources: {},
     host: { vizFrame: { links: true } },
-  };
+  });
 }
 
 function pushBadLink(frame: VizDataFrame): void {

@@ -12,6 +12,7 @@ import type { PluginView } from "./plugin";
 
 const pack = (over: Partial<PluginView> = {}): PluginView => ({
   id: "carousel",
+  name: "Carousel",
   packName: "Carousel",
   version: 1,
   engine: "carousel",

@@ -3,14 +3,16 @@ import { TileHealthMonitor, writeTileHealErrors } from "./tile-health-monitor";
 import { TILE_LOAD_GRACE_MS, freshTileHealthState } from "./tile-health";
 import type { NetScene } from "../graph/scene";
 import type { RenderHost } from "../graph/render-host";
+import { deviceRect } from "../graph/pack-mirror-rect";
+import { mockPartial } from "../../test-support/mock-partial";
 
 function mockScene(serial = 0, lost = false): NetScene {
-  return {
+  return mockPartial<NetScene>({
     viewEl: document.createElement("div"),
     pictureSerial: serial,
     gpuContextLost: lost,
-    lastViewport: { x: 0, y: 0, w: 200, h: 120 },
-  } as NetScene;
+    lastViewport: deviceRect(0, 0, 200, 120),
+  });
 }
 
 function baseMonitor(over: Partial<{
@@ -19,15 +21,16 @@ function baseMonitor(over: Partial<{
   tabVisible: boolean | (() => boolean);
   onHeal: (id: string, step: string) => void;
 }> = {}) {
-  const awaiting = typeof over.awaitingApproval === "function"
-    ? over.awaitingApproval
-    : () => over.awaitingApproval ?? false;
-  const onScreen = typeof over.onScreen === "function"
-    ? over.onScreen
-    : () => over.onScreen ?? true;
-  const tabVisible = typeof over.tabVisible === "function"
-    ? over.tabVisible
-    : () => over.tabVisible ?? true;
+  const { awaitingApproval, onScreen: onScreenOver, tabVisible: tabVisibleOver } = over;
+  const awaiting = typeof awaitingApproval === "function"
+    ? awaitingApproval
+    : () => awaitingApproval ?? false;
+  const onScreen = typeof onScreenOver === "function"
+    ? onScreenOver
+    : () => onScreenOver ?? true;
+  const tabVisible = typeof tabVisibleOver === "function"
+    ? tabVisibleOver
+    : () => tabVisibleOver ?? true;
   const host = {
     software: true,
     canvas: document.createElement("canvas"),
@@ -106,7 +109,8 @@ describe("TileHealthMonitor exemptions", () => {
     let tab = true;
     const { mon } = baseMonitor({ tabVisible: () => tab });
     const internal = mon as unknown as { states: Map<string, { emptyStreak: number }> };
-    internal.states.set("main", { ...freshTileHealthState(), emptyStreak: 2, backoffUntil: 50_000 });
+    const seeded = { ...freshTileHealthState(), emptyStreak: 2, backoffUntil: 50_000 };
+    internal.states.set("main", seeded);
     tab = false;
     (mon as unknown as { onTabVisibility: () => void }).onTabVisibility();
     expect(mon.state("main").emptyStreak).toBe(0);

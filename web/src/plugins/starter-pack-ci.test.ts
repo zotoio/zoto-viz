@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
-import type { VizDataFrame } from "../../../plugins/sdk/viz-contract";
+import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../plugins/sdk/viz-contract";
 import { VIZ_FIXTURE_IDLE } from "../../../plugins/sdk/viz-fixtures";
 import { formatViolationMessage, scanPackDirectory } from "../../../plugins/sdk/pack-lint";
 import { StarterSim } from "../../../plugins/sdk/starter/frontend/sim";
@@ -43,7 +43,8 @@ function lintStarterAsShippedPack(packRoot: string) {
 function withSysFailed(frame: VizDataFrame, failed: number): VizDataFrame {
   return {
     ...frame,
-    sys: { ...(frame.sys ?? {}), failed },
+    // Every frame passed here carries the full gauge set (VIZ_FIXTURE_IDLE); the zeroed set only types the fallback.
+    sys: { ...(frame.sys ?? EMPTY_SYS_TELEMETRY), failed },
   };
 }
 
@@ -115,7 +116,7 @@ describe("pack starter template CI", () => {
     try {
       const result = await runStarterPackDrawPipeline(repoRoot, packHome);
       expect(result.ok).toBe(false);
-      expect(result.stage).toBe("visualisation-contract");
+      expect(result.ok ? null : result.stage).toBe("visualisation-contract");
     } finally {
       rmSync(stageRoot, { recursive: true, force: true });
     }
@@ -143,7 +144,7 @@ describe("pack starter template CI", () => {
     try {
       const result = await runStarterPackDrawPipeline(repoRoot, packHome);
       expect(result.ok).toBe(false);
-      expect(result.stage).toBe("shader");
+      expect(result.ok ? null : result.stage).toBe("shader");
     } finally {
       rmSync(stageRoot, { recursive: true, force: true });
     }

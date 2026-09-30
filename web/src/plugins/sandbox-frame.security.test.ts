@@ -8,6 +8,7 @@ import {
   setSandboxFrameLocationHref,
   type SandboxZoto,
 } from "./sandbox-frame";
+import { mockPartial } from "../../test-support/mock-partial";
 
 describe("sandbox-frame boot security", () => {
   it("ignores boot-channel when event.source is not window.parent", () => {
@@ -15,7 +16,7 @@ describe("sandbox-frame boot security", () => {
     setSandboxFrameLocationHref("http://127.0.0.1/#zoto-boot=nonce-1");
     const foreign = {} as MessageEventSource;
     const ch = new MessageChannel();
-    const ev = {
+    const ev = mockPartial<MessageEvent>({
       data: {
         source: HOST_SOURCE,
         type: "boot-channel",
@@ -24,8 +25,9 @@ describe("sandbox-frame boot security", () => {
       },
       source: foreign,
       ports: [ch.port2],
-    } as MessageEvent;
-    handleSandboxBootChannelMessage(ev);
+    });
+    // The runtime the nonce was just set on, so only the source check can keep the port out.
+    handleSandboxBootChannelMessage(ev, sandboxFrameRuntimeForTests());
     expect(sandboxFrameRuntimeForTests().pluginPort).toBeNull();
   });
 

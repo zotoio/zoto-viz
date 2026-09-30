@@ -9,6 +9,7 @@ import {
   sandboxBitmapLane,
 } from "./sandbox-bitmap";
 import { PluginSandbox } from "./host";
+import { mockPartial } from "../../test-support/mock-partial";
 
 function mockBitmap(): ImageBitmap {
   const close = vi.fn();
@@ -157,10 +158,10 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {});
     const bmp = mockBitmap();
     const src = box["iframe"]!.contentWindow;
-    box["onMessage"]({
+    box["onMessage"](mockPartial<MessageEvent>({
       source: src ?? null,
       data: { source: "zoto-viz-plugin", type: "publishBitmap", payload: { bitmap: bmp } },
-    } as MessageEvent);
+    }));
     expect(seen).toHaveLength(1);
     expect(seen[0]).toBe(bmp);
     box.unload();
@@ -204,10 +205,10 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     box.handlers = { publishBitmap: (_id, bmp) => seen.push(bmp) };
     await box.load("secure", "globalThis.ok = true;", ["viz.write"], {});
     const bmp = mockBitmap();
-    box["onMessage"]({
+    box["onMessage"](mockPartial<MessageEvent>({
       source: window,
       data: { source: "zoto-viz-plugin", type: "publishBitmap", payload: { bitmap: bmp } },
-    } as MessageEvent);
+    }));
     expect(seen).toHaveLength(0);
     expect(bmp.close).toHaveBeenCalledOnce();
     box.unload();
@@ -235,10 +236,10 @@ describe("duplicate pack mirror (Performance Pedant)", () => {
     };
     await box.load("pulse", "globalThis.ok = true;", ["viz.write"], {});
     const src = box["iframe"]!.contentWindow;
-    box["onMessage"]({
+    box["onMessage"](mockPartial<MessageEvent>({
       source: src ?? null,
       data: { source: "zoto-viz-plugin", type: "publishBitmapFailed", payload: {} },
-    } as MessageEvent);
+    }));
     expect(lane.shouldShowFailurePlaceholder()).toBe(true);
     box.unload();
   });

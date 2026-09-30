@@ -32,6 +32,15 @@ import {
 } from "./sandbox-test-harness";
 import { defaultVizContract } from "./viz-host";
 import { VIZ_WRITE_BATCH_MAX_BYTES } from "./viz-write-batch";
+import { mockPartial } from "../../test-support/mock-partial";
+
+// scripts/revert-proof-lib.mjs reads these two keys off each test's task.meta (vitest JSON report).
+declare module "vitest" {
+  interface TaskMeta {
+    revertProofAssertion?: boolean;
+    revertProofRed?: { actual: unknown; expected: unknown };
+  }
+}
 
 const FRAME_ID = "11111111-1111-4111-8111-111111111111";
 
@@ -98,7 +107,7 @@ describe("sandbox write path counts (#129)", () => {
       setSandboxFrameLocationHref("http://127.0.0.1/#zoto-boot=nonce-src");
       const ch = new MessageChannel();
       handleSandboxBootChannelMessage(
-        {
+        mockPartial<MessageEvent>({
           data: {
             source: HOST_SOURCE,
             type: "boot-channel",
@@ -107,7 +116,7 @@ describe("sandbox write path counts (#129)", () => {
           },
           source: {} as MessageEventSource,
           ports: [ch.port2],
-        } as MessageEvent,
+        }),
         sandboxFrameRuntimeForTests(),
       );
       expect(sandboxFrameRuntimeForTests().pluginPort === null).toBe(true);
@@ -120,7 +129,7 @@ describe("sandbox write path counts (#129)", () => {
       resetSandboxFrameRuntimeForTests();
       setSandboxFrameLocationHref("http://127.0.0.1/#zoto-boot=nonce-revert");
       const ch = new MessageChannel();
-      const ev = {
+      const ev = mockPartial<MessageEvent>({
         data: {
           source: HOST_SOURCE,
           type: "boot-channel",
@@ -129,7 +138,7 @@ describe("sandbox write path counts (#129)", () => {
         },
         source: {} as MessageEventSource,
         ports: [ch.port2],
-      } as MessageEvent;
+      });
       if (ev.source !== window.parent) {
         attachSandboxHostPort(ch.port2, sandboxFrameRuntimeForTests(), sandboxZotoApi);
       }

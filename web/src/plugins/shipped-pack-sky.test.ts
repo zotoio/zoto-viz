@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { probePluginSkyCompile, wrapPluginSky } from "./plugin-sky-probe";
+import { mockPartial } from "../../test-support/mock-partial";
 
 /** Shipped packs that ship `sky/fragment.glsl` (via `plugin.yml` home). Update when adding a sky pack. */
 const PINNED_SHIPPED_PACK_SKY_IDS = [
@@ -158,7 +159,12 @@ describe("shipped pack sky fragments (host)", () => {
     if ("error" in wrapped) return;
 
     const lose = vi.fn();
-    const gl = {
+    function loseContextOnly(name: "WEBGL_lose_context"): WEBGL_lose_context | null;
+    function loseContextOnly(name: string): null;
+    function loseContextOnly(name: string): WEBGL_lose_context | null {
+      return name === "WEBGL_lose_context" ? mockPartial<WEBGL_lose_context>({ loseContext: lose }) : null;
+    }
+    const gl = mockPartial<WebGL2RenderingContext>({
       FRAGMENT_SHADER: 0x8b30,
       COMPILE_STATUS: 0x8b81,
       createShader: () => ({}),
@@ -166,13 +172,18 @@ describe("shipped pack sky fragments (host)", () => {
       compileShader() {},
       getShaderParameter: () => false,
       getShaderInfoLog: () => "ERROR: undeclared identifier zotoUndeclaredCompileBreaker",
-      getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext: lose } : null),
-    };
+      getExtension: loseContextOnly,
+    });
     const orig = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type: string) {
-      if (type === "webgl2") return gl as never;
-      return orig.call(this, type as never);
-    } as typeof orig;
+    // getContext is overloaded per context id; the stub answers "webgl2" and hands every other id to the
+    // real method, so it goes on as a plain property value rather than an overload-by-overload match.
+    Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+      configurable: true,
+      writable: true,
+      value: function (this: HTMLCanvasElement, type: string): RenderingContext | null {
+        return type === "webgl2" ? gl : orig.call(this, type);
+      },
+    });
     try {
       const gpuErr = probePluginSkyCompile(wrapped.frag);
       expect(gpuErr).not.toBeNull();

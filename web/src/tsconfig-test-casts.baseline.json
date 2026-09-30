@@ -119,7 +119,6 @@
   "web/src/plugins/sandbox-test-harness.ts": 3,
   "web/src/plugins/sandbox-write-path.counts.test.ts": 2,
   "web/src/plugins/sandbox-write-path.e2e.test.ts": 3,
-  "web/src/plugins/shipped-pack-sky.test.ts": 2,
   "web/src/plugins/syscon-telemetry.test.ts": 1,
   "web/src/plugins/talker-storm-host-184.test.ts": 1,
   "web/src/plugins/tile-health-async.test.ts": 1,
