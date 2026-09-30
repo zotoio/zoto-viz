@@ -166,6 +166,15 @@ body[data-softgl] .brand::after {
 .tetris-idle-label.is-visible {
   opacity: 1;
 }
+/* #181: frogger / netpong / invaders demo-data badge, over the board, under the header */
+.arcade > .arcade-idle-label {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--bar-h, 76px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--bg, #000) 70%, transparent);
+}
 .tetris-skip-hud {
   margin-left: 6px;
   text-transform: none;
