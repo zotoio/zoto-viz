@@ -96,16 +96,6 @@
       "target": "declare-const-zoto"
     },
     {
-      "file": "plugins/src/nixie-clock/frontend/index.ts",
-      "rule": "sandbox-escape",
-      "target": "typeof parent"
-    },
-    {
-      "file": "plugins/src/nixie-clock/frontend/tubes.ts",
-      "rule": "sandbox-escape",
-      "target": "parent."
-    },
-    {
       "file": "plugins/src/rocket-car-soccer/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
