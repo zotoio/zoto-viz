@@ -2,7 +2,7 @@
   "plugins/src/rocket-car-soccer/frontend/pack.test.ts": 4,
   "scripts/revert-proof.test.ts": 1,
   "web/assembly/layout.ts": 5,
-  "web/src/app/__tests__/main-entry.context-loss-pick-179.test.ts": 2,
+  "web/src/app/__tests__/main-entry.context-loss-pick-179.test.ts": 1,
   "web/src/app/__tests__/main-entry.perf-pin.test.ts": 1,
   "web/src/app/agent-patch.test.ts": 1,
   "web/src/app/apply-mode.test.ts": 6,
