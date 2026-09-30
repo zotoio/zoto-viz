@@ -293,8 +293,9 @@ def test_the_service_backstop_refuses_with_bundle_timeout_and_empties_the_group(
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(_pulse_doc(), PULSE, update_cache=False, install_lint=True)
     assert isinstance(e.value.__cause__, plugins._PackScriptTimeout), f"the backstop really fired: {e.value.__cause__!r}"
-    assert (e.value.reason, str(e.value)) == ("bundle_timeout", IN_TIME_INSTALL.format(name="Pulse TS"))
-    assert _setup_reasons(caplog) == ["bundle_timeout"], caplog.text
+    assert e.value.reason == "bundle_timeout", f"reason {e.value.reason!r}, sentence {str(e.value)!r}"
+    assert str(e.value) == IN_TIME_INSTALL.format(name="Pulse TS"), f"sentence {str(e.value)!r}"
+    assert _setup_reasons(caplog) == ["bundle_timeout"], f"logged reasons {_setup_reasons(caplog)}"
     pgid, left = _group_left(pids)
     assert not left, f"process group {pgid} not empty after the service backstop: {left}"
 
@@ -330,10 +331,10 @@ def test_an_upgrade_stopped_by_the_backstop_keeps_the_old_version(
     plugins.reset_bundles()
     out = plugin_local.install_local_zip(_probe(tmp_path, 4), overwrite=True)
     assert out.get("ok") is False and out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert _setup_reasons(caplog) == ["bundle_timeout"], caplog.text
     assert out.get("message") == (
         f"Couldn't safety-check the new version of Upgrade Probe in time, so it wasn't updated. {still}"
-    ), out
+    ), f"message {out.get('message')!r}"
+    assert _setup_reasons(caplog) == ["bundle_timeout"], f"logged reasons {_setup_reasons(caplog)}"
     assert "bundle_timeout" not in str(out)
     assert "version: 3" in (runtime / "plugin.yml").read_text(encoding="utf-8"), "v3 is still installed"
     pgid, left = _group_left(pids)
