@@ -13,6 +13,7 @@ from .pack_boundary import (
 )
 from .plugin_install import (
     InstallStartFailedError,
+    InstallUpdateRefusedError,
     InstallV2BlockedError,
     cleanup_staging_artifacts,
     format_v2_blocked_message,
@@ -125,7 +126,8 @@ def materialize_zip_runtime(
     except InstallV2BlockedError:
         raise
     except InstallStartFailedError as e:
-        raise ValueError(str(e)) from e
+        # #111: the new version couldn't start and the old one is back; the code says so, not the text.
+        raise InstallUpdateRefusedError(str(e)) from e
 
 
 def runtime_has_partial_bundle(runtime: Path) -> bool:

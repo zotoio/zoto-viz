@@ -20,12 +20,20 @@ from .pack_install_lint import (
     REASON_INSTALL_CHECK_UNAVAILABLE,
     PackInstallLintSetupError,
     format_install_lint_setup_upgrade_message,
+    format_install_unchecked_message,
+    format_update_copy,
+    format_update_refused_message,
     merge_lint_warnings,
     run_install_pack_lint,
 )
 from .pack_zip_blocks import record_zip_block, row_for_start_failure, zip_block_for_sha
 from .pack_install_blocked_store import record_blocked_zip
-from .pack_install_copy import REASON_PACK_INSTALL_BLOCKED, upgrade_rollback_user_message
+from .pack_install_copy import (
+    REASON_INSTALL_UNCHECKED,
+    REASON_PACK_INSTALL_BLOCKED,
+    REASON_UPDATE_REFUSED,
+    upgrade_rollback_user_message,
+)
 from .pack_sdk_contract import assert_pack_sdk_compatible, read_cached_sdk_manifest
 from .pack_zip_install_ux import installed_runtime_version
 from .pack_block_copy import (
@@ -113,6 +121,33 @@ class InstallCheckUnavailableError(Exception):
     """Labelled failure when a required check cannot run."""
 
 
+class InstallUpdateRefusedError(ValueError):
+    """#111: an update didn't go through and the version you had is still installed.
+
+    A ValueError, so callers that catch ValueError keep working; they branch on ``reason_code``
+    (:data:`REASON_UPDATE_REFUSED`), never on the message text.
+    """
+
+    reason_code = REASON_UPDATE_REFUSED
+
+
+def update_refused_payload(zip_rel: str) -> dict[str, str]:
+    """#111: the payload fields of a refused update. ``reasonCode`` is the stable code callers branch on."""
+    return {"upgrade_blocked": "true", "zip": zip_rel, "reasonCode": REASON_UPDATE_REFUSED}
+
+
+def install_unchecked_payload(e: InstallCheckUnavailableError) -> dict[str, str]:
+    """#200: a fresh install whose check couldn't run: the fresh-install sentence (``str(e)``, the table's
+    ``install_unchecked``) with its codes. Nothing was installed; there is no old version to name."""
+    return {"error": REASON_INSTALL_CHECK_UNAVAILABLE, "message": str(e), "reasonCode": REASON_INSTALL_UNCHECKED}
+
+
+def update_refused_error(name: str, old_version: str | int | None, zip_rel: str) -> InstallV2BlockedError:
+    """#111: the new version couldn't be safety-checked, so the update was refused: UX Pro's sentence
+    (the shared copy table, with the installed version) and the payload with its reasonCode."""
+    return InstallV2BlockedError(format_update_refused_message(name, old_version), payload=update_refused_payload(zip_rel))
+
+
 def register_install_check(check: InstallCheck) -> None:
     _INSTALL_CHECKS.append(check)
 
@@ -151,20 +186,19 @@ def format_v2_blocked_message(
     return upgrade_block_message(name, sentence, old_version, tail=tail)
 
 
-def format_v2_start_failed_message(name: str, version: str | int | None) -> str:
-    label = (name or "Plugin").strip()
-    ver = str(version).strip() if version is not None else "2"
-    return f"{label} v{ver} couldn't start, so v1 was restored"
+def format_v2_start_failed_message(name: str, version: str | int | None, old_version: str | int | None = None) -> str:
+    """#111: the new version couldn't start, so the update didn't happen (the shared copy table)."""
+    return format_update_copy("couldnt_start", name, version, old_version)
 
 
-def format_interrupted_restore_message(name: str) -> str:
-    label = (name or "Plugin").strip()
-    return f"An update to {label} was interrupted, so v1 was restored"
+def format_interrupted_restore_message(name: str, old_version: str | int | None = None) -> str:
+    """#111: an update that didn't finish; the version you had is back (the shared copy table)."""
+    return format_update_copy("interrupted", name, None, old_version)
 
 
 def format_couldnt_check_message(name: str) -> str:
-    label = (name or "Plugin").strip()
-    return f"Couldn't check {label}; v1 is still running"
+    """#111: a fresh install whose check couldn't run (the shared copy table's ``install_unchecked``)."""
+    return format_install_unchecked_message(name)
 
 
 @dataclass
@@ -549,7 +583,7 @@ def _install_staged_to_runtime_locked(
             raise
         except InstallCheckUnavailableError as e:
             if upgrade:
-                raise InstallV2BlockedError(str(e), payload={"upgrade_blocked": "true", "zip": rel}) from e
+                raise update_refused_error(name, installed_runtime_version(runtime), rel) from e
             raise
         except PackInstallLintSetupError as e:
             # #185: the install lint couldn't run (or gave no valid verdict). Never "was blocked";
@@ -610,7 +644,7 @@ def _install_staged_to_runtime_locked(
         except Exception as e:
             if swapped:
                 _restore_from_bak(runtime, dest_zip)
-                msg = format_v2_start_failed_message(name, version)
+                msg = format_v2_start_failed_message(name, version, installed_runtime_version(runtime))
                 record_zip_block(
                     sha256,
                     row_for_start_failure(
@@ -683,7 +717,7 @@ def recover_interrupted_swaps(runtime_parent: Path) -> list[str]:
             cleanup_staging_for_pack(runtime_parent, pid)
             from .pack_install_catalog import append_catalog_record
 
-            msg = format_interrupted_restore_message(name)
+            msg = format_interrupted_restore_message(name, installed_runtime_version(runtime))
             append_catalog_record(
                 {
                     "error": "pack_install_interrupted",
