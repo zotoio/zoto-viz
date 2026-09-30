@@ -62,11 +62,14 @@ async function runCase(page: Page, c: Case): Promise<unknown> {
 }
 
 beforeAll(async () => {
+  httpServer = http.createServer((req, res) => vite!.middlewares(req, res));
   vite = await createServer({
     configFile: path.join(webRoot, "vite.config.mjs"),
-    server: { middlewareMode: true },
+    // No live reload, and Vite's WebSocket rides on this suite's own http server: in middleware mode
+    // Vite 8 otherwise listens on the fixed port 24678 (even with hmr:false), so two readback suites
+    // in one vitest run clash there and the loser's pages fail "WebSocket closed without opened" (#192).
+    server: { middlewareMode: true, hmr: false, ws: { server: httpServer } },
   });
-  httpServer = http.createServer((req, res) => vite!.middlewares(req, res));
   await new Promise<void>((resolve) => httpServer!.listen(0, "127.0.0.1", resolve));
   const port = (httpServer!.address() as AddressInfo).port;
   baseUrl = `http://127.0.0.1:${port}`;
