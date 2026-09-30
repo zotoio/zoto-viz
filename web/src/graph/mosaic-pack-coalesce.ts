@@ -4,6 +4,7 @@ import type { NetScene } from "./scene";
 import { mosaicPlacedTileIndices, mosaicTileViewId } from "./mosaic-tile-id";
 import { normalizeVizDemoPackId, type VizDemoPackId } from "../ui/viz-hud";
 import { runPackFrameHandler, type VizPackHandlers } from "../plugins/viz-pack-host";
+import { paintPackInfoCaption } from "../plugins/blob-mesh-devices-notice";
 import type { PluginView } from "../plugins/plugin";
 import {
   bindVizWriterCore,
@@ -115,6 +116,7 @@ export function deliverCoalescedMosaicPacks(input: {
       continue;
     }
     if (!group.packId) {
+      for (const slot of group.slots) paintPackInfoCaption(input.mosaic.graphScene(slot)?.viewEl, null);
       if (group.pluginId) input.onSandboxFrame?.(group.pluginId, input.frame);
       continue;
     }
@@ -129,6 +131,9 @@ export function deliverCoalescedMosaicPacks(input: {
       writeParticles: (data, stride) => {
         writer.writeParticles(data, stride);
         primary.setPluginUboBuffer(writer.ubo);
+      },
+      setInfoNotice: (text) => {
+        for (const slot of group.slots) paintPackInfoCaption(input.mosaic.graphScene(slot)?.viewEl, text);
       },
     };
 

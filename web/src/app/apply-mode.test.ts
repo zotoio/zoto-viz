@@ -110,7 +110,7 @@ function mode(id: string, pluginId: string, label: string): ViewMode {
     legend: () => [],
     options: [],
     config: {},
-  } as ViewMode;
+  } as unknown as ViewMode;
 }
 
 function sceneEl(): HTMLElement {
@@ -127,7 +127,7 @@ function hudPackLabel(): string {
 
 function buildHost(
   overrides: Partial<ApplyModeHost> & { ensureReviewed: ApplyModeHost["ensureReviewed"] },
-): ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud } {
+): ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud; skyPromptPack: () => string } {
   const sandbox = new PluginSandbox();
   const presentDriveDeps = { sandbox, pluginClock: () => 0, stageAspect: () => 16 / 9 };
   refreshPluginDriveState(stereoSpec, "plugin:stereo-gram", presentDriveDeps);
@@ -196,12 +196,11 @@ function buildHost(
     applyModeFeedExtras: () => {},
     bindThisView,
     clearModeOpts: () => {},
-    ensureReviewed: overrides.ensureReviewed,
     loadTsPlugin: overrides.loadTsPlugin ?? vi.fn(async () => {}),
     syncPluginSky: overrides.syncPluginSky ?? vi.fn(async () => {}),
     mosaic: overrides.mosaic ?? null,
     captureMosaicSnap: () => ({
-      size: "2",
+      size: "4",
       hero: "off",
       tree: null,
       maximized: null,
@@ -356,7 +355,7 @@ describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no
   });
 
   it("present drive capture order: mosaic failure restores via reapply refresh (not loadTs stub)", async () => {
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
       loadTsPlugin: async (spec, signal) => loadTs(spec, signal),
@@ -369,7 +368,7 @@ describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no
         focusedId: "topology",
         setPaneView: () => false,
         setSize: vi.fn(),
-      } as ApplyModeHost["mosaic"],
+      } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
     });
@@ -384,7 +383,7 @@ describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no
     const restoreMosaicSnap = vi.fn();
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
-      mosaic: { on: true, heroPos: "left", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "left", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as unknown as ApplyModeHost["mosaic"],
       mosaicShouldResize: () => true,
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
@@ -404,7 +403,7 @@ describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no
     const applyMosaicModeVisuals = vi.fn();
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "declined",
-      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setPaneView, setSize: vi.fn() } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setPaneView, setSize: vi.fn() } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: setPaneView,
       applyMosaicModeVisuals,
@@ -421,7 +420,7 @@ describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no
   it("stale consent: B pending, switch to C, resolve B — no B load, HUD shows C", async () => {
     let resolveB!: (r: ConsentReviewResult) => void;
     const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const host = buildHost({
       ensureReviewed: async (spec, _signal) => {
         if (spec?.id === "roto-proto") return bPending;
@@ -459,7 +458,7 @@ describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
       applyMosaicModeVisuals,
-      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
     });
@@ -490,7 +489,7 @@ describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no
 
   it("dream-cycle while B consent open then accept records consent, HUD, and load", async () => {
     const consent = deferConsentForPack("packet-tunnel");
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const syncSky = vi.fn(async () => {});
     const applySolo = vi.fn();
     const host = buildHost({
@@ -1024,5 +1023,51 @@ describe("applyMode via main host", { timeout: 30_000 }, () => {
     });
     expect(document.querySelector("#scene > .mosaic-pane-notice")?.textContent).toContain("Stereo couldn't start.");
     expect(document.getElementById("modeSwitchStatus")?.textContent ?? "").not.toContain("Couldn't load");
+  });
+});
+
+describe("wall view opens its wall (Syscon / Cypher CIC, #172)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+  afterEach(() => {
+    vi.advanceTimersByTime(6000);
+    vi.useRealTimers();
+    document.getElementById("apply-mode-test-root")?.replaceChildren();
+    resetModeSwitchStateForTests();
+    resetModeSwitchAttemptForTests();
+    resetPackConsentForTests();
+    resetModeSwitchCoordinatorForTests();
+    clearModeSwitchStatus();
+  });
+
+  it.each([
+    { name: "Syscon", id: "syscon", hero: "off" as const, tiles: ["plugin:cores", "plugin:memory"] },
+    { name: "Cypher CIC", id: "cypher-cic", hero: "center" as const, tiles: ["plugin:topology", "plugin:talkers", "plugin:protocols"] },
+  ])("$name: applyModeImpl does not swap the wall view into its own wall's focus tile", async (w) => {
+    const wallId = `plugin:${w.id}`;
+    const wallSpec: PluginView = {
+      id: w.id, name: w.name, version: 1, capabilities: ["viz.write"], consent: "authored",
+      look: { mosaic: "8", hero: w.hero, mosaicTiles: w.tiles },
+    };
+    const focus = w.tiles[w.hero === "off" ? 0 : 1]!;
+    const setPaneView = vi.fn(() => true);
+    const applyMosaicModeVisuals = vi.fn();
+    const host = buildHost({
+      ensureReviewed: async () => "ok",
+      // applyPluginWall has just laid the wall out (mosaic on, the wall's own tiles on screen).
+      mosaic: { on: true, heroPos: w.hero, heroMode: "", current: "8", tileIds: w.tiles, focusedId: focus, setPaneView, setSize: vi.fn() } as unknown as ApplyModeHost["mosaic"],
+      modeById: (id) => mode(id, id.replace("plugin:", ""), id === wallId ? w.name : id),
+      pluginSpecForMode: (id) => (id === wallId ? wallSpec : null),
+      mosaicHasTile: (id) => w.tiles.includes(id),
+      mosaicFocusSlot: () => focus,
+      mosaicSetPaneView: setPaneView,
+      applyMosaicModeVisuals,
+    });
+    runApply(host, wallId);
+    await flushMicrotasks();
+    expect(setPaneView, `setPaneView calls: ${JSON.stringify(setPaneView.mock.calls)}`).not.toHaveBeenCalled();
+    expect(host.getLiveMode()).toBe(wallId);
+    expect(applyMosaicModeVisuals).toHaveBeenCalledWith(expect.objectContaining({ id: wallId }), {}, wallSpec, false);
   });
 });

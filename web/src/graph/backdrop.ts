@@ -1381,7 +1381,13 @@ export class Backdrop {
 
   private ensurePluginMat(id: string, frag: string): void {
     if (this.pluginMat && this.pluginMat.fragmentShader === frag) {
-      if (this.pluginId !== id) resetPackWrites(this.packWrote);
+      if (this.pluginId !== id) {
+        // Same fragment, another pack: it must not inherit the previous pack's writes. Clear the
+        // factors and put the host look back on the reused material now (a new material starts from
+        // the host's values too), not only at the next host frame.
+        resetPackWrites(this.packWrote);
+        this.syncPluginLook();
+      }
       this.pluginId = id;
       this.pluginFrag = frag;
       this.mesh.material = this.pluginMat;

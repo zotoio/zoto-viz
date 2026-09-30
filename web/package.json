@@ -12,6 +12,7 @@
     "build": "pnpm asbuild && tsc --noEmit && tsc -p tsconfig.test.json --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "prepare": "node scripts/build-pack-install-lint.mjs",
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
     "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",
@@ -40,8 +41,9 @@
     "playwright": "^1.63.0",
     "pngjs": "^7.0.0",
     "puppeteer-core": "^25.12.0",
-    "typescript": "^7.0.2",
     "ts6": "npm:typescript@5.9.3",
+    "tsx": "4.23.15",
+    "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^5.0.0",
     "yaml": "^2.9.1"

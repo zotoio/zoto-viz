@@ -8,6 +8,7 @@ import type { PluginView } from "../plugins/plugin";
 import { illustratedSourceBind, parseSourceBind } from "../core/sources";
 import type { VizDataFrame, VizFrameBudget, VizBufferWriter } from "../plugins/viz-host";
 import { syncVizPackRenderCanvas } from "../plugins/viz-pack-host";
+import { paintPackInfoCaption } from "../plugins/blob-mesh-devices-notice";
 import {
   mirrorMosaicTileCadenceFromPrimary,
   vizTileBudgetRegistry,
@@ -76,6 +77,7 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
   if (!(active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks)) {
     host.vizHud.syncStatusPanels([]);
     host.vizHud.clearStatus();
+    paintPackInfoCaption(host.scene.viewEl, null);
     return;
   }
 
@@ -125,6 +127,7 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
         pluginSpecForMode: host.pluginSpecForMode,
         optsFor: host.optsFor,
         budgetStats: host.vizBudget.stats,
+        soloInfoNotice: (text) => paintPackInfoCaption(host.scene.viewEl, text),
       });
       if (packPerfEnabled() && active?.id) notePackSandboxFrame(active.id);
     },

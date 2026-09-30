@@ -85,7 +85,8 @@ def test_zip_ux_literal_install_failed_template() -> None:
 def test_zip_ux_literal_blocked_message_template() -> None:
     _ux_literal(
         BLOCKED_MESSAGE,
-        "{label} was blocked. {body} Nothing was installed and the current wall is unchanged.",
+        "{name} was blocked because {sentence} Nothing was installed, and your wall is unchanged. "
+        "If you made this pack, run pack lint to see what to fix.",
         "zip ux blocked message template",
     )
 
@@ -120,8 +121,9 @@ def test_zip_ux_corrupt_prior_installed_example() -> None:
     )
 
 def test_zip_ux_blocked_message_example() -> None:
-    assert blocked_message("Sample", "bad import.") == (
-        "Sample was blocked. bad import. Nothing was installed and the current wall is unchanged."
+    assert blocked_message("Sample", "It loads code from outside its own folder.") == (
+        "Sample was blocked because it loads code from outside its own folder. "
+        "Nothing was installed, and your wall is unchanged. If you made this pack, run pack lint to see what to fix."
     )
 
 def test_zip_ux_fault_message_example() -> None:
