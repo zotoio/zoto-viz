@@ -105,8 +105,12 @@ describe("sandbox-fixture-multi module graph (#180)", () => {
           expect(patchLum(u, v, time, pulse, 0)).toBe(0);
           expect(patchLum(u, v, time, pulse, 0.92)).toBeCloseTo(0.92 * patchLum(u, v, time, pulse, 1), 12);
         }
-        // Tile health (tile-health.ts): a 16x16 patch is near-uniform when its luma spread is < 6/255.
-        for (const [u, v] of five) expect(patchSpread(u, v, time, pulse, fixture.bright) * 255).toBeGreaterThan(6);
+        // Tile health (tile-health.ts): a 16x16 patch is near-uniform when its luma spread is < 6/255. Checked in
+        // linear light (the screen is sRGB, which only widens dark spreads) at the fixture bright and at 0.4,
+        // the lean sky bright the host wrote over it in the #180 shots (pack uniform writes lose to the host, H1).
+        for (const b of [fixture.bright, 0.4]) {
+          for (const [u, v] of five) expect(patchSpread(u, v, time, pulse, b) * 255, `spread at uBright ${b}`).toBeGreaterThan(6);
+        }
         expect(Math.max(...lums)).toBeGreaterThan(0.2);
       }
     }
@@ -115,7 +119,7 @@ describe("sandbox-fixture-multi module graph (#180)", () => {
 
 /** CPU mirror of sky/fragment.glsl (these lines must appear verbatim in the shader). */
 const SKY_LINES = [
-  "float stripes = 0.5 + 0.5 * sin(40.0 * dir.x + 30.0 * dir.y + uTime + 6.28318 * zotoVizSlots[0].x);",
+  "float stripes = 0.5 + 0.5 * sin(90.0 * dir.x + 70.0 * dir.y + uTime + 6.28318 * zotoVizSlots[0].x);",
   "vec3 tint = 0.5 + 0.5 * cos(6.28318 * (0.5 * dir.y + vec3(0.0, 0.33, 0.67)));",
   "fragColor = vec4(uBright * stripes * tint, uOpacity);",
 ] as const;
@@ -127,7 +131,7 @@ function skyRgb(u: number, v: number, time: number, pulse: number, bright: numbe
   const l = Math.hypot(x, y, 1);
   const dx = x / l;
   const dy = y / l;
-  const stripes = 0.5 + 0.5 * Math.sin(40 * dx + 30 * dy + time + 6.28318 * pulse);
+  const stripes = 0.5 + 0.5 * Math.sin(90 * dx + 70 * dy + time + 6.28318 * pulse);
   const tint = [0, 0.33, 0.67].map((o) => 0.5 + 0.5 * Math.cos(6.28318 * (0.5 * dy + o)));
   return [bright * stripes * tint[0]!, bright * stripes * tint[1]!, bright * stripes * tint[2]!];
 }
