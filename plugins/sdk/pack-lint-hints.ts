@@ -106,6 +106,13 @@ export const PACK_LINT_PLAIN_SUMMARY: Readonly<Record<PackLintRule, string>> = {
   "unverified-import-call": "it loads code in a way that can't be checked.",
   "get-config-in-on-frame": "it reads its settings in a way that isn't allowed.",
   "host-imports-pack-src": "it loads code from outside its own folder.",
+  // #171b's uniform rules (combined with #185). The install lint doesn't block on them today
+  // (INSTALL_BLOCK_RULES), so these only keep the table complete.
+  "glsl-uniform-undeclared": "it reads a shader setting it never declares.",
+  "glsl-uniform-unset": "it reads a shader setting that nothing sets.",
+  "uniform-set-undeclared": "it sets a shader setting its shader never declares.",
+  "uniform-type-conflict": "it redefines one of the app's shader settings with a different type.",
+  "write-uniform-not-in-manifest": "it writes a shader setting it doesn't list in its manifest.",
 };
 
 export const PACK_LINT_PLAIN_FALLBACK = "it uses code the pack sandbox doesn't allow.";
