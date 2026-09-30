@@ -21,7 +21,11 @@ export class GfxWallNotice {
   ) {}
 
   onContextLost(): void {
-    if (this.shown) return;
+    if (this.shown) {
+      // Lost again after a restore that never drew: a fresh "Restoring…" window, not a second notice.
+      this.restartInterrupted();
+      return;
+    }
     this.shown = true;
     const el = document.createElement("div");
     el.className = "gfx-wall-notice";
@@ -50,6 +54,14 @@ export class GfxWallNotice {
       this.wall.focus();
     }
     if (hadLateReload) this.opts.onDismissLateReload?.();
+  }
+
+  private restartInterrupted(): void {
+    if (!this.el) return;
+    if (this.restoreTimer) clearTimeout(this.restoreTimer);
+    this.reloadOffered = false;
+    this.el.textContent = GFX_INTERRUPTED_NOTICE;
+    this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
   }
 
   /** Drop the notice and its timer without the restored side effects (host disposed). */

@@ -198,6 +198,13 @@ export class RenderHost {
   private restoreDelays: readonly number[] = CONTEXT_RESTORE_RETRY_MS;
   private restoreAttempts = 0;
   private _contextRecovery: ContextRecovery = "ok";
+  /**
+   * The context came back but no real frame has drawn since: the wall notice stays up (UX Pro, #179 row 4).
+   * A restore that never draws is not a recovery, so only the first drawn frame clears it.
+   */
+  private noticeWaitsForDraw = false;
+  /** A real GL draw landed in the current host frame. */
+  private drewThisFrame = false;
 
   constructor(
     readonly wall: HTMLElement,
@@ -283,8 +290,13 @@ export class RenderHost {
       this.packMirrors.beginFrame();
       this.syncMirrorScopesIfNeeded();
       const frameTs = frameTsFromRaf(ts);
+      this.drewThisFrame = false;
       if (!this.glContextLost) {
         for (const v of this.views) v.hostFrame(frameTs);
+      }
+      if (this.noticeWaitsForDraw && this.drewThisFrame && !this.glContextLost) {
+        this.noticeWaitsForDraw = false;
+        this.tileShader.onFirstFrameAfterRestore();
       }
       finishSandboxBitmapHostFrame();
     };
@@ -405,6 +417,7 @@ export class RenderHost {
     if (this.disposed) return;
     const selfLoss = this.selfLossPending;
     this.selfLossPending = false;
+    this.noticeWaitsForDraw = false;
     this.tileShader.onSharedContextLost();
     for (const v of this.views) v.hostContextLost();
     // Every loss gets a fresh recovery, including one right after a restore (#179 row 4).
@@ -420,6 +433,10 @@ export class RenderHost {
     this._contextRecovery = "ok";
     if (this.disposed) return;
     this.tileShader.onSharedContextRestored();
+    // The notice clears on the first real frame drawn after this, not on the event (#179 row 4).
+    // A software host has no GL frames to wait for.
+    if (this.software) this.tileShader.onFirstFrameAfterRestore();
+    else this.noticeWaitsForDraw = true;
     this.dirty = true;
     this.refreshContextAntialias();
     this.markMirrorScopeDirty();
@@ -566,6 +583,7 @@ export class RenderHost {
       const tex = gpu.uploadFrame(bitmap);
       if (!tex) return null;
       gpu.present(rd, tex, fill, asCssRect(dst), aspect);
+      this.drewThisFrame = true;
       return this.writeFbViewport(dst, pr);
     } finally {
       if (releaseBitmap) bitmap.close();
@@ -749,6 +767,7 @@ export class RenderHost {
     this.packDrawOpts.fill = null;
     this.packDrawOpts.aspect = box.w / Math.max(1, box.h);
     this.packMirrors.presentPack(packKey, rd, asCssRect(this.packDrawViewport), this.packDrawOpts);
+    this.drewThisFrame = true;
   };
 
   private readonly runTimedViewDraw = (): void => {
@@ -768,6 +787,7 @@ export class RenderHost {
     );
     rd.setClearColor(this.gpuTimedClearHex, 1);
     rd.render(scene, camera);
+    this.drewThisFrame = true;
   };
 
   private writeFbViewport(box: SoftRect, pr: number): Viewport {

@@ -187,6 +187,8 @@ function expectPickLandsAndDraws(h: Harness, view: typeof BACKROOMS): void {
 }
 
 function expectRecovered(h: Harness): void {
+  // The wall notice clears on the first real frame drawn after the restore (UX Pro, row 4), so draw one.
+  expect(drawsOver(h, 1)).toBe(1);
   expect(h.gl.lost).toBe(false);
   expect(h.host.glContextLost).toBe(false);
   expect(h.scene.gpuContextLost).toBe(false);
@@ -311,6 +313,43 @@ describe("#179 render host context recovery (Backrooms boot)", () => {
     vi.advanceTimersByTime(50);
     expectRecovered(h);
     expectPickLandsAndDraws(h, BACKROOMS);
+  });
+
+  it("row 4 (UX Pro): restored but no frame draws after it -- the notice stays up and switches to Reload at 10 s", () => {
+    h = bootBackrooms();
+    h.gl.browserLoss({ autoRestoreMs: 1_500 });
+    vi.advanceTimersByTime(0); // lost at t=0
+    expect(notices(h.wall).map((n) => n.textContent)).toEqual([GFX_INTERRUPTED_NOTICE]);
+    vi.advanceTimersByTime(1_500); // webglcontextrestored at 1.5 s, and no frame is drawn after it
+    expect(h.gl.lost).toBe(false);
+    expect(h.host.glContextLost).toBe(false);
+    expect(h.render).not.toHaveBeenCalled();
+    expect(notices(h.wall).map((n) => n.textContent), "restored event alone must not clear the notice").toEqual([GFX_INTERRUPTED_NOTICE]);
+    vi.advanceTimersByTime(8_499); // t = 9.999 s
+    expect(notices(h.wall).map((n) => n.textContent)).toEqual([GFX_INTERRUPTED_NOTICE]);
+    expect(h.wall.querySelectorAll(".gfx-wall-reload").length).toBe(0);
+    vi.advanceTimersByTime(1); // t = 10 s
+    const n = notices(h.wall);
+    expect(n.length).toBe(1);
+    expect(n[0]!.textContent).toBe(`${GFX_NO_RESTORE_NOTICE}Reload`);
+    // Positive half: the first real frame drawn after the restore clears it.
+    expect(drawsOver(h, 1)).toBe(1);
+    expect(notices(h.wall).length).toBe(0);
+    expectPickLandsAndDraws(h, FRACTAL);
+  });
+
+  it("row 4 (UX Pro), positive: a restore followed by a real drawn frame clears the notice before the 10 s mark", () => {
+    h = bootBackrooms();
+    h.gl.browserLoss({ autoRestoreMs: 1_500 });
+    vi.advanceTimersByTime(0);
+    vi.advanceTimersByTime(1_500);
+    expect(notices(h.wall).length).toBe(1);
+    vi.advanceTimersByTime(500);
+    expect(drawsOver(h, 1)).toBe(1);
+    expect(notices(h.wall).length).toBe(0);
+    vi.advanceTimersByTime(20_000);
+    expect(notices(h.wall).length).toBe(0);
+    expect(h.wall.querySelectorAll(".gfx-wall-reload").length).toBe(0);
   });
 
   it("dispose while lost: the host's notice and timer go with it; a new host shows exactly one notice", () => {

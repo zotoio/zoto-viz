@@ -203,10 +203,14 @@ export class RenderHostTileShader {
 
   onSharedContextRestored(): void {
     this.host.glContextLost = false;
-    this.gfxNotice.onContextRestored();
     for (const slot of this.tileShaders.values()) {
       slot.latch.reset();
     }
+  }
+
+  /** The first real frame has drawn since the restore: now the wall notice may clear (#179 row 4). */
+  onFirstFrameAfterRestore(): void {
+    this.gfxNotice.onContextRestored();
   }
 
   dispose(): void {
