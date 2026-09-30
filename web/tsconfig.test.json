@@ -13,6 +13,8 @@
     "src/graph/pack-mirror-lifecycle.test.ts",
     "src/graph/pack-mirror-rect-converters.test.ts",
     "src/graph/pack-mirror-readback.test.ts",
+    "src/graph/h1-gap-rows.test.ts",
+    "src/plugins/pack-sky-lean-h1.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
     "test/node/pack-mirror-readback-vite.ts"
   ],
