@@ -4,6 +4,7 @@ import type { NetScene } from "../graph/scene";
 import type { Packet, StateMsg, TrafficMsg } from "../core/types";
 import { goldenLanFixture } from "../plugins/fixtures/golden-lan-state";
 import { PongView } from "./pong";
+import { mockPartial } from "../../test-support/mock-partial";
 
 /**
  * NetPong's packets-per-second reading (the HUD's "N pkt/s") must fall back once packets stop.
@@ -34,10 +35,11 @@ interface Recorder { ctx: CanvasRenderingContext2D; texts: string[] }
 /** A 2D context that records fillText and no-ops everything else (happy-dom has no canvas). */
 function recordingCtx(): Recorder {
   const texts: string[] = [];
-  const store: CanvasRenderingContext2D = Object.create(null);
+  // collaborator fake: an empty 2D context; the Proxy answers every method, own properties hold what the view sets
+  const store = mockPartial<CanvasRenderingContext2D>({});
   const ctx = new Proxy(store, {
     get(t, k) {
-      if (k in t) return Reflect.get(t, k);
+      if (Object.prototype.hasOwnProperty.call(t, k)) return Reflect.get(t, k);
       if (k === "fillText") return (s: string) => { texts.push(String(s)); };
       if (k === "measureText") return (s: string) => ({ width: String(s).length * 6, actualBoundingBoxAscent: 8, actualBoundingBoxDescent: 2 });
       if (k === "getImageData") return (_x: number, _y: number, w: number, h: number) => ({ data: new Uint8ClampedArray(Math.max(1, w * h * 4)), width: w, height: h });
@@ -51,12 +53,12 @@ function recordingCtx(): Recorder {
   return { ctx, texts };
 }
 
+/** Collaborator fake: the two NetScene members PongView reads (device lookup, alias resolve). */
 function sceneFor(msg: StateMsg): NetScene {
-  const scene: Pick<NetScene, "deviceOf" | "resolve"> = {
+  return mockPartial<NetScene>({
     deviceOf: (ip: string) => msg.devices.find((d) => d.ip === ip),
     resolve: (ip: string) => ip,
-  };
-  return Object.assign(Object.create(null), { pulseNow: { level: 0 }, selectIp: () => {} }, scene);
+  });
 }
 
 /** A clean HOME: this host and its router only (netpong's default source is the gateway). */
