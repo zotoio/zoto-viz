@@ -19,6 +19,7 @@
     "src/plugins/pack-sky-lean-h1.test.ts",
     "src/graph/scene-pack-sky-bright.test.ts",
     "src/plugins/plugin-unavailable.test.ts",
+    "src/app/main-consent-picker.wiring.test.ts",
     "src/graph/render-host-context-recovery.test.ts",
     "src/graph/render-host-fractal-context-restore.test.ts",
     "src/arcade/arcade-idle-board.test.ts",

@@ -1276,7 +1276,7 @@ onConsentChange(() => {
   pickerRefreshQueued = true;
   queueMicrotask(() => {
     pickerRefreshQueued = false;
-    modeSel.setOptions(pickerOptions());
+    setHeaderPickerOptions();
   });
 });
 
