@@ -10,13 +10,14 @@
  */
 import { spawnSync, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { appendFileSync, cpSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, cpSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, describe, expect, it } from "vitest";
+import { scanHostLintFixture } from "../../../plugins/sdk/pack-lint";
 import { PACK_LINT_PLAIN_SUMMARY } from "../../../plugins/sdk/pack-lint-hints";
-import { extractPackImports } from "../../../plugins/sdk/pack-lint-import";
+import { extractModuleSpecifiers, extractPackImports } from "../../../plugins/sdk/pack-lint-import";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const REASON = "dynamic_import_nonliteral";
@@ -100,6 +101,26 @@ describe("#194 an unbundled pack's non-literal import() is refused (dynamic_impo
     }, 60_000);
   }
 
+  it("the log line's :line is the original source line, even under a multi-line block comment", () => {
+    const code = [
+      "/*",
+      " * A multi-line block comment above the call: masking blanks it but keeps its newlines,",
+      " * so import(notThisOne) in here is ignored and the line below is still counted right.",
+      " */",
+      "export const loadV = (name) => import(name);",
+    ].join("\n");
+    const home = packWith(UNBUNDLED, "frontend/helper.js", code);
+    const source = readFileSync(`${home}/frontend/helper.js`, "utf8");
+    const trueLine = source.slice(0, source.indexOf("import(name)")).split("\n").length;
+    expect(trueLine, "the fixture's call sits below the 4-line comment").toBe(9);
+    const r = install(home, { lintOnly: true });
+    expect(r.status, why(r)).toBe(EXIT_LINT_BLOCK);
+    const block = lines(r.stderr, "pack-install-lint-block");
+    expect(block, why(r)).toHaveLength(1);
+    expect(block[0]!.reason).toBe(REASON);
+    expect(block[0]!.details).toEqual([`frontend/helper.js:${trueLine} ${REASON} — import(name)`]);
+  }, 60_000);
+
   it("allowed: plain string literal import('./a.js')", () => {
     expectPass(install(packWith(UNBUNDLED, "frontend/helper.js", "export const loadL = () => import('./a.js');"), { lintOnly: true }), UNBUNDLED);
   }, 60_000);
@@ -122,12 +143,26 @@ describe("#194 an unbundled pack's non-literal import() is refused (dynamic_impo
 });
 
 describe("#194 the import extractor: a literal is only the whole argument when `)` or `,` follows it", () => {
-  it("'./a' + b and `./a` + b are unverified (host scans keep the literal prefix); literals with attributes stay literal", () => {
-    const sites = (src: string) => extractPackImports(src).map((s) => (s.kind === "unverified" ? `unverified ${s.raw} host=${s.hostSpec}` : `${s.kind} ${s.specifier}`));
-    expect(sites("import('./a' + b);")).toEqual(["unverified import('./a' + b) host=./a"]);
-    expect(sites("import(`./a` + b);")).toEqual(["unverified import(`./a` + b) host=./a"]);
+  it("'./a' + b and `./a` + b are unverified; literals with attributes stay literal", () => {
+    const sites = (src: string) => extractPackImports(src).map((s) => (s.kind === "unverified" ? `unverified ${s.raw}` : `${s.kind} ${s.specifier}`));
+    expect(sites("import('./a' + b);")).toEqual(["unverified import('./a' + b)"]);
+    expect(sites("import(`./a` + b);")).toEqual(["unverified import(`./a` + b)"]);
     expect(sites("import( './a.js' );")).toEqual(["dynamic ./a.js"]);
     expect(sites("import('./a.json', { with: { type: 'json' } });")).toEqual(["dynamic ./a.json"]);
     expect(sites("import(`./a.js`);")).toEqual(["dynamic ./a.js"]);
+  });
+
+  it("hostSpec pin: the host reverse-boundary scan still sees ./a for import('./a' + b) (kind unverified)", () => {
+    const [site] = extractPackImports("import('./a' + b);");
+    expect(site).toMatchObject({ kind: "unverified", call: "import", hostSpec: "./a" });
+    expect(extractPackImports("import(`./a` + b);")[0]).toMatchObject({ kind: "unverified", call: "import", hostSpec: "./a" });
+    // The host scan's own extraction, and a real host file concatenating onto a pack source path.
+    expect(extractModuleSpecifiers("import('./a' + b);")).toEqual(["./a"]);
+    const hits = scanHostLintFixture(
+      "web/src/plugins/host-concat-fixture.ts",
+      'export const load = (ext: string) => import("../../../plugins/src/marble-run/frontend/config" + ext);\n',
+      repoRoot,
+    );
+    expect(hits.map((h) => [h.rule, h.target])).toEqual([["host-imports-pack-src", "plugins/src/marble-run/frontend/config.ts"]]);
   });
 });
