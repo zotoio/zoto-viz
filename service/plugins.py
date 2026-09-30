@@ -326,6 +326,94 @@ def _install_lint_block_from_compile(stderr: str) -> str | None:
     return None
 
 
+# Service-side limit for one bundle-pack-entry.mjs run. The install lint runner has its own, lower
+# timeout inside the script (pack-install-lint-gate.mjs DEFAULT_LINT_TIMEOUT_MS = 15000 ms).
+PACK_BUNDLE_TIMEOUT_S = 20
+
+
+class _PackScriptTimeout(Exception):
+    pass
+
+
+def _run_pack_script(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+    """Run bundle-pack-entry.mjs in its own session; on timeout kill the whole group (esbuild's
+    service process, node) and raise :class:`_PackScriptTimeout`."""
+    proc = subprocess.Popen(
+        argv,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        env=env,
+        start_new_session=os.name == "posix",
+    )
+    try:
+        out, err = proc.communicate(timeout=PACK_BUNDLE_TIMEOUT_S)
+    except subprocess.TimeoutExpired as e:
+        try:
+            if os.name == "posix":
+                os.killpg(proc.pid, 9)
+            else:
+                proc.kill()
+        except OSError:
+            pass
+        proc.communicate()
+        raise _PackScriptTimeout(str(e)) from e
+    return subprocess.CompletedProcess(argv, proc.returncode, out, err)
+
+
+def _install_lint_env(env: dict[str, str]) -> tuple[dict[str, str], str]:
+    import uuid
+
+    nonce = uuid.uuid4().hex
+    out = dict(env)
+    out["ZOTO_PACK_INSTALL_LINT"] = "1"
+    out[pil.NONCE_ENV] = nonce
+    return out, nonce
+
+
+def run_install_lint_only(doc: dict[str, Any], home: Path) -> None:
+    """#185: the install lint for packs esbuild doesn't bundle (``frontend.bundle: false`` or no
+    frontend). Same gate (bundle-pack-entry.mjs --lint-only), same verdict rules: only exit 0 with
+    the nonce-bound pass line lets the install go ahead."""
+    label = str(doc.get("name") or doc.get("id") or "Plugin")
+    if not _PACK_BUNDLE_SCRIPT.is_file():
+        raise pil.PackInstallLintSetupError(label)
+    from . import cursor_agent
+
+    env, nonce = _install_lint_env(os.environ.copy())
+    try:
+        proc = _run_pack_script(
+            [cursor_agent.node_bin(), str(_PACK_BUNDLE_SCRIPT), "--lint-only", str(home.resolve()), str(REPO)],
+            env,
+        )
+    except (_PackScriptTimeout, OSError) as e:
+        raise pil.PackInstallLintSetupError(label) from e
+    _check_install_lint_verdict(proc, doc, label, nonce)
+
+
+def _check_install_lint_verdict(
+    proc: subprocess.CompletedProcess[str], doc: dict[str, Any], label: str, nonce: str
+) -> None:
+    """Setup refusal / lint block / pass, from one install-lint run of bundle-pack-entry.mjs."""
+    if pil.install_lint_setup_failed(proc.returncode, proc.stderr):
+        raise pil.PackInstallLintSetupError(label)
+    if proc.returncode != 0:
+        block = boundary_from_compile(doc, proc.stderr)
+        if block:
+            raise PackBundleBoundaryError(block)
+        lint_msg = _install_lint_block_from_compile(proc.stderr)
+        if lint_msg:
+            raise ValueError(
+                f"{label} was blocked: {lint_msg} "
+                "Nothing was installed and the current wall is unchanged. "
+                "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
+            )
+        raise ValueError(proc.stderr.strip() or "esbuild failed")
+    if not pil.install_lint_passed(proc.returncode, proc.stderr, nonce=nonce, pack=str(doc.get("id") or "")):
+        # #185: fail closed. Only the nonce-bound pass line, last on stderr, is a pass.
+        raise pil.PackInstallLintSetupError(label)
+
+
 def verify_pack_bundle_home(home: Path, doc: dict[str, Any], sha256: str | None = None) -> None:
     """Run esbuild allowlist without updating the in-memory bundle cache."""
     yml = home / "plugin.yml"
@@ -346,6 +434,9 @@ def compile_typescript(
     home = _plugin_home(path)
     nested = path.name in ("plugin.yml", "plugin.yaml")
     if not has_frontend_part(doc, home, nested=nested):
+        if install_lint:
+            # #185: no frontend still needs the explicit pass verdict (the lint reads any .ts too).
+            run_install_lint_only(doc, home)
         return {}
     caps = [c for c in (doc.get("capabilities") or []) if c in ALLOWED_CAPS]
     unknown = [c for c in (doc.get("capabilities") or []) if c not in ALLOWED_CAPS]
@@ -368,6 +459,9 @@ def compile_typescript(
     global _compile_runs, _bundle_invocations
     fe = doc.get("frontend") if isinstance(doc.get("frontend"), dict) else {}
     if fe.get("bundle") is False:
+        if install_lint:
+            # #185: unbundled frontends are linted like bundled ones (sandbox-fixture-multi).
+            run_install_lint_only(doc, home)
         js = entry.read_bytes()
         if len(js) > MAX_BUNDLE:
             raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")
@@ -383,42 +477,33 @@ def compile_typescript(
     home_resolved = home.resolve()
     bundle_env = os.environ.copy()
     bundle_env.setdefault("NODE_ENV", "production")
+    nonce = ""
     if install_lint:
-        bundle_env["ZOTO_PACK_INSTALL_LINT"] = "1"
-    proc = subprocess.run(
-        [
-            cursor_agent.node_bin(),
-            str(_PACK_BUNDLE_SCRIPT),
-            str(entry),
-            str(_SDK_ROOT),
-            str(home_resolved),
-            str(REPO),
-        ],
-        capture_output=True,
-        text=True,
-        timeout=20,
-        check=False,
-        env=bundle_env,
-    )
-    _bundle_invocations += 1
+        bundle_env, nonce = _install_lint_env(bundle_env)
     label = str(doc.get("name") or doc.get("id") or "Plugin")
-    if install_lint and pil.install_lint_setup_failed(proc.returncode, proc.stderr):
-        raise pil.PackInstallLintSetupError(pil.format_install_lint_setup_message(label))
-    if proc.returncode != 0:
+    argv = [
+        cursor_agent.node_bin(),
+        str(_PACK_BUNDLE_SCRIPT),
+        str(entry),
+        str(_SDK_ROOT),
+        str(home_resolved),
+        str(REPO),
+    ]
+    try:
+        proc = _run_pack_script(argv, bundle_env)
+    except _PackScriptTimeout as e:
+        if install_lint:
+            # #185: a timeout is "couldn't check", never a raw TimeoutExpired.
+            raise pil.PackInstallLintSetupError(label) from e
+        raise ValueError(f"pack bundle timed out after {PACK_BUNDLE_TIMEOUT_S} s") from e
+    _bundle_invocations += 1
+    if install_lint:
+        _check_install_lint_verdict(proc, doc, label, nonce)
+    elif proc.returncode != 0:
         block = boundary_from_compile(doc, proc.stderr)
         if block:
             raise PackBundleBoundaryError(block)
-        lint_msg = _install_lint_block_from_compile(proc.stderr)
-        if lint_msg:
-            raise ValueError(
-                f"{label} was blocked: {lint_msg} "
-                "Nothing was installed and the current wall is unchanged. "
-                "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
-            )
         raise ValueError(proc.stderr.strip() or "esbuild failed")
-    if install_lint and not pil.install_lint_passed(proc.stderr):
-        # #185: fail closed. A bundle that went through the install lint must carry its pass verdict.
-        raise pil.PackInstallLintSetupError(pil.format_install_lint_setup_message(label))
     js = proc.stdout.encode("utf-8")
     if len(js) > MAX_BUNDLE:
         raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")

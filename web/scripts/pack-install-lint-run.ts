@@ -5,8 +5,10 @@ import { formatViolationMessage } from "../../plugins/sdk/pack-lint-hints";
 
 const packHome = process.argv[2];
 const repoRootArg = process.argv[3];
-if (!packHome || !repoRootArg) {
-  console.error("usage: pack-install-lint-run.ts <packHomeAbs> <repoRootAbs>");
+const packIdArg = process.argv[4];
+const nonce = process.argv[5];
+if (!packHome || !repoRootArg || !packIdArg || !nonce) {
+  console.error("usage: pack-install-lint-run.ts <packHomeAbs> <repoRootAbs> <packId> <nonce>");
   process.exit(2);
 }
 
@@ -34,6 +36,7 @@ for (const v of warnings) {
   const loc = v.line != null ? `${v.file}:${v.line}` : v.file;
   console.warn(`${loc} ${v.rule} — ${formatViolationMessage(v)}`);
 }
-// #185: bundle-pack-entry.mjs installs only on this explicit verdict (exit 0 alone is not a pass).
-process.stdout.write(`${JSON.stringify({ type: "pack-install-lint-pass" })}\n`);
+// #185: bundle-pack-entry.mjs installs only on this explicit verdict, bound to its per-run nonce and
+// the pack id, as the LAST stdout line (exit 0 alone is not a pass). Nothing may be printed after it.
+process.stdout.write(`${JSON.stringify({ type: "pack-install-lint-pass", nonce, pack: packIdArg })}\n`);
 process.exit(0);

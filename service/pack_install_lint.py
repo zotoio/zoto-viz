@@ -1,9 +1,10 @@
 """Install-time pack lint warnings only (blocking runs in bundle-pack-entry.mjs).
 
 #185: the blocking lint fails closed. bundle-pack-entry.mjs exits EXIT_LINT_SETUP with a
-``pack-install-lint-setup-error`` JSON line when the lint couldn't run or gave no verdict, and
-writes a ``pack-install-lint-pass`` line when it passed. The service refuses an install-lint
-bundle that has neither a block nor a pass verdict.
+``pack-install-lint-setup-error`` JSON line when the lint couldn't run or gave no verdict. On a pass
+its LAST stderr line is exactly ``{"type":"pack-install-lint-pass","nonce":<service nonce>,
+"pack":<pack id>}``; the service generates the nonce per run (``ZOTO_PACK_INSTALL_LINT_NONCE``) and
+refuses an install-lint run that doesn't end in that line with exit 0.
 """
 from __future__ import annotations
 
@@ -72,13 +73,34 @@ _LINT_PASS = "pack-install-lint-pass"
 _LINT_SETUP = "pack-install-lint-setup-error"
 
 
+NONCE_ENV = "ZOTO_PACK_INSTALL_LINT_NONCE"
+
+
 class PackInstallLintSetupError(ValueError):
-    """The install lint couldn't run (or gave no verdict), so the install was refused."""
+    """The install lint couldn't run (or gave no valid verdict), so the install was refused.
+
+    ``str(e)`` is the fresh-install copy; upgrades re-word it with
+    :func:`format_install_lint_setup_upgrade_message` (they know the installed version).
+    """
+
+    def __init__(self, pack_name: str) -> None:
+        self.pack_name = (pack_name or "").strip() or "Plugin"
+        super().__init__(format_install_lint_setup_message(self.pack_name))
 
 
 def format_install_lint_setup_message(name: str) -> str:
     label = (name or "").strip() or "Plugin"
     return f"Couldn't safety-check {label}, so it wasn't installed. Run `pnpm install` in `web/` and try again."
+
+
+def format_install_lint_setup_upgrade_message(name: str, old_version: str | int | None) -> str:
+    label = (name or "").strip() or "Plugin"
+    old = str(old_version).strip() if old_version is not None else ""
+    still = f"You're still on v{old}." if old else "You're still on the version you had."
+    return (
+        f"Couldn't safety-check the new version of {label}, so it wasn't updated. {still} "
+        "Run `pnpm install` in `web/` and try again."
+    )
 
 
 def _verdict_lines(stderr: str, kind: str) -> list[dict[str, Any]]:
@@ -100,5 +122,15 @@ def install_lint_setup_failed(returncode: int, stderr: str) -> bool:
     return returncode == EXIT_LINT_SETUP or bool(_verdict_lines(stderr, _LINT_SETUP))
 
 
-def install_lint_passed(stderr: str) -> bool:
-    return bool(_verdict_lines(stderr, _LINT_PASS))
+def install_lint_passed(returncode: int, stderr: str, *, nonce: str, pack: str) -> bool:
+    """Exit 0 and the LAST non-empty stderr line is exactly {type: pass, nonce, pack}."""
+    if returncode != 0 or not nonce:
+        return False
+    lines = [ln.strip() for ln in (stderr or "").splitlines() if ln.strip()]
+    if not lines:
+        return False
+    try:
+        raw = json.loads(lines[-1])
+    except json.JSONDecodeError:
+        return False
+    return raw == {"type": _LINT_PASS, "nonce": nonce, "pack": pack}

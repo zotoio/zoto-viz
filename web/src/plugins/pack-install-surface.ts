@@ -24,10 +24,25 @@ export type BlockedCatalogEntry = PackInstallBlockedPayload & {
 export const PACK_BLOCKED_SELECT_VALUE = "__pack_blocked_catalog__";
 
 /**
- * #185: the service refused an install because the pack install lint couldn't run. Its message is
- * "Couldn't safety-check <Name>, so it wasn't installed. Run `pnpm install` in `web/` and try again."
+ * #185: the service refused an install because the pack install lint couldn't run (or gave no valid
+ * verdict, or timed out). The UI shows the service's message as is:
+ * - fresh install: "Couldn't safety-check <Name>, so it wasn't installed. Run `pnpm install` in `web/` and try again."
+ * - upgrade: "Couldn't safety-check the new version of <Name>, so it wasn't updated. You're still on
+ *   v<old>. Run `pnpm install` in `web/` and try again."
  */
 export const PACK_INSTALL_CHECK_UNAVAILABLE = "pack_install_check_unavailable";
+
+/** Agent chat line for a POST /api/ai/plugin/local result (install + activate). */
+export function localPluginPublishChatLine(
+  d: { ok?: boolean; error?: string; message?: string; id?: string; activated?: boolean; consentRequired?: boolean },
+  names: string,
+): string {
+  if (d.activated) return `plugin ${d.id} built and activated (${names})`;
+  if (d.consentRequired) return `plugin ${d.id} installed (${names}) — source review required`;
+  // #185: the install lint couldn't run; show the service's own wording, not "plugin invalid".
+  if (d.error === PACK_INSTALL_CHECK_UNAVAILABLE && d.message) return d.message;
+  return d.ok ? `plugin ${d.id} built (${names})` : `plugin invalid: ${d.error}`;
+}
 
 let pendingNotice: string | null = null;
 const toastedKeys = new Set<string>();

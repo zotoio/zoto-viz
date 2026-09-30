@@ -19,6 +19,7 @@ from .pack_boundary import PackBundleBoundary, PackBundleBoundaryError, format_b
 from .pack_install_lint import (
     REASON_INSTALL_CHECK_UNAVAILABLE,
     PackInstallLintSetupError,
+    format_install_lint_setup_upgrade_message,
     merge_lint_warnings,
     run_install_pack_lint,
 )
@@ -534,10 +535,11 @@ def _install_staged_to_runtime_locked(
                 raise InstallV2BlockedError(str(e), payload={"upgrade_blocked": "true", "zip": rel}) from e
             raise
         except PackInstallLintSetupError as e:
-            # #185: the install lint couldn't run. Same wording as a fresh install, never "was blocked".
+            # #185: the install lint couldn't run (or gave no valid verdict). Never "was blocked";
+            # an upgrade says which version is still installed.
             if upgrade:
                 raise InstallV2BlockedError(
-                    str(e),
+                    format_install_lint_setup_upgrade_message(name or e.pack_name, installed_runtime_version(runtime)),
                     payload={"error": REASON_INSTALL_CHECK_UNAVAILABLE, "upgrade_blocked": "true", "zip": rel},
                 ) from e
             raise

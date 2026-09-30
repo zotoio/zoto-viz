@@ -373,7 +373,47 @@ export function scanPackLintFixture(
 export type ScanPackDirectoryOptions = {
   packId?: string;
   repoPathPrefix?: string;
+  /**
+   * #185 install lint: also lint the pack's frontend scripts that aren't `.ts` (`.js`, `.mjs`,
+   * `.tsx`, …) under `frontend/`, and whatever plugin.yml points at (`frontend.entry`, legacy
+   * `entry`), so unbundled packs (`frontend.bundle: false`) are linted like bundled ones.
+   */
+  frontendScripts?: boolean;
 };
+
+/** Script extensions the install lint reads under `frontend/` (plus `.ts`, which it always reads). */
+export const PACK_FRONTEND_SCRIPT_EXTENSIONS = [".js", ".mjs", ".cjs", ".jsx", ".tsx", ".mts", ".cts"] as const;
+
+function isTsSource(name: string): boolean {
+  return name.endsWith(".ts") && !name.endsWith(".d.ts");
+}
+
+function isFrontendScript(name: string): boolean {
+  if (/\.d\.[mc]?ts$/.test(name)) return false;
+  return PACK_FRONTEND_SCRIPT_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+/** Pack-relative files plugin.yml names as the frontend (`frontend.entry`, legacy top-level `entry`). */
+export function manifestFrontendEntries(packDirAbs: string): string[] {
+  let yml = "";
+  for (const name of ["plugin.yml", "plugin.yaml"]) {
+    try {
+      yml = fs.readFileSync(path.join(packDirAbs, name), "utf8");
+      break;
+    } catch {
+      /* try the next name */
+    }
+  }
+  const clean = (v: string | undefined) =>
+    (v ?? "").replace(/\s+#.*$/, "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  const out: string[] = [];
+  const top = clean(yml.match(/^entry:[ \t]*(.+?)[ \t]*$/m)?.[1]);
+  if (top) out.push(top);
+  const fe = yml.match(/^frontend:[ \t]*\r?\n((?:[ \t]+.*(?:\r?\n|$))+)/m)?.[1] ?? "";
+  const nested = clean(fe.match(/^[ \t]+entry:[ \t]*(.+?)[ \t]*$/m)?.[1]);
+  if (nested) out.push(nested);
+  return out.map((p) => path.posix.normalize(p.replace(/\\/g, "/")).replace(/^\.\//, ""));
+}
 
 const INSTALL_BLOCK_RULES = new Set<PackLintRule>(["sandbox-escape", "host-transport-escape"]);
 
@@ -400,6 +440,7 @@ export function scanPackInstallLint(packDirAbs: string, repoRoot: string): PackI
   const violations = scanPackDirectory(packDirAbs, repoRoot, {
     packId,
     repoPathPrefix: `plugins/src/${packId}`,
+    frontendScripts: true,
   });
   const legacyBlocks = legacyZotoViolationsOnDisallowedPacks(violations);
   const legacyBlockKeys = new Set(legacyBlocks.map(violationKey));
@@ -421,12 +462,18 @@ export function scanPackDirectory(
   const packId = opts.packId ?? path.basename(packDirAbs);
   const repoPrefix = opts.repoPathPrefix ?? `plugins/src/${packId}`;
   const violations: PackLintViolation[] = [...symlinkViolations(packDirAbs, repoPrefix, repoRoot)];
+  const entries = new Set(opts.frontendScripts ? manifestFrontendEntries(packDirAbs) : []);
+  const lintable = (sub: string, name: string) => {
+    if (isTsSource(name)) return true;
+    if (!opts.frontendScripts) return false;
+    return entries.has(sub) || (sub.startsWith("frontend/") && isFrontendScript(name));
+  };
   const walk = (rel: string) => {
     const dir = path.join(packDirAbs, rel);
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
       const sub = rel ? `${rel}/${ent.name}` : ent.name;
       if (ent.isDirectory()) walk(sub);
-      else if (ent.name.endsWith(".ts") && !ent.name.endsWith(".d.ts")) {
+      else if (lintable(sub, ent.name)) {
         const repoRel = `${repoPrefix}/${sub}`.replace(/\\/g, "/");
         const text = fs.readFileSync(path.join(packDirAbs, sub), "utf8");
         violations.push(

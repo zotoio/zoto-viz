@@ -2,109 +2,140 @@
 /**
  * Bundle a pack frontend entry for the service catalog.
  * Every resolved file must stay inside the pack home or plugins/sdk (realpath).
+ *
+ *   bundle-pack-entry.mjs [--lint-timeout-ms=N] <entry.ts> <plugins/sdk/abs> <packHome/abs> [repoRoot]
+ *   bundle-pack-entry.mjs --lint-only [--lint-timeout-ms=N] <packHome/abs> <repoRoot>
+ *
+ * Install lint (#185) runs with ZOTO_PACK_INSTALL_LINT=1 (bundle mode) or --lint-only (packs that
+ * aren't bundled: `frontend.bundle: false` or no frontend). It fails closed — see
+ * pack-install-lint-gate.mjs. Exit codes: 0 pass, 1 lint block / build error, 2 usage,
+ * 3 setup refusal (the check couldn't run or gave no valid verdict; the user message never carries
+ * the raw cause, only the `pack-install-lint-setup-error` diagnostic line does). On a pass the LAST
+ * stderr line is {"type":"pack-install-lint-pass","nonce":$ZOTO_PACK_INSTALL_LINT_NONCE,"pack":<id>},
+ * which the service requires.
  */
-import * as esbuild from "esbuild";
-import { spawnSync } from "node:child_process";
 import fs from "node:fs";
-import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
-import {
-  PACK_BUNDLE_EXTERNALS,
-  resolvePackBundleImport,
-} from "../../plugins/sdk/pack-bundle-resolve.mjs";
 
-const entry = process.argv[2];
-const sdkRoot = path.resolve(process.argv[3] ?? "");
-const packHome = path.resolve(process.argv[4] ?? "");
-const repoRoot = process.argv[5] ? path.resolve(process.argv[5]) : undefined;
+// Mirrors pack-install-lint-gate.mjs; kept here so a gate module that can't load still refuses.
+const EXIT_LINT_SETUP = 3;
+const LINT_SETUP = "pack-install-lint-setup-error";
+const LINT_PASS = "pack-install-lint-pass";
 
-if (!entry || !sdkRoot || !packHome) {
-  console.error("usage: bundle-pack-entry.mjs <entry.ts> <plugins/sdk/abs> <packHome/abs> [repoRoot]");
+const flags = new Map();
+const pos = [];
+for (const arg of process.argv.slice(2)) {
+  if (arg.startsWith("--")) {
+    const eq = arg.indexOf("=");
+    flags.set(eq < 0 ? arg.slice(2) : arg.slice(2, eq), eq < 0 ? "" : arg.slice(eq + 1));
+  } else {
+    pos.push(arg);
+  }
+}
+const lintOnly = flags.has("lint-only");
+const lintMode = lintOnly || process.env.ZOTO_PACK_INSTALL_LINT === "1";
+let lintTimeoutMs;
+if (flags.has("lint-timeout-ms")) {
+  lintTimeoutMs = Number(flags.get("lint-timeout-ms"));
+  if (!Number.isInteger(lintTimeoutMs) || lintTimeoutMs <= 0) {
+    console.error("--lint-timeout-ms must be a positive integer (milliseconds)");
+    process.exit(2);
+  }
+}
+
+const entry = lintOnly ? "" : pos[0];
+const sdkRoot = lintOnly ? "" : path.resolve(pos[1] ?? "");
+const packHome = path.resolve((lintOnly ? pos[0] : pos[2]) ?? "");
+const repoArg = lintOnly ? pos[1] : pos[3];
+const repoRoot = repoArg ? path.resolve(repoArg) : undefined;
+
+if (lintOnly ? !pos[0] || !pos[1] : !entry || !pos[1] || !pos[2]) {
+  console.error("usage: bundle-pack-entry.mjs [--lint-timeout-ms=N] <entry.ts> <plugins/sdk/abs> <packHome/abs> [repoRoot]");
+  console.error("       bundle-pack-entry.mjs --lint-only [--lint-timeout-ms=N] <packHome/abs> <repoRoot>");
   process.exit(2);
 }
 
-/**
- * Install lint (#185): fails closed. The install goes ahead only on the runner's explicit pass
- * verdict (a `pack-install-lint-pass` JSON line on stdout, exit 0). A real lint block (exit 1 with
- * the `pack-install-lint-block` JSON line) keeps its message and exit 1. Anything else (tsx or the
- * runner can't be resolved or started, a crash, a signal, exit 0 without a verdict) refuses the
- * install with EXIT_LINT_SETUP and a `pack-install-lint-setup-error` JSON line.
- */
-const EXIT_LINT_BLOCK = 1;
-const EXIT_LINT_SETUP = 3;
-const LINT_PASS = "pack-install-lint-pass";
-const LINT_BLOCK = "pack-install-lint-block";
-const LINT_SETUP = "pack-install-lint-setup-error";
-
-function jsonLines(text, type) {
-  const out = [];
-  for (const line of String(text || "").split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t.startsWith("{")) continue;
+function readManifest(home) {
+  for (const name of ["plugin.yml", "plugin.yaml"]) {
     try {
-      const raw = JSON.parse(t);
-      if (raw && typeof raw === "object" && raw.type === type) out.push(raw);
+      return fs.readFileSync(path.join(home, name), "utf8");
     } catch {
-      /* not a verdict line */
+      /* try the next name */
     }
   }
-  return out;
+  return "";
 }
 
+function manifestField(text, key) {
+  const m = text.match(new RegExp(`^${key}:[ \\t]*(.+?)[ \\t]*$`, "m"));
+  if (!m) return "";
+  return m[1].replace(/^(["'])(.*)\1$/, "$2").trim();
+}
+
+const manifest = readManifest(packHome);
+/** plugin.yml `id:` (the service checks it in the pass verdict), else the pack folder name. */
+const packId = manifestField(manifest, "id") || path.basename(packHome);
 /** plugin.yml display name (top-level `name:`), else `id:`, else the pack folder name. */
-function packDisplayName(home) {
-  let text = "";
-  try {
-    text = fs.readFileSync(path.join(home, "plugin.yml"), "utf8");
-  } catch {
-    try {
-      text = fs.readFileSync(path.join(home, "plugin.yaml"), "utf8");
-    } catch {
-      text = "";
-    }
-  }
-  const field = (key) => {
-    const m = text.match(new RegExp(`^${key}:[ \\t]*(.+?)[ \\t]*$`, "m"));
-    if (!m) return "";
-    return m[1].replace(/^(["'])(.*)\1$/, "$2").trim();
-  };
-  return field("name") || field("id") || path.basename(home);
-}
+const packName = manifestField(manifest, "name") || packId;
 
 function refuseLintSetup(detail) {
-  const message = `Couldn't safety-check ${packDisplayName(packHome)}, so it wasn't installed. Run \`pnpm install\` in \`web/\` and try again.`;
+  const message = `Couldn't safety-check ${packName}, so it wasn't installed. Run \`pnpm install\` in \`web/\` and try again.`;
   console.error(message);
   console.error(JSON.stringify({ type: LINT_SETUP, message, detail }));
   process.exit(EXIT_LINT_SETUP);
 }
 
-if (process.env.ZOTO_PACK_INSTALL_LINT === "1") {
-  if (!repoRoot) refuseLintSetup("no repo root passed to bundle-pack-entry.mjs");
-  const lintRun = path.join(repoRoot, "web/scripts/pack-install-lint-run.ts");
-  let tsxCli;
-  try {
-    tsxCli = createRequire(path.join(repoRoot, "web/package.json")).resolve("tsx/cli");
-  } catch (err) {
-    refuseLintSetup(`tsx not resolvable from web/: ${String(err?.code || err?.message || err)}`);
-  }
-  if (!fs.existsSync(lintRun)) refuseLintSetup(`lint runner missing: ${lintRun}`);
-  const lint = spawnSync(process.execPath, [tsxCli, lintRun, packHome, repoRoot], {
-    cwd: repoRoot,
-    encoding: "utf8",
-  });
-  if (lint.stderr) process.stderr.write(lint.stderr);
-  if (lint.error) refuseLintSetup(`lint runner did not start: ${String(lint.error.code || lint.error.message)}`);
-  if (lint.signal) refuseLintSetup(`lint runner killed by ${lint.signal}`);
-  if (lint.status === EXIT_LINT_BLOCK && jsonLines(lint.stderr, LINT_BLOCK).length > 0) {
-    process.exit(EXIT_LINT_BLOCK);
-  }
-  if (lint.status !== 0 || jsonLines(lint.stdout, LINT_PASS).length === 0) {
-    refuseLintSetup(`lint runner gave no verdict (exit ${lint.status})`);
-  }
-  // Passed: tell the service the lint really ran (it refuses an install-lint bundle without this).
-  console.error(JSON.stringify({ type: LINT_PASS }));
+function errCode(err) {
+  return String(err?.code || err?.message || err);
 }
+
+/** The service's verdict: last stderr line, bound to the service's nonce and this pack id. */
+function emitServicePass() {
+  console.error(JSON.stringify({ type: LINT_PASS, nonce: process.env.ZOTO_PACK_INSTALL_LINT_NONCE ?? "", pack: packId }));
+}
+
+/** A module the bundle needs (esbuild after `pnpm install --prod`, plugins/sdk) can't load. */
+async function importOrRefuse(spec, what) {
+  try {
+    return await import(spec);
+  } catch (err) {
+    if (lintMode) refuseLintSetup(`${what} not importable: ${errCode(err)}`);
+    console.error(`${what} not importable (${errCode(err)}); run \`pnpm install\` in \`web/\``);
+    process.exit(1);
+  }
+}
+
+const esbuild = lintOnly ? null : await importOrRefuse("esbuild", "esbuild");
+const bundleResolve = lintOnly
+  ? null
+  : await importOrRefuse("../../plugins/sdk/pack-bundle-resolve.mjs", "plugins/sdk/pack-bundle-resolve.mjs");
+
+if (lintMode) {
+  if (!repoRoot) refuseLintSetup("no repo root passed to bundle-pack-entry.mjs");
+  let gate;
+  try {
+    gate = await import("./pack-install-lint-gate.mjs");
+  } catch (err) {
+    refuseLintSetup(`lint gate not importable: ${errCode(err)}`);
+  }
+  const verdict = await gate.runInstallLint({
+    repoRoot,
+    packHome,
+    packId,
+    timeoutMs: lintTimeoutMs ?? gate.DEFAULT_LINT_TIMEOUT_MS,
+  });
+  if (verdict.stderr) process.stderr.write(verdict.stderr.endsWith("\n") ? verdict.stderr : `${verdict.stderr}\n`);
+  if (verdict.kind === "block") process.exit(gate.EXIT_LINT_BLOCK);
+  if (verdict.kind !== "pass") refuseLintSetup(verdict.detail || "lint gave no verdict");
+}
+
+if (lintOnly) {
+  emitServicePass();
+  process.exit(0);
+}
+
+const { PACK_BUNDLE_EXTERNALS, resolvePackBundleImport } = bundleResolve;
 
 function boundaryError(importer, specifier, reason) {
   const relFile = path.relative(packHome, importer).replace(/\\/g, "/");
@@ -171,4 +202,5 @@ if (!result.outputFiles[0]) {
   console.error("esbuild produced no output");
   process.exit(1);
 }
+if (lintMode) emitServicePass();
 process.stdout.write(result.outputFiles[0].text);

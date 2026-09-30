@@ -1,12 +1,15 @@
 """#185: the pack install lint fails closed (service side).
 
 bundle-pack-entry.mjs refuses an install with exit 3 and a ``pack-install-lint-setup-error`` line
-when the install lint can't run or gives no verdict. The service maps that to
-PackInstallLintSetupError with the user-facing wording, keeps a real lint block's existing
-"was blocked" message, and refuses an install-lint bundle that carries no pass verdict.
+when the install lint can't run or gives no verdict. The service maps that (and its own timeout)
+to PackInstallLintSetupError with the user-facing wording, keeps a real lint block's existing
+"was blocked" message, and accepts only exit 0 whose LAST stderr line is exactly
+``{"type":"pack-install-lint-pass","nonce":<the service's per-run nonce>,"pack":<id>}``.
+Unbundled (``frontend.bundle: false``) and no-frontend packs go through the same gate
+(``bundle-pack-entry.mjs --lint-only``).
 
-The install rows run the real bundle-pack-entry.mjs with the repo root pointed at a temp tree that
-has no tsx, so the lint runner is really unresolvable.
+The install rows run the real bundle-pack-entry.mjs; the "unresolvable" rows point the repo root at a
+temp tree that has no tsx, so the lint runner really can't be resolved.
 """
 from __future__ import annotations
 
@@ -15,6 +18,7 @@ import json
 import os
 import shutil
 import subprocess
+import time
 import zipfile
 from pathlib import Path
 
@@ -25,9 +29,11 @@ from service import plugin_local
 from service import plugins
 from service.pack_install_lint import (
     EXIT_LINT_SETUP,
+    NONCE_ENV,
     REASON_INSTALL_CHECK_UNAVAILABLE,
     PackInstallLintSetupError,
     format_install_lint_setup_message,
+    format_install_lint_setup_upgrade_message,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,11 +42,18 @@ SETUP_TAIL = ", so it wasn't installed. Run `pnpm install` in `web/` and try aga
 _BLOCK_JSON = json.dumps({"type": "pack-install-lint-block", "message": "frontend/leak.ts:1 sandbox-escape — indexedDB"})
 
 
-def _stub_bundle(monkeypatch: pytest.MonkeyPatch, code: int, stderr: str, stdout: str = "export {};\n") -> None:
-    def run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess(cmd, code, stdout=stdout if code == 0 else "", stderr=stderr)
+def _stub_bundle(monkeypatch: pytest.MonkeyPatch, code: int, stderr: object, stdout: str = "export {};\n") -> None:
+    """Replace the bundle-pack-entry.mjs run; ``stderr`` may be a callable(env) (it sees the nonce)."""
 
-    monkeypatch.setattr(subprocess, "run", run)
+    def run(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        err = stderr(env) if callable(stderr) else stderr
+        return subprocess.CompletedProcess(argv, code, stdout=stdout if code == 0 else "", stderr=err)
+
+    monkeypatch.setattr(plugins, "_run_pack_script", run)
+
+
+def _pass_line(nonce: str, pack: str = "pulse-ts") -> str:
+    return json.dumps({"type": "pack-install-lint-pass", "nonce": nonce, "pack": pack})
 
 
 def _pulse_doc() -> dict:
@@ -77,10 +90,32 @@ def test_compile_refuses_install_lint_bundle_without_pass_verdict(monkeypatch: p
 
 def test_compile_accepts_install_lint_bundle_with_pass_verdict(monkeypatch: pytest.MonkeyPatch) -> None:
     doc = _pulse_doc()
-    _stub_bundle(monkeypatch, 0, '{"type":"pack-install-lint-pass"}\n')
+    _stub_bundle(monkeypatch, 0, lambda env: f"lint warning line\n{_pass_line(env[NONCE_ENV], str(doc['id']))}\n")
     plugins.reset_bundles()
     out = plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
     assert out["bytes"] > 0
+
+
+@pytest.mark.parametrize(
+    "stderr",
+    [
+        pytest.param(lambda env: '{"type":"pack-install-lint-pass"}\n', id="bare-pass-line"),
+        pytest.param(lambda env: _pass_line("not-the-nonce") + "\n", id="wrong-nonce"),
+        pytest.param(lambda env: _pass_line(env[NONCE_ENV], "other-pack") + "\n", id="other-pack"),
+        pytest.param(lambda env: _pass_line(env[NONCE_ENV]) + "\nmore output\n", id="pass-not-last"),
+        pytest.param(
+            lambda env: json.dumps({"type": "pack-install-lint-pass", "nonce": env[NONCE_ENV], "pack": "pulse-ts", "x": 1}) + "\n",
+            id="extra-keys",
+        ),
+    ],
+)
+def test_compile_refuses_pass_verdict_that_is_not_the_exact_last_line(monkeypatch: pytest.MonkeyPatch, stderr: object) -> None:
+    doc = _pulse_doc()
+    assert doc["id"] == "pulse-ts"
+    _stub_bundle(monkeypatch, 0, stderr)
+    plugins.reset_bundles()
+    with pytest.raises(PackInstallLintSetupError, match="Couldn't safety-check Pulse TS"):
+        plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
 
 
 def test_compile_lint_block_keeps_its_message_and_is_not_a_setup_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -135,7 +170,8 @@ def _probe(tmp_path: Path, version: int) -> bytes:
     src = tmp_path / f"probe-v{version}"
     shutil.copytree(ROOT / "plugins/sdk/pack-bundle-fixtures/upgrade-probe", src)
     yml = src / "plugin.yml"
-    yml.write_text(yml.read_text(encoding="utf-8").replace("version: 1", f"version: {version}"), encoding="utf-8")
+    text = yml.read_text(encoding="utf-8").replace("version: 1", f"version: {version}")
+    yml.write_text(text.replace("name: Upgrade probe v1", "name: Upgrade Probe"), encoding="utf-8")
     return _zip_tree(src)
 
 
@@ -156,7 +192,7 @@ def test_install_local_zip_refused_when_lint_runner_unresolvable(
     out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
     assert out.get("ok") is False, out
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert out.get("message") == f"Couldn't safety-check Upgrade probe v1{SETUP_TAIL}"
+    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}"
     assert not (paths.plugin_local_runtime_dir(create=True) / "upgrade-probe").exists()
 
 
@@ -177,6 +213,175 @@ def test_upgrade_refused_when_lint_runner_unresolvable_keeps_v1(
     out = plugin_local.install_local_zip(_probe(tmp_path, 2), overwrite=True)
     assert out.get("ok") is False, out
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert out.get("message") == f"Couldn't safety-check Upgrade probe v1{SETUP_TAIL}"
+    assert out.get("message") == (
+        "Couldn't safety-check the new version of Upgrade Probe, so it wasn't updated. "
+        "You're still on v1. Run `pnpm install` in `web/` and try again."
+    )
+    assert out.get("message") == format_install_lint_setup_upgrade_message("Upgrade Probe", 1)
     assert "was blocked" not in str(out.get("message"))
-    assert "version: 1" in (runtime / "plugin.yml").read_text(encoding="utf-8")
+    assert "version: 1" in (runtime / "plugin.yml").read_text(encoding="utf-8"), "v1 is still installed"
+
+
+# --- runner / service timeouts -----------------------------------------------------------------
+
+
+def test_default_lint_timeout_is_15s_and_below_the_service_timeout() -> None:
+    gate = (ROOT / "web" / "scripts" / "pack-install-lint-gate.mjs").as_uri()
+    js = subprocess.run(
+        ["node", "--input-type=module", "-e", f"import({json.dumps(gate)}).then((m) => console.log(m.DEFAULT_LINT_TIMEOUT_MS))"],
+        capture_output=True, text=True, check=True, timeout=30,
+    )
+    assert int(js.stdout.strip()) == 15000 and int(js.stdout.strip()) < plugins.PACK_BUNDLE_TIMEOUT_S * 1000 == 20000
+
+
+def _gone(pid: int) -> bool:
+    for _ in range(50):
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return True
+        try:
+            # reaped zombies of our own children don't count; anything else is still alive
+            if Path(f"/proc/{pid}/stat").read_text().split()[2] == "Z":
+                return True
+        except OSError:
+            return True
+        time.sleep(0.1)
+    return False
+
+
+def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    """The service's own timeout (a bundle-pack-entry.mjs that hangs) is the setup refusal, not a raw
+    TimeoutExpired, and the whole process group (the script and its child) is killed."""
+    _needs_node_tree()
+    pids = tmp_path / "pids"
+    hang = tmp_path / "hang-bundle.mjs"
+    hang.write_text(
+        "import { spawn } from 'node:child_process';\n"
+        "import { appendFileSync } from 'node:fs';\n"
+        "const c = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });\n"
+        f"appendFileSync({json.dumps(str(pids))}, `${{process.pid}} ${{c.pid}}\\n`);\n"
+        "setInterval(() => {}, 1000);\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", hang)
+    monkeypatch.setattr(plugins, "PACK_BUNDLE_TIMEOUT_S", 1.5)
+    doc = _pulse_doc()
+    plugins.reset_bundles()
+    t0 = time.monotonic()
+    with pytest.raises(PackInstallLintSetupError) as e:
+        plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
+    assert time.monotonic() - t0 < 15
+    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL}"
+    for pid in (int(p) for p in pids.read_text().split()):
+        assert _gone(pid), f"pid {pid} left running after the service timeout"
+    _repo(tmp_path, monkeypatch)
+    out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
+    assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
+    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}"
+
+
+# --- unbundled and no-frontend packs go through the same gate -----------------------------------
+
+
+def _shipped_zip(tmp_path: Path, pack: str, *, leak_js: bool = False) -> bytes:
+    src = tmp_path / f"src-{pack}"
+    shutil.copytree(ROOT / "plugins" / "src" / pack, src)
+    if leak_js:
+        with (src / "frontend" / "helper.js").open("a", encoding="utf-8") as fh:
+            fh.write('\nexport function stash() { return indexedDB.open("x"); }\n')
+    return _zip_tree(src)
+
+
+def test_bundle_false_pack_with_indexeddb_in_a_js_file_is_blocked_at_install(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    assert "bundle: false" in (ROOT / "plugins/src/sandbox-fixture-multi/plugin.yml").read_text(encoding="utf-8")
+    out = plugin_local.install_local_zip(_shipped_zip(tmp_path, "sandbox-fixture-multi", leak_js=True), overwrite=True)
+    assert out.get("ok") is False, out
+    text = str(out.get("message") or out.get("error"))
+    assert text.startswith("Sandbox Fixture Multi was blocked: "), out
+    assert "frontend/helper.js" in text and "indexedDB" in text, out
+    assert "safety-check" not in text
+    assert not (paths.plugin_local_runtime_dir(create=True) / "sandbox-fixture-multi").exists()
+
+
+def test_no_frontend_pack_gets_an_explicit_pass_and_installs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    assert not (ROOT / "plugins/src/cores/frontend").exists()
+    runs: list[tuple[list[str], str]] = []
+    real = plugins._run_pack_script
+
+    def spy(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        proc = real(argv, env)
+        runs.append((argv, proc.stderr))
+        return proc
+
+    monkeypatch.setattr(plugins, "_run_pack_script", spy)
+    plugins.reset_bundles()
+    out = plugin_local.install_local_zip(_shipped_zip(tmp_path, "cores"), overwrite=True)
+    assert out.get("wrote") is True, out
+    lint_only = [(a, err) for a, err in runs if "--lint-only" in a]
+    assert len(lint_only) == 1, runs
+    last = [ln for ln in lint_only[0][1].splitlines() if ln.strip()][-1]
+    verdict = json.loads(last)
+    assert verdict["type"] == "pack-install-lint-pass" and verdict["pack"] == "cores" and verdict["nonce"], verdict
+
+
+def test_no_frontend_pack_is_refused_when_the_runner_is_unresolvable(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    monkeypatch.setattr(plugins, "REPO", _tree_without_tsx(tmp_path))
+    plugins.reset_bundles()
+    out = plugin_local.install_local_zip(_shipped_zip(tmp_path, "cores"), overwrite=True)
+    assert out.get("ok") is False, out
+    assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
+    assert out.get("message") == f"Couldn't safety-check CPU cores{SETUP_TAIL}"
+
+
+def test_setup_messages_and_the_lint_block_share_no_text(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    """Real service output: the lint block (bundle:false pack), the fresh-install setup refusal and
+    the upgrade setup refusal; neither setup message contains the block's text, nor vice versa."""
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    block = plugin_local.install_local_zip(_shipped_zip(tmp_path, "sandbox-fixture-multi", leak_js=True), overwrite=True)
+    block_msg = str(block.get("message") or block.get("error"))
+    assert "was blocked" in block_msg, block
+    first = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
+    assert first.get("wrote") is True, first
+    monkeypatch.setattr(plugins, "REPO", _tree_without_tsx(tmp_path))
+    plugins.reset_bundles()
+    upgrade_msg = str(plugin_local.install_local_zip(_probe(tmp_path, 2), overwrite=True).get("message"))
+    fresh_msg = str(plugin_local.install_local_zip(_shipped_zip(tmp_path, "cores"), overwrite=True).get("message"))
+    assert fresh_msg == f"Couldn't safety-check CPU cores{SETUP_TAIL}"
+    assert upgrade_msg.startswith("Couldn't safety-check the new version of Upgrade Probe")
+    for setup in (fresh_msg, upgrade_msg):
+        assert setup not in block_msg and block_msg not in setup
+        for token in ("was blocked", "sandbox-escape", "indexedDB", "Nothing was installed", "pack lint"):
+            assert token not in setup, (token, setup)
+        for token in ("safety-check", "pnpm install", "wasn't installed", "wasn't updated", "still on v"):
+            assert token not in block_msg, (token, block_msg)
+    assert fresh_msg != upgrade_msg and fresh_msg not in upgrade_msg and upgrade_msg not in fresh_msg
