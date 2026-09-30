@@ -139,15 +139,18 @@ function monitor(opts: {
   mayBeStatic?: boolean;
   drawingNothing?: boolean;
   contextLost?: boolean;
+  /** Not live on the sandbox floor, but new pictures keep landing (no viz.read, serial advances). */
+  picturesAdvance?: boolean;
 }): Run {
   const info = vi.spyOn(console, "info").mockImplementation(() => {});
   const heals: string[] = [];
   const blanks: string[] = [];
   let confirmCalls = 0;
   let pendingOnce = true;
+  let serial = 1;
   const scene = {
     viewEl: document.createElement("div"),
-    pictureSerial: 1,
+    get pictureSerial() { return opts.picturesAdvance ? ++serial : serial; },
     gpuContextLost: !!opts.contextLost,
     lastViewport: { x: 0, y: 0, w: W, h: H },
     tileHealthSkyRgba: () => {
@@ -163,7 +166,7 @@ function monitor(opts: {
     mosaic: null,
     paneEl: () => scene.viewEl,
     sceneFor: () => scene,
-    packFor: () => ({ id: opts.packId, capabilities: ["viz.read", "viz.write"] } as PluginView),
+    packFor: () => ({ id: opts.packId, capabilities: opts.picturesAdvance ? ["viz.write"] : ["viz.read", "viz.write"] } as PluginView),
     mayBeStatic: () => !!opts.mayBeStatic,
     awaitingApproval: () => false,
     isVisible: () => true,
@@ -198,6 +201,16 @@ describe("#180 tile-health confirm: nixie-clock (PA's frame at d276d5df)", () =>
     expect(r.blanks).toEqual([]);
     expect(r.heals).toEqual([]);
   });
+
+  it("nixie-clock off the live floor (pictures still landing): the ladder does not climb", () => {
+    const five = b64(NIXIE_FIVE_PATCH);
+    const signals = { mayBeStatic: false, contextLost: false, pictureSerial: 2, dataFramesArriving: true, drawingNothing: false };
+    expect(classifyTileEmpty({ patch: five, signals, lastCheckPictureSerial: 1 }), "five patches alone").toBe("uniform");
+    expect(classifyTileEmpty({ patch: five, signals, lastCheckPictureSerial: 1, skyFlat: false })).toBeNull();
+    const r = monitor({ packId: "nixie-clock", five, tile: b64(NIXIE_TILE_64), live: false, ms: 30_000, picturesAdvance: true });
+    expect(r.confirmCalls).toBeGreaterThan(0);
+    expect(r.heals).toEqual([]);
+  });
 });
 
 describe("#180 tile-health confirm: the five fixtures, with H1 applied", () => {
@@ -212,6 +225,8 @@ describe("#180 tile-health confirm: the five fixtures, with H1 applied", () => {
     expect(r.confirmCalls).toBeGreaterThan(0);
     expect(r.blanks).toEqual([]);
     expect(r.heals).toEqual([]);
+    const off = monitor({ packId: "tile-health-static", five: b64(STATIC_NOCLOB_FIVE_PATCH), tile, live: false, ms: 30_000, mayBeStatic: true, picturesAdvance: true });
+    expect(off.heals, "off the live floor").toEqual([]);
   });
 
   it("tile-health-black: flat on the patches and on the whole tile, still gets the live-blank notice", () => {
@@ -225,9 +240,10 @@ describe("#180 tile-health confirm: the five fixtures, with H1 applied", () => {
     expect(r.heals).toEqual([]);
   });
 
-  it("tile-health-black when it stops drawing: the ladder still heals it (uniform)", () => {
+  it("tile-health-black off the live floor, pictures still landing: the ladder still heals it (uniform)", () => {
     const u = packUniforms("tile-health-black");
-    const r = monitor({ packId: "tile-health-black", five: fivePatch(SKY["tile-health-black"]!, u), tile: tileRead(SKY["tile-health-black"]!, u), live: false, ms: 20_000 });
+    const r = monitor({ packId: "tile-health-black", five: fivePatch(SKY["tile-health-black"]!, u), tile: tileRead(SKY["tile-health-black"]!, u), live: false, ms: 20_000, picturesAdvance: true });
+    expect(r.confirmCalls).toBeGreaterThan(0);
     expect(r.heals[0]).toBe(`main:${HEAL_LADDER[0]}`);
   });
 
