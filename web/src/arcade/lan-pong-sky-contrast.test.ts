@@ -1,4 +1,5 @@
 /** @vitest-environment happy-dom */
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +7,8 @@ import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parse as parseYaml } from "yaml";
 import { hashColor } from "../core/modes";
-import { contrastRatio, relativeLuminance, themeById, type Theme } from "../core/themes";
+import { contrastRatio, relativeLuminance, SKY_LUMA_CAP, SKY_LUMA_CAP_GLSL, themeById, type Theme } from "../core/themes";
+import { BACKDROP_SKY_FRAG } from "../graph/backdrop";
 import { LookStage } from "../graph/look";
 import { NetScene } from "../graph/scene";
 import { IDLE_VIZ_DEMO_HOSTS } from "../plugins/fixtures/idle-viz-frame";
@@ -24,9 +26,11 @@ import { parseLook } from "../plugins/plugin-visualisation";
  * Backdrop.setLook -> the sky material's uniforms. The WebGL renderer is a recorder (no GPU): its
  * render() hands back the world and the camera, setClearColor the clear behind the sky.
  *
- * The sky pixel is a CPU mirror of the drawn fragment (backdrop.ts FRAG space() + capSkyLuma),
- * with every coefficient read from the material's own fragmentShader each run (spaceShape), so a
- * shader edit changes the mirror or throws. Approximations vs the GPU: float64 instead of float32
+ * The sky pixel is a CPU mirror (the TS copy) of the drawn fragment (backdrop.ts BACKDROP_SKY_FRAG:
+ * hash2 / noise / fbm / space() + capSkyLuma). It is pinned to the GLSL two ways (the parity rows):
+ * every structural value it uses is parsed from the shipped GLSL and must equal the copy's MIRROR
+ * constants, and the normalized source of those GLSL functions must match SKY_GLSL_PIN; the mirror
+ * also refuses to evaluate a shader whose parsed values differ from MIRROR. Approximations vs the GPU: float64 instead of float32
  * (the sin-hash values differ bit for bit, their distribution does not); vDir is the exact sphere
  * direction behind the pixel (ray / sky-sphere hit), not the 48 x 32 tessellation's interpolation;
  * the output is clamped, alpha-blended over the clear at uOpacity and rounded to bytes, then WCAG
@@ -78,54 +82,172 @@ function ymlLook(): Look {
   return { skyBright: vis.look?.skyBright, skyOpacity: vis.look?.skyOpacity, theme: vis.look?.theme, backdrop: vis.look?.backdrop };
 }
 
-/** The space() body, coefficient by coefficient, from the drawn fragment shader. */
-type SpaceShape = {
-  base: number; nXY: number; nZ: number; nT: number; neb: number;
-  sXY: number; sZ: number; sPow: number; gXZ: number; gPow: number;
-  starK: number; starAudio: number; giantMix: number; giantK: number; cap: number;
+/**
+ * The TS copy of the sky shader: every structural value the CPU mirror below depends on, as backdrop.ts's
+ * shipped GLSL (BACKDROP_SKY_FRAG) has it. skyGlslShape() parses the same values out of the GLSL; the parity
+ * rows hold parsed === MIRROR, and mirrorShape() refuses to evaluate a shader that disagrees, so a drift on
+ * either side goes red instead of being silently re-derived. SKY_GLSL_PIN pins the normalized source of every
+ * GLSL function the mirror copies. If either fails: update MIRROR and the mirror functions to match the GLSL,
+ * then re-pin SKY_GLSL_PIN.
+ */
+type SkyShape = {
+  hash2: { kx: number; ky: number; k: number };
+  noise: { s3: number; s2: number; corners: [number, number][] };
+  fbm: { octaves: number; a0: number; w0: number; lacunarity: number; gain: number };
+  space: {
+    base: number; nXY: number; nZ: number; nT: number; neb: number; statements: number;
+    sXY: number; sZ: number; sPow: number; gXZ: number; gPow: number;
+    starK: number; starAudio: number; giantMix: number; giantK: number; giantAudio: number;
+  };
+  dispatch: { fractalBelow: number; spaceBelow: number };
+  out: { cap: string; col: string; bright: string; alpha: string };
+  luma: { r: number; g: number; b: number; floor: number; cap: number };
 };
-const NUM = "([0-9]+(?:\\.[0-9]+)?)";
-function spaceShape(frag: string): SpaceShape {
-  const body = frag.match(/vec3 space\(vec3 dir, float t\) \{([\s\S]*?)\n\}/)?.[1];
-  if (!body) throw new Error("backdrop FRAG: `vec3 space(vec3 dir, float t)` not found; update the CPU mirror");
-  const grab = (re: string, what: string): number[] => {
-    const m = body.match(new RegExp(re));
-    if (!m) throw new Error(`backdrop space(): ${what} line changed; update the CPU mirror`);
+const MIRROR: SkyShape = {
+  hash2: { kx: 127.1, ky: 311.7, k: 43758.5453123 },
+  noise: { s3: 3, s2: 2, corners: [[1, 0], [0, 1], [1, 1]] },
+  fbm: { octaves: 5, a0: 0, w0: 0.5, lacunarity: 2.03, gain: 0.5 },
+  space: {
+    base: 0.25, nXY: 2.4, nZ: 1.7, nT: 0.012, neb: 0.45, statements: 9,
+    sXY: 520, sZ: 210, sPow: 28, gXZ: 110, gPow: 14,
+    starK: 2.2, starAudio: 2.8, giantMix: 0.4, giantK: 0.9, giantAudio: 1,
+  },
+  dispatch: { fractalBelow: 1.5, spaceBelow: 2.5 },
+  out: { cap: "capSkyLuma", col: "col", bright: "uBright", alpha: "uOpacity" },
+  luma: { r: 0.2126, g: 0.7152, b: 0.0722, floor: 0.001, cap: 0.58 },
+};
+/** sha256 of the normalized GLSL the mirror copies (skyGlslPinSource): re-pin only together with a MIRROR update. */
+const SKY_GLSL_PIN = "e011f8e58ec3659de5b91de956fd7fa901a971a80849bfc0370888454061f694";
+const SKY_GLSL_FUNCTIONS = ["hash2", "noise", "fbm", "space", "capSkyLumaTo", "capSkyLuma"];
+
+const NUM = "(-?[0-9]+(?:\\.[0-9]+)?)";
+const INT = "([0-9]+)";
+/** One GLSL function, signature to its matching close brace. */
+function glslFunction(src: string, name: string): string {
+  const head = new RegExp(`\\b(?:float|vec2|vec3|vec4|void)\\s+${name}\\s*\\(`).exec(src);
+  if (!head) throw new Error(`backdrop sky GLSL: function ${name}() not found; update the TS copy (MIRROR) and re-pin SKY_GLSL_PIN`);
+  const open = src.indexOf("{", head.index);
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(head.index, i + 1);
+  }
+  throw new Error(`backdrop sky GLSL: function ${name}() has no closing brace`);
+}
+/** Comments stripped, whitespace dropped wherever it is not between two identifier characters. */
+function normalizeGlsl(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, " ").replace(/\s+/g, " ").replace(/ ?([^\w ]) ?/g, "$1").trim();
+}
+/** The main() statements the space sky passes through: dir / t set-up, the space dispatch and the output line. */
+function mainSpacePath(src: string): string[] {
+  return normalizeGlsl(glslFunction(src, "main")).split(";").filter((s) => /vDir|uTime|fractal\(|space\(|fragColor/.test(s));
+}
+function skyGlslPinSource(src: string): string {
+  return [...SKY_GLSL_FUNCTIONS.map((f) => normalizeGlsl(glslFunction(src, f))), ...mainSpacePath(src)].join("\n");
+}
+const sha256 = (s: string) => createHash("sha256").update(s).digest("hex");
+
+/** Every structural value the TS copy depends on, parsed out of the GLSL. Throws on a line it cannot read. */
+function skyGlslShape(src: string): SkyShape {
+  const body = (name: string) => normalizeGlsl(glslFunction(src, name));
+  const grab = (name: string, re: string, what: string): number[] => {
+    const m = body(name).match(new RegExp(re));
+    if (!m) throw new Error(`backdrop ${name}(): ${what} changed shape; update the TS copy (MIRROR) and re-pin SKY_GLSL_PIN`);
     return m.slice(1).map(Number);
   };
-  const [base] = grab(`vec3 col = uBg \\* ${NUM};`, "base");
-  const [nXY, nZ, nT] = grab(`float n = fbm\\(dir\\.xy \\* ${NUM} \\+ dir\\.z \\* ${NUM} \\+ t \\* ${NUM}\\);`, "nebula fbm");
-  const [neb] = grab(`col \\+= uAccent \\* \\(n \\* n\\) \\* ${NUM};`, "nebula");
-  const [sXY, sZ] = grab(`float speckle = hash2\\(floor\\(dir\\.xy \\* ${NUM} \\+ dir\\.z \\* ${NUM}\\)\\);`, "speckle");
-  const [sPow] = grab(`float star = pow\\(speckle, ${NUM}\\);`, "star");
-  const [gXZ, gPow] = grab(`float giant = pow\\(hash2\\(floor\\(dir\\.xz \\* ${NUM}\\)\\), ${NUM}\\);`, "giant");
-  const [starK, starAudio] = grab(`col \\+= vec3\\(1\\.0\\) \\* star \\* \\(${NUM} \\+ uAudio \\* ${NUM}\\);`, "star add");
-  const [giantMix, giantK] = grab(`col \\+= mix\\(vec3\\(1\\.0\\), uAccent, ${NUM}\\) \\* giant \\* \\(${NUM} \\+ uAudio\\);`, "giant add");
-  if (body.split(";").filter((s) => s.trim()).length !== 9) throw new Error("backdrop space(): statement count changed; update the CPU mirror");
-  if (!/else if \(uMode < 2\.5\) col = space\(dir, t\);/.test(frag)) throw new Error("backdrop FRAG: space() mode dispatch changed");
-  if (!/fragColor = vec4\(capSkyLuma\(col \* uBright\), uOpacity\);/.test(frag)) throw new Error("backdrop FRAG: output line changed");
-  const capM = frag.match(new RegExp(`return capSkyLumaTo\\(c, ${NUM}\\);`));
-  if (!capM) throw new Error("backdrop FRAG: capSkyLuma cap not found");
-  return { base: base!, nXY: nXY!, nZ: nZ!, nT: nT!, neb: neb!, sXY: sXY!, sZ: sZ!, sPow: sPow!, gXZ: gXZ!, gPow: gPow!, starK: starK!, starAudio: starAudio!, giantMix: giantMix!, giantK: giantK!, cap: Number(capM[1]) };
+  const [kx, ky, k] = grab("hash2", `return fract\\(sin\\(dot\\(p,vec2\\(${NUM},${NUM}\\)\\)\\)\\*${NUM}\\);`, "hash");
+  grab("noise", `vec2 i=floor\\(p\\),f=fract\\(p\\);`, "cell split");
+  const [s3, s2] = grab("noise", `f=f\\*f\\*\\(${NUM}-${NUM}\\*f\\);`, "smoothstep");
+  const ret = body("noise").match(/return mix\(mix\(hash2\(i\),hash2\(i\+vec2\(([^)]*)\)\),f\.x\),mix\(hash2\(i\+vec2\(([^)]*)\)\),hash2\(i\+vec2\(([^)]*)\)\),f\.x\),f\.y\);/);
+  if (!ret) throw new Error("backdrop noise(): bilinear mix changed shape; update the TS copy (MIRROR) and re-pin SKY_GLSL_PIN");
+  const corners = ret.slice(1).map((c): [number, number] => { const [a, b] = c.split(",").map(Number); return [a!, b!]; });
+  const [a0, w0] = grab("fbm", `float a=${NUM},w=${NUM};`, "accumulators");
+  const [octaves, lacunarity, gain] = grab("fbm", `for\\(int i=0;i<${INT};i\\+\\+\\)\\{a\\+=w\\*noise\\(p\\);p\\*=${NUM};w\\*=${NUM};\\}return a;`, "octave loop");
+  const [base] = grab("space", `vec3 col=uBg\\*${NUM};`, "base");
+  const [nXY, nZ, nT] = grab("space", `float n=fbm\\(dir\\.xy\\*${NUM}\\+dir\\.z\\*${NUM}\\+t\\*${NUM}\\);`, "nebula fbm");
+  const [neb] = grab("space", `col\\+=uAccent\\*\\(n\\*n\\)\\*${NUM};`, "nebula");
+  const [sXY, sZ] = grab("space", `float speckle=hash2\\(floor\\(dir\\.xy\\*${NUM}\\+dir\\.z\\*${NUM}\\)\\);`, "speckle");
+  const [sPow] = grab("space", `float star=pow\\(speckle,${NUM}\\);`, "star");
+  const [gXZ, gPow] = grab("space", `float giant=pow\\(hash2\\(floor\\(dir\\.xz\\*${NUM}\\)\\),${NUM}\\);`, "giant");
+  const [starK, starAudio] = grab("space", `col\\+=vec3\\(1\\.0\\)\\*star\\*\\(${NUM}\\+uAudio\\*${NUM}\\);`, "star add");
+  const [giantMix, giantK] = grab("space", `col\\+=mix\\(vec3\\(1\\.0\\),uAccent,${NUM}\\)\\*giant\\*\\(${NUM}\\+uAudio\\);`, "giant add");
+  const statements = body("space").replace(/^[^{]*\{/, "").split(";").filter((s) => s.replace("}", "").trim()).length;
+  const main = mainSpacePath(src).join(";");
+  const fr = main.match(new RegExp(`if\\(uMode<${NUM}\\)col=fractal\\(dir,t\\)`));
+  const sp = main.match(new RegExp(`else if\\(uMode<${NUM}\\)col=space\\(dir,t\\)`));
+  const out = main.match(/fragColor=vec4\((\w+)\((\w+)\*(\w+)\),(\w+)\)/);
+  if (!fr || !sp || !out) throw new Error("backdrop main(): space dispatch or output line changed shape; update the TS copy (MIRROR) and re-pin SKY_GLSL_PIN");
+  const [r, g, b] = grab("capSkyLumaTo", `float y=dot\\(max\\(c,vec3\\(0\\.0\\)\\),vec3\\(${NUM},${NUM},${NUM}\\)\\);`, "luma weights");
+  const [floor] = grab("capSkyLumaTo", `return y>cap&&cap>${NUM}\\?c\\*\\(cap/y\\):c;`, "cap scale");
+  const [cap] = grab("capSkyLuma", `return capSkyLumaTo\\(c,${NUM}\\);`, "cap value");
+  return {
+    hash2: { kx: kx!, ky: ky!, k: k! },
+    noise: { s3: s3!, s2: s2!, corners },
+    fbm: { octaves: octaves!, a0: a0!, w0: w0!, lacunarity: lacunarity!, gain: gain! },
+    space: {
+      base: base!, nXY: nXY!, nZ: nZ!, nT: nT!, neb: neb!, statements,
+      sXY: sXY!, sZ: sZ!, sPow: sPow!, gXZ: gXZ!, gPow: gPow!,
+      starK: starK!, starAudio: starAudio!, giantMix: giantMix!, giantK: giantK!, giantAudio: 1,
+    },
+    dispatch: { fractalBelow: Number(fr[1]), spaceBelow: Number(sp[1]) },
+    out: { cap: out[1]!, col: out[2]!, bright: out[3]!, alpha: out[4]! },
+    luma: { r: r!, g: g!, b: b!, floor: floor!, cap: cap! },
+  };
+}
+/** The shape the mirror evaluates with: parsed from the drawn GLSL, and only if it is exactly the TS copy's. */
+function mirrorShape(frag: string): SkyShape {
+  const parsed = skyGlslShape(frag);
+  if (JSON.stringify(parsed) !== JSON.stringify(MIRROR)) {
+    throw new Error(`backdrop sky GLSL no longer matches the TS copy: parsed ${JSON.stringify(parsed)} vs MIRROR ${JSON.stringify(MIRROR)}; update the TS copy and re-pin SKY_GLSL_PIN`);
+  }
+  return parsed;
 }
 
 const fract = (x: number) => x - Math.floor(x);
-const hash2 = (x: number, y: number) => fract(Math.sin(x * 127.1 + y * 311.7) * 43758.5453123);
-function noise(x: number, y: number): number {
-  const ix = Math.floor(x), iy = Math.floor(y);
-  let fx = x - ix, fy = y - iy;
-  fx = fx * fx * (3 - 2 * fx); fy = fy * fy * (3 - 2 * fy);
+/** hash2 / noise / fbm as in the GLSL, every constant from the shape. */
+function mirrorNoise(s: SkyShape): { hash2: (x: number, y: number) => number; fbm: (x: number, y: number) => number } {
+  const { kx, ky, k } = s.hash2;
+  const { s3, s2 } = s.noise;
+  const [c1, c2, c3] = s.noise.corners;
+  const { octaves, a0, w0, lacunarity, gain } = s.fbm;
+  const hash2 = (x: number, y: number) => fract(Math.sin(x * kx + y * ky) * k);
   const m = (a: number, b: number, t: number) => a + (b - a) * t;
-  return m(m(hash2(ix, iy), hash2(ix + 1, iy), fx), m(hash2(ix, iy + 1), hash2(ix + 1, iy + 1), fx), fy);
-}
-function fbm(x: number, y: number): number {
-  let a = 0, w = 0.5;
-  for (let i = 0; i < 5; i++) { a += w * noise(x, y); x *= 2.03; y *= 2.03; w *= 0.5; }
-  return a;
+  const noise = (x: number, y: number): number => {
+    const ix = Math.floor(x), iy = Math.floor(y);
+    let fx = x - ix, fy = y - iy;
+    fx = fx * fx * (s3 - s2 * fx); fy = fy * fy * (s3 - s2 * fy);
+    return m(m(hash2(ix, iy), hash2(ix + c1![0], iy + c1![1]), fx), m(hash2(ix + c2![0], iy + c2![1]), hash2(ix + c3![0], iy + c3![1]), fx), fy);
+  };
+  const fbm = (x: number, y: number): number => {
+    let a = a0, w = w0;
+    for (let i = 0; i < octaves; i++) { a += w * noise(x, y); x *= lacunarity; y *= lacunarity; w *= gain; }
+    return a;
+  };
+  return { hash2, fbm };
 }
 
 /** What the sky material draws with, read back from the real LookStage frame. */
-type Drawn = { uBright: number; uOpacity: number; uAudio: number; uMode: number; accent: number[]; bg: number[]; clear: number; frag: string; radius: number; camera: THREE.PerspectiveCamera };
+type Drawn = {
+  uBright: number; uOpacity: number; uAudio: number; uMode: number; accent: number[]; bg: number[]; clear: number; frag: string; radius: number; camera: THREE.PerspectiveCamera;
+  blend: { transparent: boolean; blending: THREE.Blending; premultipliedAlpha: boolean; toneMapped: boolean };
+};
+
+describe("#195 sky mirror parity: the TS copy is pinned to backdrop.ts's shipped GLSL (BACKDROP_SKY_FRAG)", () => {
+  it("every structural value the TS copy uses (octave count, octave weight / frequency, hash, smoothstep, mix and speck coefficients, uBright use, luma weights, SKY_LUMA_CAP) equals the one parsed from the GLSL", () => {
+    const parsed = skyGlslShape(BACKDROP_SKY_FRAG);
+    process.stdout.write(`[#195 parity] parsed ${JSON.stringify(parsed)}\n`);
+    expect(parsed, "backdrop.ts sky GLSL vs the TS copy (MIRROR): update the TS copy (MIRROR + mirror functions in lan-pong-sky-contrast.test.ts) to match the GLSL, then re-pin SKY_GLSL_PIN").toEqual(MIRROR);
+    expect(MIRROR.luma.cap, "TS copy's cap vs themes.ts SKY_LUMA_CAP").toBe(SKY_LUMA_CAP);
+    expect(BACKDROP_SKY_FRAG.includes(SKY_LUMA_CAP_GLSL), "the sky GLSL embeds themes.ts SKY_LUMA_CAP_GLSL").toBe(true);
+    expect(() => mirrorShape(BACKDROP_SKY_FRAG), "the mirror accepts the shipped GLSL").not.toThrow();
+  });
+
+  it("normalized pin: hash2 / noise / fbm / space / capSkyLumaTo / capSkyLuma and main()'s space path, comments and whitespace stripped", () => {
+    const src = skyGlslPinSource(BACKDROP_SKY_FRAG);
+    const hash = sha256(src);
+    expect(hash, `backdrop.ts sky GLSL changed (sha256 ${hash}, pinned ${SKY_GLSL_PIN}): update the TS copy (MIRROR + mirror functions in lan-pong-sky-contrast.test.ts) to match, then re-pin SKY_GLSL_PIN. Normalized source now:\n${src}`).toBe(SKY_GLSL_PIN);
+  });
+});
 
 describe("#195 lan-pong: every game piece >= 3:1 against its sky at full audio", () => {
   const hosts: HTMLElement[] = [];
@@ -190,6 +312,7 @@ describe("#195 lan-pong: every game piece >= 3:1 against its sky at full audio",
       drawn: {
         uBright: Number(u.uBright?.value), uOpacity: Number(u.uOpacity?.value), uAudio: Number(u.uAudio?.value), uMode: Number(u.uMode?.value),
         accent: col(u.uAccent?.value), bg: col(u.uBg?.value), clear, frag: mesh.material.fragmentShader, radius: mesh.geometry.parameters.radius, camera,
+        blend: { transparent: mesh.material.transparent, blending: mesh.material.blending, premultipliedAlpha: mesh.material.premultipliedAlpha, toneMapped: mesh.material.toneMapped },
       },
     };
   }
@@ -217,20 +340,22 @@ describe("#195 lan-pong: every game piece >= 3:1 against its sky at full audio",
    */
   function brightestSky(d: Drawn, dirs: Float64Array, specks: "counted" | "excluded"): { lum: number; hex: number; t: number } {
     const stars = specks === "counted";
-    const s = spaceShape(d.frag);
+    const s = mirrorShape(d.frag);
+    const { hash2, fbm } = mirrorNoise(s);
+    const sp = s.space, lu = s.luma;
     const clearRgb = [(d.clear >> 16) & 255, (d.clear >> 8) & 255, d.clear & 255].map((v) => v / 255);
     let best = { lum: -1, hex: 0, t: 0 };
     const byte = (v: number) => Math.round(Math.min(1, Math.max(0, v)) * 255);
     for (const t of SKY_TIMES) {
       for (let i = 0; i < dirs.length; i += 3) {
         const x = dirs[i]!, y = dirs[i + 1]!, z = dirs[i + 2]!;
-        const n = fbm(x * s.nXY + z * s.nZ + t * s.nT, y * s.nXY + z * s.nZ + t * s.nT);
-        const star = stars ? hash2(Math.floor(x * s.sXY + z * s.sZ), Math.floor(y * s.sXY + z * s.sZ)) ** s.sPow : 0;
-        const giant = stars ? hash2(Math.floor(x * s.gXZ), Math.floor(z * s.gXZ)) ** s.gPow : 0;
-        const c = [0, 1, 2].map((k) => (d.bg[k]! * s.base + d.accent[k]! * n * n * s.neb
-          + star * (s.starK + d.uAudio * s.starAudio) + (1 + (d.accent[k]! - 1) * s.giantMix) * giant * (s.giantK + d.uAudio)) * d.uBright);
-        const yl = 0.2126 * Math.max(0, c[0]!) + 0.7152 * Math.max(0, c[1]!) + 0.0722 * Math.max(0, c[2]!);
-        const k = yl > s.cap && s.cap > 0.001 ? s.cap / yl : 1;
+        const n = fbm(x * sp.nXY + z * sp.nZ + t * sp.nT, y * sp.nXY + z * sp.nZ + t * sp.nT);
+        const star = stars ? hash2(Math.floor(x * sp.sXY + z * sp.sZ), Math.floor(y * sp.sXY + z * sp.sZ)) ** sp.sPow : 0;
+        const giant = stars ? hash2(Math.floor(x * sp.gXZ), Math.floor(z * sp.gXZ)) ** sp.gPow : 0;
+        const c = [0, 1, 2].map((k) => (d.bg[k]! * sp.base + d.accent[k]! * n * n * sp.neb
+          + star * (sp.starK + d.uAudio * sp.starAudio) + (1 + (d.accent[k]! - 1) * sp.giantMix) * giant * (sp.giantK + d.uAudio * sp.giantAudio)) * d.uBright);
+        const yl = lu.r * Math.max(0, c[0]!) + lu.g * Math.max(0, c[1]!) + lu.b * Math.max(0, c[2]!);
+        const k = yl > lu.cap && lu.cap > lu.floor ? lu.cap / yl : 1;
         const hex = (byte(Math.min(1, Math.max(0, c[0]! * k)) * d.uOpacity + clearRgb[0]! * (1 - d.uOpacity)) << 16)
           | (byte(Math.min(1, Math.max(0, c[1]! * k)) * d.uOpacity + clearRgb[1]! * (1 - d.uOpacity)) << 8)
           | byte(Math.min(1, Math.max(0, c[2]! * k)) * d.uOpacity + clearRgb[2]! * (1 - d.uOpacity));
@@ -264,7 +389,11 @@ describe("#195 lan-pong: every game piece >= 3:1 against its sky at full audio",
     expect(yml.backdrop, why).toBe("space");
     const { drawn } = drawAtFullAudio();
     process.stdout.write(`[#195 drawn] uBright ${drawn.uBright.toFixed(4)} uOpacity ${drawn.uOpacity.toFixed(4)} uAudio ${drawn.uAudio} uMode ${drawn.uMode} clear #${drawn.clear.toString(16).padStart(6, "0")}\n`);
+    expect(drawn.frag, "the drawn sky material ships backdrop.ts's BACKDROP_SKY_FRAG, the GLSL the TS copy is pinned to").toBe(BACKDROP_SKY_FRAG);
+    // the mirror blends src * uOpacity + clear * (1 - uOpacity) with no tone mapping: the material must draw that way
+    expect(drawn.blend, "sky material blend state the mirror assumes").toEqual({ transparent: true, blending: THREE.NormalBlending, premultipliedAlpha: false, toneMapped: false });
     expect(drawn.uMode, "space sky mode").toBe(2);
+    expect(drawn.uMode >= MIRROR.dispatch.fractalBelow && drawn.uMode < MIRROR.dispatch.spaceBelow, `uMode ${drawn.uMode} takes main()'s space() branch`).toBe(true);
     expect(drawn.uAudio, "full audio reaches the sky").toBe(1);
     expect(drawn.uBright, `full-audio uBright is above the yml skyBright (the audio boost is on): ${why}`).toBeGreaterThan(Number(yml.skyBright));
   });
