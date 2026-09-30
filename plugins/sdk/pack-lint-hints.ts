@@ -88,3 +88,35 @@ export function ruleMessage(rule: PackLintRule, v: PackLintViolation): string {
       return `${loc} ${rule} → ${v.target}`;
   }
 }
+
+/**
+ * #185: plain-words sentence per rule for the user-facing install block
+ * ("<Name> was blocked because <sentence> Nothing was installed, …"; service/pack_block_copy.py).
+ * No rule ids, file paths, line numbers or code (`parent.`) — those stay in the diagnostic log.
+ * Every rule is listed so a new rule can't silently fall back.
+ */
+export const PACK_LINT_PLAIN_SUMMARY: Readonly<Record<PackLintRule, string>> = {
+  "sandbox-escape": "it tries to reach outside its sandbox.",
+  "host-transport-escape": "it tries to talk to the app directly, which packs aren't allowed to do.",
+  "inline-zoto-declare": "it connects to the visualiser in an old way that isn't allowed any more.",
+  "pack-zoto-binding": "it connects to the visualiser in an old way that isn't allowed any more.",
+  "host-import": "it loads code from outside its own folder.",
+  "cross-pack-import": "it loads code from another pack.",
+  "side-effect-import": "it loads code from outside its own folder.",
+  "unverified-import-call": "it loads code in a way that can't be checked.",
+  "get-config-in-on-frame": "it reads its settings in a way that isn't allowed.",
+  "host-imports-pack-src": "it loads code from outside its own folder.",
+};
+
+export const PACK_LINT_PLAIN_FALLBACK = "it uses code the pack sandbox doesn't allow.";
+
+/** One sentence per distinct kind of finding, in first-seen order ("it …. It …."). */
+export function plainBlockSummary(violations: readonly Pick<PackLintViolation, "rule">[]): string {
+  const sentences: string[] = [];
+  for (const v of violations) {
+    const s = (PACK_LINT_PLAIN_SUMMARY as Record<string, string | undefined>)[v.rule] ?? PACK_LINT_PLAIN_FALLBACK;
+    if (!sentences.includes(s)) sentences.push(s);
+  }
+  if (!sentences.length) sentences.push(PACK_LINT_PLAIN_FALLBACK);
+  return sentences.map((s, i) => (i === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1))).join(" ");
+}

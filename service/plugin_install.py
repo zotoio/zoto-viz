@@ -16,12 +16,26 @@ from . import pack_safe_zip as psz
 from . import paths
 from . import plugin_zip as pz
 from .pack_boundary import PackBundleBoundary, PackBundleBoundaryError, format_blocked_message
-from .pack_install_lint import merge_lint_warnings, run_install_pack_lint
+from .pack_install_lint import (
+    REASON_INSTALL_CHECK_UNAVAILABLE,
+    PackInstallLintSetupError,
+    format_install_lint_setup_upgrade_message,
+    merge_lint_warnings,
+    run_install_pack_lint,
+)
 from .pack_zip_blocks import record_zip_block, row_for_start_failure, zip_block_for_sha
 from .pack_install_blocked_store import record_blocked_zip
 from .pack_install_copy import REASON_PACK_INSTALL_BLOCKED, upgrade_rollback_user_message
 from .pack_sdk_contract import assert_pack_sdk_compatible, read_cached_sdk_manifest
 from .pack_zip_install_ux import installed_runtime_version
+from .pack_block_copy import (
+    BLOCK_FIX_TAIL,
+    SENTENCE_BOUNDARY,
+    SENTENCE_CHECKS_FAILED,
+    SENTENCE_SDK_OLDER,
+    PackBlockedError,
+    upgrade_block_message,
+)
 
 InstallCheck = Callable[["InstallContext"], None]
 
@@ -126,11 +140,15 @@ def queue_install_notice(message: str, *, error: str = "pack_install") -> None:
     _pending_notices.append({"error": error, "message": message})
 
 
-def format_v2_blocked_message(name: str, version: str | int | None, detail: str) -> str:
-    label = (name or "Plugin").strip()
-    ver = str(version).strip() if version is not None else "2"
-    body = detail.strip() or "Pack checks failed."
-    return f"{label} v{ver} was blocked; v1 is still running. {body}"
+def format_v2_blocked_message(
+    name: str,
+    old_version: str | int | None,
+    sentence: str,
+    *,
+    tail: str = BLOCK_FIX_TAIL,
+) -> str:
+    """#185: upgrade block copy; ``old_version`` is the installed version (never a hard-coded v1)."""
+    return upgrade_block_message(name, sentence, old_version, tail=tail)
 
 
 def format_v2_start_failed_message(name: str, version: str | int | None) -> str:
@@ -295,6 +313,12 @@ def _check_pack_install_warnings(ctx: InstallContext) -> dict[str, Any]:
 def _check_sdk_contract(ctx: InstallContext) -> None:
     row = assert_pack_sdk_compatible(ctx.staging, ctx.doc, ctx.rel, runtime_parent=ctx.runtime.parent)
     if row is not None:
+        try:
+            older = int(row.get("packSdkContractVersion") or 0) < int(row.get("hostSdkContractVersion") or 0)
+        except ValueError:
+            older = False
+        if older:
+            raise PackBlockedError(row.get("name") or ctx.doc.get("name") or ctx.doc.get("id"), SENTENCE_SDK_OLDER, tail="")
         raise ValueError(row.get("message") or "SDK contract mismatch")
 
 
@@ -517,10 +541,9 @@ def _install_staged_to_runtime_locked(
             run_staging_checks(ctx)
             doc = ctx.doc
         except PackBundleBoundaryError as e:
-            detail = "Pack imports code outside its own folder."
             if upgrade:
                 raise InstallV2BlockedError(
-                    format_v2_blocked_message(name, version, detail),
+                    format_v2_blocked_message(name, installed_runtime_version(runtime), SENTENCE_BOUNDARY),
                     payload={**e.block.to_dict(), "upgrade_blocked": "true", "zip": rel},
                 ) from e
             raise
@@ -528,11 +551,26 @@ def _install_staged_to_runtime_locked(
             if upgrade:
                 raise InstallV2BlockedError(str(e), payload={"upgrade_blocked": "true", "zip": rel}) from e
             raise
-        except ValueError as e:
+        except PackInstallLintSetupError as e:
+            # #185: the install lint couldn't run (or gave no valid verdict). Never "was blocked";
+            # an upgrade says which version is still installed.
             if upgrade:
                 raise InstallV2BlockedError(
-                    format_v2_blocked_message(name, version, str(e)),
-                    payload={"error": "pack_install_blocked", "upgrade_blocked": "true", "zip": rel},
+                    format_install_lint_setup_upgrade_message(name or e.pack_name, installed_runtime_version(runtime)),
+                    payload={"error": REASON_INSTALL_CHECK_UNAVAILABLE, "upgrade_blocked": "true", "zip": rel},
+                ) from e
+            raise
+        except ValueError as e:
+            if upgrade:
+                if isinstance(e, PackBlockedError):
+                    sentence, tail = e.sentence, e.tail
+                else:
+                    # Not a plain-words block (esbuild error, bad manifest): keep the raw text in the log.
+                    _LOG.warning("pack upgrade blocked for %s: %s", pid, e)
+                    sentence, tail = SENTENCE_CHECKS_FAILED, BLOCK_FIX_TAIL
+                raise InstallV2BlockedError(
+                    format_v2_blocked_message(name, installed_runtime_version(runtime), sentence, tail=tail),
+                    payload={"error": "pack_install_blocked", "upgrade_blocked": "true", "zip": rel, "sentence": sentence},
                 ) from e
             raise
 
