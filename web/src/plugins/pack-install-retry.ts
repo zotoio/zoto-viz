@@ -22,6 +22,8 @@ export type PackInstallRetryApiBody = {
   name?: string;
   id?: string;
   version?: string | number;
+  /** #111: the version still installed after a failed retry ("" when unknown). */
+  installedVersion?: string | number;
   message?: string;
   zipSha256?: string;
 };
@@ -86,8 +88,7 @@ export function applyPackInstallRetryResponse(
   }
   if (result === "start_failed") {
     const name = body.name || body.id;
-    const ver = body.version ?? 2;
-    const message = body.message || packRetryStartFailedMessage(name, ver);
+    const message = body.message || packRetryStartFailedMessage(name, body.version, body.installedVersion);
     updateBlockedCatalogEntryBySha(sha, { message, retryable: "true" });
     return "start_failed";
   }

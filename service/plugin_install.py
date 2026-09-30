@@ -20,6 +20,8 @@ from .pack_install_lint import (
     REASON_INSTALL_CHECK_UNAVAILABLE,
     PackInstallLintSetupError,
     format_install_lint_setup_upgrade_message,
+    format_install_unchecked_message,
+    format_update_copy,
     format_update_refused_message,
     merge_lint_warnings,
     run_install_pack_lint,
@@ -173,20 +175,19 @@ def format_v2_blocked_message(
     return upgrade_block_message(name, sentence, old_version, tail=tail)
 
 
-def format_v2_start_failed_message(name: str, version: str | int | None) -> str:
-    label = (name or "Plugin").strip()
-    ver = str(version).strip() if version is not None else "2"
-    return f"{label} v{ver} couldn't start, so v1 was restored"
+def format_v2_start_failed_message(name: str, version: str | int | None, old_version: str | int | None = None) -> str:
+    """#111: the new version couldn't start, so the update didn't happen (the shared copy table)."""
+    return format_update_copy("couldnt_start", name, version, old_version)
 
 
-def format_interrupted_restore_message(name: str) -> str:
-    label = (name or "Plugin").strip()
-    return f"An update to {label} was interrupted, so v1 was restored"
+def format_interrupted_restore_message(name: str, old_version: str | int | None = None) -> str:
+    """#111: an update that didn't finish; the version you had is back (the shared copy table)."""
+    return format_update_copy("interrupted", name, None, old_version)
 
 
 def format_couldnt_check_message(name: str) -> str:
-    label = (name or "Plugin").strip()
-    return f"Couldn't check {label}; v1 is still running"
+    """#111: a fresh install whose check couldn't run (the shared copy table's ``install_unchecked``)."""
+    return format_install_unchecked_message(name)
 
 
 @dataclass
@@ -632,7 +633,7 @@ def _install_staged_to_runtime_locked(
         except Exception as e:
             if swapped:
                 _restore_from_bak(runtime, dest_zip)
-                msg = format_v2_start_failed_message(name, version)
+                msg = format_v2_start_failed_message(name, version, installed_runtime_version(runtime))
                 record_zip_block(
                     sha256,
                     row_for_start_failure(
@@ -705,7 +706,7 @@ def recover_interrupted_swaps(runtime_parent: Path) -> list[str]:
             cleanup_staging_for_pack(runtime_parent, pid)
             from .pack_install_catalog import append_catalog_record
 
-            msg = format_interrupted_restore_message(name)
+            msg = format_interrupted_restore_message(name, installed_runtime_version(runtime))
             append_catalog_record(
                 {
                     "error": "pack_install_interrupted",

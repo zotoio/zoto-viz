@@ -143,6 +143,26 @@ def format_install_lint_setup_upgrade_message(name: str, old_version: str | int 
     return _fill(setup_template("upgrade", reason), {"name": label, "still": _still(old_version), "fix": setup_fix(reason)})
 
 
+def _label(name: str | None) -> str:
+    return (name or "").strip() or "Plugin"
+
+
+def _version(value: str | int | None) -> str:
+    return str(value).strip() if value is not None else ""
+
+
+def format_update_copy(kind: str, name: str | None, new_version: str | int | None, old_version: str | int | None) -> str:
+    """#111: the table's ``updates[kind]`` sentence ("couldnt_start", "interrupted", "retry_couldnt_start"):
+    the new version by number and which version is still installed. Never "v1"."""
+    template = str(SETUP_COPY["updates"][kind])
+    return _fill(template, {"name": _label(name), "new": _version(new_version), "still": _still(old_version)})
+
+
+def format_install_unchecked_message(name: str | None) -> str:
+    """#111: a fresh install whose check couldn't run (not a setup cause): the table's ``install_unchecked``."""
+    return _fill(str(SETUP_COPY["install_unchecked"]), {"name": _label(name)})
+
+
 def format_update_refused_message(name: str, old_version: str | int | None) -> str:
     """#111: an update refused because its safety check couldn't run at all (UX Pro's sentence: the
     table's ``overrides.update_refused.upgrade``; no fix to offer). Sent with reasonCode

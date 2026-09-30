@@ -883,7 +883,9 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
                     **payload,
                 }
             except (InstallStartFailedError, RuntimeError):
-                msg = format_retry_start_failed_message(name, version)
+                # #111: the version you had is back in place (restored after the failed start).
+                old_version = installed_runtime_version(runtime)
+                msg = format_retry_start_failed_message(name, version, old_version)
                 record_zip_block(
                     digest,
                     row_for_start_failure(
@@ -903,6 +905,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
                     "id": pid,
                     "name": name,
                     "version": version,
+                    "installedVersion": "" if old_version is None else str(old_version),
                     "zipSha256": digest,
                     "blockReason": "couldnt_start",
                     "retryable": "true",

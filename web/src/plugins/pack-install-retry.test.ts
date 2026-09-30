@@ -15,7 +15,7 @@ function seedCouldntStartRecord(
   syncBlockedCatalogFromErrors([{
     error: "pack_install_start_failed",
     blockReason: "couldnt_start",
-    message: "Upgrade probe v2 couldn't start, so v1 was restored",
+    message: "Upgrade probe version 2 couldn't start, so it wasn't updated. You're still on version 1.",
     name: "Upgrade probe",
     id: "upgrade-probe",
     zip: "/tmp/upgrade-probe.zip",
@@ -70,12 +70,12 @@ describe("pack install retry UX", () => {
       retryResult: "start_failed",
       name: "Upgrade probe",
       version: 2,
-      message: packRetryStartFailedMessage("Upgrade probe", 2),
+      message: packRetryStartFailedMessage("Upgrade probe", 2, 1),
     };
     applyPackInstallRetryResponse(SHA, 400, body);
     const entry = blockedCatalogEntries()[0]!;
     expect(blockedRecordDisplayMessage(entry)).toBe(
-      "Upgrade probe v2 still couldn't start, so v1 is still active",
+      "Upgrade probe version 2 still couldn't start. You're still on version 1.",
     );
     expect(packInstallHistory()).toEqual([]);
     expect(packRetryButtonState(SHA).label).toBe(PACK_RETRY_BUTTON_IDLE);
