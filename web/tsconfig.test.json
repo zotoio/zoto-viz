@@ -164,7 +164,6 @@
     "src/plugins/viz-host.test.ts",
     "src/plugins/viz-publish-surface.test.ts",
     "src/plugins/viz-v1-frame-adapter.test.ts",
-    "src/remix/remix-snapshot.test.ts",
     "src/ui/media-ask-focus.chromium.test.ts",
     "src/ui/media-ask-ux.chromium.test.ts",
     "src/ui/media-ask-ux.test.ts",
