@@ -1,7 +1,9 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { ShaderMaterial } from "three";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import { Backdrop } from "../graph/backdrop";
 import { wrapPluginSky } from "./plugin-sky-probe";
 import {
   assertPluginSkySmokeDraws,
@@ -115,6 +117,29 @@ function packWriterInputs(frame: VizDataFrame): { slots: Float32Array; uniforms:
   };
 }
 
+/**
+ * #188: the uniforms the app draws for the pack writer's frame. packWriterInputs above keeps the
+ * pack's raw writes (the #161 writer-parity row compares those); this is what reaches the wall.
+ * #180 H1 makes the pack's uBright / uOpacity factors on the host look: backdrop.ts
+ * setPluginUniform (:1472) and syncPluginLook (:1509) put host uBright x pack uBright on the
+ * material, and applyMorphFade (:1621) host opacity x pack uOpacity (blob-mesh writes none: 1).
+ * The host look is visualisation.yml skyBright / skyOpacity: scene.ts applyLook (:2651-2665) hands
+ * a `backdrop: plugin` view setLook(skyOpacity, skyBright x thermalSkyK x visScale), both factors 1
+ * by default. The pack's uBright is 0.8 + 0.2 x audio (frontend/index.ts:16), so the drawn uBright
+ * is skyBright x (0.8 + 0.2 x audio), never the pack's value alone.
+ */
+function packWriterDrawInputs(frame: VizDataFrame): { slots: Float32Array; uniforms: PluginSkySmokeUniforms; packBright: number } {
+  const { slots, uniforms } = packWriterInputs(frame);
+  const w = captured.uniforms;
+  const packBright = typeof w.uBright === "number" ? w.uBright : 1;
+  const packOpacity = typeof w.uOpacity === "number" ? w.uOpacity : 1;
+  return {
+    slots,
+    packBright,
+    uniforms: { ...uniforms, uBright: HOST_DEFAULTS.uBright * packBright, uOpacity: HOST_DEFAULTS.uOpacity * packOpacity },
+  };
+}
+
 const EMPTY: VizDataFrame = { t: 3, dt: 0.1, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
 
 describe("blob-mesh sky draws on the host camera", () => {
@@ -126,13 +151,13 @@ describe("blob-mesh sky draws on the host camera", () => {
   it("lights the wall on a quiet LAN (live talkers at low rates, smallest blobs)", async () => {
     const roles = ["gateway", "lan", "internet", "lan", "local"];
     const talkers = roles.map((role, i) => ({ id: `192.168.1.${10 + i}`, rate: 0.5, role }));
-    const { slots, uniforms } = packWriterInputs({ ...EMPTY, talkers });
+    const { slots, uniforms } = packWriterDrawInputs({ ...EMPTY, talkers });
     const r = await smokeRenderPluginSky(wrappedSky(), slots, uniforms);
     expect(() => assertPluginSkySmokeDraws(r), r.assertion).not.toThrow();
   }, 60_000);
 
   it("lights the wall from the pack's own writer on a host idle-fixture frame", async () => {
-    const { slots, uniforms } = packWriterInputs(mergeVizIdleFrame(EMPTY, { fixture: "host" }));
+    const { slots, uniforms } = packWriterDrawInputs(mergeVizIdleFrame(EMPTY, { fixture: "host" }));
     const r = await smokeRenderPluginSky(wrappedSky(), slots, uniforms);
     expect(() => assertPluginSkySmokeDraws(r), r.assertion).not.toThrow();
   }, 60_000);
@@ -168,6 +193,56 @@ describe("blob-mesh sky draws on the host camera", () => {
     const w75 = await smokeRenderPluginSky(wrappedSky(rawSky, worldDomeSkyRay(75)), empty, HOST_DEFAULTS);
     expect(w15.pixelChecksum, "world-fixed dome control should differ across pitch").not.toBe(w75.pixelChecksum);
   }, 90_000);
+});
+
+/**
+ * #188: the pack-writer rows render what the app's Backdrop puts on the material, not the pack's
+ * own uBright. The expected numbers come from the real path (see packWriterDrawInputs): host
+ * skyBright 1.03 / skyOpacity 0.96 (visualisation.yml) x pack uBright 0.8 + 0.2 x audio.
+ * Revert: render the pack's uBright alone in packWriterDrawInputs -> 0.8 vs 0.824, red.
+ */
+describe("blob-mesh pack-writer rows draw the app's host x pack uBright (#188, #180 H1)", () => {
+  /** A real Backdrop at blob-mesh's host look, with the pack's writes forwarded (NetScene.setPluginUniform's route). */
+  function backdropDraws(writes: Record<string, number | [number, number, number]>): { bright: number; opacity: number } {
+    const b = new Backdrop();
+    b.setKind("plugin");
+    expect(b.setPluginShader({ id: "blob-mesh", source: rawSky }, () => null)).toBeNull();
+    for (let f = 0; f <= 240; f++) {
+      b.setLook(HOST_DEFAULTS.uOpacity, HOST_DEFAULTS.uBright, 0);
+      for (const [name, v] of Object.entries(writes)) expect(b.setPluginUniform(name, v), name).toBe(true);
+      b.tick(f / 60);
+    }
+    expect(b.skyMorphing(), "crossfade done").toBe(false);
+    const m = b.mesh.material;
+    if (!(m instanceof ShaderMaterial)) throw new Error("the plugin sky material is not on the sphere");
+    const bright: unknown = m.uniforms.uBright?.value;
+    const opacity: unknown = m.uniforms.uOpacity?.value;
+    if (typeof bright !== "number" || typeof opacity !== "number") throw new Error("plugin material has no uBright / uOpacity");
+    return { bright, opacity };
+  }
+
+  it("renders skyBright x (0.8 + 0.2 x audio) and skyOpacity, the values the Backdrop draws: 0.824 / 0.927 / 1.03 and 0.96", () => {
+    const idle = mergeVizIdleFrame({ ...EMPTY, t: 35 }, { fixture: "host" });
+    const pinned = [
+      { audio: 0, pack: 0.8, drawn: 0.824 },
+      { audio: 0.5, pack: 0.9, drawn: 0.927 },
+      { audio: 1, pack: 1, drawn: 1.03 },
+    ];
+    for (const p of pinned) {
+      const frame = { ...idle, audio: p.audio };
+      const { uniforms, packBright } = packWriterDrawInputs(frame);
+      const writes = { ...captured.uniforms };
+      captured = { slot0: [], uniforms: {} };
+      const app = backdropDraws(writes);
+      const why = `audio ${p.audio}: pack uBright ${packBright}, Backdrop draws uBright ${app.bright} uOpacity ${app.opacity}; harness uBright ${uniforms.uBright} uOpacity ${uniforms.uOpacity}`;
+      expect(packBright, why).toBeCloseTo(p.pack, 9);
+      expect(app.bright, why).toBeCloseTo(p.drawn, 9);
+      expect(app.opacity, why).toBeCloseTo(0.96, 9);
+      expect(uniforms.uBright, `harness renders the Backdrop's uBright: ${why}`).toBeCloseTo(app.bright, 9);
+      expect(uniforms.uOpacity, `harness renders the Backdrop's uOpacity: ${why}`).toBeCloseTo(app.opacity, 9);
+      expect(Math.abs(app.bright - packBright), `the host factor is visible: ${why}`).toBeGreaterThan(0.01);
+    }
+  });
 });
 
 /**
