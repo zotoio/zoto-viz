@@ -43,6 +43,7 @@ function minimalState(): StateMsg {
   };
 }
 import { markFrame } from "../../core/fps";
+import { frameTsFromRaf } from "../../core/time-ms";
 import {
   applyHostRenderScaleGovernor,
   bindRenderScaleGovernorPresentListener,
@@ -107,7 +108,7 @@ function runFrames(
   try {
     for (let i = 0; i < frames; i++) {
       scene.noteFrameCost(gpuMs);
-      markFrame(ts);
+      markFrame(frameTsFromRaf(ts));
       ts += FRAME_MS;
       vi.advanceTimersByTime(FRAME_MS);
     }

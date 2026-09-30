@@ -65,7 +65,6 @@
     "../plugins/src/sandbox-fixture-multi/frontend/module.test.ts",
     "../plugins/src/talker-storm/frontend/pack.test.ts",
     "../plugins/src/voxel-world/frontend/world.test.ts",
-    "src/app/__tests__/render-scale-governor-production.test.ts",
     "src/app/consent-pack-start.test.ts",
     "src/app/consent-preserve-ubo.test.ts",
     "src/app/duplicate-slot-scope-note-guards.test.ts",
