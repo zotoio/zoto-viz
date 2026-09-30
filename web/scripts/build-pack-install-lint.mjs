@@ -43,6 +43,9 @@ export async function buildPackInstallLint({ repoRoot = path.resolve(scriptsDir,
     metafile: true,
     legalComments: "none",
     charset: "utf8",
+    // Paths as the checkout lays them out (a linked plugins/sdk still reads "plugins/sdk/…"), so the
+    // output and its stamp don't depend on where the files really live.
+    preserveSymlinks: true,
     logLevel: "silent",
   });
   const inputs = Object.keys(result.metafile.inputs).map((p) => p.replace(/\\/g, "/")).sort();
