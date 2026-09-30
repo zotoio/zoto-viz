@@ -263,6 +263,7 @@ import { applyVizWriteBatch } from "../plugins/viz-write-batch";
 import { notePackPerfPresent } from "./pack-perf-report";
 import { createHostMeshBridge, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
+import { installTileSkyShader } from "./plugin-sky-compile";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
 import { hasKeptTileAnswer, showNeedsYou, waitForTileReview, type TileReviewRunner } from "./needs-you";
 import { clearViewState, setViewState, setViewStateTileResolver, viewStateOf, viewStatePickerSuffix, viewStateViewId } from "./view-state";
@@ -492,14 +493,15 @@ function applyViewLook(): void {
     applyChrome(userChrome, false);
     const m = modeById(modeSel.value);
     const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-    void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal);
+    void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal).catch(() => {});
     return;
   }
   const look = pin ? lookForMode(modeSel.value) : undefined;
   scene.setAnim(mergeLook(settings.animSettings, look));
   const m = modeById(modeSel.value);
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-  void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal);
+  // A sky that fails (fetch or compile) is logged and shown on its tile by installPluginSky.
+  void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal).catch(() => {});
   const want = look?.theme ?? theme.id;
   if (theme.id !== want) applyTheme(want, !!look?.theme, false);
   applyChrome(look?.chrome ?? userChrome, false);
@@ -1403,7 +1405,8 @@ async function installPluginSky(
     throwIfAborted(ctl.signal());
     // A Retry started a newer load for this tile; that one installs the sky.
     if (!ctl.current()) return;
-    const err = target.setPluginShader({ id: spec.id, source });
+    // With its pack, so a sky that fails to compile lands on the tile as cant-draw / shader (#171 c).
+    const err = installTileSkyShader(target, spec, source, packKey);
     if (err) {
       console.warn("zoto-viz plugin sky:", err);
       spec.sky_error = err;
@@ -2382,7 +2385,7 @@ async function healTile(tileId: string, step: HealStep): Promise<void> {
       const sc = tileId === "main" ? scene : mosaic?.graphScene(tileId) ?? null;
       if (sc) setSceneMode(sc, m, optsFor(m));
       if (spec && modeSel.value === m.id) await loadTsPlugin(spec, refreshPluginSignal.signal);
-      else void syncPluginSky(spec, refreshPluginSignal.signal);
+      else void syncPluginSky(spec, refreshPluginSignal.signal).catch(() => {});
       sc?.refresh();
       break;
     }
