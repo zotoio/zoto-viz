@@ -8,6 +8,7 @@
  */
 
 import { skyStartingText } from "../graph/sky-starting-card";
+import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
 import { paintPackAssetPaneNotice } from "../plugins/pack-asset-pane-notice";
 import { packSkyTimedOut } from "../plugins/plugin-copy";
 import type { ConsentState } from "./consent-store";
@@ -23,11 +24,24 @@ export type NeedsYouReason = "consent" | "changed" | "incomplete";
 /** Why a view could not start. `missing`: a saved layout names a view that is not installed. */
 export type CouldntStartReason = "timeout" | "load-failed" | "grant-failed" | "missing";
 
+/**
+ * Why a tile cannot draw (#171 c / #179): its own shader failed to compile or link (`shader`, one
+ * tile), or the shared graphics context is lost (`context-lost`, every tile on the host).
+ */
+export type CantDrawReason = "shader" | "context-lost";
+
 export type ViewState =
   | { kind: "starting" }
   | { kind: "ready" }
   | { kind: "needs-you"; reason: NeedsYouReason; packId: string }
-  | { kind: "couldnt-start"; reason: CouldntStartReason; packId: string; log?: string };
+  | { kind: "couldnt-start"; reason: CouldntStartReason; packId: string; log?: string }
+  /** `log` is the shader info log: for the console line only, never painted on the tile. */
+  | { kind: "cant-draw"; reason: "shader"; packId: string; log?: string }
+  /**
+   * `reload: true` once the wall offers Reload (the host stopped trying, or the notice's own
+   * window ran out); absent while the wall still says it is restoring.
+   */
+  | { kind: "cant-draw"; reason: "context-lost"; reload?: true };
 
 export type ViewStateKind = ViewState["kind"];
 
@@ -52,6 +66,33 @@ function needsYouText(name: string, reason: NeedsYouReason): string {
   }
 }
 
+function cantDrawText(name: string, state: Extract<ViewState, { kind: "cant-draw" }>, solo: boolean): string {
+  switch (state.reason) {
+    case "shader":
+      // A solo tile has no other tiles to reassure about (UX Pro, 36ec34ae review).
+      return solo
+        ? `${name} couldn't draw. Pick another view, or reload to try again.`
+        : `${name} couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.`;
+    case "context-lost":
+      // Word for word what the wall notice shows at this moment (its own constants, so they can't
+      // drift): "Restoring…" until Reload is offered, then the Reload sentence. Never "Other tiles
+      // aren't affected": every tile is.
+      return state.reload ? GFX_NO_RESTORE_NOTICE : GFX_INTERRUPTED_NOTICE;
+    default:
+      return assertNever(state);
+  }
+}
+
+/**
+ * Where the copy lands: the tile id ("main" is the solo wall) and, when the caller knows it, how
+ * many tiles are on the wall. Solo (tile "main" or the only tile) drops "Other tiles aren't affected".
+ */
+export type ViewStateCopyTile = { tileId?: string; tileCount?: number };
+
+function isSoloTile(tile: ViewStateCopyTile): boolean {
+  return tile.tileId === "main" || tile.tileCount === 1;
+}
+
 function couldntStartText(name: string, reason: CouldntStartReason): string {
   switch (reason) {
     case "timeout":
@@ -67,7 +108,7 @@ function couldntStartText(name: string, reason: CouldntStartReason): string {
 }
 
 /** Plain copy for a state: one sentence and at most one button. */
-export function viewStateCopy(state: ViewState, viewName: string): ViewStateCopy {
+export function viewStateCopy(state: ViewState, viewName: string, tile: ViewStateCopyTile = {}): ViewStateCopy {
   const name = viewName.trim() || "This view";
   switch (state.kind) {
     case "starting":
@@ -80,6 +121,9 @@ export function viewStateCopy(state: ViewState, viewName: string): ViewStateCopy
       // Retry cannot bring back a view that is not installed: the notice has no button then.
       if (state.reason === "missing") return { text: couldntStartText(name, state.reason), action: null, button: null };
       return { text: couldntStartText(name, state.reason), action: "retry", button: "Retry" };
+    case "cant-draw":
+      // Copy only: which surface paints it (tile fallback, wall notice) and its button are #179 (c).
+      return { text: cantDrawText(name, state, isSoloTile(tile)), action: null, button: null };
     default:
       return assertNever(state);
   }
@@ -96,6 +140,9 @@ export function viewStatePickerSuffix(state: ViewState | null | undefined): stri
       return "needs OK";
     case "couldnt-start":
       return "couldn't start";
+    case "cant-draw":
+      // Not marked in the picker until UX Pro says so (#179 c): a lost context would mark every view.
+      return null;
     default:
       return assertNever(state);
   }
@@ -123,6 +170,12 @@ export function needsYouReasonFor(state: ConsentState): NeedsYouReason {
 type TileEntry = { viewId: string; state: ViewState; el: HTMLElement | null };
 
 const tiles = new Map<string, TileEntry>();
+/**
+ * What other writers asked for while a lost context held the tile: nothing draws until the
+ * context is back, so a sky wait's "starting" / "ready" (or a clear) waits here and applies when
+ * the tile leaves context-lost.
+ */
+const heldUnderContextLost = new Map<string, { viewId: string; state: ViewState | null; cleared?: true }>();
 const listeners = new Set<(tileId: string) => void>();
 
 function defaultTileEl(tileId: string): HTMLElement | null {
@@ -183,6 +236,11 @@ function notify(tileId: string): void {
 export function setViewState(tileId: string, viewId: string, state: ViewState, el?: HTMLElement | null): void {
   if (!tileId) return;
   const prev = tiles.get(tileId);
+  if (prev && holdsContextLost(prev.state) && !holdsContextLost(state)) {
+    heldUnderContextLost.set(tileId, { viewId, state });
+    if (el) prev.el = el;
+    return;
+  }
   tiles.set(tileId, { viewId, state, el: el ?? prev?.el ?? null });
   if ((state.kind === "starting" || state.kind === "ready")
     && (prev?.state.kind === "needs-you" || prev?.state.kind === "couldnt-start")) {
@@ -203,6 +261,10 @@ export function viewStateViewId(tileId: string): string | null {
 /** Forget a tile (view torn down): attributes come off its element. */
 export function clearViewState(tileId: string): void {
   if (!tiles.has(tileId)) return;
+  if (holdsContextLost(tiles.get(tileId)!.state)) {
+    heldUnderContextLost.set(tileId, { viewId: tiles.get(tileId)!.viewId, state: null, cleared: true });
+    return;
+  }
   const el = viewStateTileEl(tileId);
   const prev = tiles.get(tileId)!;
   tiles.delete(tileId);
@@ -212,6 +274,68 @@ export function clearViewState(tileId: string): void {
     el.querySelectorAll<HTMLElement>(SURFACES).forEach((s) => { delete s.dataset.viewState; });
   }
   notify(tileId);
+}
+
+function holdsContextLost(state: ViewState): boolean {
+  return state.kind === "cant-draw" && state.reason === "context-lost";
+}
+
+/**
+ * The shared context is lost: the tile can't draw (#179). Its current state is kept underneath
+ * and comes back in `leaveContextLost`. `reload` once the wall offers Reload.
+ */
+export function enterContextLost(tileId: string, opts: { reload?: boolean } = {}): void {
+  if (!tileId) return;
+  const prev = tiles.get(tileId);
+  if (prev && !holdsContextLost(prev.state)) heldUnderContextLost.set(tileId, { viewId: prev.viewId, state: prev.state });
+  else if (!prev) heldUnderContextLost.set(tileId, { viewId: tileId, state: null });
+  const state: ViewState = opts.reload
+    ? { kind: "cant-draw", reason: "context-lost", reload: true }
+    : { kind: "cant-draw", reason: "context-lost" };
+  tiles.set(tileId, { viewId: prev?.viewId ?? tileId, state, el: prev?.el ?? null });
+  stampViewState(tileId);
+  notify(tileId);
+}
+
+/**
+ * The context is back and a frame has drawn: the tile leaves context-lost. It returns to what it
+ * was showing (Starting, Needs you, Couldn't start, a shader failure), else it is ready.
+ */
+export function leaveContextLost(tileId: string): void {
+  const cur = tiles.get(tileId);
+  if (!cur || !holdsContextLost(cur.state)) return;
+  const under = heldUnderContextLost.get(tileId);
+  heldUnderContextLost.delete(tileId);
+  if (under?.cleared) {
+    // A writer cleared the tile while it was lost (view torn down): forget it now.
+    tiles.set(tileId, { ...cur, state: { kind: "ready" } });
+    clearViewState(tileId);
+    return;
+  }
+  const back = under?.state && under.state.kind !== "ready" ? under.state : { kind: "ready" as const };
+  tiles.set(tileId, { viewId: under?.viewId ?? cur.viewId, state: back, el: cur.el });
+  stampViewState(tileId);
+  notify(tileId);
+}
+
+/** This tile's own shader failed to compile or link (#171 c). */
+export function enterCantDrawShader(tileId: string, packId: string, log?: string): void {
+  if (!tileId) return;
+  const state: ViewState = log
+    ? { kind: "cant-draw", reason: "shader", packId, log }
+    : { kind: "cant-draw", reason: "shader", packId };
+  setViewState(tileId, viewStateViewId(tileId) ?? tileId, state);
+}
+
+/** The tile's shader compiled, or its pack was swapped or cleared: a shader failure no longer holds. */
+export function leaveCantDrawShader(tileId: string): void {
+  const isShader = (s: ViewState | null | undefined) => s?.kind === "cant-draw" && s.reason === "shader";
+  const under = heldUnderContextLost.get(tileId);
+  if (under && isShader(under.state)) {
+    heldUnderContextLost.set(tileId, { viewId: under.viewId, state: null });
+    return;
+  }
+  if (isShader(tiles.get(tileId)?.state)) clearViewState(tileId);
 }
 
 export function onViewStateChange(fn: (tileId: string) => void): () => void {
@@ -240,7 +364,7 @@ export function showViewState(
 ): void {
   const el = tileEl(tileId) ?? hostEl ?? null;
   if (el && (state.kind === "needs-you" || state.kind === "couldnt-start")) {
-    const copy = viewStateCopy(state, viewName);
+    const copy = viewStateCopy(state, viewName, { tileId });
     const onAction = copy.action === "review" ? actions.onReview : copy.action === "retry" ? actions.onRetry : undefined;
     paintPackAssetPaneNotice(el, copy.text, "fail", onAction
       ? { showRetry: true, onRetry: onAction, retryLabel: copy.button ?? undefined, retryAction: copy.action ?? undefined, onRetryFocused: actions.onActionFocused }
@@ -252,5 +376,6 @@ export function showViewState(
 /** Tiles only: host listeners registered at module load stay. */
 export function resetViewStatesForTests(): void {
   tiles.clear();
+  heldUnderContextLost.clear();
   tileEl = defaultTileEl;
 }
