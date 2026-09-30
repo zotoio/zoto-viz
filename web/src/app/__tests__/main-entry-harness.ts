@@ -2,7 +2,8 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, vi } from "vitest";
+import { afterAll, expect, vi } from "vitest";
+import { SESSION_LIVE_KEY } from "../../core/session-live";
 import type { StateMsg } from "../../core/types";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -263,11 +264,33 @@ export type MainEntryHarness = {
   ws: MockWebSocket;
 };
 
+/** A main.ts is booted in this file and hasn't been torn down yet. */
+let booted = false;
+
+/**
+ * #208: tear the booted main.ts down the way a page going away does. Its pagehide disposes the
+ * LiveFeed poll (#206), which happy-dom's teardown never clears, so no boot's timer outlives it.
+ */
+function pagehideBootedEntry(): void {
+  if (!booted) return;
+  booted = false;
+  // Its pagehide also saves that boot's live session (persistLive), which the next boot would restore.
+  const live = sessionStorage.getItem(SESSION_LIVE_KEY);
+  window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
+  if (live === null) sessionStorage.removeItem(SESSION_LIVE_KEY);
+  else sessionStorage.setItem(SESSION_LIVE_KEY, live);
+}
+
+// The last boot in each test file.
+afterAll(pagehideBootedEntry);
+
 export async function importMainEntryModule(extraPlugins: Record<string, unknown>[] = []): Promise<void> {
+  pagehideBootedEntry();
   vi.resetModules();
   installMainEntryMocks();
   extraPluginRows = extraPlugins;
   mountIndexDom();
+  booted = true;
   await import("../main");
 }
 
