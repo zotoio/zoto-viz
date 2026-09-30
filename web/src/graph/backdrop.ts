@@ -1315,6 +1315,9 @@ export class Backdrop {
   private applyFrag(src: string): void {
     this.mat.fragmentShader = src;
     // #171 (b): only the agent sky (sky-agent.ts PREAMBLE) declares uPhoto; the built-in FRAG does not.
+    // The built-in recipe uniforms (uMode, uMotif, uA, uB, uWarp, uGrain, uBands) stay on mat while a
+    // custom or agent fragment is swapped in, so they are ready when FRAG returns. Those fragments don't
+    // declare them and three.js ignores undeclared uniforms, so nothing reads them in the meantime.
     if (DECLARES_UPHOTO.test(src)) this.mat.uniforms.uPhoto = { value: this.photoTex ?? blankTex() };
     else delete this.mat.uniforms.uPhoto;
     this.mat.needsUpdate = true;
