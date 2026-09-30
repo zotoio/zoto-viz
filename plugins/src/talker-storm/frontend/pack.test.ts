@@ -81,7 +81,9 @@ describe("talker-storm sky (#180)", () => {
       writeParticles: (data: ArrayLike<number>) => void;
     } = {
       onFrame: null,
-      writeBuffer: (slot, data) => writes.push({ kind: "buffer", slot, data: Array.from(data) }),
+      // `data ?? []`: a stale index.ts that still writes slot 0 from a removed field is counted as a
+      // slot 0 write (and fails on that), not as a TypeError inside the stub.
+      writeBuffer: (slot, data) => writes.push({ kind: "buffer", slot, data: Array.from(data ?? []) }),
       writeUniform: (name) => writes.push({ kind: "uniform", name }),
       writeParticles: (data) => writes.push({ kind: "particles", len: data.length }),
     };
