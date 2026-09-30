@@ -94,6 +94,7 @@ describe.skipIf(!pythonDepsReady())("pack bundle install gate (local zip path)",
   ] as const;
 
   for (const { dir, id } of fixtures) {
+    // 60 s: a load accommodation, not a behaviour change (the synchronous python install takes 14-19 s on a loaded box).
     it(`blocks ${dir} through install_local_zip`, () => {
       const pluginLocalDir = mkdtempSync(path.join(os.tmpdir(), "zoto-pack-boundary-"));
       try {
@@ -116,6 +117,6 @@ describe.skipIf(!pythonDepsReady())("pack bundle install gate (local zip path)",
       } finally {
         rmSync(pluginLocalDir, { recursive: true, force: true });
       }
-    });
+    }, 60_000);
   }
 });
