@@ -23,11 +23,22 @@ export type NeedsYouReason = "consent" | "changed" | "incomplete";
 /** Why a view could not start. `missing`: a saved layout names a view that is not installed. */
 export type CouldntStartReason = "timeout" | "load-failed" | "grant-failed" | "missing";
 
+/**
+ * Why a tile can't draw (#171 (c) / #179). `shader`: the tile's own sky failed to compile or link
+ * (one tile). `context-lost`: the shared WebGL context is gone (every tile at once).
+ *
+ * PLACEHOLDER (GE, #179 part (c)): the shape follows TSE's agreed #171 (c) design
+ * (`{ kind: "cant-draw", reason: "shader" | "context-lost", packId, log }`), with `packId` / `log`
+ * optional because a lost context is nobody's pack. Reconcile with TSE's #171 (c) head when it lands.
+ */
+export type CantDrawReason = "shader" | "context-lost";
+
 export type ViewState =
   | { kind: "starting" }
   | { kind: "ready" }
   | { kind: "needs-you"; reason: NeedsYouReason; packId: string }
-  | { kind: "couldnt-start"; reason: CouldntStartReason; packId: string; log?: string };
+  | { kind: "couldnt-start"; reason: CouldntStartReason; packId: string; log?: string }
+  | { kind: "cant-draw"; reason: CantDrawReason; packId?: string; log?: string };
 
 export type ViewStateKind = ViewState["kind"];
 
@@ -66,6 +77,22 @@ function couldntStartText(name: string, reason: CouldntStartReason): string {
   }
 }
 
+/**
+ * The shader copy keeps #171's "Other tiles aren't affected."; a lost context must not say that
+ * (every tile is affected). The wall's single notice owns Reload for a lost context, so the tile
+ * offers no button of its own (UX Pro, #171 / #179).
+ */
+function cantDrawText(name: string, reason: CantDrawReason): string {
+  switch (reason) {
+    case "shader":
+      return `${name} couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.`;
+    case "context-lost":
+      return "Graphics stopped responding. Reload to get it back.";
+    default:
+      return assertNever(reason);
+  }
+}
+
 /** Plain copy for a state: one sentence and at most one button. */
 export function viewStateCopy(state: ViewState, viewName: string): ViewStateCopy {
   const name = viewName.trim() || "This view";
@@ -80,6 +107,8 @@ export function viewStateCopy(state: ViewState, viewName: string): ViewStateCopy
       // Retry cannot bring back a view that is not installed: the notice has no button then.
       if (state.reason === "missing") return { text: couldntStartText(name, state.reason), action: null, button: null };
       return { text: couldntStartText(name, state.reason), action: "retry", button: "Retry" };
+    case "cant-draw":
+      return { text: cantDrawText(name, state.reason), action: null, button: null };
     default:
       return assertNever(state);
   }
@@ -96,6 +125,9 @@ export function viewStatePickerSuffix(state: ViewState | null | undefined): stri
       return "needs OK";
     case "couldnt-start":
       return "couldn't start";
+    case "cant-draw":
+      // A lost context is every tile at once: the wall notice says it, the picker does not repeat it per view.
+      return state.reason === "shader" ? "can't draw" : null;
     default:
       return assertNever(state);
   }
@@ -183,6 +215,12 @@ function notify(tileId: string): void {
 export function setViewState(tileId: string, viewId: string, state: ViewState, el?: HTMLElement | null): void {
   if (!tileId) return;
   const prev = tiles.get(tileId);
+  // While the shared context is lost the tile stays cant-draw: what it would show next waits for the recovery.
+  if (afterContextLoss.has(tileId) && !isContextLostState(state) && isContextLostState(prev?.state)) {
+    afterContextLoss.set(tileId, { viewId, state });
+    if (el && prev) prev.el = el;
+    return;
+  }
   tiles.set(tileId, { viewId, state, el: el ?? prev?.el ?? null });
   if ((state.kind === "starting" || state.kind === "ready")
     && (prev?.state.kind === "needs-you" || prev?.state.kind === "couldnt-start")) {
@@ -202,6 +240,7 @@ export function viewStateViewId(tileId: string): string | null {
 
 /** Forget a tile (view torn down): attributes come off its element. */
 export function clearViewState(tileId: string): void {
+  afterContextLoss.delete(tileId);
   if (!tiles.has(tileId)) return;
   const el = viewStateTileEl(tileId);
   const prev = tiles.get(tileId)!;
@@ -249,8 +288,61 @@ export function showViewState(
   setViewState(tileId, viewId, state, el);
 }
 
+const CONTEXT_LOST: ViewState = { kind: "cant-draw", reason: "context-lost" };
+
+function isContextLostState(state: ViewState | null | undefined): boolean {
+  return state?.kind === "cant-draw" && state.reason === "context-lost";
+}
+
+/** Per tile, the state it goes back to once the lost context is back and has drawn (#179 part (c)). */
+const afterContextLoss = new Map<string, { viewId: string; state: ViewState }>();
+
+/**
+ * The shared WebGL context was lost: every tile on it can't draw. Each tile keeps what it showed
+ * before (or `ready` if it had no state yet) for {@link leaveContextLost}; writes made while lost
+ * (a pick, a sky wait) replace that, so the tile comes back to its latest state.
+ */
+export function enterContextLost(tileIds: readonly string[], viewIdFor: (tileId: string) => string): void {
+  for (const tileId of tileIds) {
+    if (!tileId) continue;
+    const prev = tiles.get(tileId);
+    if (!afterContextLoss.has(tileId)) {
+      const back: ViewState = prev && !isContextLostState(prev.state) ? prev.state : { kind: "ready" };
+      afterContextLoss.set(tileId, { viewId: prev?.viewId ?? viewIdFor(tileId), state: back });
+    }
+    setViewState(tileId, prev?.viewId ?? viewIdFor(tileId), CONTEXT_LOST);
+  }
+}
+
+/** The context is back and a real frame has drawn on it: each tile leaves cant-draw / context-lost. */
+export function leaveContextLost(): void {
+  const back = [...afterContextLoss];
+  afterContextLoss.clear();
+  for (const [tileId, next] of back) {
+    if (isContextLostState(tiles.get(tileId)?.state)) setViewState(tileId, next.viewId, next.state);
+  }
+}
+
+/** What {@link followContextLifecycle} needs from the shared render host (graph/render-host.ts). */
+export type ContextLifecycleSource = {
+  onContextLifecycle(fn: (ev: "lost" | "restored" | "drawn") => void): () => void;
+  tileIds(): string[];
+};
+
+/**
+ * #179 part (c): a lost shared context puts every tile on the host in cant-draw / context-lost; the
+ * first frame drawn after the restore (never the restored event alone) takes them back off.
+ */
+export function followContextLifecycle(host: ContextLifecycleSource, viewIdFor: (tileId: string) => string): () => void {
+  return host.onContextLifecycle((ev) => {
+    if (ev === "lost") enterContextLost(host.tileIds(), viewIdFor);
+    else if (ev === "drawn") leaveContextLost();
+  });
+}
+
 /** Tiles only: host listeners registered at module load stay. */
 export function resetViewStatesForTests(): void {
+  afterContextLoss.clear();
   tiles.clear();
   tileEl = defaultTileEl;
 }

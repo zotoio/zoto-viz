@@ -28,6 +28,8 @@ describe("viewStateCopy: one switch, plain words, at most one button", () => {
     [{ kind: "couldnt-start", reason: "load-failed", packId: "backrooms", log: "403" }, "Backrooms couldn't start.", "Retry"],
     [{ kind: "couldnt-start", reason: "grant-failed", packId: "backrooms" }, "Backrooms couldn't start.", "Retry"],
     [{ kind: "couldnt-start", reason: "missing", packId: "backrooms" }, "Backrooms isn't installed. Pick another view for this tile.", null],
+    [{ kind: "cant-draw", reason: "shader", packId: "backrooms" }, "Backrooms couldn't draw. Other tiles aren't affected.", null],
+    [{ kind: "cant-draw", reason: "context-lost" }, "Graphics stopped responding. Reload to get it back.", null],
   ];
   for (const [state, text, button] of rows) {
     it(`${state.kind}${"reason" in state ? `/${state.reason}` : ""}`, () => {
@@ -38,7 +40,9 @@ describe("viewStateCopy: one switch, plain words, at most one button", () => {
   }
 
   it("an unknown kind is a thrown error, not blank copy (assertNever)", () => {
-    expect(() => viewStateCopy({ kind: "cant-draw" } as unknown as ViewState, "Backrooms")).toThrow(/unhandled view state/);
+    // cant-draw is a real kind now (#179 part (c)); a kind nobody wrote copy for still throws.
+    expect(() => viewStateCopy(JSON.parse('{"kind":"not-a-kind"}'), "Backrooms")).toThrow(/unhandled view state/);
+    expect(() => viewStateCopy(JSON.parse('{"kind":"cant-draw","reason":"not-a-reason"}'), "Backrooms")).toThrow(/unhandled view state/);
     expect(() => assertNever("x" as never)).toThrow(/unhandled view state/);
   });
 

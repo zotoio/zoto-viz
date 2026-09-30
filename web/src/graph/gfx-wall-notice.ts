@@ -15,6 +15,12 @@ export class GfxWallNotice {
   private restoreTimer: ReturnType<typeof setTimeout> | null = null;
   private reloadOffered = false;
 
+  /** What the wall shows right now: nothing, "Graphics were interrupted", or the Reload copy. */
+  get showing(): "none" | "interrupted" | "reload" {
+    if (!this.el) return "none";
+    return this.reloadOffered ? "reload" : "interrupted";
+  }
+
   constructor(
     private readonly wall: HTMLElement,
     private readonly opts: GfxWallNoticeOpts = {},
