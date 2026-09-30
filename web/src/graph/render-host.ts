@@ -424,7 +424,17 @@ export class RenderHost {
     this.restoreAttempts = 0;
     this.restoreDelays = selfLoss ? [0, ...CONTEXT_RESTORE_RETRY_MS] : CONTEXT_RESTORE_RETRY_MS;
     this._contextRecovery = "restoring";
+    // A software host (or a GL renderer without forceContextRestore) cannot ask for the context
+    // back: no restore timer at all, so the wall notice's own 10 s window is the only timer the
+    // loss adds (qe-hook-context-loss, #179 replay).
+    if (!this.canAskForContextRestore()) return;
     this.scheduleContextRestore(this.restoreDelays[0] ?? 0);
+  }
+
+  /** True when this host can request a lost WebGL context back itself (#179). */
+  private canAskForContextRestore(): boolean {
+    if (this.software) return false;
+    return typeof (this.renderer as Partial<THREE.WebGLRenderer>).forceContextRestore === "function";
   }
 
   private onGlContextRestored(): void {
