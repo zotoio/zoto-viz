@@ -57,6 +57,16 @@ export function listPackIds(packsRoot: string): string[] {
     .sort();
 }
 
+/**
+ * #207: a pack's test and vitest config files (`*.test.ts`, `vitest.config.*`) never go into
+ * `module.js`, so the pack-lint walks (`scanPluginsSrc`, `scanPackDirectory`) skip them; the SDK walk
+ * already skips `.test.ts`. The install-time scan (`frontendScripts`) still reads them: an entry that
+ * imports one would bundle it.
+ */
+function isPackTestOrConfigFile(name: string): boolean {
+  return name.endsWith(".test.ts") || /^vitest\.config\.[cm]?[jt]s$/.test(name);
+}
+
 function listPackTsFiles(packsRoot: string, packId: string): string[] {
   const dir = path.join(packsRoot, packId);
   const out: string[] = [];
@@ -66,11 +76,11 @@ function listPackTsFiles(packsRoot: string, packId: string): string[] {
       const sub = rel ? `${rel}/${ent.name}` : ent.name;
       const full = path.join(dir, sub);
       if (ent.isSymbolicLink()) {
-        if (ent.name.endsWith(".ts") && !ent.name.endsWith(".d.ts")) out.push(sub);
+        if (ent.name.endsWith(".ts") && !ent.name.endsWith(".d.ts") && !isPackTestOrConfigFile(ent.name)) out.push(sub);
         continue;
       }
       if (ent.isDirectory()) walk(sub);
-      else if (ent.name.endsWith(".ts") && !ent.name.endsWith(".d.ts")) out.push(sub);
+      else if (ent.name.endsWith(".ts") && !ent.name.endsWith(".d.ts") && !isPackTestOrConfigFile(ent.name)) out.push(sub);
     }
   };
   walk("");
@@ -481,6 +491,7 @@ export function scanPackDirectory(
   const violations: PackLintViolation[] = [...symlinkViolations(packDirAbs, repoPrefix, repoRoot)];
   const entries = new Set(opts.frontendScripts ? manifestFrontendEntries(packDirAbs) : []);
   const lintable = (sub: string, name: string) => {
+    if (!opts.frontendScripts && isPackTestOrConfigFile(name)) return false;
     if (isTsSource(name)) return true;
     if (!opts.frontendScripts) return false;
     return entries.has(sub) || (sub.startsWith("frontend/") && isFrontendScript(name));

@@ -9,6 +9,7 @@ import {
   isLegacyDeclareZotoPackAllowed,
   LEGACY_DECLARE_ZOTO_PACK_IDS,
   scanHostLintFixture,
+  scanPackDirectory,
   scanPackInstallLint,
   scanWebSrc,
   type PackLintRule,
@@ -428,8 +429,31 @@ describe("pack lint guardrails", () => {
 
   it("reports baseline counts per pack and per rule (documentation)", () => {
     const baseline = loadBaseline(repoRoot);
-    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(14);
+    expect(Object.keys(baselineCountsByPack(baseline)).length).toBe(6);
     expect(baselineCountsByRule(baseline)["host-imports-pack-src"] ?? 0).toBe(0);
+    // #207: pack test and vitest config files are out of scope, so no host-import debt is left.
+    expect(baselineCountsByRule(baseline)["host-import"] ?? 0).toBe(0);
+  });
+
+  /** #207: scan a one-file temp pack with the pack-lint (CLI) view. */
+  const scanOneFilePack = (rel: string) => {
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "pack-lint-207-"));
+    const packDir = path.join(tmp, "plugins/src/test-file-probe");
+    mkdirSync(path.dirname(path.join(packDir, rel)), { recursive: true });
+    writeFileSync(path.join(packDir, rel), 'import { readFileSync } from "node:fs";\nexport const r = readFileSync;\n');
+    try {
+      return scanPackDirectory(packDir, repoRoot).map((v) => `${v.file} ${v.rule}`);
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  };
+
+  it("pack-lint does not flag node:fs in a pack's x.test.ts (#207)", () => {
+    expect(scanOneFilePack("frontend/x.test.ts")).toEqual([]);
+  });
+
+  it("pack-lint still reports host-import for node:fs in a pack's shipped index.ts (#207)", () => {
+    expect(scanOneFilePack("frontend/index.ts")).toEqual(["plugins/src/test-file-probe/frontend/index.ts host-import"]);
   });
 
   for (const { rel, rule, target, targetIncludes } of ALL_PACK_BAD_FIXTURES) {
