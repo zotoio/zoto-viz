@@ -40,6 +40,7 @@ export function buildIdleVizFrame(t: number, dt = 0): VizDataFrame {
     rf: [...DEMO_RF],
     talkers: [...DEMO_TALKERS],
     headlines: [...DEMO_HEADLINES],
-    sys: { failed: 0 },
+    // Same all-zero telemetry as the host idle frame (EMPTY_SYS_TELEMETRY); aquarium reads only `failed`.
+    sys: { cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed: 0, udev: 0 },
   };
 }

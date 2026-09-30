@@ -8,7 +8,7 @@ import type { ZotoVizPluginHost } from "../../../sdk/plugin-sandbox";
 type FractalHost = ZotoVizPluginHost<VizDataFrame>;
 
 function vizHost(): FractalHost {
-  return (globalThis as { zoto: FractalHost }).zoto;
+  return (globalThis as typeof globalThis & { zoto: FractalHost }).zoto;
 }
 
 let cfg: Record<string, string> = {};

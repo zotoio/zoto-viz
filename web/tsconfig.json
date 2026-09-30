@@ -15,7 +15,10 @@
     "resolveJsonModule": true,
     "types": [
       "vite/client"
-    ]
+    ],
+    "paths": {
+      "plugins/sdk/*": ["../plugins/sdk/*"]
+    }
   },
   "include": [
     "src",
