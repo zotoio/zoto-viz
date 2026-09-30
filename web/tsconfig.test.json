@@ -18,6 +18,7 @@
     "src/graph/h1-gap-rows.test.ts",
     "src/plugins/pack-sky-lean-h1.test.ts",
     "src/graph/scene-pack-sky-bright.test.ts",
+    "src/plugins/plugin-unavailable.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
     "test/node/pack-mirror-readback-vite.ts",
     "src/core/perf.test.ts",

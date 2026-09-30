@@ -314,6 +314,33 @@ def scan_builds() -> int:
 _PACK_BUNDLE_SCRIPT = REPO / "web" / "scripts" / "bundle-pack-entry.mjs"
 _LOG = logging.getLogger(__name__)
 
+# #169: a pack whose frontend can't be bundled stays in the catalog as an unavailable row (payload
+# ``unavailable``), never in ``plugins``, so no consumer of ``plugins`` can try to load it.
+UNAVAILABLE_ESBUILD = "esbuild_unavailable"
+UNAVAILABLE_BUNDLE_FAILED = "bundle_failed"
+
+
+class PackBundleUnavailable(ValueError):
+    """The frontend bundle couldn't be built. ``reason`` is ``esbuild_unavailable`` (setup isn't
+    finished: esbuild / web/node_modules missing, or #185's exit-3 setup refusal) or
+    ``bundle_failed`` (this pack only). ``str()`` is the raw cause, for the log only."""
+
+    def __init__(self, reason: str, detail: str) -> None:
+        super().__init__(detail)
+        self.reason = reason
+
+
+def _esbuild_probe() -> Path:
+    """The file node resolves for ``import("esbuild")`` from bundle-pack-entry.mjs (web/node_modules)."""
+    return _PACK_BUNDLE_SCRIPT.parent.parent / "node_modules" / "esbuild" / "package.json"
+
+
+def bundle_setup_missing(returncode: int, stderr: str) -> bool:
+    """True when bundle-pack-entry.mjs failed because setup isn't finished, not because of the pack."""
+    if returncode == 3:  # #185 EXIT_LINT_SETUP: the setup refusal
+        return True
+    return "Cannot find package 'esbuild'" in stderr or "esbuild not importable" in stderr
+
 
 def _install_lint_block_from_compile(stderr: str) -> str | None:
     """The plain-words ``message`` of the runner's ``pack-install-lint-block`` line (user-facing).
@@ -514,11 +541,16 @@ def compile_typescript(
         if install_lint:
             # #185: a timeout is "couldn't check", never a raw TimeoutExpired.
             raise pil.PackInstallLintSetupError(label) from e
-        raise ValueError(f"pack bundle timed out after {PACK_BUNDLE_TIMEOUT_S} s") from e
+        raise PackBundleUnavailable(
+            UNAVAILABLE_BUNDLE_FAILED, f"pack bundle timed out after {PACK_BUNDLE_TIMEOUT_S} s"
+        ) from e
     except OSError as e:
         if install_lint:
             # node itself couldn't be started: the check couldn't run.
             raise pil.PackInstallLintSetupError(label) from e
+        if isinstance(e, FileNotFoundError):
+            # #169: no node binary is unfinished setup too, not this pack's fault.
+            raise PackBundleUnavailable(UNAVAILABLE_ESBUILD, f"node not found: {e}") from e
         raise
     _bundle_invocations += 1
     if install_lint:
@@ -527,7 +559,10 @@ def compile_typescript(
         block = boundary_from_compile(doc, proc.stderr)
         if block:
             raise PackBundleBoundaryError(block)
-        raise ValueError(proc.stderr.strip() or "esbuild failed")
+        detail = proc.stderr.strip() or "esbuild failed"
+        if bundle_setup_missing(proc.returncode, proc.stderr):
+            raise PackBundleUnavailable(UNAVAILABLE_ESBUILD, detail)
+        raise PackBundleUnavailable(UNAVAILABLE_BUNDLE_FAILED, detail)
     js = proc.stdout.encode("utf-8")
     if len(js) > MAX_BUNDLE:
         raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")
@@ -1573,6 +1608,7 @@ def _scan_payload(
     plugins: list[dict[str, Any]],
     errors: list[dict[str, str]],
     blocked: list[dict[str, Any]] | None = None,
+    unavailable: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     return {
         "dir": str(dir_path),
@@ -1580,6 +1616,7 @@ def _scan_payload(
         "plugins": plugins,
         "errors": errors,
         "blocked": list(blocked or []),
+        "unavailable": list(unavailable or []),
         "pythonService": python_enabled(),
     }
 
@@ -1658,6 +1695,9 @@ def _catalog_token(root: Path | None) -> tuple[Any, ...]:
         else:
             parts.extend(_dir_token(zips_dir))
     parts.append(_file_token(CONSENT_FILE))
+    # #169: `pnpm install` in web/ changes this, so the next scan retries the unavailable packs
+    # (failed bundles are never cached) and a reload picks them up without a restart.
+    parts.append(_file_token(_esbuild_probe()))
     return tuple(parts)
 
 
@@ -1676,11 +1716,18 @@ def _copy_scan(result: dict[str, Any]) -> dict[str, Any]:
         "plugins": [dict(p) for p in (result.get("plugins") or [])],
         "errors": [dict(e) for e in (result.get("errors") or [])],
         "blocked": [dict(b) for b in (result.get("blocked") or [])],
+        "unavailable": [dict(u) for u in (result.get("unavailable") or [])],
     }
 
 
 def _scan_uncached(root: Path | None = None) -> dict[str, Any]:
     """Build the catalog from src trees plus non-colliding zips, or a YAML tree."""
+    result = _scan_uncached_build(root)
+    _warn_setup_unavailable(result)
+    return result
+
+
+def _scan_uncached_build(root: Path | None = None) -> dict[str, Any]:
     global _scan_builds
     _scan_builds += 1
     src_probe = paths.plugin_src_dir()
@@ -1713,6 +1760,7 @@ def _attach_runtime(
     *,
     sha256: str | None = None,
     parts: list[str] | tuple[str, ...] | None = None,
+    unavailable: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any] | None:
     try:
         home = _plugin_home(path)
@@ -1745,10 +1793,49 @@ def _attach_runtime(
             ),
         )
         return None
+    except PackBundleUnavailable as e:
+        if unavailable is None:
+            errors.append({"file": rel, "error": str(e)})
+            return None
+        unavailable.append(_unavailable_row(doc, rel, e.reason))
+        if e.reason == UNAVAILABLE_BUNDLE_FAILED:
+            # Operator detail (path, raw esbuild error) stays in the log; the row carries only the reason.
+            _LOG.warning("pack %s: frontend bundle failed, pack unavailable: %s", doc.get("id"), e)
+        return None
     except ValueError as e:
         errors.append({"file": rel, "error": str(e)})
         return None
     return extra
+
+
+def _unavailable_row(doc: dict[str, Any], rel: str, reason: str) -> dict[str, Any]:
+    """#169 catalog row for a pack that can't load. No path or raw error: ``file`` is the manifest
+    path the other rows carry, the UI words the reason itself."""
+    row: dict[str, Any] = {
+        "id": str(doc.get("id") or ""),
+        "name": str(doc.get("name") or doc.get("id") or ""),
+        "file": rel,
+        "available": False,
+        "reason": reason,
+    }
+    if doc.get("version") is not None:
+        row["version"] = doc.get("version")
+    return row
+
+
+def _warn_setup_unavailable(result: dict[str, Any]) -> None:
+    """#169: exactly one warning line per catalog build when esbuild is missing (count + ids)."""
+    ids = sorted(
+        str(r.get("id") or "")
+        for r in (result.get("unavailable") or [])
+        if r.get("reason") == UNAVAILABLE_ESBUILD
+    )
+    if ids:
+        _LOG.warning(
+            "esbuild unavailable: %d TS pack(s) can't load until `pnpm install` runs in web/: %s",
+            len(ids),
+            ", ".join(ids),
+        )
 
 
 def _materialize_zip_plugin(
@@ -1917,6 +2004,7 @@ def _scan_zips(
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     blocked: list[dict[str, Any]] = []
+    unavailable: list[dict[str, Any]] = []
     seen: set[str] = set()
     owned = owned_ids or set()
     for zip_path in _zip_files(zips_dir):
@@ -1964,9 +2052,13 @@ def _scan_zips(
                 continue
             parts = tuple(pz.detect_parts(dest))
             zip_sha = pz.plugin_sha256(zip_path)
-            extra = _attach_runtime(doc, yml, errors, rel, sha256=zip_sha, parts=parts)
+            extra = _attach_runtime(
+                doc, yml, errors, rel, sha256=zip_sha, parts=parts, unavailable=unavailable,
+            )
         else:
-            extra = _attach_runtime(doc, yml, errors, rel, sha256=unpacked.sha256, parts=unpacked.parts)
+            extra = _attach_runtime(
+                doc, yml, errors, rel, sha256=unpacked.sha256, parts=unpacked.parts, unavailable=unavailable,
+            )
         if extra is None:
             continue
         row = _catalog_row(
@@ -1978,7 +2070,7 @@ def _scan_zips(
         )
         if row is not None:
             plugins.append(row)
-    return _scan_payload(zips_dir, plugins, errors, blocked)
+    return _scan_payload(zips_dir, plugins, errors, blocked, unavailable)
 
 
 def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
@@ -1986,6 +2078,7 @@ def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
     plugins: list[dict[str, Any]] = []
     errors: list[dict[str, str]] = []
     blocked: list[dict[str, Any]] = []
+    unavailable: list[dict[str, Any]] = []
     seen: set[str] = set()
     for path in files:
         rel = str(path)
@@ -2001,7 +2094,7 @@ def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
         seen.add(pid)
         home = _plugin_home(path)
         parts = pz.detect_parts(home) if path.name in ("plugin.yml", "plugin.yaml") else []
-        extra = _attach_runtime(doc, path, errors, rel, parts=parts)
+        extra = _attach_runtime(doc, path, errors, rel, parts=parts, unavailable=unavailable)
         if extra is None:
             continue
         more: dict[str, Any] = {"file": rel, "parts": list(parts)}
@@ -2011,7 +2104,7 @@ def _scan_trees(root: Path, *, origin: str | None = None) -> dict[str, Any]:
         row = _catalog_row(doc, extra, home, errors, rel, blocked, **more)
         if row is not None:
             plugins.append(row)
-    return _scan_payload(root, plugins, errors, blocked)
+    return _scan_payload(root, plugins, errors, blocked, unavailable)
 
 
 def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str, Any]:
@@ -2023,6 +2116,7 @@ def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str,
     local_plugins: list[dict[str, Any]] = []
     local_errors: list[dict[str, str]] = []
     local_blocked: list[dict[str, Any]] = []
+    local_unavailable: list[dict[str, Any]] = []
     if local_dir.is_dir():
         local = _scan_zips(
             local_dir, paths.plugin_local_runtime_dir(), owned_ids=seen, origin="local",
@@ -2030,6 +2124,7 @@ def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str,
         local_plugins = list(local["plugins"])
         local_errors = list(local["errors"])
         local_blocked = list(local.get("blocked") or [])
+        local_unavailable = list(local.get("unavailable") or [])
     catalog_dir = zips_dir if zips_dir.is_dir() else src_dir
     blocked = (
         list(src.get("blocked") or [])
@@ -2041,6 +2136,7 @@ def _scan_catalog(src_dir: Path, zips_dir: Path, runtime_dir: Path) -> dict[str,
         pins.attach(list(src["plugins"]) + list(zipped["plugins"]) + local_plugins),
         list(src["errors"]) + list(zipped["errors"]) + local_errors,
         blocked,
+        list(src.get("unavailable") or []) + list(zipped.get("unavailable") or []) + local_unavailable,
     )
 
 

@@ -904,6 +904,13 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
   color: var(--muted); font-weight: 600; pointer-events: none;
 }
 .menu li.menu-empty { cursor: default; color: var(--muted); font-size: 12px; }
+/* #169: a pack that can't load is listed greyed out and can't be picked; one setup note on top. */
+.menu li.disabled { cursor: default; color: var(--muted); opacity: 0.6; white-space: normal; }
+.menu li.disabled.active { background: none; }
+.menu li.menu-banner {
+  cursor: default; white-space: normal; max-width: 360px; font-size: 12px; color: var(--muted);
+  border: 1px solid var(--line); margin: 2px 2px 6px;
+}
 .menu li .txt { font-weight: 500; }
 .menu li small { color: var(--muted); margin-left: 8px; font-size: 11px; }
 .menu li.active { background: var(--chip-hover); }
