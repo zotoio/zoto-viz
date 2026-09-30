@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { NetScene } from "../graph/scene";
+import { mockPartial } from "../../test-support/mock-partial";
 import { NetScene as NetSceneCtor } from "../graph/scene";
 import { bindTetrisStandaloneHost, TETRIS_TILE_BACKDROP } from "./tetris-standalone-host";
 import { TetrisView } from "./tetris";
@@ -8,7 +9,12 @@ import { TetrisView } from "./tetris";
 const EXPECTED_WELL_LIT_SIGNATURE = "lights:3,bg:none,fog:0b1220";
 
 function mockScene(): NetScene {
-  return { pulseNow: { level: 0 }, selectedIp: "", deviceOf: () => undefined, selectIp: () => {} } as NetScene;
+  return mockPartial<NetScene>({
+    pulseNow: mockPartial<NetScene["pulseNow"]>({ level: 0 }),
+    selectedIp: "",
+    deviceOf: () => undefined,
+    selectIp: () => {},
+  });
 }
 
 describe("Tetris standalone tile sky", () => {

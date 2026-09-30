@@ -1,7 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_FEED, FEED_LAYOUTS, FEED_SCOPES, FEED_SOURCES, feedViewShift, LiveFeed } from "./feed";
 import type { NetScene } from "../graph/scene";
 import type { Packet, TrafficMsg } from "../core/types";
+import { mockPartial } from "../../test-support/mock-partial";
 
 const feeds: LiveFeed[] = [];
 
@@ -137,5 +138,74 @@ describe("traffic overlay", () => {
     const tx = feed.el.querySelector(".row .tx") as HTMLSpanElement;
     expect(tx.textContent).toBe("A very long NASA image of the day title");
     expect(tx.textContent).not.toMatch(/\n/);
+  });
+});
+
+/** feed.ts POLL_MS: one traffic poll per interval tick while the feed runs. */
+const FEED_POLL_MS = 800;
+
+describe("#198 the stored on drives the off class, the overlay and the feed loop", () => {
+  function bareFeed(): LiveFeed {
+    const host = document.createElement("div");
+    document.body.append(host);
+    const feed = new LiveFeed(host, mockPartial<NetScene>({
+      pulseNow: mockPartial<NetScene["pulseNow"]>({ level: 0 }),
+      selectedIp: "",
+      deviceOf: () => undefined,
+      selectIp: () => {},
+    }));
+    feeds.push(feed);
+    return feed;
+  }
+  const polls = (): number => vi.mocked(fetch).mock.calls.length;
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval", "setTimeout", "clearTimeout", "requestAnimationFrame", "cancelAnimationFrame"] });
+    vi.stubGlobal("fetch", vi.fn(async () => mockPartial<Response>({ ok: false })));
+  });
+
+  afterEach(() => {
+    for (const f of feeds) f.setConfig({ on: false });
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("a partial config with no `on` is on: no off class, overlay shown, feed running", async () => {
+    const feed = bareFeed();
+    feed.setConfig({ layout: "bars", modulate: false });
+    expect(feed.on).toBe(true);
+    expect(feed.el.classList.contains("off")).toBe(false);
+    expect(feed.el.hidden).toBe(!feed.on);
+    expect(feed.el.querySelector<HTMLElement>(".feed-bars")!.hidden).toBe(false);
+    const before = polls();
+    await vi.advanceTimersByTimeAsync(FEED_POLL_MS * 3);
+    expect(polls() - before).toBe(3);
+  });
+
+  it("a partial config with on: false is off: off class, overlay hidden, feed stopped", async () => {
+    const feed = bareFeed();
+    feed.setConfig({ layout: "bars" });
+    feed.setConfig({ layout: "bars", on: false });
+    vi.mocked(fetch).mockClear();
+    expect(feed.on).toBe(false);
+    expect(feed.el.classList.contains("off")).toBe(true);
+    expect(feed.el.hidden).toBe(!feed.on);
+    expect(vi.getTimerCount()).toBe(0); // no poll interval and no rAF frame left pending
+    await vi.advanceTimersByTimeAsync(FEED_POLL_MS * 3);
+    expect(polls()).toBe(0);
+  });
+
+  it("two partial configs then { on: true } leave exactly one feed loop (Pedant: N ticks, not 2N)", async () => {
+    const feed = bareFeed();
+    const setIntervalSpy = vi.spyOn(window, "setInterval");
+    feed.setConfig({ layout: "bars", modulate: false });
+    feed.setConfig({ layout: "bars", modulate: false });
+    feed.setConfig({ on: true });
+    expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+    const n = 5;
+    const before = polls();
+    await vi.advanceTimersByTimeAsync(FEED_POLL_MS * n);
+    expect(polls() - before).toBe(n);
+    expect(vi.getTimerCount()).toBe(2); // one poll interval + one pending rAF frame
   });
 });

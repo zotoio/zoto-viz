@@ -44,7 +44,7 @@ describe("media ask UX (chromium)", () => {
     expect.hasAssertions();
     const page = await harnessPage();
     await page.evaluate(() => {
-      const h = (window as Window & { __mediaAskFocusHarness: Harness }).__mediaAskFocusHarness;
+      const h = (window as Window & { __mediaAskFocusHarness?: Harness }).__mediaAskFocusHarness!;
       h.reset();
       void h.openMicAsk();
     });

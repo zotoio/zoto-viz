@@ -2,6 +2,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bootMainEntry, pickModeFromUi, waitEntryBootComplete } from "./main-entry-harness";
 
+/**
+ * Each row boots the real main.ts and lays out a wall: under box load (~30) the first boot alone
+ * can pass the default 5 s, so this file has its own 30 s budget (#172 follow-up). A broken
+ * expectation still fails on its own message long before that.
+ */
+const WALL_VIEW_TIMEOUT_MS = 30_000;
+vi.setConfig({ testTimeout: WALL_VIEW_TIMEOUT_MS });
+
 /** Graph pack row shaped like the /api/plugins catalog (no consent needed). */
 function packRow(id: string, name: string, look: Record<string, unknown>): Record<string, unknown> {
   return {
@@ -230,5 +238,127 @@ describe("declined wall view shows Needs you (Syscon / Cypher CIC, #172)", () =>
     expect.soft(notice?.dataset.viewId).toBe(wallMode);
     expect.soft(notice?.textContent ?? "").toContain(`${w.name} needs your OK to run.`);
     expect.soft(notice?.querySelector<HTMLButtonElement>("button[data-action=review]")?.textContent).toBe("Review");
+  });
+});
+
+/** A wall view whose pack needs consent only for its backend: no sky and no frontend to load. */
+function backendOnlyWallPacks(w: WallCase): Record<string, unknown>[] {
+  const [wall, ...rest] = wallPacks(w);
+  return [{ ...wall, has_backend: true, backend_sha256: `${w.wallId}-backend`, consent: null, consent_state: "none" }, ...rest];
+}
+
+/** The main tile's Needs you: state and view id on the tile and on its own notice, B's copy. */
+function needsYouOn(tileId: string): { state: string; viewId: string; noticeState: string; noticeViewId: string; text: string; button: string } {
+  const pane = wallPane(tileId);
+  const notice = pane?.querySelector<HTMLElement>(":scope > .mosaic-pane-notice");
+  return {
+    state: pane?.dataset.viewState ?? "",
+    viewId: pane?.dataset.viewId ?? "",
+    noticeState: notice?.dataset.viewState ?? "",
+    noticeViewId: notice?.dataset.viewId ?? "",
+    text: notice?.textContent?.replace(/Review$/, "") ?? "",
+    button: notice?.querySelector<HTMLButtonElement>("button[data-action=review]")?.textContent ?? "",
+  };
+}
+
+async function waitForWall(): Promise<string> {
+  await vi.waitFor(() => {
+    expect(document.body.dataset.mosaic).toBe("8");
+    expect(wallTileIds().length).toBeGreaterThan(0);
+  }, { timeout: 8000 });
+  return mainTileId();
+}
+
+/** Serve a compilable fragment for the wall view's sky (the harness answers other /api/ paths with "{}"). */
+function stubWallSky(wallId: string): void {
+  const harnessFetch = globalThis.fetch;
+  vi.stubGlobal("fetch", ((input: RequestInfo | URL, init?: RequestInit) =>
+    String(input instanceof Request ? input.url : input).includes(`/api/plugins/${wallId}/sky/`)
+      ? Promise.resolve(new Response("void main() { gl_FragColor = vec4(0.0); }", { status: 200 }))
+      : harnessFetch(input, init)) as typeof fetch);
+}
+
+/**
+ * One row per Needs-you route for a wall view (#172 follow-up). Each row reaches only its own
+ * route, so reverting that route alone turns only that row red:
+ * - route (a), paintPluginNeedsReviewNotice's wall branch: the wall view's pack changes while its
+ *   wall is up, and the next sky sync (a Settings pane swap on another tile) asks again;
+ * - route (b), showNeedsYou in reviewWallView: the wall view is picked while its pack (backend
+ *   only, so no sky or frontend ever loads) still needs consent.
+ */
+describe("one row per wall-view Needs-you route (#172 follow-up)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    for (const a of [...document.body.attributes]) document.body.removeAttribute(a.name);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it.each(WALLS)("route (a) paintPluginNeedsReviewNotice wall branch: $name's pack changes while its wall is up; the next sky sync names $name on its main tile", async (w) => {
+    expect.hasAssertions();
+    const wallMode = `plugin:${w.wallId}`;
+    localStorage.setItem("zoto-viz.mode", START);
+    const rows = skyWallPacks(w);
+    await bootMainEntry(rows);
+    await waitEntryBootComplete();
+    stubWallSky(w.wallId);
+
+    await pickModeFromUi(wallMode);
+    const main = await waitForWall();
+    expect(w.tiles).toContain(main);
+    await new Promise((r) => setTimeout(r, 300));
+    expect(needsYouOn(main).state, "approved: no Needs you yet").not.toBe("needs-you");
+
+    // The monitor now reports new sky content for the wall view's pack: its grant no longer holds.
+    Object.assign(rows[0]!, { consent: null, consent_state: "changed", shader_sha256: `${w.wallId}-sky-v2` });
+    const host = await import("../apply-mode-test-host");
+    await host.refreshCatalogForTests();
+
+    // Swap another tile from Settings: the pane switch re-syncs every tile's sky, the wall's too.
+    const other = wallTileIds().find((id) => id !== main)!;
+    const slot = document.querySelector<HTMLSelectElement>(`.mosaic-pane-row[data-pane="${CSS.escape(other)}"] select.mosaic-slot`);
+    expect(slot, `Settings slot for ${other}`).toBeTruthy();
+    slot!.value = "plugin:harness-alt";
+    slot!.dispatchEvent(new Event("change", { bubbles: true }));
+
+    await vi.waitFor(() => { expect(needsYouOn(main).state, `${main} view state`).toBe("needs-you"); }, { timeout: 4000 });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(needsYouOn(main)).toEqual({
+      state: "needs-you",
+      viewId: wallMode,
+      noticeState: "needs-you",
+      noticeViewId: wallMode,
+      text: `${w.name} needs your OK again.`,
+      button: "Review",
+    });
+    expect.soft(headerViewId(), "the header stays on the wall view").toBe(wallMode);
+    expect.soft(document.body.dataset.mosaic, "the wall stays up").toBe("8");
+  });
+
+  it.each(WALLS)("route (b) reviewWallView: picking $name (backend-only pack) held for consent shows Needs you on its main tile", async (w) => {
+    expect.hasAssertions();
+    const wallMode = `plugin:${w.wallId}`;
+    localStorage.setItem("zoto-viz.mode", START);
+    await bootMainEntry(backendOnlyWallPacks(w));
+    await waitEntryBootComplete();
+
+    await pickModeFromUi(wallMode);
+    const main = await waitForWall();
+    expect(w.tiles).toContain(main);
+    await vi.waitFor(() => { expect(needsYouOn(main).state, `${main} view state`).toBe("needs-you"); }, { timeout: 4000 });
+    await new Promise((r) => setTimeout(r, 300));
+    expect(needsYouOn(main)).toEqual({
+      state: "needs-you",
+      viewId: wallMode,
+      noticeState: "needs-you",
+      noticeViewId: wallMode,
+      text: `${w.name} needs your OK to run.`,
+      button: "Review",
+    });
+    expect.soft([...wallTileIds()].sort(), "the wall keeps its own tiles").toEqual([...w.tiles].sort());
+    expect.soft(headerViewId(), "the header stays on the wall view").toBe(wallMode);
   });
 });

@@ -44,7 +44,7 @@ describe("duplicate slot shared config > drawer rebind guards", () => {
     const spec = loadSettingsDeclFixture();
     setPluginModes([
       compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
-      compilePlugin({ id: "topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
+      compilePlugin({ id: "topology", name: "Topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
     ]);
     const settings = new Settings({ storePrefix: "zoto-scope-note-guards", onChange: () => {} });
     document.body.append(settings.el);
@@ -57,7 +57,7 @@ describe("duplicate slot shared config > drawer rebind guards", () => {
     applyMosaicTiles(settings, mosaic, [PACK, `${PACK}!1`, "plugin:topology", "plugin:memory"]);
     bindThisView(PACK);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(r));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
     return { settings, spec, applyMode };
   }
 

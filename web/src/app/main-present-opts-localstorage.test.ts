@@ -21,18 +21,21 @@ describe("present-loop optsFor localStorage (main @6520b01)", () => {
     const mode: ViewMode = {
       id: "plugin:packet-tunnel",
       label: "Packet Tunnel",
+      hint: "",
+      legend: () => [],
       pluginId: "packet-tunnel",
       options: [],
       config: [
-        { key: "bright", type: "number", default: 1, min: 0, max: 2 },
-        { key: "speed", type: "number", default: 1, min: 0, max: 2 },
-        { key: "depth", type: "number", default: 1, min: 0, max: 2 },
-        { key: "gain", type: "number", default: 1, min: 0, max: 2 },
+        { key: "bright", label: "bright", type: "number", default: 1, min: 0, max: 2 },
+        { key: "speed", label: "speed", type: "number", default: 1, min: 0, max: 2 },
+        { key: "depth", label: "depth", type: "number", default: 1, min: 0, max: 2 },
+        { key: "gain", label: "gain", type: "number", default: 1, min: 0, max: 2 },
       ],
     };
     const spec: PluginView = {
       id: "packet-tunnel",
       name: "Packet Tunnel",
+      version: 1,
       capabilities: ["viz.read"],
       config: mode.config,
     };

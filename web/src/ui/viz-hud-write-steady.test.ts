@@ -27,7 +27,7 @@ describe("VizHud steady DOM writes", () => {
       t: 0,
       dt: 0,
       audio: 0,
-      packets: [{ proto: 1, size: 64, field: 1 }],
+      packets: [{ proto: "1", size: 64, field: 1 }],
       rf: [],
       talkers: [],
       headlines: [],

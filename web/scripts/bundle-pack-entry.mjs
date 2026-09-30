@@ -348,7 +348,9 @@ async function runInstallLint() {
   if (answer.kind === "block") {
     for (const line of answer.details) console.error(line);
     // #185: `message` is the <sentence> in "<Name> was blocked because <sentence> …" — plain words only.
-    console.error(JSON.stringify({ type: LINT_BLOCK, message: answer.message, details: answer.details }));
+    // #194: `reason` names install-only refusals (dynamic_import_nonliteral); the details carry it to the log too.
+    const reason = answer.reason ? { reason: answer.reason } : {};
+    console.error(JSON.stringify({ type: LINT_BLOCK, message: answer.message, details: answer.details, ...reason }));
     process.exit(EXIT_LINT_BLOCK);
   }
   if (answer.kind === "boundary") {

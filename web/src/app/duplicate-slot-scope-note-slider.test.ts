@@ -43,7 +43,7 @@ describe("duplicate slot shared config > plugin field persist", () => {
     const spec = loadSettingsDeclFixture();
     setPluginModes([
       compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
-      compilePlugin({ id: "topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
+      compilePlugin({ id: "topology", name: "Topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
     ]);
     const settings = new Settings({ storePrefix: "zoto-scope-note-slider", onChange: () => {} });
     document.body.append(settings.el);
@@ -56,7 +56,7 @@ describe("duplicate slot shared config > plugin field persist", () => {
     applyMosaicTiles(settings, mosaic, [PACK, "plugin:topology", "plugin:memory", "plugin:disk"]);
     bindThisView(PACK);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(r));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
     return { settings, spec };
   }
 
@@ -93,7 +93,7 @@ describe("duplicate slot shared config > plugin field persist", () => {
       maximized: null,
       tiles: twoTiles,
     });
-    await new Promise<void>((r) => requestAnimationFrame(r));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(rebuildDrawerSpy).not.toHaveBeenCalled();
     expect(document.activeElement).toBe(gain);
     expect(gain.value).toBe("8");

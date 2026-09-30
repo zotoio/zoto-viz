@@ -178,12 +178,18 @@ function showPickCouldntStart(
   reason: CouldntStartReason,
   err?: unknown,
 ): void {
+  const tile = tileFor(host, m);
+  const packId = spec?.id ?? m.pluginId ?? m.id;
+  // The pack's sky failed to compile: the tile already says so (cant-draw / shader, #171 c), and a
+  // generic "couldn't start" with Retry would only compile the same shader again.
+  const cur = viewStateOf(tile);
+  if (cur?.kind === "cant-draw" && cur.reason === "shader" && cur.packId === packId) return;
   const log = err instanceof Error ? err.message : err != null ? String(err) : undefined;
   showViewState(
-    tileFor(host, m),
+    tile,
     m.id,
     spec?.name || host.modeLabel(m),
-    { kind: "couldnt-start", reason, packId: spec?.id ?? m.pluginId ?? m.id, ...(log ? { log } : {}) },
+    { kind: "couldnt-start", reason, packId, ...(log ? { log } : {}) },
     { onRetry: () => host.retryDeclinedMode?.(m.id) },
   );
 }

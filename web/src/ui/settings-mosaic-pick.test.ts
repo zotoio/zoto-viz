@@ -21,7 +21,7 @@ describe("settings mosaic pane pickers", () => {
     s.addAnimation(() => {}, { el: document.createElement("div") });
     s.applyAnim({
       ...s.animSettings,
-      mosaic: "2",
+      mosaic: "4",
       mosaicTiles: ["plugin:topology", "plugin:wifi"],
     });
     s.open("view");
@@ -40,7 +40,7 @@ describe("settings mosaic pane pickers", () => {
     s.addAnimation(() => {}, { el: document.createElement("div") });
     s.applyAnim({
       ...s.animSettings,
-      mosaic: "2",
+      mosaic: "4",
       mosaicTiles: ["plugin:topology", "plugin:wifi"],
     });
     s.open("view");
@@ -58,7 +58,7 @@ describe("settings mosaic pane pickers", () => {
     s.addAnimation(() => {}, { el: document.createElement("div") });
     s.applyAnim({
       ...s.animSettings,
-      mosaic: "2",
+      mosaic: "4",
       mosaicTiles: ["plugin:topology", "plugin:wifi"],
     });
     s.open("view");

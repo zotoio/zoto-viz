@@ -6,12 +6,25 @@
  *   least one tsc error, so a fixed file has to leave the list.
  * - HELD: scripts/revert-proof* is a held path (ask ZotoBoss). Those paths must exist and stay under
  *   scripts/revert-proof*, and are exempt from the shrink-only rule.
+ *
+ * The test-cast row: test code gets no new escape hatches: `as unknown as`, `as any`, `as never`,
+ * `: any` annotations, `Object.create(` (returns `any`), or ts-ignore / ts-expect-error / ts-nocheck
+ * comments. Scope and matching live in
+ * web/test-support/test-cast-scan.ts (test files and __tests__ under web/src, web/scripts, plugins/src,
+ * plugins/sdk; all of web/test, web/test-support, web/typecheck, web/assembly and scripts/; test
+ * helpers under web/src). Code patterns count only outside strings and comments. Partial fakes go
+ * through mockPartial() in web/test-support/mock-partial.ts, the only file exempt. Existing hits are
+ * listed per file in tsconfig-test-casts.baseline.json, which may only shrink.
+ *
+ * The JS-include row: tsconfig.test.json sets allowJs with checkJs off, so a .js/.mjs/.cjs file it
+ * lists explicitly is only type-checked if its first line is `// @ts-check`.
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
+import { testCastCounts } from "../test-support/test-cast-scan";
 
 // One whole-program tsc run takes ~5-9 s on a loaded box; keep the default 5 s from flaking it.
 vi.setConfig({ testTimeout: 120_000 });
@@ -35,7 +48,7 @@ const TEST_FILE = /\.test\.tsx?$/;
  * tsconfig.test.json as JSON (tsconfig allows `//` comments; this file only uses whole-line ones).
  * A file that doesn't parse fails every row with the parser's message, not with a list of paths.
  */
-function readTestConfig(): { exclude: string[] } {
+function readTestConfig(): { exclude: string[]; include: string[] } {
   // Blank the comment lines rather than drop them, so the parser's line numbers match the file.
   const text = readFileSync(TEST_CONFIG, "utf8")
     .split("\n")
@@ -51,7 +64,11 @@ function readTestConfig(): { exclude: string[] } {
   if (!Array.isArray(exclude) || !exclude.every((p) => typeof p === "string")) {
     throw new Error(`could not parse ${TEST_CONFIG_REL}: "exclude" is not a list of paths`);
   }
-  return { exclude };
+  const include = (parsed as { include?: unknown }).include;
+  if (!Array.isArray(include) || !include.every((p) => typeof p === "string")) {
+    throw new Error(`could not parse ${TEST_CONFIG_REL}: "include" is not a list of paths`);
+  }
+  return { exclude, include };
 }
 
 /** Splits `exclude` at the `// HELD` comment line (the list is read line by line to see the comments). */
@@ -133,6 +150,9 @@ function testFilesWithTscErrors(): Set<string> {
   }
 }
 
+const repoRoot = path.resolve(webRoot, "..");
+const CAST_BASELINE = path.join(webRoot, "src/tsconfig-test-casts.baseline.json");
+
 describe("tsconfig.test.json exclude list (#192)", () => {
   it("each block lists sorted, unique test files", () => {
     const { shrinkOnly, held } = excludeBlocks();
@@ -158,5 +178,20 @@ describe("tsconfig.test.json exclude list (#192)", () => {
     const { shrinkOnly } = excludeBlocks();
     const withErrors = testFilesWithTscErrors();
     expect(shrinkOnly.filter((p) => !withErrors.has(p))).toEqual([]);
+  });
+
+  it("test code adds no casts outside mockPartial() and the shrink-only cast baseline", () => {
+    const baseline = new Map(Object.entries(JSON.parse(readFileSync(CAST_BASELINE, "utf8")) as Record<string, number>));
+    const counts = testCastCounts(repoRoot);
+    const added = [...counts].filter(([rel, n]) => n > (baseline.get(rel) ?? 0)).map(([rel, n]) => `${rel}: ${n} (baseline ${baseline.get(rel) ?? 0}); use mockPartial() or a small fake`);
+    expect(added).toEqual([]);
+    const lower = [...baseline].filter(([rel, n]) => (counts.get(rel) ?? 0) < n).map(([rel, n]) => `${rel}: ${counts.get(rel) ?? 0} (baseline ${n}); lower its count in tsconfig-test-casts.baseline.json`);
+    expect(lower).toEqual([]);
+  });
+
+  it("every .js/.mjs/.cjs file in the includes starts with // @ts-check (checkJs is off)", () => {
+    const js = readTestConfig().include.filter((p) => /\.[cm]?js$/.test(p));
+    const unchecked = js.filter((p) => readFileSync(path.join(webRoot, p), "utf8").split("\n", 1)[0]!.trim() !== "// @ts-check");
+    expect(unchecked).toEqual([]);
   });
 });

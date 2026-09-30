@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NetScene } from "../graph/scene";
+import { mockPartial } from "../../test-support/mock-partial";
 import { RenderHost } from "../graph/render-host";
 import { ArcadeView } from "./arcade";
 
@@ -23,6 +24,11 @@ class ArcadeFitProbe extends ArcadeView {
 
   runFit(): void {
     this.fit();
+  }
+
+  /** The protected backing canvas, for the size assertions. */
+  get backing(): HTMLCanvasElement {
+    return this.canvas;
   }
 }
 
@@ -53,13 +59,13 @@ describe("arcade layout DPR fit", () => {
     Object.defineProperty(container, "clientWidth", { configurable: true, value: 100 });
     Object.defineProperty(container, "clientHeight", { configurable: true, value: 80 });
     document.body.appendChild(container);
-    const ctx = { setTransform: vi.fn() } as unknown as CanvasRenderingContext2D;
+    const ctx = mockPartial<CanvasRenderingContext2D>({ setTransform: vi.fn() });
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(ctx);
 
     const view = new ArcadeFitProbe(container, sceneStub());
     view.runFit();
-    expect(view.canvas.width).toBe(125);
-    expect(view.canvas.height).toBe(100);
+    expect(view.backing.width).toBe(125);
+    expect(view.backing.height).toBe(100);
     capHost.dispose();
   });
 });

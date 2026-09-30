@@ -46,7 +46,7 @@ describe("main entry wiring", () => {
     document.body.innerHTML = bodyHtml;
     vi.stubGlobal("WebSocket", MockWebSocket);
     vi.resetModules();
-    await import("./main.ts");
+    await import("./main");
     await settleMainBoot();
   });
 

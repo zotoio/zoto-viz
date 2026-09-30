@@ -12,6 +12,8 @@ import {
 } from "./tile-health";
 import type { NetScene } from "../graph/scene";
 import type { RenderHost } from "../graph/render-host";
+import { viewMutAsDeviceRect } from "../graph/pack-mirror-rect";
+import { mockPartial } from "../../test-support/mock-partial";
 import type { PluginView } from "./plugin";
 
 const CHECK_STEP_MS = 700;
@@ -67,12 +69,12 @@ function harness(opts: {
   pack?: (id: string) => string;
 }): Harness {
   let packId = "voxel-world";
-  const scene = {
+  const scene = mockPartial<NetScene>({
     viewEl: document.createElement("div"),
     pictureSerial: 1, // never advances: without the floor, a non-uniform patch reads "stalled"
     gpuContextLost: false,
-    lastViewport: { x: 0, y: 0, w: 200, h: 120 },
-  } as NetScene;
+    lastViewport: viewMutAsDeviceRect({ x: 0, y: 0, w: 200, h: 120 }),
+  });
   const tiles = opts.tiles ?? ["main"];
   const mosaic = tiles.length > 1 ? ({ on: true, tileIds: tiles } as unknown as TileHealthDeps["mosaic"]) : null;
   const heals: string[] = [];

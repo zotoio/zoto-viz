@@ -46,7 +46,6 @@ describe("duplicate slot shared config > pack scope note sync", () => {
 
     const wallTwo: PackWallScope = {
       tileModeIds: [PACK, `${PACK}!1`, "plugin:topology"],
-      packId: spec.id,
       mosaicOn: true,
     };
     syncPackScopeNote(host, spec, wallTwo);
@@ -58,7 +57,6 @@ describe("duplicate slot shared config > pack scope note sync", () => {
 
     syncPackScopeNote(host, spec, {
       tileModeIds: [PACK, `${PACK}!1`, `${PACK}!2`, "plugin:topology"],
-      packId: spec.id,
       mosaicOn: true,
     });
     pin.pinned();
