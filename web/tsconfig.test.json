@@ -20,6 +20,8 @@
     "src/graph/scene-pack-sky-bright.test.ts",
     "src/plugins/plugin-unavailable.test.ts",
     "src/graph/render-host-context-recovery.test.ts",
+    "src/app/__tests__/main-entry-harness.ts",
+    "src/app/__tests__/main-entry.context-loss-pick-179.test.ts",
     "src/graph/render-host-fractal-context-restore.test.ts",
     "src/arcade/arcade-idle-board.test.ts",
     "src/ui/feed-arcade-demo-182.test.ts",
