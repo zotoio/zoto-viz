@@ -105,6 +105,9 @@ def test_a_lint_that_runs_too_long_is_refused_with_lint_timeout_and_leaves_no_pr
     plugins.reset_bundles()
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(_pulse_doc(), PULSE, update_cache=False, install_lint=True)
+    assert not isinstance(e.value.__cause__, plugins._PackScriptTimeout), (
+        f"the service's {plugins.PACK_BUNDLE_TIMEOUT_S} s backstop fired, not the script's lint_timeout"
+    )
     assert codes == [EXIT_LINT_SETUP], codes
     assert e.value.reason == "lint_timeout"
     assert _setup_reasons(caplog) == ["lint_timeout"], caplog.text
@@ -168,6 +171,9 @@ def test_a_lint_stuck_in_a_native_call_is_still_refused_with_lint_timeout(
     plugins.reset_bundles()
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(_pulse_doc(), PULSE, update_cache=False, install_lint=True)
+    assert not isinstance(e.value.__cause__, plugins._PackScriptTimeout), (
+        f"the service's {plugins.PACK_BUNDLE_TIMEOUT_S} s backstop fired, not the script's lint_timeout"
+    )
     assert codes and codes[0] in (EXIT_LINT_SETUP, -signal.SIGKILL), codes
     assert e.value.reason == "lint_timeout"
     assert _setup_reasons(caplog) == ["lint_timeout"], caplog.text
