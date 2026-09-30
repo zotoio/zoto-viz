@@ -497,7 +497,8 @@ export abstract class ArcadeView {
         this.ingest(fresh, fresh[0][0], newest);
       }
     } catch {
-      // server away; the next tick retries
+      // server away; the next tick retries. No packets this poll either: the rate falls back (#199, as netpong #197)
+      if (gen === this.gen) this.pps *= 0.6;
     } finally {
       if (gen === this.gen) this.inflight = false;
     }

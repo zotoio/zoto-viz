@@ -119,7 +119,7 @@ function boardHosts(engine: Engine, view: unknown): string[] {
   return [...v.sources.rows.keys(), ...[...v.lanes.rows.values()].map((l) => l.host)];
 }
 
-type FetchMode = "empty" | "live" | "hold" | "error";
+type FetchMode = "empty" | "live" | "hold" | "error" | "away";
 
 describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () => {
   let rec: Recorder;
@@ -128,14 +128,19 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
   let held: ((r: Response) => void)[] = [];
   let liveSeq = 0;
   let livePeer = "93.184.216.34";
+  /** real packets per live poll (#199 drives the rate to a pinned r0 with more) */
+  let liveK = 1;
 
   const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
-  /** one real packet per poll, newer each time (a device on the LAN talking to a web host) */
+  /** liveK real packets per poll (newest first), newer each time (a device on the LAN talking to a web host) */
   const liveBody = (ip: string) => {
-    liveSeq++;
     const t = Date.now() / 1000;
-    const p: Packet = [t, "out", livePeer, "TCP", "tcp/443", 74, "eth0", "[SYN] Seq=0", `${50000 + liveSeq}→443`, "192.168.1.50"];
-    return { ip, peer: null, ts: t, packets: [p], window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] } };
+    const packets: Packet[] = [];
+    for (let i = 0; i < liveK; i++) {
+      liveSeq++;
+      packets.push([t - i * 0.001, "out", livePeer, "TCP", "tcp/443", 74, "eth0", "[SYN] Seq=0", `${50000 + liveSeq}→443`, "192.168.1.50"]);
+    }
+    return { ip, peer: null, ts: t, packets, window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] } };
   };
 
   beforeEach(() => {
@@ -144,11 +149,12 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
     rec = recordingCtx();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(rec.ctx as never);
-    fetches = 0; mode = "empty"; held = []; liveSeq = 0; livePeer = "93.184.216.34";
+    fetches = 0; mode = "empty"; held = []; liveSeq = 0; livePeer = "93.184.216.34"; liveK = 1;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       fetches++;
       const ip = new URL(url, "http://x").searchParams.get("ip") ?? "";
       if (mode === "hold") return new Promise<Response>((res) => held.push(res));
+      if (mode === "away") throw new TypeError("Failed to fetch");
       if (mode === "error") return new Response(JSON.stringify({ error: "unknown device" }), { status: 404, headers: { "Content-Type": "application/json" } });
       return json(mode === "live" ? liveBody(ip) : { ip, packets: [] });
     }));
@@ -273,6 +279,33 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       expect(pps(), "after 2 failed polls: live x 0.6 x 0.6").toBeCloseTo(live * 0.36, 9);
       expect(demoCalls() - off, "no demo batch before the 3rd empty/failed poll in a row").toBe(0);
     });
+
+    // #199: with the server away (fetch rejects) the rate falls back x0.6 per failed poll, as netpong's does (#197).
+    // First HUD zero pinned (Math.round): from 4.352 on failed poll 5, from 50 on 10, from 200 on 12.
+    if (engine !== "netpong") for (const r of [{ r0: 4.352, k: 5, polls: 4, n: 5 }, { r0: 50, k: 125, polls: 1, n: 10 }, { r0: 200, k: 500, polls: 1, n: 12 }]) {
+      it(`${engine}: server away (fetch rejects) from ${r.r0} pkt/s — the HUD first reads 0 on failed poll ${r.n} (poll ${r.n - 1} still >= 1) (#199)`, async () => {
+        const { view, poll, hud, labelShown } = mount(engine, cleanHomeState());
+        if (view instanceof PongView) throw new Error("ArcadeView engines only");
+        const pps = () => view["pps"];
+        liveK = r.k;
+        mode = "live";
+        for (let i = 0; i < r.polls; i++) await poll();
+        expect(labelShown(), "live traffic: no demo").toBe(false);
+        expect(pps(), `r0 after ${r.polls} live poll(s) of ${r.k} packets`).toBeCloseTo(r.r0, 9);
+        mode = "away";
+        const seen: number[] = [];
+        for (let i = 1; i <= r.n; i++) {
+          await poll();
+          expect(pps(), `after ${i} failed fetch(es): r0 x 0.6^${i}`).toBeCloseTo(r.r0 * 0.6 ** i, 9);
+          const h = await hud();
+          expect(h.row, `HUD rate row drawn after failed poll ${i}`).not.toBe("");
+          seen.push(h.pps);
+        }
+        expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before failed poll ${r.n}: ${seen.join(", ")}`).toBe(true);
+        expect(seen[r.n - 1], `HUD reading on failed poll ${r.n} (all: ${seen.join(", ")})`).toBe(0);
+        expect(labelShown(), "no demo while the server is away").toBe(false);
+      });
+    }
 
     it(`${engine}: view stop — the feed panel drops the demo status with the view (#182)`, async () => {
       const { view, poll, feedStatus, badge, labelShown } = mount(engine, cleanHomeState());
