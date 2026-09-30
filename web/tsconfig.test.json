@@ -14,6 +14,7 @@
     "src/graph/pack-mirror-rect-converters.test.ts",
     "src/graph/pack-mirror-readback.test.ts",
     "src/arcade/arcade-idle-board.test.ts",
+    "src/ui/feed-arcade-demo-182.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
     "test/node/pack-mirror-readback-vite.ts"
   ],

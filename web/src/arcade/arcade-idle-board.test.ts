@@ -119,7 +119,7 @@ function boardHosts(engine: Engine, view: unknown): string[] {
   return [...v.sources.rows.keys(), ...[...v.lanes.rows.values()].map((l) => l.host)];
 }
 
-type FetchMode = "empty" | "live" | "hold";
+type FetchMode = "empty" | "live" | "hold" | "error";
 
 describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () => {
   let rec: Recorder;
@@ -149,6 +149,7 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       fetches++;
       const ip = new URL(url, "http://x").searchParams.get("ip") ?? "";
       if (mode === "hold") return new Promise<Response>((res) => held.push(res));
+      if (mode === "error") return new Response(JSON.stringify({ error: "unknown device" }), { status: 404, headers: { "Content-Type": "application/json" } });
       return json(mode === "live" ? liveBody(ip) : { ip, packets: [] });
     }));
   });
@@ -253,6 +254,24 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       expect(l.row, "HUD rate row still drawn after takeover (the counter is never hidden)").not.toBe("");
       expect(l.demo, `HUD cue after one live poll ("${l.row}")`).toBe(false);
       expect(feedStatus(), "feed status after one live poll: no demo text, no stale waiting").toBe("");
+    });
+
+    // ArcadeView engines only: netpong keeps its own stats.pps, which moves only when rows are ingested (pong.ts).
+    if (engine !== "netpong") it(`${engine}: a failed poll (HTTP error) decays the HUD rate x0.6, exactly like an empty poll (#182)`, async () => {
+      const { view, poll, labelShown, demoCalls } = mount(engine, cleanHomeState());
+      const pps = () => (view as unknown as { pps: number }).pps;
+      mode = "live";
+      for (let i = 0; i < 3; i++) await poll();
+      expect(labelShown(), "live traffic: no demo").toBe(false);
+      const live = pps();
+      expect(live, "HUD rate after 3 live polls").toBeGreaterThan(0);
+      mode = "error";
+      const off = demoCalls();
+      await poll();
+      expect(pps(), "after 1 failed poll: live x 0.6").toBeCloseTo(live * 0.6, 9);
+      await poll();
+      expect(pps(), "after 2 failed polls: live x 0.6 x 0.6").toBeCloseTo(live * 0.36, 9);
+      expect(demoCalls() - off, "no demo batch before the 3rd empty/failed poll in a row").toBe(0);
     });
 
     it(`${engine}: view stop — the feed panel drops the demo status with the view (#182)`, async () => {
