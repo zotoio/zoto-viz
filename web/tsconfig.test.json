@@ -18,7 +18,10 @@
     "src/graph/h1-gap-rows.test.ts",
     "src/plugins/pack-sky-lean-h1.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
-    "test/node/pack-mirror-readback-vite.ts"
+    "test/node/pack-mirror-readback-vite.ts",
+    "src/plugins/pack-bundle-install.test.ts",
+    "src/plugins/pack-install-lint-fail-closed.test.ts",
+    "src/plugins/pack-install-surface.test.ts"
   ],
   "exclude": []
 }

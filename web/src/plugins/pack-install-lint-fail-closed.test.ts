@@ -515,7 +515,7 @@ describe("#185 the install UI shows the setup refusal in the service's words", (
       expect(isPackInstallBlockedPayload(row), "catalog notice").toBe(true);
       expect(formatPackInstallBlocked(row), "catalog notice text").toBe(message);
       expect(catalogErrorLooksBlocked(message)).toBe(true);
-      expect(localPluginPublishChatLine({ ok: false, ...row }, "frontend/index.ts"), "agent chat").toBe(message);
+      expect(localPluginPublishChatLine(row, "frontend/index.ts"), "agent chat").toBe(message);
     }
     expect(upgradeSetupMsg(PACK_NAME, "3")).toBe(
       "Couldn't safety-check the new version of Star Sines, so it wasn't updated. You're still on v3. Run `pnpm install` in `web/` and try again.",
