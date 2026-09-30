@@ -1,5 +1,6 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { MockInstance } from "vitest";
 import type { NetScene } from "../graph/scene";
 import type { Packet, StateMsg } from "../core/types";
 import { DEMO_DATA_LABEL, DEMO_LABEL_CLASS } from "../core/demo-source";
@@ -161,7 +162,7 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
 
   function mount(engine: Engine, msg: StateMsg = goldenLanFixture()) {
     const proto = protoOf(engine);
-    const ingest = vi.isMockFunction(proto.ingest) ? (proto.ingest as unknown as ReturnType<typeof vi.spyOn>) : vi.spyOn(proto, "ingest");
+    const ingest: MockInstance<Proto[string]> = vi.isMockFunction(proto.ingest) ? proto.ingest : vi.spyOn(proto, "ingest");
     const el = document.createElement("div");
     el.className = "arcade";
     Object.defineProperty(el, "clientWidth", { configurable: true, value: 960 });
