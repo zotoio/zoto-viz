@@ -26,7 +26,8 @@ from service.pack_install_lint import EXIT_LINT_SETUP, REASON_INSTALL_CHECK_UNAV
 from tests.pack_install_lint_tree_util import BUILT_LINT, ROOT, script_tree
 from tests.test_pack_install_lint_fail_closed import (
     PULSE,
-    SETUP_TAIL,
+    SETUP_TAIL_INSTALL,
+    SETUP_TAIL_PREPARE,
     _assert_plain_block_text,
     _bad_probe,
     _blocked,
@@ -104,11 +105,11 @@ def test_zip_installs_with_no_tsx_present_and_a_finding_is_still_blocked(
 
 
 @pytest.mark.parametrize(
-    ("tree", "reason"),
+    ("tree", "reason", "tail"),
     [
-        pytest.param({"built": False}, "lint_prebuilt_missing", id="built-lint-missing"),
-        pytest.param({"stale": True}, "lint_prebuilt_stale", id="built-lint-stale"),
-        pytest.param({"esbuild": False}, "esbuild_unresolvable", id="esbuild-unresolvable"),
+        pytest.param({"built": False}, "lint_prebuilt_missing", SETUP_TAIL_PREPARE, id="built-lint-missing"),
+        pytest.param({"stale": True}, "lint_prebuilt_stale", SETUP_TAIL_PREPARE, id="built-lint-stale"),
+        pytest.param({"esbuild": False}, "esbuild_unresolvable", SETUP_TAIL_INSTALL, id="esbuild-unresolvable"),
     ],
 )
 def test_zip_install_setup_refusal_names_its_own_cause(
@@ -118,10 +119,12 @@ def test_zip_install_setup_refusal_names_its_own_cause(
     _isolate_plugin_local: Path,
     tree: dict,
     reason: str,
+    tail: str,
 ) -> None:
     """Built lint deleted / stale (plugins/sdk edited after the build) / esbuild unresolvable: no
-    install, #185's one sentence (``pnpm install`` in web/ fixes all three), the script's refusal code
-    is 3 (what #169's ``bundle_setup_missing`` keys on), and the log names this cause's own reason."""
+    install, the script's refusal code is 3 (what #169's ``bundle_setup_missing`` keys on), the log
+    names this cause's own reason, and the user gets that reason's own sentence (``pnpm run prepare``
+    for a missing or stale built lint (and an unloadable one), ``pnpm install`` for esbuild)."""
     _needs_node_tree()
     _repo(tmp_path, monkeypatch)
     monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", script_tree(tmp_path, **tree))
@@ -132,7 +135,7 @@ def test_zip_install_setup_refusal_names_its_own_cause(
     assert codes == [EXIT_LINT_SETUP], codes
     assert _setup_reasons(caplog) == [reason], caplog.text
     assert out.get("ok") is False and out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}", out
+    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{tail}", out
     assert reason not in str(out) and not re.search(r"ERR_|Error\b|\bexit \d|\bat .+:\d+|node:|\b3\b", str(out.get("message")))
     assert not (paths.plugin_local_runtime_dir(create=True) / "upgrade-probe").exists()
 
@@ -164,7 +167,7 @@ def test_a_lint_that_hangs_in_process_is_refused_at_the_service_timeout_and_leav
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
     assert time.monotonic() - t0 < 15
-    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL}"
+    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL_INSTALL}", "service timeout: pnpm install"
     assert pids.is_file(), "the lint really ran and hung before the service timeout"
     got = [int(p) for p in pids.read_text().split()]
     assert len(got) == 2, got

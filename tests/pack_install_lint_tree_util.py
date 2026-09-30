@@ -1,7 +1,8 @@
 """#186: a temp copy of what bundle-pack-entry.mjs needs, for the install-lint rows.
 
 The service runs ``plugins._PACK_BUNDLE_SCRIPT``; pointing it at the copy's script makes the
-in-process install lint really use the copy's files (the built lint, its stamp, esbuild, plugins/sdk).
+in-process install lint really use the copy's files (the built lint, its stamp, the setup copy table,
+esbuild, plugins/sdk).
 No tsx anywhere in the copy.
 """
 from __future__ import annotations
@@ -11,7 +12,13 @@ import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-LINT_SCRIPTS = ("bundle-pack-entry.mjs", "pack-install-lint-stamp.mjs", "pack-install-lint.built.mjs")
+LINT_SCRIPTS = (
+    "bundle-pack-entry.mjs",
+    "pack-install-lint-stamp.mjs",
+    "pack-install-lint.built.mjs",
+    "pack-install-lint-setup-copy.mjs",
+    "pack-install-lint-setup-copy.json",
+)
 BUILT_LINT = "pack-install-lint.built.mjs"
 
 
