@@ -1,6 +1,7 @@
 id: tile-health-detail
 name: Tile health — dark detail
 version: 1
+picker: hidden
 hint: Host dogfood pack — dark sky with high contrast detail (must not flag empty).
 capabilities:
   - viz.read

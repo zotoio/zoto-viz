@@ -4,6 +4,10 @@ export type PackAssetPaneNoticeOpts = {
   showRetry?: boolean;
   onRetry?: () => void;
   onRetryFocused?: () => void;
+  /** Button words when the one action is not Retry (Needs you offers Review). */
+  retryLabel?: string;
+  /** `data-action` on the button, e.g. "review" or "retry". */
+  retryAction?: string;
   showRemoveFromWall?: boolean;
   onRemoveFromWall?: () => void;
 };
@@ -41,7 +45,8 @@ export function paintPackAssetPaneNotice(
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "mosaic-pane-notice-retry";
-    btn.textContent = "Retry";
+    btn.textContent = opts.retryLabel ?? "Retry";
+    if (opts.retryAction) btn.dataset.action = opts.retryAction;
     // Keep the press on the button: tile camera / orbit handlers below must not capture it.
     btn.addEventListener("pointerdown", (e) => e.stopPropagation());
     btn.addEventListener("click", (e) => {

@@ -2041,6 +2041,17 @@ export class NetScene implements HostedView, RenderScalePane {
     this.standaloneClock.lastMs = 0;
   }
 
+  /**
+   * TEST-ONLY (#183): stage-only and whether any graph layer (nodes, links, fabric, sparks,
+   * labels) would draw. The floor grid and sky are not part of the graph layer.
+   */
+  testGraphLayer(): { stageOnly: boolean; graphDrawn: boolean } {
+    const labels = this.labelLayer.domElement.style.display !== "none";
+    const graphDrawn = this.spheres.visible || this.sheath.mesh.visible || this.fabric.mesh.visible
+      || this.particles.visible || this.arrows.visible || labels;
+    return { stageOnly: this.stageOnly, graphDrawn };
+  }
+
   /** TEST-ONLY: graph {@link present} calls while this scene is the main wall view. */
   testGraphRenderCount(): number {
     return this.graphRenderCount;

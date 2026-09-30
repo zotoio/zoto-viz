@@ -168,3 +168,67 @@ describe("main.ts wall view uses its own sky on its wall (#172c)", () => {
     expect(others.map((s) => s.scene.currentMode.id)).toEqual([]);
   });
 });
+
+/** The same wall view with its own sky, not yet approved (consent needed, auto-consent off). */
+function unapprovedWallPacks(w: WallCase): Record<string, unknown>[] {
+  const [wall, ...rest] = skyWallPacks(w);
+  return [{ ...wall, consent: null, consent_state: "none" }, ...rest];
+}
+
+/** The view the header names: the picker row marked selected. */
+function headerViewId(): string {
+  return document.querySelector<HTMLElement>(`#mode li[aria-selected="true"]`)?.dataset.value ?? "";
+}
+
+function wallPane(tileId: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(`#wall .mosaic-pane[data-mode="${CSS.escape(tileId)}"]`);
+}
+
+describe("declined wall view shows Needs you (Syscon / Cypher CIC, #172)", () => {
+  beforeEach(() => {
+    localStorage.clear();
+    sessionStorage.clear();
+    for (const a of [...document.body.attributes]) document.body.removeAttribute(a.name);
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it.each(WALLS)("$name held for consent from solo Topology: its wall stays, the header stays on it, Needs you on its main tile", async (w) => {
+    expect.hasAssertions();
+    const wallMode = `plugin:${w.wallId}`;
+    localStorage.setItem("zoto-viz.mode", START);
+    await bootMainEntry(unapprovedWallPacks(w));
+    await waitEntryBootComplete();
+    expect(document.body.dataset.mosaic ?? "off").toBe("off");
+    expect(headerViewId()).toBe(START);
+
+    await pickModeFromUi(wallMode);
+    await vi.waitFor(() => {
+      expect(document.body.dataset.mosaic).toBe("8");
+      expect(wallTileIds().length).toBeGreaterThan(0);
+    }, { timeout: 8000 });
+    const main = mainTileId();
+    expect(w.tiles).toContain(main);
+    // Needs you (B's copy and surface): the main tile and its own notice, with Review.
+    await vi.waitFor(() => {
+      expect(wallPane(main)?.dataset.viewState, `${main} view state`).toBe("needs-you");
+    }, { timeout: 4000 });
+    // Let the re-entrant switch (applyPluginWall -> setSize -> onAfterSetSize -> applyMode) settle.
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect.soft([...wallTileIds()].sort(), "the wall keeps its own tiles").toEqual([...w.tiles].sort());
+    expect.soft(wallTileIds()).not.toContain(wallMode);
+    expect.soft(document.body.dataset.mosaic, "the wall stays up").toBe("8");
+    expect.soft(headerViewId(), "the header stays on the wall view").toBe(wallMode);
+
+    const pane = wallPane(main);
+    expect.soft(pane?.dataset.viewState).toBe("needs-you");
+    expect.soft(pane?.dataset.viewId).toBe(wallMode);
+    const notice = pane?.querySelector<HTMLElement>(":scope > .mosaic-pane-notice");
+    expect.soft(notice?.dataset.viewState).toBe("needs-you");
+    expect.soft(notice?.dataset.viewId).toBe(wallMode);
+    expect.soft(notice?.textContent ?? "").toContain(`${w.name} needs your OK to run.`);
+    expect.soft(notice?.querySelector<HTMLButtonElement>("button[data-action=review]")?.textContent).toBe("Review");
+  });
+});

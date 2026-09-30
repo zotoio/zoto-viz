@@ -44,6 +44,13 @@
       "type": "string",
       "maxLength": 512
     },
+    "picker": {
+      "type": "string",
+      "enum": [
+        "hidden"
+      ],
+      "description": "hidden: test / fixture packs. The view never shows in the view picker, the mosaic pane pickers, dice or dream-cycle picks, but it can still be opened by id (URL, MCP, a saved layout). Omit for normal views."
+    },
     "frontend": {
       "type": "object",
       "additionalProperties": false,

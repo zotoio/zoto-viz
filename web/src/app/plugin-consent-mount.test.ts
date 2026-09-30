@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
+import { resetConsentStoreForTests } from "./consent-store";
 import { shouldPromptPluginReview } from "./plugin-consent-mount";
 import type { PluginView } from "../plugins/plugin";
 
@@ -13,6 +14,9 @@ const reviewed: PluginView = {
 };
 
 describe("shouldPromptPluginReview", () => {
+  // The consent store keeps one entry per pack id; each case starts from the spec it passes.
+  afterEach(() => resetConsentStoreForTests());
+
   it("never prompts before catalog consent is loaded", () => {
     expect(shouldPromptPluginReview({ ...reviewed, consent: null }, false)).toBe(false);
   });

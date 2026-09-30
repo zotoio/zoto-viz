@@ -226,8 +226,14 @@ def _attach_sandbox_frame_policy(resp: web.Response, request: web.Request, token
     resp.headers["X-Frame-Options"] = "SAMEORIGIN"
 
 
-def _pack_forbidden() -> web.Response:
-    resp = web.json_response({"error": "forbidden origin"}, status=403)
+def _pack_consent_required(row: dict[str, Any] | None) -> web.Response:
+    """A pack file refused for consent: say so, with the consent state (never a hash value).
+
+    Unknown packs read as ``none``. The body never mentions origin, so a refusal is not mistaken
+    for a cross-origin block in the pane notice or the 4xx log.
+    """
+    state = plugins.consent_state(row) if row else "none"
+    resp = web.json_response({"error": "consent required", "state": state}, status=403)
     access.attach_pack_asset_json_headers(resp)
     return resp
 
@@ -281,7 +287,7 @@ async def api_pack_assets(request: web.Request) -> web.StreamResponse:
 
     row = plugins._plugin_row(pack_id)
     if not row or not plugins.consented(row):
-        return _pack_forbidden()
+        return _pack_consent_required(row)
 
     if tail == "module.js":
         mod = await asyncio.to_thread(plugins.module_response, pack_id)
