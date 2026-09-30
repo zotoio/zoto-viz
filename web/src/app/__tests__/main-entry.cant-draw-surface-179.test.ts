@@ -14,6 +14,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { bootMainEntry, setHarnessFetchOverride } from "./main-entry-harness";
 
 type FakeGlLike = { isContextLost(): boolean; getShaderInfoLog(s: object): string; getProgramInfoLog(p: object): string };
+/** The wall's RenderHost, as the rows drive it (the calls NetScene.setPluginShader makes with pack meta). */
+type WallHost = {
+  canvas: HTMLCanvasElement;
+  beginTilePack(tileId: string, packKey: string, packId: string, mount: HTMLElement, packName: string, isShaderPack?: boolean): void;
+  probeTileSky(tileId: string, scene: THREE.Scene, camera: THREE.Camera): string | null;
+  clearShaderFallback(tileId: string): void;
+};
 type FakeDebug = { checkShaderErrors: boolean; onShaderError: ((gl: FakeGlLike, program: object, vs: object, fs: object) => void) | null };
 
 const t = vi.hoisted(() => {
@@ -32,17 +39,13 @@ const t = vi.hoisted(() => {
     getShaderInfoLog(): string { return ""; }
     getProgramInfoLog(): string { return ""; }
   }
-  return {
-    FakeGl,
-    host: null as null | {
-      canvas: HTMLCanvasElement;
-      beginTilePack(tileId: string, packKey: string, packId: string, mount: HTMLElement, packName: string, isShaderPack?: boolean): void;
-      probeTileSky(tileId: string, scene: THREE.Scene, camera: THREE.Camera): string | null;
-      clearShaderFallback(tileId: string): void;
-    },
+  const state: {
+    FakeGl: typeof FakeGl;
+    host: WallHost | null;
     /** The info log the wall's next sky compile fails with; null = it compiles. */
-    failLog: null as string | null,
-  };
+    failLog: string | null;
+  } = { FakeGl, host: null, failLog: null };
+  return state;
 });
 
 vi.mock("../../graph/render-host", async (orig) => {
@@ -175,7 +178,7 @@ describe("#179 part (c) UX Pro: a solo wall whose pack shader fails (production 
     expect(labelVisibility(label), "after it clears").not.toBe("hidden");
   });
 
-  it("name: a pack name with markup reaches the tile as literal, sanitized text (no element), and an empty name is 'This view'", { timeout: 60_000 }, async () => {
+  it("name: a pack name with markup reaches the tile in literal, sanitized text (no element), and an empty name is 'This view'", { timeout: 60_000 }, async () => {
     const raw = "<img src=x onerror=alert(1)>";
     await bootOn("xss-pack", raw);
     failSky("xss-pack", raw);
