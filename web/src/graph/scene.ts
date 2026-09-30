@@ -2637,7 +2637,7 @@ export class NetScene implements HostedView, RenderScalePane {
     const floorP = a.gridAudio ? this.pulseLevel : 0;
     const skyB = a.skyAudio ? this.pulseBass : 0;
     const floorB = a.gridAudio ? this.pulseBass : 0;
-    const skyLook = skyLookFor(a, this.tune, this.stageOnly);
+    const skyLook = skyLookFor(a, this.tune);
     const skyOp = skyLook.opacity;
     const skyBr = skyLook.bright * this.thermalSkyK();
     const skySp = this.tune?.skySpeed ?? a.skySpeed;
