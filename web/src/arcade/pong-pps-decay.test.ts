@@ -18,6 +18,17 @@ const K = 5;               // live packets per poll
 const LIVE_POLLS = 4;
 const LIVE = K * (1 - 0.6 ** LIVE_POLLS); // 4.352 pkt/s after 4 polls of 5 packets from a 0 start
 
+/**
+ * #199: where the HUD's Math.round first reads 0 once every quiet poll multiplies the rate by 0.6:
+ * n = ceil(ln(0.5 / r0) / ln 0.6). Pinned, not computed: poll n - 1 still reads >= 1, poll n reads 0.
+ * r0 is driven through the real ingest: `polls` live polls of `k` packets from a 0 start (k x (1 - 0.6^polls)).
+ */
+const FIRST_ZERO = [
+  { r0: LIVE, k: K, polls: LIVE_POLLS, n: 5 },
+  { r0: 50, k: 125, polls: 1, n: 10 },
+  { r0: 200, k: 500, polls: 1, n: 12 },
+] as const;
+
 interface Recorder { ctx: CanvasRenderingContext2D; texts: string[] }
 
 /** A 2D context that records fillText and no-ops everything else (happy-dom has no canvas). */
@@ -56,22 +67,23 @@ function cleanHomeState(): StateMsg {
   return { ...g, local_ip: self.ip, gateway: gw.ip, devices: [self, gw], flows: [] };
 }
 
-type Mode = "live" | "empty" | "error" | "away";
+type Mode = "live" | "empty" | "error" | "away" | "hang";
 
 describe("netpong: the packets-per-second reading drops back once packets stop", () => {
   let rec: Recorder;
   let mode: Mode = "live";
   let fetches = 0;
   let seq = 0;
+  let liveK: number = K;
 
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-  /** K real packets, newest first like the server, all newer than the previous poll's */
+  /** liveK real packets, newest first like the server, all newer than the previous poll's (and inside REPLAY_S) */
   const liveBody = (ip: string): TrafficMsg => {
     const t = Date.now() / 1000;
     const packets: Packet[] = [];
-    for (let i = 0; i < K; i++) {
+    for (let i = 0; i < liveK; i++) {
       seq++;
-      packets.push([t - i * 0.1, "out", "93.184.216.34", "TCP", "tcp/443", 74, "eth0", "[SYN] Seq=0", `${50000 + seq}→443`]);
+      packets.push([t - i * 0.001, "out", "93.184.216.34", "TCP", "tcp/443", 74, "eth0", "[SYN] Seq=0", `${50000 + seq}→443`]);
     }
     return { ip, peer: null, ts: t, packets, window: null, summary: { protos: [], ports: [], queries: [], sni: [], peers: [] } };
   };
@@ -82,11 +94,12 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
     rec = recordingCtx();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(rec.ctx);
-    mode = "live"; fetches = 0; seq = 0;
+    mode = "live"; fetches = 0; seq = 0; liveK = K;
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       fetches++;
       const ip = new URL(url, "http://x").searchParams.get("ip") ?? "";
       if (mode === "away") throw new TypeError("Failed to fetch");
+      if (mode === "hang") return new Promise<Response>(() => {}); // never settles
       if (mode === "error") return json({ error: "unknown device" }, 404);
       return json(mode === "live" ? liveBody(ip) : { ip, packets: [] });
     }));
@@ -119,8 +132,10 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
     };
     /** exactly one poll interval (one /api/traffic fetch) */
     const poll = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "one poll per interval").toBe(f + 1); };
+    /** one poll interval that must not start a fetch (the previous one is still in flight) */
+    const tick = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "no second fetch while one is in flight").toBe(f); };
     const demoShowing = () => view["idle"].showing;
-    return { view, pps, hud, poll, demoShowing };
+    return { view, pps, hud, poll, tick, demoShowing };
   }
 
   /** LIVE_POLLS polls of K live packets each (the poll at start + LIVE_POLLS - 1 interval polls) */
@@ -168,4 +183,55 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
     expect(row, "no demo cue: the demo feed sends nothing while the server is away").not.toMatch(/· demo\b/);
     expect(v.demoShowing(), "demo while the server is away").toBe(false);
   });
+
+  /** `polls` live polls of `k` packets (the poll at start + polls - 1 interval polls); returns the view at r0 */
+  async function driveTo(r: (typeof FIRST_ZERO)[number]) {
+    liveK = r.k;
+    const v = mount();
+    await vi.advanceTimersByTimeAsync(0);
+    for (let i = 1; i < r.polls; i++) await v.poll();
+    expect(v.pps(), `r0 after ${r.polls} poll(s) of ${r.k} packets`).toBeCloseTo(r.r0, 9);
+    expect(v.demoShowing(), "live traffic: no demo").toBe(false);
+    return v;
+  }
+
+  /** the HUD's integer reading */
+  const reading = async (v: ReturnType<typeof mount>) => {
+    const row = await v.hud();
+    expect(row, "HUD rate row drawn").toMatch(/^\d+ pkt\/s/);
+    return Number(/^(\d+) pkt\/s/.exec(row)?.[1]);
+  };
+
+  for (const r of FIRST_ZERO) {
+    it(`#199 server away (fetch rejects) from ${r.r0.toFixed(3)} pkt/s: the HUD first reads 0 on failed poll ${r.n} (poll ${r.n - 1} still >= 1)`, async () => {
+      const v = await driveTo(r);
+      mode = "away";
+      const seen: number[] = [];
+      for (let i = 1; i <= r.n; i++) {
+        await v.poll();
+        expect(v.pps(), `after ${i} failed fetch(es): r0 x 0.6^${i}`).toBeCloseTo(r.r0 * 0.6 ** i, 9);
+        seen.push(await reading(v));
+      }
+      expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before failed poll ${r.n}: ${seen.join(", ")}`).toBe(true);
+      expect(seen[r.n - 1], `HUD reading on failed poll ${r.n} (all: ${seen.join(", ")})`).toBe(0);
+      expect(v.demoShowing(), "no demo while the server is away").toBe(false);
+    });
+
+    it(`#199 hung fetch (never settles) from ${r.r0.toFixed(3)} pkt/s: each tick that finds it in flight is a quiet poll, no second fetch, and the HUD first reads 0 on quiet poll ${r.n}`, async () => {
+      const v = await driveTo(r);
+      mode = "hang";
+      await v.poll(); // this tick starts the fetch that never settles: nothing is known about it yet
+      expect(v.pps(), "the tick that starts the hung fetch").toBeCloseTo(r.r0, 9);
+      const seen: number[] = [];
+      for (let i = 1; i <= r.n; i++) {
+        await v.tick();
+        expect(v.pps(), `after ${i} tick(s) with the fetch still in flight: r0 x 0.6^${i}`).toBeCloseTo(r.r0 * 0.6 ** i, 9);
+        seen.push(await reading(v));
+      }
+      expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before quiet poll ${r.n}: ${seen.join(", ")}`).toBe(true);
+      expect(seen[r.n - 1], `HUD reading on quiet poll ${r.n} (all: ${seen.join(", ")})`).toBe(0);
+      expect(fetches, "fetches: the live ones + the one hung fetch").toBe(r.polls + 1);
+      expect(v.demoShowing(), "no demo while the fetch hangs").toBe(false);
+    });
+  }
 });

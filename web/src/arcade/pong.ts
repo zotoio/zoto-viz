@@ -325,7 +325,7 @@ export class PongView {
     this.rebuildOptions();
     this.resync();
     this.idle.start(this.lastT === 0);
-    if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
+    if (this.timer === null) this.timer = window.setInterval(() => void this.poll(true), POLL_MS);
     void this.poll();
     cancelAnimationFrame(this.raf);
     this.raf = requestAnimationFrame(this.frame);
@@ -615,8 +615,11 @@ export class PongView {
 
   // ------------------------------------------------------------------ data
 
-  private async poll(): Promise<void> {
-    if (!this.running || !this.srcIp || this.inflight) return;
+  /** `tick`: called by the poll interval (not by start / a retarget). */
+  private async poll(tick = false): Promise<void> {
+    if (!this.running || !this.srcIp) return;
+    // #199: the last fetch has not settled by the next tick (a hung request): a quiet poll, no second fetch
+    if (this.inflight) { if (tick) this.stats.pps *= 0.6; return; }
     this.inflight = true;
     const gen = this.gen;
     try {
