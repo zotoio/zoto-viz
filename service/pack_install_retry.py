@@ -21,10 +21,14 @@ def pack_label(name: str | None, pack_id: str | None = None) -> str:
     return label or "Plugin"
 
 
-def format_retry_start_failed_message(name: str | None, version: str | int | None = 2) -> str:
-    label = pack_label(name)
-    ver = str(version).strip() if version is not None and str(version).strip() else "2"
-    return f"{label} v{ver} still couldn't start, so v1 is still active"
+def format_retry_start_failed_message(
+    name: str | None, version: str | int | None, old_version: str | int | None = None
+) -> str:
+    """#111: Retry ran the install again and the new version failed to start again (the shared copy table,
+    web/scripts/pack-install-lint-setup-copy.json ``updates.retry_couldnt_start``; the web reads it too)."""
+    from .pack_install_lint import format_update_copy
+
+    return format_update_copy("retry_couldnt_start", pack_label(name), version, old_version)
 
 
 def format_retry_zip_changed_message(name: str | None, pack_id: str | None = None) -> str:

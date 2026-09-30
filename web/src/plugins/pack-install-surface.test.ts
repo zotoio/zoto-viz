@@ -109,7 +109,7 @@ describe("pack install blocked surface", () => {
     } = await import("./pack-install-surface");
     const { installPlugins } = await import("./plugin");
     const orig = globalThis.fetch;
-    const human = "An update to Probe was interrupted, so v1 was restored";
+    const human = "The update to Probe didn't finish, so nothing changed. You're still on version 1.";
     globalThis.fetch = (async () => ({
       ok: true,
       json: async () => ({

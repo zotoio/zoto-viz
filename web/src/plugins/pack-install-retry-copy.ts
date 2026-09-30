@@ -1,5 +1,7 @@
 /** User-facing copy for blocked-zip retry (keep aligned with service/pack_install_retry.py). */
 
+import { packUpdateCopy } from "./pack-install-copy-table";
+
 export const PACK_RETRY_BUTTON_IDLE = "Retry";
 export const PACK_RETRY_BUTTON_BUSY = "Retrying…";
 
@@ -18,10 +20,17 @@ export function packLabel(name: string | undefined, id?: string): string {
   return label || "Plugin";
 }
 
-export function packRetryStartFailedMessage(name: string | undefined, version: string | number = 2): string {
-  const label = packLabel(name);
-  const ver = String(version).trim() || "2";
-  return `${label} v${ver} still couldn't start, so v1 is still active`;
+/**
+ * #111: Retry ran the install again and the new version failed to start again. The words are the shared
+ * table's `updates.retry_couldnt_start` (the service sends the same sentence as `message`); this is the
+ * fallback when a response has none. `installedVersion` is the version still in place, if known.
+ */
+export function packRetryStartFailedMessage(
+  name: string | undefined,
+  version: string | number | undefined,
+  installedVersion?: string | number,
+): string {
+  return packUpdateCopy("retry_couldnt_start", packLabel(name), version, installedVersion);
 }
 
 export function packRetryZipChangedMessage(name: string | undefined, id?: string): string {

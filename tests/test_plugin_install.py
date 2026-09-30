@@ -329,7 +329,7 @@ def test_interrupted_swap_uses_after_first_rename_hook(
 
     msgs = recover_interrupted_swaps(runtime.parent)
     assert len(msgs) == 1
-    assert "interrupted" in msgs[0]
+    assert "didn't finish, so nothing changed." in msgs[0]
     records = peek_catalog_records()
     assert any(r.get("error") == "pack_install_interrupted" for r in records)
     assert runtime.is_dir()
@@ -360,7 +360,7 @@ def test_v2_start_failure_restores_v1_and_zip(
     with pytest.raises(InstallStartFailedError) as exc:
         plugin_local.install_local_zip(v2, overwrite=True)
     assert "couldn't start" in str(exc.value)
-    assert "v1 was restored" in str(exc.value)
+    assert "so it wasn't updated. You're still on version 1." in str(exc.value)
     plugins.scan()
     digest_after, _ = plugins.bundle_for(pid)
     assert digest_after == digest_v1
@@ -462,7 +462,7 @@ def test_retry_blocked_zip_runs_full_install_keeps_v1_on_repeat_failure(
     assert info.get("ok") is False
     assert info.get("error") == "pack_install_start_failed"
     assert info.get("retryResult") == RETRY_RESULT_START_FAILED
-    still_msg = format_retry_start_failed_message(str(info.get("name") or pid), info.get("version") or 2)
+    still_msg = format_retry_start_failed_message(str(info.get("name") or pid), info.get("version"), 1)
     assert info.get("message") == still_msg
     assert (_runtime_parent() / pid / "frontend/sdk/marker.ts").read_text(encoding="utf-8") == marker_v1
     plugins.scan()
