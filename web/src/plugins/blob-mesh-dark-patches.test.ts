@@ -299,7 +299,7 @@ const lumaOf = (c: number[]) => {
  */
 export type SkyShades = { blobCols: number[][]; skyCols: number[][] };
 export function skyShades(frame: VizDataFrame, look = packLook(frame).u, src = SKY): SkyShades {
-  const unit = { ...look, uBright: 1 }; // shadePixel multiplies by uBright last, so x 1 leaves the colour as is
+  const unit = { ...look, uBright: 1 }; // shadePixel multiplies by uBright last, so x 1 leaves the colour unchanged
   const shape = mirrorShape(src);
   const slots = hostSlots(frame);
   const blobs: { x: number; y: number; r: number }[] = [];
