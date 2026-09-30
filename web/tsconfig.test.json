@@ -27,6 +27,7 @@
     "../scripts/**/*.test.ts",
     "../scripts/**/*.test.tsx",
     // Non-test sources and declarations the test program needs to resolve.
+    "../plugins/sdk/pack-bundle-resolve.mjs",
     "../plugins/sdk/pack-lint-import.ts",
     "../plugins/sdk/pack-lint.ts",
     "../plugins/src/ant-colony/frontend/index.ts",
