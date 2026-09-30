@@ -4,10 +4,12 @@ import { fileURLToPath } from "node:url";
 import { beforeAll, describe, expect, it } from "vitest";
 import {
   BLOB_MESH_FLOOR,
+  BLOB_MESH_HALF_RATE_SHARE,
   BLOB_MESH_MAX_BLOBS,
   BLOB_MESH_SLOT_BUDGET,
   planBlobMesh,
 } from "../../../plugins/sdk/blob-mesh-budget";
+import { lanFrames35s } from "./pack-sky-lan-frame-test-helper";
 import { runPackFrameHandler } from "./viz-pack-host";
 import type { VizDataFrame } from "./viz-host";
 
@@ -41,7 +43,7 @@ const EQUAL8 = frameOf(Array.from({ length: 8 }, (_, i) => talker(`172.30.0.${10
 const HALF = frameOf([talker("172.30.0.10", 120), talker("172.30.0.11", 60), talker("172.30.0.12", 2)]);
 const LOW_BESIDE_BUSY = frameOf([talker("172.30.0.10", 400), talker("172.30.0.31", 1)]);
 const FRAMES = { LAN7, EQUAL7, SINGLE, BUSY1_IDLE6, QUIET5, EQUAL8, HALF, LOW_BESIDE_BUSY } as const;
-/** Devices drawn per frame at budget 0.1152 / floor 0.12. */
+/** Devices drawn per frame at budget 0.11765 / floor 0.12. */
 const DRAWN: Record<keyof typeof FRAMES, number> = { LAN7: 7, EQUAL7: 7, SINGLE: 1, BUSY1_IDLE6: 7, QUIET5: 5, EQUAL8: 8, HALF: 3, LOW_BESIDE_BUSY: 2 };
 
 function radiiOf(slot0: readonly number[]): number[] {
@@ -84,6 +86,42 @@ const writers = [
   ["pack frontend", packSlot0Of],
 ] as const;
 
+/** Independent count: most busiest-first devices whose minimum shape (1.4x top, 25% half-rate share, floor) fits B. */
+function minimumShapeFit(rates: readonly number[]): number {
+  const sorted = [...rates].sort((a, b) => b - a);
+  for (let n = Math.min(BLOB_MESH_MAX_BLOBS, sorted.length); n > 1; n--) {
+    const top = sorted.slice(0, n);
+    const hi = top[0]!;
+    const lo = top[n - 1]!;
+    const g = hi > lo ? 0.4 * Math.min(1, Math.log2(hi / lo)) : 0;
+    // quietest itself >= half: q = floor + 0.25 (big - floor) and big = (1 + g) q
+    const q = hi > lo && 2 * lo >= hi ? (0.75 * BLOB_MESH_FLOOR) / (1 - 0.25 * (1 + g)) : BLOB_MESH_FLOOR;
+    const big = q * (1 + g);
+    const need = top.reduce((s, r) => s + (r === hi ? big : 2 * r >= hi ? BLOB_MESH_FLOOR + 0.25 * (big - BLOB_MESH_FLOOR) : BLOB_MESH_FLOOR) ** 2, 0);
+    if (need <= BLOB_MESH_SLOT_BUDGET + 1e-12) return n;
+  }
+  return Math.min(1, sorted.length);
+}
+
+/**
+ * The 25% half-rate row (UX Pro): every drawn device at >= half the busiest drawn rate sits at least
+ * floor + 25% of the floor-to-top range. Returns failure text or null.
+ */
+function halfRateRow(rates: readonly number[], radii: readonly number[]): string | null {
+  const hi = Math.max(...rates);
+  const top = Math.max(...radii);
+  for (let i = 0; i < rates.length; i++) {
+    if (2 * rates[i]! < hi || rates[i] === hi) continue;
+    const need = BLOB_MESH_FLOOR + 0.25 * (top - BLOB_MESH_FLOOR);
+    const share = (radii[i]! - BLOB_MESH_FLOOR) / (top - BLOB_MESH_FLOOR);
+    if (radii[i]! < need - 1e-9) return `rate ${rates[i]} (>= half of ${hi}) r=${radii[i]!.toFixed(4)} sits ${(100 * share).toFixed(1)}% of floor-to-top, needs >= 25% (${need.toFixed(4)})`;
+  }
+  return null;
+}
+
+const LAN7_HOST = lanFrames35s({ fixture: "host" }, 2)[0]!;
+const LAN11_HOST = lanFrames35s({ fixture: "host" }, 2, 1, 6, 11)[0]!;
+
 describe("blob-mesh coverage budget (#174)", () => {
   it("the sky's minimum radius is the writers' floor (0.12, #174 option 1)", () => {
     expect(BLOB_MESH_FLOOR).toBe(0.12);
@@ -125,22 +163,24 @@ describe("blob-mesh coverage budget (#174)", () => {
       expect(radii[0]).toBe(Math.max(...radii));
     });
 
-    it(`${who}: one device alone is one big blob using the whole budget (sqrt(B) = 0.339, no 0.22 cap)`, () => {
+    it(`${who}: one device alone is one big blob using the whole budget (sqrt(B) = 0.343, no 0.22 cap)`, () => {
       const [r] = radiiOf(slotsOf(SINGLE));
       expect(r).toBeCloseTo(Math.sqrt(BLOB_MESH_SLOT_BUDGET), 9);
     });
 
-    it(`${who}: the quiet LAN (5 x 0.5 pkt/s) shares the whole budget evenly, sqrt(B / 5) = 0.152 each`, () => {
+    it(`${who}: the quiet LAN (5 x 0.5 pkt/s) shares the whole budget evenly, sqrt(B / 5) = 0.153 each`, () => {
       const radii = radiiOf(slotsOf(QUIET5));
       expect(radii).toHaveLength(5);
       for (const r of radii) expect(r).toBeCloseTo(Math.sqrt(BLOB_MESH_SLOT_BUDGET / 5), 9);
     });
 
-    it(`${who}: size order matches rate order, ties equal (LAN7, BUSY1_IDLE6, shuffled input with ties)`, () => {
+    it(`${who}: size order matches rate order, ties equal (LAN7, BUSY1_IDLE6, shuffled input with ties, tied busiest)`, () => {
       const cases: [string, VizDataFrame][] = [
         ["LAN7", LAN7],
         ["BUSY1_IDLE6", BUSY1_IDLE6],
         ["SHUFFLED_TIES", frameOf([25, 100, 50, 100, 50, 12, 25].map((r, i) => talker(`10.1.0.${i + 2}`, r)))],
+        // tied busiest while the others are squeezed (lambda < 1)
+        ["TIED_TOP", frameOf([100, 25, 40, 100, 30, 40].map((r, i) => talker(`10.2.0.${i + 2}`, r)))],
       ];
       for (const [name, frame] of cases) {
         const radii = radiiOf(slotsOf(frame));
@@ -157,20 +197,62 @@ describe("blob-mesh coverage budget (#174)", () => {
     });
   }
 
-  it("growth reserve only when rates differ: 8 equal devices all fit at the floor; 8 that differ fit 7 (8 would need 0.1296)", () => {
-    expect(BLOB_MESH_SLOT_BUDGET).toBeCloseTo(0.1152, 12);
+  it("budget is the smallest clean value that draws the live LAN's 7 with 1.4x and the 25% half-rate share (0.11765)", () => {
+    // live LAN minimum shape: busiest 1.4 x floor, the 100 pkt/s device at floor + 25% of the range, five at the floor
+    const busiest = 1.4 * BLOB_MESH_FLOOR;
+    const half = BLOB_MESH_FLOOR + 0.25 * (busiest - BLOB_MESH_FLOOR);
+    const need = busiest ** 2 + half ** 2 + 5 * BLOB_MESH_FLOOR ** 2;
+    process.stdout.write(`[budget] B=${BLOB_MESH_SLOT_BUDGET} liveLanMinimum=${need.toFixed(8)} margin=${(BLOB_MESH_SLOT_BUDGET - need).toExponential(2)}\n`);
+    expect(need).toBeCloseTo(0.117648, 12);
+    expect(BLOB_MESH_SLOT_BUDGET).toBeGreaterThanOrEqual(need + 1e-7);
+    expect(BLOB_MESH_SLOT_BUDGET - need, "no more than the rounding up").toBeLessThan(1e-5);
+    expect(planBlobMesh(LAN7.talkers.map((t) => t.rate), need - 1e-7).shownIdx, "a hair under the minimum draws 6").toHaveLength(6);
+  });
+
+  it("growth reserve only when rates differ: 8 equal devices all fit at the floor; 8 that differ fit fewer", () => {
     expect(BLOB_MESH_MAX_BLOBS).toBe(8);
     const equal = planBlobMesh(Array(8).fill(60));
     expect(equal.shownIdx).toHaveLength(8);
     expect(equal.hidden).toBe(0);
-    for (const r of equal.radii) expect(r).toBeCloseTo(BLOB_MESH_FLOOR, 12);
-    expect(6 * 0.12 ** 2 + (1.4 * 0.12) ** 2).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET);
+    for (const r of equal.radii) expect(r).toBeCloseTo(Math.sqrt(BLOB_MESH_SLOT_BUDGET / 8), 12);
+    expect(8 * BLOB_MESH_FLOOR ** 2).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET);
     expect(7 * 0.12 ** 2 + (1.4 * 0.12) ** 2).toBeGreaterThan(BLOB_MESH_SLOT_BUDGET);
-    expect(planBlobMesh([120, 60, 60, 60, 60, 60, 60, 30]).shownIdx).toHaveLength(7);
+    // 120 + six at 60 + 30: with 30 dropped every drawn device is >= half the busiest (25% share each,
+    // and 1.4x over a quietest that is itself lifted), so 5 fit
+    expect(planBlobMesh([120, 60, 60, 60, 60, 60, 60, 30]).shownIdx).toHaveLength(5);
     expect(planBlobMesh(LAN7.talkers.map((t) => t.rate)).shownIdx).toHaveLength(7);
   });
 
+  it("where every device is >= half the busiest (200, 185, ... 110), each needs its 25% share: 6 of 7 fit", () => {
+    const rates = Array.from({ length: 7 }, (_, i) => 200 - i * 15);
+    const plan = planBlobMesh(rates);
+    process.stdout.write(`[half-heavy] rates=${rates.join(",")} shown=${plan.shownIdx.length} radii=${plan.radii.map((r) => r.toFixed(4)).join(",")}\n`);
+    expect(plan.shownIdx).toHaveLength(6);
+    expect(plan.hidden).toBe(1);
+  });
+
   for (const [who, slotsOf] of writers) {
+    it(`${who}: 25% half-rate row: every drawn device at >= half the busiest rate sits >= floor + 25% of floor-to-top (LAN7, LAN11, all fixtures)`, () => {
+      expect(BLOB_MESH_HALF_RATE_SHARE).toBe(0.25);
+      const cases: [string, VizDataFrame, number][] = [
+        ["LAN7", LAN7_HOST, 7], ["LAN11", LAN11_HOST, 7],
+        ...Object.entries(FRAMES).map(([n, f]) => [n, f, DRAWN[n as keyof typeof FRAMES]] as [string, VizDataFrame, number]),
+        ["FULL8", frameOf(Array.from({ length: 8 }, (_, i) => talker(`172.30.0.${10 + i}`, 120 - i * 12))), 5],
+        ["PAIR2X", frameOf([talker("172.30.0.10", 90), talker("172.30.0.11", 45)]), 2],
+      ];
+      for (const [name, frame, drawn] of cases) {
+        const radii = radiiOf(slotsOf(frame));
+        const plan = planBlobMesh(frame.talkers.map((t) => t.rate));
+        const rates = plan.shownIdx.map((i) => frame.talkers[i]!.rate);
+        const top = Math.max(...radii);
+        const shares = radii.map((r) => (top > BLOB_MESH_FLOOR ? (100 * (r - BLOB_MESH_FLOOR)) / (top - BLOB_MESH_FLOOR) : 0));
+        const text = `${name} rates=${rates.map((r) => +r.toFixed(1)).join(",")} radii=${radii.map((r) => r.toFixed(4)).join(",")} share%=${shares.map((s) => s.toFixed(1)).join(",")} sumR2=${radii.reduce((s, r) => s + r * r, 0).toFixed(6)}`;
+        if (who === "host mirror") process.stdout.write(`[half-rate] ${text}\n`);
+        expect(radii, text).toHaveLength(drawn);
+        expect(halfRateRow(rates, radii), text).toBeNull();
+      }
+    });
+
     it(`${who}: busiest >= 2x the quietest drawn rate gives a radius >= 1.4x, inside the budget (LAN7, BUSY1_IDLE6, two devices at exactly 2x)`, () => {
       for (const [name, frame] of [["LAN7", LAN7], ["BUSY1_IDLE6", BUSY1_IDLE6], ["PAIR2X", frameOf([talker("172.30.0.10", 90), talker("172.30.0.11", 45)])]] as const) {
         const radii = radiiOf(slotsOf(frame));
@@ -189,7 +271,7 @@ describe("blob-mesh coverage budget (#174)", () => {
     });
   }
 
-  it("contrast holds across a sweep of 2..11 devices with busiest >= 2x quietest drawn, floor and budget kept", () => {
+  it("contrast and the 25% half-rate row hold across a sweep of 2..11 devices with busiest >= 2x quietest drawn, floor and budget kept", () => {
     let checked = 0;
     for (let n = 2; n <= 11; n++) {
       for (const spread of [2, 2.5, 5, 40]) {
@@ -204,7 +286,8 @@ describe("blob-mesh coverage budget (#174)", () => {
           expect(Math.max(...plan.radii) / Math.min(...plan.radii), text).toBeGreaterThanOrEqual(1.4 - EPS);
           expect(plan.radii.reduce((s, r) => s + r * r, 0), text).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + EPS);
           expect(Math.min(...plan.radii), text).toBeGreaterThanOrEqual(BLOB_MESH_FLOOR - EPS);
-          expect(plan.shownIdx.length, text).toBe(Math.min(7, n));
+          expect(plan.shownIdx.length, text).toBe(minimumShapeFit(rates));
+          expect(halfRateRow(drawn, plan.radii), text).toBeNull();
         }
       }
     }

@@ -30,8 +30,10 @@ function equal(n: number, extra: number[] = []): VizDataFrame {
   return { t: 35, dt: FRAME_MS / 1000, audio: 0, packets: [], rf: [], talkers, headlines: [] };
 }
 
+/** The live LAN's rates, busiest first (LAN11 fixture: 125, 118, 50, 45, 40, 35, 25, 8, 6, 5, 4 pkt/s); lan(n) is its busiest n. */
+const LIVE_RATES = lanFrames35s({ fixture: "host" }, 2, 1, 6, 11)[0]!.talkers.map((t) => t.rate).sort((a, b) => b - a);
 function lan(n: number): VizDataFrame {
-  const talkers = Array.from({ length: n }, (_, i) => ({ id: `172.30.0.${10 + i}`, rate: 200 - i * 15, role: i === 1 ? "gateway" : "lan" }));
+  const talkers = Array.from({ length: n }, (_, i) => ({ id: `172.30.0.${10 + i}`, rate: LIVE_RATES[i]!, role: i === 1 ? "gateway" : "lan" }));
   return { t: 35, dt: FRAME_MS / 1000, audio: 0, packets: [], rf: [], talkers, headlines: [] };
 }
 

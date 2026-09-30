@@ -297,7 +297,7 @@ describe("viz hud helpers", () => {
     const state = minimalState();
     const frameOf = (n: number) => ({
       t: 0, dt: 0, audio: 0, packets: [], rf: [], headlines: [],
-      talkers: Array.from({ length: n }, (_, i) => ({ id: `10.0.0.${10 + i}`, rate: 200 - i * 15, role: "lan" })),
+      talkers: Array.from({ length: n }, (_, i) => ({ id: `10.0.0.${10 + i}`, rate: [125, 118, 50, 45, 40, 35, 25, 8, 6, 5, 4][i]!, role: "lan" })),
     });
     expect(vizHudMetric("blob-mesh", frameOf(7), state)).toEqual({ label: "devices", value: "7" });
     expect(vizHudMetric("blob-mesh", frameOf(8), state)).toEqual({ label: "devices", value: "7 of 8" });

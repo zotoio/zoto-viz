@@ -227,8 +227,9 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
     expect(LAN7.talkers).toHaveLength(7);
     expect(LAN7.talkers.reduce((s, t) => s + t.rate, 0)).toBe(LAN_35S_PPS);
     expect(mirrorShape(SKY)).toEqual({ floor: BLOB_MESH_FLOOR, gate: "live-gated" });
-    // 8 devices draw 7 since the growth reserve (the 8th is dropped and the notice says so)
-    expect(planBlobMesh(FULL8.talkers.map((t) => t.rate)).hidden).toBe(1);
+    // FULL8 (120 down to 36 pkt/s) draws 5 (120..72, all >= half the busiest, each with its 25% share);
+    // the three quietest are dropped and the notice says so
+    expect(planBlobMesh(FULL8.talkers.map((t) => t.rate)).hidden).toBe(3);
     expect(planBlobMesh(EQUAL8.talkers.map((t) => t.rate)).hidden).toBe(0);
     expect(LAN11.talkers).toHaveLength(11);
     expect(planBlobMesh(LAN11.talkers.map((t) => t.rate)).shownIdx).toHaveLength(7);
