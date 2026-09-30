@@ -255,10 +255,15 @@ class ScreensaverHold:
         return getattr(proc, "returncode", 1) == 0
 
 
-def screensaver_tool_check(platform: str | None = None) -> tuple[bool, str, tuple[str, ...]]:
-    """Bootstrap/doctor: whether an inhibit backend exists on this host."""
+def screensaver_tool_check(
+    platform: str | None = None,
+    which: Callable[[str], str | None] = shutil.which,
+) -> tuple[bool, str, tuple[str, ...]]:
+    """Bootstrap/doctor: whether an inhibit backend exists on this host.
+
+    ``which`` is the host's PATH lookup; bootstrap passes ``Host.which`` so its checks read one host (#221).
+    """
     plat = platform or detect_platform()
-    which = shutil.which
     if plat == "windows":
         try:
             import ctypes

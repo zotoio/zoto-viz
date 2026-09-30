@@ -104,7 +104,7 @@ def gather_bootstrap_items(host: inst.Host, run: Run | None = None) -> list[Boot
             )
         )
 
-    saver_ok, saver_detail, saver_manual = idle.screensaver_tool_check(host.platform)
+    saver_ok, saver_detail, saver_manual = idle.screensaver_tool_check(host.platform, host.which)
     items.append(
         BootstrapItem(
             id="screensaver",
