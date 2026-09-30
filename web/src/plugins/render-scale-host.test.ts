@@ -7,7 +7,8 @@ import {
   type RenderScalePane,
 } from "./render-scale-host";
 
-function pane(active: boolean, hasGov = true): RenderScalePane {
+/** A hosted pane that also reports the scale it was last given. */
+function pane(active: boolean, hasGov = true): RenderScalePane & { readonly applied: number } {
   const state = new RenderScaleViewState();
   if (hasGov) state.configure({ min: 0.35, steps: [1, 0.75, 0.5, 0.35] });
   let scale = 1;

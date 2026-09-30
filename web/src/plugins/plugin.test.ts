@@ -31,7 +31,7 @@ const node = (over: Partial<GNode> = {}, d?: Device): GNode => ({
 } as GNode);
 
 const spec = (over: Partial<PluginView> = {}): PluginView => ({
-  id: "pulse", packName: "Pulse", version: 1, engine: "graph", base: "topology", ...over,
+  id: "pulse", name: "Pulse", packName: "Pulse", version: 1, engine: "graph", base: "topology", ...over,
 });
 
 afterEach(() => applyPluginCatalog([]));
@@ -183,12 +183,12 @@ describe("compilePlugin", () => {
   });
 
   it("compiles arcade plugins and view options", () => {
-    const arcade = compilePlugin({ id: "pong", packName: "Pong", version: 1, engine: "netpong" });
+    const arcade = compilePlugin({ id: "pong", packName: "Pong", name: "Pong", version: 1, engine: "netpong" });
     expect(arcade.standalone).toBe(true);
     expect(arcade.arcadeId).toBe("netpong");
     expect(arcade.kind).toBe("arcade");
     const storm = compilePlugin({
-      id: "storm", packName: "Storm", version: 1, engine: "graph", base: "talkers",
+      id: "storm", packName: "Storm", name: "Storm", version: 1, engine: "graph", base: "talkers",
       capabilities: ["viz.read", "viz.write"], look: { backdrop: "plugin" },
     });
     expect(storm.kind).toBe("demo");
@@ -206,18 +206,18 @@ describe("compilePlugin", () => {
       id: "heat", name: "Heat", version: 1, engine: "graph", base: "talkers",
       look: { backdrop: "none" },
     })).stageOnly).toBe(false);
-    expect(specCaption({ id: "air", packName: "Air SSIDs", version: 1, engine: "graph", base: "wifi" })).toBe("AIR SSIDs");
-    expect(specCaption({ id: "bt", packName: "Air Bluetooth", version: 1, engine: "graph", base: "bluetooth" })).toBe("BT Bluetooth");
-    expect(specCaption({ id: "cores", packName: "CPU cores", version: 1, engine: "graph", base: "cores" })).toBe("CPU cores");
-    expect(specCaption({ id: "source-web", packName: "Source web", version: 1, engine: "graph", base: "sources" })).toBe("SRC Source web");
-    expect(specCaption({ id: "memory", packName: "Memory", version: 1, engine: "graph", base: "memory" })).toBe("SYS Memory");
-    expect(specCaption({ id: "syscon", packName: "Syscon", version: 1, engine: "graph", base: "bridge" })).toBe("SYS Syscon");
+    expect(specCaption({ id: "air", packName: "Air SSIDs", name: "Air SSIDs", version: 1, engine: "graph", base: "wifi" })).toBe("AIR SSIDs");
+    expect(specCaption({ id: "bt", packName: "Air Bluetooth", name: "Air Bluetooth", version: 1, engine: "graph", base: "bluetooth" })).toBe("BT Bluetooth");
+    expect(specCaption({ id: "cores", packName: "CPU cores", name: "CPU cores", version: 1, engine: "graph", base: "cores" })).toBe("CPU cores");
+    expect(specCaption({ id: "source-web", packName: "Source web", name: "Source web", version: 1, engine: "graph", base: "sources" })).toBe("SRC Source web");
+    expect(specCaption({ id: "memory", packName: "Memory", name: "Memory", version: 1, engine: "graph", base: "memory" })).toBe("SYS Memory");
+    expect(specCaption({ id: "syscon", packName: "Syscon", name: "Syscon", version: 1, engine: "graph", base: "bridge" })).toBe("SYS Syscon");
     expect(pluginStageOnly({
       engine: "graph", capabilities: ["viz.read", "viz.write"], look: { backdrop: "plugin", stageOnly: false },
       has_sky_shader: true,
     })).toBe(false);
-    expect(specCaption({ id: "pong", packName: "Pong", version: 1, engine: "netpong" })).toBe("NET Pong");
-    expect(specCaption({ id: "doom", packName: "Doom", version: 1, engine: "doom" })).toBe("CPU Doom");
+    expect(specCaption({ id: "pong", packName: "Pong", name: "Pong", version: 1, engine: "netpong" })).toBe("NET Pong");
+    expect(specCaption({ id: "doom", packName: "Doom", name: "Doom", version: 1, engine: "doom" })).toBe("CPU Doom");
     applyPluginCatalog([spec({ id: "topology", packName: "Topology" })]);
     expect(viewSelectOptions().some((o) => o.value === "plugin:topology" && o.label === "NET Topology")).toBe(true);
     applyPluginCatalog([]);
@@ -448,11 +448,11 @@ describe("visualisation.yml", () => {
   });
 
   it("maps arcade engines including doom onto arcadeId", () => {
-    const doom = compilePlugin({ id: "doom", packName: "Doom", version: 1, engine: "doom" });
+    const doom = compilePlugin({ id: "doom", packName: "Doom", name: "Doom", version: 1, engine: "doom" });
     expect(doom.arcadeId).toBe("doom");
     expect(doom.standalone).toBe(true);
     for (const engine of ["waves", "orbits", "helix", "skyline", "pacman", "tetris", "portal", "carousel"] as const) {
-      const mode = compilePlugin({ id: engine, packName: engine, version: 1, engine });
+      const mode = compilePlugin({ id: engine, packName: engine, name: engine, version: 1, engine });
       expect(mode.arcadeId).toBe(engine);
       expect(mode.standalone).toBe(true);
       expect(mode.kind).toBe("arcade");

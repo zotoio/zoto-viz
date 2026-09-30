@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { Flow, StateMsg } from "../core/types";
-import type { ParentMsg } from "./host";
+import { monoMs } from "../core/viz-time";
+import type { HostSandboxPortMsg } from "./sandbox-channel";
 import type { VizDataFrame } from "./viz-host";
 import { buildVizFrame, buildVizFrameForPlugin, VIZ_CONTRACT_VERSION } from "./viz-host";
 import { buildIdleVizFrame, buildIdleVizFrameFailed } from "./fixtures/idle-viz-frame";
@@ -87,7 +88,7 @@ describe("viz frame v2 collector", () => {
 
   it("stamps empty links as the shared EMPTY_VIZ_LINKS constant when collection is on but no pairs qualify", () => {
     const state = syntheticState({ host: { vizFrame: { links: true } }, flows: [] });
-    const frame = buildVizFrame(state, 0, 0);
+    const frame = buildVizFrame(state, monoMs(0), 0);
     expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(frame.links).toEqual([]);
     expect(frame.links).toBe(EMPTY_VIZ_LINKS);
@@ -95,7 +96,7 @@ describe("viz frame v2 collector", () => {
 
   it("omits link enrichment when the monitor switch is off but stamps contract", () => {
     const state = syntheticState({ host: { vizFrame: { links: false } } });
-    const frame = buildVizFrame(state, 0, 0);
+    const frame = buildVizFrame(state, monoMs(0), 0);
     expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(frame.links).toBeUndefined();
     expect(frame.talkers.every((t) => t.failed === undefined)).toBe(true);
@@ -122,8 +123,8 @@ describe("idle demo v2", () => {
 
   it("nested quiet frames do not alias talker arrays", () => {
     const state = vmLiveCaptureState();
-    const first = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE, 2);
-    const second = buildVizFrameForPlugin(state, first.t, 0, VIZ_SDK_HOST_IDLE, 2);
+    const first = buildVizFrameForPlugin(state, monoMs(0), 0, VIZ_SDK_HOST_IDLE, 2);
+    const second = buildVizFrameForPlugin(state, monoMs(first.t), 0, VIZ_SDK_HOST_IDLE, 2);
     expect(first.talkers).not.toBe(second.talkers);
     expect(first.talkers).toEqual(second.talkers);
   });
@@ -142,7 +143,7 @@ describe("vm-live quiet capture", () => {
     const state = vmLiveCaptureState();
     expect(state.devices.length).toBeGreaterThan(0);
     expect(state.flows).toHaveLength(0);
-    const frame = buildVizFrameForPlugin(state, 0, 0, VIZ_SDK_HOST_IDLE, 2);
+    const frame = buildVizFrameForPlugin(state, monoMs(0), 0, VIZ_SDK_HOST_IDLE, 2);
     expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(frame.links ?? []).toHaveLength(0);
     expect(frame.talkers.every((t) => t.failed === undefined)).toBe(true);
@@ -157,14 +158,17 @@ describe("vm-live quiet capture", () => {
   });
 });
 
+/** The host's frame message on the sandbox port; the port type itself carries `frame: unknown`. */
+type FrameMsg = Extract<HostSandboxPortMsg, { type: "frame" }> & { frame: VizDataFrame };
+
 describe("host serialisation", () => {
   it("round-trips v2 fields through JSON like postMessage", () => {
     const frame: VizDataFrame = {
       ...buildIdleVizFrameFailed(1, 0),
       talkers: [{ id: "10.0.0.42", rate: 1, role: "lan", failed: 0.5 }],
     };
-    const msg: ParentMsg = { source: "zoto-viz-host", type: "frame", frame };
-    const parsed = JSON.parse(JSON.stringify(msg)) as ParentMsg;
+    const msg: FrameMsg = { source: "zoto-viz-host", type: "frame", frame };
+    const parsed: FrameMsg = JSON.parse(JSON.stringify(msg));
     expect(parsed.type).toBe("frame");
     if (parsed.type !== "frame") return;
     expect(parsed.frame.contract).toBe(VIZ_CONTRACT_VERSION);
@@ -174,7 +178,7 @@ describe("host serialisation", () => {
 
 describe("buildVizFrame v2", () => {
   it("adds per-talker failed from device conn_fail ratio gauges", () => {
-    const frame = buildVizFrame(syntheticState(), 0, 0);
+    const frame = buildVizFrame(syntheticState(), monoMs(0), 0);
     expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(frame.talkers.find((t) => t.id === "10.0.0.2")?.failed).toBeCloseTo(0.5);
   });
@@ -196,7 +200,7 @@ describe("buildVizFrame v2", () => {
         },
       ],
     };
-    const frame = buildVizFrameForPlugin(state, 0, 0, { fixture: "host" });
+    const frame = buildVizFrameForPlugin(state, monoMs(0), 0, { fixture: "host" });
     expect(frame.links ?? []).toHaveLength(0);
     assertLinksMatchTalkers(frame);
     for (const link of frame.links ?? []) {

@@ -9,6 +9,7 @@ import {
   resetNixieRealWallClockForTests,
 } from "./nixie-wall-parts";
 import { SharedNixieWallSecond } from "./nixie-wall-broadcast";
+import { monoMs } from "../core/viz-time";
 import { resetNixieFormatterCache } from "./nixie-wall-clock";
 import { resetNixiePackHostScope, runPackFrameHandler } from "./viz-pack-host";
 import type { VizDataFrame } from "./viz-host";
@@ -55,7 +56,7 @@ describe("nixie wall clock source rows (B1 option b)", () => {
     for (let frame = 0; frame < 600; frame++) {
       wall = t0 + frame * 16;
       mono = frame * 16;
-      wallSecond.syncWallSecond(mono);
+      wallSecond.syncWallSecond(monoMs(mono));
     }
 
     expect(dateCtor).not.toHaveBeenCalled();

@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { StateMsg } from "../core/types";
+import type { Device, Flow, StateMsg } from "../core/types";
+import { monoMs } from "../core/viz-time";
+import { mockPartial } from "../../test-support/mock-partial";
 import type { VizDataFrame } from "./viz-host";
 import {
   VizV1FrameAdapter,
@@ -89,20 +91,21 @@ describe("VizV1FrameAdapter", () => {
   });
 
   it("maps lifetime talker counts through the host v1 delivery build and adapter", () => {
-    const state: StateMsg = {
+    // Devices carry no byte counter (the host reads `packets`); flows keep theirs.
+    const state = mockPartial<StateMsg>({
       ts: 100,
       devices: [
-        { ip: "192.168.1.3", packets: 209, bytes: 1, role: "lan" },
-        { ip: "192.168.1.1", packets: 208, bytes: 1, role: "lan" },
-        { ip: "192.168.1.2", packets: 50, bytes: 1, role: "lan" },
+        mockPartial<Device>({ ip: "192.168.1.3", packets: 209, role: "lan" }),
+        mockPartial<Device>({ ip: "192.168.1.1", packets: 208, role: "lan" }),
+        mockPartial<Device>({ ip: "192.168.1.2", packets: 50, role: "lan" }),
       ],
       flows: [
-        { a: "192.168.1.3", b: "192.168.1.1", packets: 100, bytes: 1000, rate_pkt_ab: 273, rate_pkt_ba: 0 },
-        { a: "192.168.1.2", b: "192.168.1.1", packets: 50, bytes: 500, rate_pkt_ab: 202.8, rate_pkt_ba: 0 },
+        mockPartial<Flow>({ a: "192.168.1.3", b: "192.168.1.1", packets: 100, bytes: 1000, rate_pkt_ab: 273, rate_pkt_ba: 0 }),
+        mockPartial<Flow>({ a: "192.168.1.2", b: "192.168.1.1", packets: 50, bytes: 500, rate_pkt_ab: 202.8, rate_pkt_ba: 0 }),
       ],
-      sources: [],
-    };
-    const hostFrame = buildVizFrameForV1AdapterDelivery(state, 0, 0, { fixture: "host" });
+      sources: {},
+    });
+    const hostFrame = buildVizFrameForV1AdapterDelivery(state, monoMs(0), 0, { fixture: "host" });
     const adapter = new VizV1FrameAdapter();
     const packFrame = adapter.register("probe");
     adapter.deliver(hostFrame);

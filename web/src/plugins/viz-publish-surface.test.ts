@@ -38,8 +38,8 @@ function installPublishSurface(createImageBitmap: typeof globalThis.createImageB
     `${SANDBOX_PUBLISH_SURFACE_SDK}; return zoto.publishSurface;`,
   ) as (
     zoto: object,
-    send: typeof send,
-    vizAllowed: typeof vizAllowed,
+    sendFn: typeof send,
+    vizAllowedFn: typeof vizAllowed,
     createImageBitmap: typeof globalThis.createImageBitmap,
     window: typeof win,
   ) => (canvas: object) => void;
