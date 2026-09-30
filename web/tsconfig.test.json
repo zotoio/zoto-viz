@@ -14,7 +14,13 @@
     "src/graph/pack-mirror-rect-converters.test.ts",
     "src/graph/pack-mirror-readback.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
-    "test/node/pack-mirror-readback-vite.ts"
+    "test/node/pack-mirror-readback-vite.ts",
+    "../plugins/src/blob-mesh/frontend/index.ts",
+    "../plugins/src/cypher-cic/frontend/index.ts",
+    "../plugins/src/hn-term/frontend/index.ts",
+    "../plugins/src/rf-constellation/frontend/index.ts",
+    "../plugins/src/roto-proto/frontend/index.ts",
+    "../plugins/src/talker-storm/frontend/index.ts"
   ],
   "exclude": []
 }
