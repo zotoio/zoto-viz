@@ -33,6 +33,7 @@
     "src/plugins/pack-install-lint-fail-closed.test.ts",
     "src/plugins/pack-install-surface.test.ts",
     "src/plugins/viz-particles-deprecated-184.test.ts",
+    "src/plugins/viz-write-api-consumers-184.test.ts",
     "src/plugins/talker-storm-host-184.test.ts",
     "src/plugins/dogfood.test.ts",
     "src/plugins/talker-storm-pack-bright-184.test.ts",
