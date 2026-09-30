@@ -13,6 +13,7 @@ import {
   healthPatchOrigins,
   patchesAreNearUniform,
   resetTileHealthProgress,
+  skyReadIsFlat,
   stepTileHealth,
   type HealStep,
   type PerTileHealthState,
@@ -286,18 +287,41 @@ export class TileHealthMonitor {
     if (sc.gpuContextLost) return;
     const patch = this.sampleScene(sc, now);
     if (!patch) return; // async GL read pending — not empty
+    let skyFlat: boolean | undefined;
+    if (patchesAreNearUniform(patch)) {
+      // #180: five patches can all land on one dark area of a working sky; confirm on the whole tile.
+      const confirm = this.confirmSky(sc);
+      if (confirm === "pending") return; // not empty this cycle
+      skyFlat = confirm ?? undefined;
+    }
     if (liveDrawing) {
-      this.runLiveFloor(tileId, packId, patch, now);
+      this.runLiveFloor(tileId, packId, patch, now, skyFlat);
       return;
     }
-    this.runTileCheck(tileId, now, sc, patch);
+    this.runTileCheck(tileId, now, sc, patch, skyFlat);
+  }
+
+  /**
+   * #180 confirm: the tile's sky alone, read coarsely over the whole tile. True / false: flat or
+   * not; "pending": the async read is in flight; null: no confirm on this path (software, no pack
+   * sky bound), so the five-patch verdict stands.
+   */
+  private confirmSky(sc: NetScene): boolean | "pending" | null {
+    const host = this.deps.host;
+    if (host.software) return null;
+    const gl = host.gl;
+    if (!gl || gl.isContextLost?.()) return null;
+    const read = sc.tileHealthSkyRgba?.(gl);
+    if (read === "pending") return "pending";
+    if (!read) return null;
+    return skyReadIsFlat(read);
   }
 
   /**
    * Floor: a ready frame whose draws keep rising never climbs the ladder. Non-uniform output is
    * healthy; uniform output is a pack running but showing nothing, which gets an on-screen notice.
    */
-  private runLiveFloor(tileId: string, packId: string, patch: TilePatchBytes, now: number): void {
+  private runLiveFloor(tileId: string, packId: string, patch: TilePatchBytes, now: number, skyFlat?: boolean): void {
     this.states.set(tileId, {
       ...resetTileHealthProgress(this.stateFor(tileId)),
       ladderIndex: 0,
@@ -305,7 +329,7 @@ export class TileHealthMonitor {
       forceDemo: false,
     });
     this.paintLabel(tileId, this.stateFor(tileId));
-    if (!patchesAreNearUniform(patch)) {
+    if (!patchesAreNearUniform(patch) || skyFlat === false) {
       this.liveBlankReads.delete(tileId);
       this.setLiveBlank(tileId, null);
       return;
@@ -338,6 +362,7 @@ export class TileHealthMonitor {
     now: number,
     sc: NetScene,
     patch: TilePatchBytes,
+    skyFlat?: boolean,
   ): void {
     const prev = this.stateFor(tileId);
     const spec = this.deps.packFor(tileId);
@@ -350,6 +375,7 @@ export class TileHealthMonitor {
       now,
       {
         patch,
+        skyFlat,
         lastCheckPictureSerial: prev.lastCheckPictureSerial,
         signals: {
           mayBeStatic: this.deps.mayBeStatic(spec),
