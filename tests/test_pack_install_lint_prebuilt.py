@@ -242,6 +242,65 @@ def test_bundle_false_zip_whose_js_imports_outside_the_pack_is_blocked(
     assert not (paths.plugin_local_runtime_dir(create=True) / "sandbox-fixture-multi").exists()
 
 
+def _sfm_zip_with(tmp_path: Path, code: str) -> Path:
+    src = tmp_path / "src-sfm"
+    shutil.copytree(ROOT / "plugins" / "src" / "sandbox-fixture-multi", src)
+    assert "bundle: false" in (src / "plugin.yml").read_text(encoding="utf-8")
+    (src / "frontend" / "a.js").write_text("export const a = 1;\n", encoding="utf-8")
+    with (src / "frontend" / "helper.js").open("a", encoding="utf-8") as fh:
+        fh.write(f"\n{code}\n")
+    return _zip_tree(src)
+
+
+@pytest.mark.parametrize(
+    "code",
+    [
+        pytest.param("export const t = (x) => import(`./${x}.js`);", id="template"),
+        pytest.param("export const v = (name) => import(name);", id="variable"),
+        pytest.param("export const c = (b) => import('./a' + b);", id="concatenation"),
+    ],
+)
+def test_bundle_false_zip_with_non_literal_dynamic_import_is_blocked(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+    _isolate_plugin_local: Path,
+    code: str,
+) -> None:
+    """#194: nothing bundles a bundle:false pack, so a non-literal import() is refused, not skipped.
+    The user gets #185's one block shape; the reason code dynamic_import_nonliteral is in the log."""
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    caplog.set_level(logging.WARNING, logger="service.plugins")
+    plugins.reset_bundles()
+    out = plugin_local.install_local_zip(_sfm_zip_with(tmp_path, code), overwrite=True)
+    assert out.get("ok") is False, out
+    text = str(out.get("message"))
+    assert text == _blocked("Sandbox Fixture Multi", "it loads code in a way that can't be checked."), out
+    _assert_plain_block_text(text)
+    assert "dynamic_import_nonliteral" not in text and "helper" not in text
+    assert "frontend/helper.js:5 dynamic_import_nonliteral" in caplog.text, caplog.text
+    assert not (paths.plugin_local_runtime_dir(create=True) / "sandbox-fixture-multi").exists()
+
+
+def test_bundle_false_zip_with_literal_dynamic_import_installs(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    _isolate_plugin_local: Path,
+) -> None:
+    """#194's control: a plain string import() inside the pack still installs (then waits for consent,
+    as every new local pack does)."""
+    _needs_node_tree()
+    _repo(tmp_path, monkeypatch)
+    plugins.reset_bundles()
+    out = plugin_local.install_local_zip(
+        _sfm_zip_with(tmp_path, "export const l = () => import('./a.js');"), overwrite=True
+    )
+    assert out.get("wrote") is True and out.get("error") == "consent-required", out
+    assert "message" not in out, out
+    assert (paths.plugin_local_runtime_dir(create=True) / "sandbox-fixture-multi").exists()
+
+
 def test_service_timeout_is_the_backstop_to_the_scripts_lint_timeout() -> None:
     """#185's runner (and its --lint-timeout-ms flag) went; the service's 20 s stays as the backstop to
     the script's own 15 s lint_timeout (tests/test_pack_install_lint_timeout.py)."""
