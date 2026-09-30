@@ -1,15 +1,15 @@
 id: talker-storm
 name: Talker Storm
 version: 1
-hint: Talker-driven particle storm with a hard 512-particle cap. Top talkers spawn capped xyzw records each frame.
+hint: Talker storm. Each top talker is a storm cell in the sky, sent in UBO slots (slot 0 counts, slot 1 cells). maxParticles stays for the host pack mirror's particle writes.
 capabilities:
   - viz.read
   - viz.write
 viz:
   graphWalk: false
   contract: 2
-  maxBuffers: 1
-  maxBufferFloats: 8
+  maxBuffers: 2
+  maxBufferFloats: 64
   maxParticles: 512
   uniforms:
     - uTime
