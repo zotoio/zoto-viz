@@ -142,15 +142,34 @@ describe("pack starter template CI", () => {
     }
   });
 
+  const FAKE_PYTHON = "/nonexistent/zoto-229/bin/python";
+
   it("#229 gate: ready on ZOTO_VIZ_PYTHON when the repo .venv is hidden from the picker", () => {
-    const venvPython = path.join(repoRoot, ".venv/bin/python");
-    expect(existsSync(venvPython), `needs ${venvPython} with requirements.txt installed`).toBe(true);
+    const calls: string[] = [];
     const gate = starterCiPythonReady(repoRoot, {
-      env: { ...process.env, ZOTO_VIZ_PYTHON: venvPython },
+      env: { ZOTO_VIZ_PYTHON: FAKE_PYTHON },
       exists: () => false,
+      run: (python) => {
+        calls.push(python);
+        return "";
+      },
     });
-    expect(gate).toEqual({ ready: true, python: venvPython, reason: "" });
-  }, 60_000);
+    expect(gate).toEqual({ ready: true, python: FAKE_PYTHON, reason: "" });
+    expect(calls).toEqual([FAKE_PYTHON]);
+  });
+
+  it("#229 gate: not ready, naming the import error, when the picked interpreter lacks the deps", () => {
+    const gate = starterCiPythonReady(repoRoot, {
+      env: { ZOTO_VIZ_PYTHON: FAKE_PYTHON },
+      exists: () => false,
+      run: () => {
+        throw new Error("ModuleNotFoundError: No module named 'aiohttp'\nTraceback (most recent call last):");
+      },
+    });
+    expect(gate.ready).toBe(false);
+    expect(gate.python).toBe(FAKE_PYTHON);
+    expect(gate.reason).toContain("ModuleNotFoundError: No module named 'aiohttp'");
+  });
 
   it("idle vs idle-failed failure visuals differ (starter sim)", () => {
     const idleFrame = VIZ_FIXTURE_IDLE;

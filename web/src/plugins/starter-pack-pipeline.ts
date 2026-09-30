@@ -84,15 +84,18 @@ function runServicePython(python: string, script: string, cwd: string, env: Node
 }
 
 export type StarterCiPythonGate = { ready: boolean; python: string; reason: string };
+export type ServicePythonRun = (python: string, script: string, cwd: string, env: NodeJS.ProcessEnv) => string;
+export type StarterCiPythonSeams = RepoPythonSeams & { run?: ServicePythonRun };
 
 /**
  * #229: whether the starter CI compile/draw rows can run: the interpreter repoPython picks imports the
  * service. `reason` names that interpreter when it cannot, so a skip says why.
  */
-export function starterCiPythonReady(repoRoot: string, seams: RepoPythonSeams = {}): StarterCiPythonGate {
+export function starterCiPythonReady(repoRoot: string, seams: StarterCiPythonSeams = {}): StarterCiPythonGate {
   const python = repoPython(repoRoot, seams);
+  const run = seams.run ?? runServicePython;
   try {
-    runServicePython(python, "from service import plugins", repoRoot, { ...(seams.env ?? process.env), PYTHONPATH: repoRoot });
+    run(python, "from service import plugins", repoRoot, { ...(seams.env ?? process.env), PYTHONPATH: repoRoot });
     return { ready: true, python, reason: "" };
   } catch (err) {
     const first = (err instanceof Error ? err.message : String(err)).split("\n")[0];
