@@ -3,6 +3,7 @@ import type { Mosaic } from "./mosaic";
 import type { NetScene } from "./scene";
 import { vizContractFor, type PluginView } from "../plugins/plugin";
 import { runPackFrameHandler, type VizPackHandlers } from "../plugins/viz-pack-host";
+import { paintPackInfoCaption } from "../plugins/blob-mesh-devices-notice";
 import { noteHostDirect } from "../plugins/viz-drive";
 import { bindVizWriterCore, type VizBufferWriter, type VizDataFrame } from "../plugins/viz-host";
 import { normalizeVizDemoPackId } from "../ui/viz-hud";
@@ -40,6 +41,7 @@ function handlersFor(target: NetScene, writer: VizBufferWriter): VizPackHandlers
       writer.writeParticles(data, stride);
       target.setPluginUboBuffer(writer.ubo);
     },
+    setInfoNotice: (text) => paintPackInfoCaption(target.viewEl, text),
   };
 }
 

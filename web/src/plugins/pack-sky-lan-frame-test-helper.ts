@@ -42,6 +42,25 @@ const FLOWS: [a: string, b: string, ab: number, ba: number, protos: string[]][] 
   ["172.30.0.22", "172.30.0.23", 15, 10, ["tcp", "smb"]],
 ];
 
+/**
+ * The 11-device live LAN (#173): the same seven plus four quieter LAN devices, each talking to the
+ * gateway. Sent pkt/s: .10 125, gateway 118, .21 50, .22 45, 142.250.66.14 40, .23 35,
+ * 104.18.32.7 25, then .31 8, .32 6, .33 5, .34 4 (the four the blob plan drops).
+ */
+const LAN11_EXTRA_DEVICES: [ip: string, role: Role][] = [
+  ["172.30.0.31", "lan"],
+  ["172.30.0.32", "lan"],
+  ["172.30.0.33", "lan"],
+  ["172.30.0.34", "lan"],
+];
+const LAN11_EXTRA_FLOWS: [a: string, b: string, ab: number, ba: number, protos: string[]][] = [
+  ["172.30.0.31", "172.30.0.1", 8, 6, ["udp", "mdns"]],
+  ["172.30.0.32", "172.30.0.1", 6, 5, ["udp", "ssdp"]],
+  ["172.30.0.33", "172.30.0.1", 5, 4, ["tcp", "http"]],
+  ["172.30.0.34", "172.30.0.1", 4, 3, ["udp", "dns"]],
+];
+export const LAN11_35S_PPS = LAN_35S_PPS + LAN11_EXTRA_FLOWS.reduce((s, [, , ab, ba]) => s + ab + ba, 0);
+
 const AVG_PKT_BYTES = 280_000 / LAN_35S_PPS;
 
 function device(ip: string, role: Role, i: number): Device {
@@ -53,9 +72,11 @@ function device(ip: string, role: Role, i: number): Device {
 }
 
 /** Monitor snapshot at epoch `ts`, 35 s after the pick. */
-export function lanState35s(ts = LAN_35S_EPOCH): StateMsg {
+export function lanState35s(ts = LAN_35S_EPOCH, devices: 7 | 11 = 7): StateMsg {
   const age = 35;
-  const flows: Flow[] = FLOWS.map(([a, b, ab, ba, protos]) => ({
+  const lan11 = devices === 11;
+  const devs = lan11 ? [...DEVICES, ...LAN11_EXTRA_DEVICES] : DEVICES;
+  const flows: Flow[] = (lan11 ? [...FLOWS, ...LAN11_EXTRA_FLOWS] : FLOWS).map(([a, b, ab, ba, protos]) => ({
     a, b, bytes: (ab + ba) * AVG_PKT_BYTES * age, packets: (ab + ba) * age, ports: [], protos, ifaces: ["enp0s3"],
     first_seen: ts - age, last_seen: ts, rate: (ab + ba) * AVG_PKT_BYTES,
     rate_ab: ab * AVG_PKT_BYTES, rate_ba: ba * AVG_PKT_BYTES, rate_pkt_ab: ab, rate_pkt_ba: ba,
@@ -63,8 +84,10 @@ export function lanState35s(ts = LAN_35S_EPOCH): StateMsg {
   return {
     type: "state", ts, iface: "enp0s3", interfaces: ["enp0s3"], network: "172.30.0.0/24",
     local_ip: "172.30.0.10", gateway: "172.30.0.1", uptime: age,
-    stats: { pps: LAN_35S_PPS, bps: 280_000, packets: LAN_35S_PPS * age, bytes: 280_000 * age, devices: 7, online: 7, flows: 7, active_flows: 7 },
-    devices: DEVICES.map(([ip, role], i) => device(ip, role, i)),
+    stats: lan11
+      ? { pps: LAN11_35S_PPS, bps: LAN11_35S_PPS * AVG_PKT_BYTES, packets: LAN11_35S_PPS * age, bytes: LAN11_35S_PPS * AVG_PKT_BYTES * age, devices: 11, online: 11, flows: 11, active_flows: 11 }
+      : { pps: LAN_35S_PPS, bps: 280_000, packets: LAN_35S_PPS * age, bytes: 280_000 * age, devices: 7, online: 7, flows: 7, active_flows: 7 },
+    devices: devs.map(([ip, role], i) => device(ip, role, i)),
     flows,
     sources: {},
   };
@@ -74,12 +97,12 @@ export function lanState35s(ts = LAN_35S_EPOCH): StateMsg {
  * `count` consecutive frames the host delivers for a pack (idle config and contract as in
  * the pack's plugin.yml), ending 35 s after the pick, at `fps` present rate (UX Pro's run showed 0-7 fps).
  */
-export function lanFrames35s(idle: VizIdleConfig | undefined, contract: number, count = 1, fps = 6): VizDataFrame[] {
+export function lanFrames35s(idle: VizIdleConfig | undefined, contract: number, count = 1, fps = 6, devices: 7 | 11 = 7): VizDataFrame[] {
   const out: VizDataFrame[] = [];
   let prev: MonoMs = monoMs(0);
   for (let i = 0; i < count; i++) {
     const ts = LAN_35S_EPOCH - (count - 1 - i) / fps;
-    out.push(mainVizBuildFrame(lanState35s(ts), prev, 0, idle, parseSourceBind({}), contract));
+    out.push(mainVizBuildFrame(lanState35s(ts, devices), prev, 0, idle, parseSourceBind({}), contract));
     prev = monoMs(1);
   }
   return out;
