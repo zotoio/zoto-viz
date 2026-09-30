@@ -353,6 +353,7 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
 
   it("shader on the solo wall (tile main, one tile): the line drops 'Other tiles aren't affected'", () => {
     w = bootWall(["main"]);
+    setViewState("main", "plugin:fluid", { kind: "ready" }); // as production: the solo wall's view id is its mode
     enterCantDrawShader("main", "fluid");
     expect(w.panes.get("main")!.querySelector(":scope > .tile-cant-draw")?.textContent)
       .toBe("Fluid couldn't draw. Pick another view, or reload to try again.");
