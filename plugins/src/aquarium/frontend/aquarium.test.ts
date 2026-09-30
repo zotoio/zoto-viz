@@ -38,6 +38,7 @@ import {
 } from "./aquarium";
 import { AQU_HOST_MESH_ASSETS, AQU_REEF_SPECIES_TO_ASSET, AQU_SPECIES_TO_ASSET } from "./host-mesh-drive";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
+import type { VizSysTelemetry } from "../../../sdk/viz-contract";
 import { probePluginSkyCompile, wrapPluginSky } from "./sky-test-harness";
 
 const talkers = [
@@ -62,13 +63,18 @@ function extractOnFrameArrowBody(src: string): string {
   return src.slice(start, i - 1);
 }
 
+/** Full telemetry with only `failed` set; the sim reads nothing else. */
+const sysFailed = (failed: number): VizSysTelemetry => ({
+  cpu: 0, mem: 0, disk: 0, gpu: 0, temp: 0, watts: 0, psi: 0, sockets: 0, failed, udev: 0,
+});
+
 const frame = (over: Partial<{
   t: number;
   dt: number;
   audio: number;
   talkers: typeof talkers;
   packets: { proto: string; size: number; field: number }[];
-  sys?: { failed: number };
+  sys?: VizSysTelemetry;
   demo?: boolean;
 }> = {}) => ({
   t: 1,
@@ -193,7 +199,7 @@ describe("aquarium shipped pack", () => {
     const sim = new AquariumSim(DEFAULT_OPTIONS);
     const packed = sim.advance(frame({
       packets: [{ proto: "dns", size: 48, field: 0.12 }],
-      sys: { failed: 0.05 },
+      sys: sysFailed(0.05),
     }));
     expect(failureVisuals({ failed: 0.05 }).murk).toBe(0);
     expect(packed.failBanner).toBe(0);
@@ -206,7 +212,7 @@ describe("aquarium shipped pack", () => {
     expect(fx.murk).toBeGreaterThan(0.1);
     expect(fx.banner).toBe(1);
     const sim = new AquariumSim(DEFAULT_OPTIONS);
-    const packed = sim.advance(frame({ sys: { failed: hi } }));
+    const packed = sim.advance(frame({ sys: sysFailed(hi) }));
     expect(packed.murk).toBeGreaterThan(0);
     expect(packed.failBanner).toBe(1);
   });
@@ -441,8 +447,8 @@ describe("aquarium shipped pack", () => {
     const simOk = new AquariumSim(DEFAULT_OPTIONS);
     const simFail = new AquariumSim(DEFAULT_OPTIONS);
     const idle = buildIdleVizFrame(3);
-    const ok = simOk.advance({ ...idle, demo: true, sys: { failed: 0.05 } });
-    const bad = simFail.advance({ ...idle, demo: true, sys: { failed: 0.62 } });
+    const ok = simOk.advance({ ...idle, demo: true, sys: sysFailed(0.05) });
+    const bad = simFail.advance({ ...idle, demo: true, sys: sysFailed(0.62) });
     expect(bad.murk).toBeGreaterThan(ok.murk);
     expect(bad.murk).toBeGreaterThan(0.2);
     expect(bad.slot0[59]).toBeGreaterThan(0);
