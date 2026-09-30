@@ -166,6 +166,15 @@ body[data-softgl] .brand::after {
 .tetris-idle-label.is-visible {
   opacity: 1;
 }
+/* #181: frogger / netpong / invaders demo-data badge, over the board, under the header */
+.arcade > .arcade-idle-label {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--bar-h, 76px) + 12px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: color-mix(in srgb, var(--bg, #000) 70%, transparent);
+}
 .tetris-skip-hud {
   margin-left: 6px;
   text-transform: none;
@@ -537,6 +546,13 @@ body.mosaic #wall > .mosaic-pane { flex: 1 1 auto; min-width: 0; min-height: 0; 
   background: var(--overlay); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
   font: 600 11px/18px inherit; letter-spacing: 0.02em;
 }
+/* #173 tile info caption: small, top edge, normal tone, click-through, never over the view centre. */
+.pack-info-caption {
+  position: absolute; top: 8px; left: 50%; transform: translateX(-50%); z-index: 3;
+  max-width: calc(100% - 16px); padding: 2px 10px; pointer-events: none;
+  background: var(--overlay); color: var(--fg); border: 1px solid var(--line); border-radius: 6px;
+  font: 12px/18px inherit; text-align: center;
+}
 .mosaic-pane-preview-caption {
   position: absolute; right: 8px; bottom: 8px; z-index: 3; max-width: calc(100% - 16px);
   padding: 2px 8px;
@@ -895,6 +911,13 @@ body[data-chrome="right"] .settings-pop { left: auto; right: calc(100% + 8px); }
   color: var(--muted); font-weight: 600; pointer-events: none;
 }
 .menu li.menu-empty { cursor: default; color: var(--muted); font-size: 12px; }
+/* #169: a pack that can't load is listed greyed out and can't be picked; one setup note on top. */
+.menu li.disabled { cursor: default; color: var(--muted); opacity: 0.6; white-space: normal; }
+.menu li.disabled.active { background: none; }
+.menu li.menu-banner {
+  cursor: default; white-space: normal; max-width: 360px; font-size: 12px; color: var(--muted);
+  border: 1px solid var(--line); margin: 2px 2px 6px;
+}
 .menu li .txt { font-weight: 500; }
 .menu li small { color: var(--muted); margin-left: 8px; font-size: 11px; }
 .menu li.active { background: var(--chip-hover); }
@@ -2049,3 +2072,12 @@ body.panel-wide #debuglog {
 }
 .wall-notice-alert .wall-notice-row { border-color: color-mix(in srgb, var(--warn) 55%, var(--line)); }
 .wall-notice-action { margin-left: 8px; }
+/* Needs you: the inline source review opens inside the tile notice (no modal). */
+.mosaic-pane-notice .pack-review {
+  pointer-events: auto; max-width: min(34rem, 94%); text-align: left;
+  padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--panel); color: var(--fg); font-size: 13px; line-height: 1.4;
+}
+.mosaic-pane-notice .pack-review p { margin: 0 0 8px; }
+.mosaic-pane-notice .pack-review p.muted { color: var(--muted); font-size: 12px; }
+.mosaic-pane-notice .pack-review-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 8px; margin-top: 6px; }

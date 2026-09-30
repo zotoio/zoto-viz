@@ -1,0 +1,13 @@
+id: good-manifest-default
+name: Good, default viz.uniforms (uniform lint fixture)
+version: 1
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  # No uniforms list: the host contract defaults to every pack sky uniform.
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts

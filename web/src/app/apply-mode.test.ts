@@ -12,7 +12,8 @@ import {
 } from "./pack-consent";
 import * as pluginModule from "../plugins/plugin";
 import { attachPluginFrontend } from "../plugins/plugin";
-import { askPluginReview } from "../plugins/plugin-ui";
+import { resetNeedsYouForTests, waitForTileReview } from "./needs-you";
+import { resetViewStatesForTests, viewStateOf } from "./view-state";
 import {
   addModeSwitchAbortListener,
   beginModeSwitchAttempt,
@@ -109,7 +110,15 @@ function mode(id: string, pluginId: string, label: string): ViewMode {
     legend: () => [],
     options: [],
     config: {},
-  } as ViewMode;
+  } as unknown as ViewMode;
+}
+
+function sceneEl(): HTMLElement {
+  return document.getElementById("scene")!;
+}
+
+function sceneNotice(): HTMLElement | null {
+  return sceneEl().querySelector<HTMLElement>(":scope > .mosaic-pane-notice");
 }
 
 function hudPackLabel(): string {
@@ -118,7 +127,7 @@ function hudPackLabel(): string {
 
 function buildHost(
   overrides: Partial<ApplyModeHost> & { ensureReviewed: ApplyModeHost["ensureReviewed"] },
-): ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud } {
+): ApplyModeHost & { bindThisViewSpy: ReturnType<typeof vi.fn>; vizHud: VizHud; skyPromptPack: () => string } {
   const sandbox = new PluginSandbox();
   const presentDriveDeps = { sandbox, pluginClock: () => 0, stageAspect: () => 16 / 9 };
   refreshPluginDriveState(stereoSpec, "plugin:stereo-gram", presentDriveDeps);
@@ -187,12 +196,11 @@ function buildHost(
     applyModeFeedExtras: () => {},
     bindThisView,
     clearModeOpts: () => {},
-    ensureReviewed: overrides.ensureReviewed,
     loadTsPlugin: overrides.loadTsPlugin ?? vi.fn(async () => {}),
     syncPluginSky: overrides.syncPluginSky ?? vi.fn(async () => {}),
     mosaic: overrides.mosaic ?? null,
     captureMosaicSnap: () => ({
-      size: "2",
+      size: "4",
       hero: "off",
       tree: null,
       maximized: null,
@@ -277,7 +285,7 @@ async function flushMicrotasks(): Promise<void> {
   vi.advanceTimersByTime(250);
 }
 
-describe("applyModeImpl rollback", () => {
+describe("applyModeImpl: the pick stays the view (Needs you / Couldn't start, no rollback)", () => {
   beforeEach(() => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
   });
@@ -294,53 +302,60 @@ describe("applyModeImpl rollback", () => {
     resetModeSwitchCoordinatorForTests();
     resetMediaAsk();
     clearModeSwitchStatus();
+    resetNeedsYouForTests();
+    resetViewStatesForTests();
   });
 
-  it("decline with empty last consented falls back to default kept mode", async () => {
+  it("Not now with no last consented view: the pick stays, on Needs you (no default kept view)", async () => {
     setLastConsentedModeId("");
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "declined",
     });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(sceneEl().dataset.viewState).toBe("needs-you");
   });
 
-  it("decline: restores picker, HUD, focus, Kept message, present drive (not failure wording)", async () => {
+  it("Not now: picker, HUD and tile keep the pick with Needs you and Review; focus returns, no Kept message", async () => {
     const host = buildHost({ ensureReviewed: async (_spec, _signal) => "declined" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
-    expect(host.bindThisViewSpy).toHaveBeenCalledWith("plugin:stereo-gram");
-    expect(hudPackLabel()).toContain("Stereo");
-    expect(getPresentDriveTileId()).toBe("stereo-gram");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(host.bindThisViewSpy).toHaveBeenCalledWith("plugin:packet-tunnel");
+    expect(host.bindThisViewSpy).not.toHaveBeenCalledWith("plugin:stereo-gram");
+    expect(hudPackLabel()).toContain("Tunnel");
+    expect(sceneNotice()?.textContent).toContain("Tunnel needs your OK to run.");
+    expect(sceneNotice()?.querySelector("button")?.textContent).toBe("Review");
     expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
-    expect(isModeSwitchStatusVisible()).toBe(true);
-    expect(document.getElementById("modeSwitchStatus")?.textContent).toMatch(/^Kept /);
+    expect(isModeSwitchStatusVisible()).toBe(false);
+    expect(document.getElementById("modeSwitchStatus")?.textContent ?? "").not.toMatch(/^Kept /);
   });
 
-  it("failure: shows Couldn't load, visible status strip, HUD and focus", async () => {
+  it("the OK could not be saved: Couldn't start with Retry on the pick's tile, never the previous view", async () => {
     const host = buildHost({ ensureReviewed: async (_spec, _signal) => "failed" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
-    expect(hudPackLabel()).toContain("Stereo");
-    expect(getPresentDriveTileId()).toBe("stereo-gram");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(hudPackLabel()).toContain("Tunnel");
+    expect(getPresentDriveTileId()).not.toBe("stereo-gram");
+    expect(viewStateOf("main")).toEqual({ kind: "couldnt-start", reason: "grant-failed", packId: "packet-tunnel" });
+    expect(sceneNotice()?.textContent).toContain("Tunnel couldn't start.");
+    expect(sceneNotice()?.querySelector("button")?.textContent).toBe("Retry");
     expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
-    expect(isModeSwitchStatusVisible()).toBe(true);
-    expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("Couldn't load Tunnel");
+    expect(isModeSwitchStatusVisible()).toBe(false);
   });
 
-  it("presentDrive stays on previous pack after rollback (reapply refreshes drive)", async () => {
+  it("Needs you: the previous pack's present drive stops (nothing drives it under the notice)", async () => {
     const host = buildHost({ ensureReviewed: async (_spec, _signal) => "declined" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(getPresentDriveTileId()).toBe("stereo-gram");
+    expect(getPresentDriveTileId()).not.toBe("stereo-gram");
     expect(getPresentDriveTileId()).not.toBe("packet-tunnel");
   });
 
   it("present drive capture order: mosaic failure restores via reapply refresh (not loadTs stub)", async () => {
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
       loadTsPlugin: async (spec, signal) => loadTs(spec, signal),
@@ -353,7 +368,7 @@ describe("applyModeImpl rollback", () => {
         focusedId: "topology",
         setPaneView: () => false,
         setSize: vi.fn(),
-      } as ApplyModeHost["mosaic"],
+      } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
     });
@@ -368,7 +383,7 @@ describe("applyModeImpl rollback", () => {
     const restoreMosaicSnap = vi.fn();
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
-      mosaic: { on: true, heroPos: "left", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "left", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as unknown as ApplyModeHost["mosaic"],
       mosaicShouldResize: () => true,
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
@@ -383,12 +398,12 @@ describe("applyModeImpl rollback", () => {
     expect(getPresentDriveTileId()).toBe("stereo-gram");
   });
 
-  it("decline in mosaic reverts setPaneView before visuals stick", async () => {
+  it("Not now in mosaic: the pane keeps the pick (no revert) and shows Needs you", async () => {
     const setPaneView = vi.fn(() => true);
     const applyMosaicModeVisuals = vi.fn();
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "declined",
-      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setPaneView, setSize: vi.fn() } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setPaneView, setSize: vi.fn() } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: setPaneView,
       applyMosaicModeVisuals,
@@ -396,15 +411,16 @@ describe("applyModeImpl rollback", () => {
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
     expect(setPaneView).toHaveBeenCalledWith("topology", "plugin:packet-tunnel");
-    expect(setPaneView).toHaveBeenCalledWith("plugin:packet-tunnel", "topology");
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(setPaneView).not.toHaveBeenCalledWith("plugin:packet-tunnel", "topology");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(viewStateOf("plugin:packet-tunnel")?.kind).toBe("needs-you");
     expect(document.activeElement).toBe(host.modeSel.el.querySelector("button"));
   });
 
   it("stale consent: B pending, switch to C, resolve B — no B load, HUD shows C", async () => {
     let resolveB!: (r: ConsentReviewResult) => void;
     const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const host = buildHost({
       ensureReviewed: async (spec, _signal) => {
         if (spec?.id === "roto-proto") return bPending;
@@ -427,14 +443,14 @@ describe("applyModeImpl rollback", () => {
     expect(isModeSwitchStatusVisible()).toBe(false);
   });
 
-  it("rollback restores getLiveMode to kept mode", async () => {
+  it("Not now: the live mode is the pick, not the previous view", async () => {
     const host = buildHost({ ensureReviewed: async (_spec, _signal) => "declined" });
     let live = "plugin:stereo-gram";
     host.getLiveMode = () => live;
     host.setLiveMode = (id) => { live = id; };
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(live).toBe("plugin:stereo-gram");
+    expect(live).toBe("plugin:packet-tunnel");
   });
 
   it("mosaic failure rollback returns before applyMosaicModeVisuals", async () => {
@@ -442,7 +458,7 @@ describe("applyModeImpl rollback", () => {
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
       applyMosaicModeVisuals,
-      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as ApplyModeHost["mosaic"],
+      mosaic: { on: true, heroPos: "off", heroMode: "plugin:stereo-gram", current: "2", tileIds: ["topology"], focusedId: "topology", setSize: vi.fn(), setPaneView: () => false } as unknown as ApplyModeHost["mosaic"],
       mosaicHasTile: () => false,
       mosaicSetPaneView: () => false,
     });
@@ -451,27 +467,29 @@ describe("applyModeImpl rollback", () => {
     expect(applyMosaicModeVisuals).not.toHaveBeenCalled();
   });
 
-  it("aborted consent does not rollback or show Kept message", async () => {
+  it("aborted consent keeps the pick on Needs you with no Kept message", async () => {
     const host = buildHost({ ensureReviewed: async (_spec, _signal) => "aborted" });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(sceneEl().dataset.viewState).toBe("needs-you");
     expect(isModeSwitchStatusVisible()).toBe(false);
   });
 
-  it("ensureReviewed rejection rolls back with failure path", async () => {
+  it("ensureReviewed rejection: Couldn't start on the pick, no rollback", async () => {
     const host = buildHost({
-      ensureReviewed: async (_spec, _signal) => { throw new Error("dialog dismissed"); },
+      ensureReviewed: async (_spec, _signal) => { throw new Error("review dismissed"); },
     });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
-    expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("Couldn't load");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(sceneEl().dataset.viewState).toBe("couldnt-start");
+    expect(sceneNotice()?.textContent).toContain("Tunnel couldn't start.");
   });
 
   it("dream-cycle while B consent open then accept records consent, HUD, and load", async () => {
     const consent = deferConsentForPack("packet-tunnel");
-    const loadTs = vi.fn(async () => {});
+    const loadTs = vi.fn(async (_spec: PluginView | null, _signal: AbortSignal) => {});
     const syncSky = vi.fn(async () => {});
     const applySolo = vi.fn();
     const host = buildHost({
@@ -485,7 +503,11 @@ describe("applyModeImpl rollback", () => {
     for (let i = 0; i < 5; i++) {
       beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:topology", {});
     }
-    expect(applySolo).not.toHaveBeenCalled();
+    // Before the OK the tile is the pick on the theme background (stage only), with no pack loaded.
+    expect(applySolo).toHaveBeenCalledTimes(1);
+    expect(applySolo.mock.calls[0]?.[0]?.id).toBe("plugin:packet-tunnel");
+    expect(applySolo.mock.calls[0]?.[3]).toBe(true);
+    expect(loadTs).not.toHaveBeenCalled();
     consent.resolve("ok");
     await vi.waitFor(() => {
       expect(readLastConsentedModeId()).toBe("plugin:packet-tunnel");
@@ -497,7 +519,7 @@ describe("applyModeImpl rollback", () => {
     expect(host.modeSel.el.querySelector("button") === document.activeElement).toBe(true);
   });
 
-  it("dream-cycle while B consent open then decline rolls back with Kept message", async () => {
+  it("dream-cycle while B waits on its OK, then Not now: stays on B with Needs you, no Kept message", async () => {
     const consent = deferConsentForPack("packet-tunnel");
     const host = buildHost({ ensureReviewed: consent.ensureReviewed });
     runApply(host, "plugin:packet-tunnel");
@@ -506,10 +528,10 @@ describe("applyModeImpl rollback", () => {
       beginCoordinatedModeSwitch({ channel: "automatic", auto: "dream-cycle" }, "plugin:topology", {});
     }
     consent.resolve("declined");
-    await vi.waitFor(() => {
-      expect(host.modeSel.value).toBe("plugin:stereo-gram");
-      expect(document.getElementById("modeSwitchStatus")?.textContent).toMatch(/^Kept /);
-    });
+    await flushMicrotasks();
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(sceneEl().dataset.viewState).toBe("needs-you");
+    expect(document.getElementById("modeSwitchStatus")?.textContent ?? "").not.toMatch(/^Kept /);
   });
 
   it("user switch during consent focuses picker with no status announcement", async () => {
@@ -524,15 +546,17 @@ describe("applyModeImpl rollback", () => {
     expect(document.getElementById("modeSwitchStatus")?.textContent).toBe("");
   });
 
-  it("held consent keeps picker label and sky prompt on previous pack until commit", async () => {
+  it("Needs you: picker, sky prompt and HUD name the pick while its OK is pending, and after approval", async () => {
     const consent = deferConsentForPack("packet-tunnel");
     const host = buildHost({ ensureReviewed: consent.ensureReviewed });
     runApply(host, "plugin:packet-tunnel");
     await consent.whenPending();
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
-    expect(host.modeSel.el.querySelector(".val .txt")?.textContent).toBe("Stereo");
-    expect(host.skyPromptPack()).toBe("stereo-gram");
-    expect(hudPackLabel()).toBe("Stereo");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(host.modeSel.el.querySelector(".val .txt")?.textContent).toBe("Tunnel");
+    expect(host.skyPromptPack()).toBe("packet-tunnel");
+    vi.advanceTimersByTime(400); // HUD label morph
+    expect(hudPackLabel()).toBe("Tunnel");
+    expect(sceneEl().dataset.viewState).toBe("needs-you");
     consent.resolve("ok");
     await vi.waitFor(() => {
       expect(host.modeSel.value).toBe("plugin:packet-tunnel");
@@ -573,7 +597,7 @@ describe("applyModeImpl rollback", () => {
     });
   });
 
-  it("held scene: last consented pack keeps present ticks while B consent pending", async () => {
+  it("Needs you: neither the previous pack nor the pick gets present ticks while B's OK is pending", async () => {
     resetPresentTickStatsForTests();
     const consent = deferConsentForPack("packet-tunnel");
     const host = buildHost({ ensureReviewed: consent.ensureReviewed });
@@ -583,30 +607,36 @@ describe("applyModeImpl rollback", () => {
     deliverPluginPresentTick(presentDrive, 16);
     deliverPluginPresentTick(presentDrive, 32);
     expect(presentTickStats().byTile["packet-tunnel"] ?? 0).toBe(0);
-    expect(presentTickStats().byTile["stereo-gram"] ?? 0).toBeGreaterThan(stereoBefore);
+    expect(presentTickStats().byTile["stereo-gram"] ?? 0).toBe(stereoBefore);
     consent.resolve("declined");
     await flushMicrotasks();
   });
 
-  it("user switch while B consent open closes dialog; return to B shows one dialog", async () => {
+  it("user switch while B's review is open takes it down; back to B shows one Needs you, no modal", async () => {
     const host = buildHost({
       ensureReviewed: (spec, attemptSignal) =>
         ensurePackReviewedOutcome(spec, (signal) => {
           if (spec?.id !== "packet-tunnel") return Promise.resolve("ok");
-          return askPluginReview(spec, { signal }).then((kind) => (signal.aborted ? "aborted" : (kind ? "ok" : "declined")));
+          return waitForTileReview(spec, signal).then((kind) => (signal.aborted ? "aborted" : (kind ? "ok" : "declined")));
         }, attemptSignal),
     });
     runApply(host, "plugin:packet-tunnel");
     await vi.waitFor(() => {
-      expect(document.querySelectorAll(".modal.ask")).toHaveLength(1);
+      expect(sceneNotice()?.querySelector("button")?.textContent).toBe("Review");
     });
+    sceneNotice()!.querySelector<HTMLButtonElement>("button")!.click();
+    expect(sceneEl().querySelectorAll(".pack-review")).toHaveLength(1);
     runApplyUser(host, "plugin:stereo-gram");
     await flushMicrotasks();
-    expect(document.querySelector(".modal.ask")).toBeNull();
+    expect(sceneEl().querySelector(".pack-review")).toBeNull();
+    expect(sceneNotice()).toBeNull();
     runApply(host, "plugin:packet-tunnel");
     await vi.waitFor(() => {
-      expect(document.querySelectorAll(".modal.ask")).toHaveLength(1);
+      expect(sceneEl().querySelectorAll(".mosaic-pane-notice")).toHaveLength(1);
+      expect(sceneNotice()?.querySelector("button")?.textContent).toBe("Review");
     });
+    expect(sceneEl().querySelector(".pack-review")).toBeNull();
+    expect(document.querySelector(".modal.ask")).toBeNull();
     await flushMicrotasks();
   });
 
@@ -628,18 +658,24 @@ describe("applyModeImpl rollback", () => {
     expect(loadSpy).not.toHaveBeenCalled();
   });
 
-  it("loadTsPlugin failure rolls back with Couldn't load message", async () => {
+  it("loadTsPlugin failure: Couldn't start with Retry on the pick (log kept), no rollback", async () => {
+    const retry = vi.fn();
     const host = buildHost({
       ensureReviewed: async (_spec, _signal) => "ok",
       loadTsPlugin: async () => { throw new Error("boom"); },
+      retryDeclinedMode: retry,
     });
     runApply(host, "plugin:packet-tunnel");
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
-    expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("Couldn't load Tunnel");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(viewStateOf("main")).toEqual({ kind: "couldnt-start", reason: "load-failed", packId: "packet-tunnel", log: "boom" });
+    expect(sceneNotice()?.textContent).toContain("Tunnel couldn't start.");
+    sceneNotice()!.querySelector<HTMLButtonElement>("button")!.click();
+    expect(retry).toHaveBeenCalledWith("plugin:packet-tunnel");
+    expect(isModeSwitchStatusVisible()).toBe(false);
   });
 
-  it("C fails while B consent pending: message names last consented A not B", async () => {
+  it("C's OK fails while B waits: C shows Couldn't start, B's late OK never takes the wall", async () => {
     let resolveB!: (r: ConsentReviewResult) => void;
     const bPending = new Promise<ConsentReviewResult>((r) => { resolveB = r; });
     const host = buildHost({
@@ -653,11 +689,13 @@ describe("applyModeImpl rollback", () => {
     runApplyUser(host, "plugin:packet-tunnel");
     await flushMicrotasks();
     expect(host.getLastConsentedModeId()).toBe("plugin:stereo-gram");
-    expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("kept Stereo");
-    expect(document.getElementById("modeSwitchStatus")?.textContent).not.toContain("Roto");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(sceneEl().dataset.viewState).toBe("couldnt-start");
+    expect(sceneNotice()?.textContent).toContain("Tunnel couldn't start.");
     resolveB("ok");
     await flushMicrotasks();
-    expect(host.modeSel.value).toBe("plugin:stereo-gram");
+    expect(host.modeSel.value).toBe("plugin:packet-tunnel");
+    expect(sceneEl().dataset.viewId).toBe("plugin:packet-tunnel");
   });
 });
 
@@ -865,7 +903,7 @@ describe("mode switch cleanup counts", () => {
   });
 });
 
-describe("applyMode via main host", () => {
+describe("applyMode via main host", { timeout: 30_000 }, () => {
   function mountShell(): void {
     document.body.innerHTML = `
       <div id="wall"><div id="scene"></div>
@@ -924,7 +962,7 @@ describe("applyMode via main host", () => {
     vi.unstubAllGlobals();
   });
 
-  it("uses dedicated status element (not stuck #hint morphing) on consent decline", async () => {
+  it("Not now via the main host: Needs you on the tile, no Kept status, #hint not morphing", async () => {
     const { applyMode } = await import("./main");
     const { configureApplyModeForTests } = await import("./apply-mode-test-host");
     const reviewSpec: PluginView = {
@@ -940,7 +978,7 @@ describe("applyMode via main host", () => {
       viz: defaultVizContract({ presentTick: true }),
     };
     configureApplyModeForTests({
-      askPluginReview: async () => null,
+      review: async () => null,
       liveMode: "topology",
       lastConsentedMode: "topology",
       pluginSpecs: [reviewSpec],
@@ -948,14 +986,16 @@ describe("applyMode via main host", () => {
     setLastConsentedModeId("topology");
     applyMode("plugin:stereo-gram");
     await vi.waitFor(() => {
-      expect(document.getElementById("modeSwitchStatus")?.textContent).toMatch(/^Kept /);
-      expect(isModeSwitchStatusVisible()).toBe(true);
+      expect(document.getElementById("scene")?.dataset.viewState).toBe("needs-you");
     });
+    expect(document.getElementById("scene")?.dataset.viewId).toBe("plugin:stereo-gram");
+    expect(isModeSwitchStatusVisible()).toBe(false);
     const status = document.getElementById("modeSwitchStatus");
     expect(status?.classList.contains("morphing")).not.toBe(true);
+    expect(document.querySelector(".modal.ask")).toBeNull();
   });
 
-  it("askPluginReview rejection rolls back with failure message", async () => {
+  it("a review that throws via the main host: Couldn't start with Retry, no rollback", async () => {
     const { applyMode } = await import("./main");
     const { configureApplyModeForTests } = await import("./apply-mode-test-host");
     const reviewSpec: PluginView = {
@@ -971,7 +1011,7 @@ describe("applyMode via main host", () => {
       viz: defaultVizContract({ presentTick: true }),
     };
     configureApplyModeForTests({
-      askPluginReview: async () => { throw new Error("dialog dismissed"); },
+      review: async () => { throw new Error("review dismissed"); },
       liveMode: "topology",
       lastConsentedMode: "topology",
       pluginSpecs: [reviewSpec],
@@ -979,7 +1019,55 @@ describe("applyMode via main host", () => {
     setLastConsentedModeId("topology");
     applyMode("plugin:stereo-gram");
     await vi.waitFor(() => {
-      expect(document.getElementById("modeSwitchStatus")?.textContent).toContain("Couldn't load");
+      expect(document.getElementById("scene")?.dataset.viewState).toBe("couldnt-start");
     });
+    expect(document.querySelector("#scene > .mosaic-pane-notice")?.textContent).toContain("Stereo couldn't start.");
+    expect(document.getElementById("modeSwitchStatus")?.textContent ?? "").not.toContain("Couldn't load");
+  });
+});
+
+describe("wall view opens its wall (Syscon / Cypher CIC, #172)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+  afterEach(() => {
+    vi.advanceTimersByTime(6000);
+    vi.useRealTimers();
+    document.getElementById("apply-mode-test-root")?.replaceChildren();
+    resetModeSwitchStateForTests();
+    resetModeSwitchAttemptForTests();
+    resetPackConsentForTests();
+    resetModeSwitchCoordinatorForTests();
+    clearModeSwitchStatus();
+  });
+
+  it.each([
+    { name: "Syscon", id: "syscon", hero: "off" as const, tiles: ["plugin:cores", "plugin:memory"] },
+    { name: "Cypher CIC", id: "cypher-cic", hero: "center" as const, tiles: ["plugin:topology", "plugin:talkers", "plugin:protocols"] },
+  ])("$name: applyModeImpl does not swap the wall view into its own wall's focus tile", async (w) => {
+    const wallId = `plugin:${w.id}`;
+    const wallSpec: PluginView = {
+      id: w.id, name: w.name, version: 1, capabilities: ["viz.write"], consent: "authored",
+      look: { mosaic: "8", hero: w.hero, mosaicTiles: w.tiles },
+    };
+    const focus = w.tiles[w.hero === "off" ? 0 : 1]!;
+    const setPaneView = vi.fn(() => true);
+    const applyMosaicModeVisuals = vi.fn();
+    const host = buildHost({
+      ensureReviewed: async () => "ok",
+      // applyPluginWall has just laid the wall out (mosaic on, the wall's own tiles on screen).
+      mosaic: { on: true, heroPos: w.hero, heroMode: "", current: "8", tileIds: w.tiles, focusedId: focus, setPaneView, setSize: vi.fn() } as unknown as ApplyModeHost["mosaic"],
+      modeById: (id) => mode(id, id.replace("plugin:", ""), id === wallId ? w.name : id),
+      pluginSpecForMode: (id) => (id === wallId ? wallSpec : null),
+      mosaicHasTile: (id) => w.tiles.includes(id),
+      mosaicFocusSlot: () => focus,
+      mosaicSetPaneView: setPaneView,
+      applyMosaicModeVisuals,
+    });
+    runApply(host, wallId);
+    await flushMicrotasks();
+    expect(setPaneView, `setPaneView calls: ${JSON.stringify(setPaneView.mock.calls)}`).not.toHaveBeenCalled();
+    expect(host.getLiveMode()).toBe(wallId);
+    expect(applyMosaicModeVisuals).toHaveBeenCalledWith(expect.objectContaining({ id: wallId }), {}, wallSpec, false);
   });
 });

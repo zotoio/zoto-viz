@@ -273,7 +273,14 @@ function pinCpuLayout(nodes: GNode[], alpha: number, ctx: ModeCtx, coreR: number
 
 const SECOND_LEVEL = new Set(["co", "com", "net", "org", "gov", "edu", "ac", "or", "ne"]);
 const ORG_ALIAS: Record<string, string> = { "1e100.net": "google.com", "googleusercontent.com": "google.com", "gstatic.com": "google.com", "ggpht.com": "google.com", "youtube.com": "google.com", "amazonaws.com": "aws", "cloudfront.net": "aws", "awsglobalaccelerator.com": "aws", "akamaitechnologies.com": "akamai", "akamaiedge.net": "akamai", "akadns.net": "akamai", "fbcdn.net": "facebook.com", "instagram.com": "facebook.com", "whatsapp.net": "facebook.com", "cloudflare-dns.com": "cloudflare.com", "one.one.one.one": "cloudflare.com", "azureedge.net": "microsoft.com", "windows.net": "microsoft.com", "msedge.net": "microsoft.com", "live.com": "microsoft.com", "office.com": "microsoft.com", "icloud.com": "apple.com", "mzstatic.com": "apple.com", "aaplimg.com": "apple.com" };
-/** registrable domain of the best name we have for a device, with a few CDN families folded together */
+/** The fallback organisations for devices with no usable name ("unnamed 1.2.x.x", "unnamed IPv6", "unnamed"). */
+function isUnnamedOrg(org: string): boolean { return /^unnamed(?: IPv6| \d+\.\d+\.x\.x)?$/.test(org); }
+
+/**
+ * Registrable domain of the best name we have for a device, with a few CDN families folded together. A useful
+ * one-word name (no dot: "cloudflare") is its own organisation; `.local` names and names that fail `usefulName`
+ * fall through to "unnamed a.b.x.x".
+ */
 export function orgOf(d: Device): string {
   const raw = (d.names ?? []).map(unescapeDns).find((x) => usefulName(x) && !x.startsWith("*"))
     ?? (d.names?.[0] ? unescapeDns(d.names[0]).replace(/^\*\./, "") : undefined)
@@ -284,6 +291,10 @@ export function orgOf(d: Device): string {
     if (parts.length >= 3 && SECOND_LEVEL.has(parts[parts.length - 2]) && parts[parts.length - 1].length === 2) n = 3;
     const org = parts.slice(-n).join(".");
     return ORG_ALIAS[org] ?? ORG_ALIAS[raw.toLowerCase()] ?? org;
+  }
+  if (raw && !raw.includes(".") && !raw.startsWith("*") && usefulName(raw)) {
+    const word = raw.trim().toLowerCase();
+    if (word && !isUnnamedOrg(word)) return word; // a device literally named "unnamed" stays with the fallback group
   }
   if (d.ip.includes(":")) return "unnamed IPv6";
   const m = d.ip.match(/^(\d+\.\d+)\./);

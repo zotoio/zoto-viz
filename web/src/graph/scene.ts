@@ -38,6 +38,8 @@ import { assessVisibility, type VisibilityReport } from "../core/visibility";
 import { Backdrop, PHOTO_LOOP_MAX_S, PHOTO_LOOP_MIN_S, PHOTO_LOOP_S, type BackdropKind } from "./backdrop";
 import { stageMeshPackId, stageMeshPose } from "./stage-mesh-camera";
 import { LumaProbe } from "./lumaProbe";
+import { AsyncRgbaPatchProbe } from "./async-rgba-patch";
+import { TILE_SKY_CONFIRM_PX } from "../plugins/tile-health";
 import { ensureSkyRecipe } from "./sky-ai";
 import { liveCam } from "../camera/livecam";
 import { cameraConsumers } from "../camera/want";
@@ -80,7 +82,7 @@ import {
   layoutDevicePxRatio,
 } from "./render-host-device-px-ratio";
 import { observeResize } from "../core/resize";
-import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
+import { notePerfChange, perfLeanState, perfOverlay, perfStress, perfWant, tickPerf, type PerfLeanState, type PerfOverlay } from "../core/perf";
 import { skyLookFor } from "./stage-sky-look";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
 import { PINCH_HOLD_MS, mouseWheelTick, pinchWheel, pointerCentroid, threeFingerZoomDelta, wheelCamMotion } from "./wheel-cam";
@@ -634,7 +636,6 @@ function glowMaterial(): THREE.ShaderMaterial {
       uAmt: { value: 1 },
       uMode: { value: 0 },
       uAdditive: { value: 1 },
-      uResolution: { value: new THREE.Vector2(1, 1) },
     },
     vertexShader: GLOW_VERT,
     fragmentShader: GLOW_FRAG,
@@ -1672,6 +1673,14 @@ export class NetScene implements HostedView, RenderScalePane {
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: FrameTs): void { this.animate(ts); }
 
+  /**
+   * #177: supported read of the perf lean (rows; `window.zotoviz.perfLean()`). The main scene's host element
+   * also carries it as `data-perf-lean` ("on" / "off" / "pinned-off") and `data-perf-k` (tune.k, 2 dp).
+   */
+  perfLean(): PerfLeanState {
+    return perfLeanState();
+  }
+
   readonly renderScaleState = new RenderScaleViewState();
   get renderScaleActive(): boolean { return this.active; }
 
@@ -1714,6 +1723,14 @@ export class NetScene implements HostedView, RenderScalePane {
     this._gpuContextLost = true;
     this.lumaProbe.reset();
     this.changeProbe.reset();
+    this.dropSkyConfirm();
+  }
+
+  private dropSkyConfirm(): void {
+    if (!this.skyConfirm) return;
+    this.skyConfirm.probe.reset(null);
+    this.skyConfirm.rt.dispose();
+    this.skyConfirm = null;
   }
   hostContextRestored(): void {
     this._gpuContextLost = false;
@@ -2039,6 +2056,17 @@ export class NetScene implements HostedView, RenderScalePane {
   setStandaloneTileTick(tick: ((dtSec: number, presentTs: FrameTs) => void) | null): void {
     this.standaloneTileTick = tick;
     this.standaloneClock.lastMs = 0;
+  }
+
+  /**
+   * TEST-ONLY (#183): stage-only and whether any graph layer (nodes, links, fabric, sparks,
+   * labels) would draw. The floor grid and sky are not part of the graph layer.
+   */
+  testGraphLayer(): { stageOnly: boolean; graphDrawn: boolean } {
+    const labels = this.labelLayer.domElement.style.display !== "none";
+    const graphDrawn = this.spheres.visible || this.sheath.mesh.visible || this.fabric.mesh.visible
+      || this.particles.visible || this.arrows.visible || labels;
+    return { stageOnly: this.stageOnly, graphDrawn };
   }
 
   /** TEST-ONLY: graph {@link present} calls while this scene is the main wall view. */
@@ -2993,6 +3021,8 @@ export class NetScene implements HostedView, RenderScalePane {
   /** Last sampled WebGL luma behind labels; -1 until the first read. */
   private sampledLuma = -1;
   private readonly lumaProbe = new LumaProbe(16, 150);
+  /** #180 tile-health confirm: this tile's sky alone, coarse, over the whole tile (async). */
+  private skyConfirm: { rt: THREE.WebGLRenderTarget; probe: AsyncRgbaPatchProbe; issuedAt: number } | null = null;
   private readonly changeProbe = new PaneChangeProbe();
   private readonly canvasProbe = new CanvasChangeProbe();
   private lastVis: VisibilityReport | null = null;
@@ -3084,6 +3114,42 @@ export class NetScene implements HostedView, RenderScalePane {
     const vp = this.lastVp;
     if (!vp || vp.w < 4 || vp.h < 4) return null;
     return this.lumaProbe.sampleForHealth(gl, vp, now);
+  }
+
+  /**
+   * #180 tile-health confirm: this tile's pack sky alone (no floor grid, graph or labels), rendered
+   * at {@link TILE_SKY_CONFIRM_PX}² over the whole tile and read back asynchronously. Returns the
+   * finished read (and queues the next), "pending" while one is in flight, or null when there is
+   * no pack sky of this tile's own to judge (no confirm; the five-patch verdict stands).
+   */
+  tileHealthSkyRgba(gl: WebGL2RenderingContext, maxStaleMs = 5000): Uint8Array | "pending" | null {
+    if (this.packCoalesce?.role === "mirror") return null;
+    const b = this.backdrop;
+    if (!b.mesh.visible || !b.pluginSkyId()) return null;
+    const rd = this.renderer;
+    if (!(rd instanceof THREE.WebGLRenderer) || gl.isContextLost()) return null;
+    const px = TILE_SKY_CONFIRM_PX;
+    const c = this.skyConfirm ??= {
+      rt: new THREE.WebGLRenderTarget(px, px, { depthBuffer: false }),
+      probe: new AsyncRgbaPatchProbe(px),
+      issuedAt: -Infinity,
+    };
+    const got = c.probe.tryHarvest(gl);
+    const fresh = got && performance.now() - c.issuedAt <= maxStaleMs;
+    if (!c.probe.pending) {
+      const prev = rd.getRenderTarget();
+      const restore = b.probeResolution(px, px);
+      try {
+        rd.setRenderTarget(c.rt);
+        rd.clear();
+        rd.render(b.mesh, this.camera);
+        if (c.probe.issue(gl, 0, 0)) c.issuedAt = performance.now();
+      } finally {
+        rd.setRenderTarget(prev);
+        restore();
+      }
+    }
+    return fresh ? c.probe.bytes : "pending";
   }
 
   /** Ease sky/floor dimming and blending toward the visibility tool's fix. Overlay only. */
@@ -4098,6 +4164,20 @@ export class NetScene implements HostedView, RenderScalePane {
     this.present(false);
   }
 
+  /** Last `data-perf-lean|data-perf-k` written, so the attributes change only when the lean does. */
+  private perfLeanAttrs = "";
+
+  private syncPerfLeanAttrs(): void {
+    const st = perfLeanState();
+    const lean = st.pinnedOff ? "pinned-off" : st.lean;
+    const k = st.k.toFixed(2);
+    const key = `${lean}|${k}`;
+    if (key === this.perfLeanAttrs) return;
+    this.perfLeanAttrs = key;
+    this.container.dataset.perfLean = lean;
+    this.container.dataset.perfK = k;
+  }
+
   private animate(ts: FrameTs): void {
     if (!this.host && this.active) {
       this.raf = requestAnimationFrame((raw) => this.hostFrame(frameTsFromRaf(raw)));
@@ -4124,10 +4204,11 @@ export class NetScene implements HostedView, RenderScalePane {
     }
     if (!this.satellite) {
       tickPerf(wallMs, this.anim.autoTune !== false, this.anim.moveEase);
+      this.syncPerfLeanAttrs();
       const s = perfStress();
       this.paneFps.hint((s > 0.04
         ? (perfWant() > 0.5
-          ? "this pane · auto-tune easing labels, sparks, glow, and sky down"
+          ? "this pane · auto-tune easing labels, sparks, glow, and sky motion down"
           : "this pane · auto-tune easing back up after a 1-minute recovered average")
         : "how often this pane's picture changed in the last second"
           + (this.lastVis && !this.lastVis.ok
@@ -4916,6 +4997,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.arrows.geometry.dispose();
     (this.arrows.material as THREE.Material).dispose();
     this.lumaProbe.reset();
+    this.dropSkyConfirm();
     this.backdrop.setPluginShader(null);
     this.controls.dispose();
     if (this.host) {

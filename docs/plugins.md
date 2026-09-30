@@ -126,6 +126,10 @@ and any `backend/` / `datasource/` Python.
 Consent is stored in `~/.zoto-viz/plugin-consent.yml` and is invalidated when
 the sha256 of a sensitive artefact changes (`consented_for` on the stamp).
 
+Consent covers pack code (`module.js`, sky, Python). Shipped packs (`origin: src`) serve their
+`assets/` meshes without a consent record, since they are repo-reviewed; contrib zips need consent
+for assets too. `assets_sha256` is recorded on the grant but only enforced for contrib packs (#170).
+
 In-process plugin Python stays **off** unless `ZOTO_VIZ_PLUGIN_SERVICE=1` (or
 `true` / `yes` / `on`) **and** the plugin has source-review consent. This is
 trusted local code, not the TypeScript iframe sandbox. See

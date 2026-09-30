@@ -28,6 +28,18 @@ export function ruleHint(rule: PackLintRule, v: PackLintViolation): string {
       return "Read config in onConfig or once at init with getConfig(); do not call getConfig() from onFrame.";
     case "host-imports-pack-src":
       return "Load shipped packs only via /api/plugins/<id>/module.js (no direct plugins/src imports).";
+    case "glsl-uniform-undeclared":
+      return "Declare `uniform <type> NAME;` in that stage (or the GLSL const it interpolates). "
+        + "A missing declaration fails the shader compile and leaves the tile bare (#171).";
+    case "uniform-set-undeclared":
+      return "Declare the uniform in the shader it is bound to, or stop setting it (a pack can only set host sky uniforms).";
+    case "glsl-uniform-unset":
+      return "Set it in the material's uniforms / onBeforeCompile (or use a host sky uniform in a pack sky).";
+    case "uniform-type-conflict":
+      return "Use the host's type for that uniform (or drop the declaration: the host preamble already declares it). "
+        + "A mismatch fails the sky compile or runs it against the wrong type.";
+    case "write-uniform-not-in-manifest":
+      return "List the uniform under `viz.uniforms` in plugin.yml (it must be a pack sky uniform), or stop writing it.";
     default:
       return "";
   }
@@ -56,7 +68,62 @@ export function ruleMessage(rule: PackLintRule, v: PackLintViolation): string {
       return `${loc} calls getConfig() inside onFrame.`;
     case "host-imports-pack-src":
       return `${loc} reaches pack source (\`${v.target}\`).`;
+    case "glsl-uniform-undeclared": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader reads undeclared uniform ${name}.`;
+    }
+    case "uniform-set-undeclared":
+      return `${loc} binds uniform ${v.target}, which its GLSL never declares.`;
+    case "glsl-uniform-unset": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader reads uniform ${name}, which nothing sets.`;
+    }
+    case "uniform-type-conflict": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader ${v.detail ?? `redeclares host uniform ${name} with a different type`}.`;
+    }
+    case "write-uniform-not-in-manifest":
+      return `${loc} ${v.detail ?? `writeUniform("${v.target}") isn't in plugin.yml viz.uniforms; the host drops the write`}.`;
     default:
       return `${loc} ${rule} → ${v.target}`;
   }
+}
+
+/**
+ * #185: plain-words sentence per rule for the user-facing install block
+ * ("<Name> was blocked because <sentence> Nothing was installed, …"; service/pack_block_copy.py).
+ * No rule ids, file paths, line numbers or code (`parent.`) — those stay in the diagnostic log.
+ * Every rule is listed so a new rule can't silently fall back.
+ */
+export const PACK_LINT_PLAIN_SUMMARY: Readonly<Record<PackLintRule, string>> = {
+  "sandbox-escape": "it tries to reach outside its sandbox.",
+  "host-transport-escape": "it tries to talk to the app directly, which packs aren't allowed to do.",
+  "inline-zoto-declare": "it connects to the visualiser in an old way that isn't allowed any more.",
+  "pack-zoto-binding": "it connects to the visualiser in an old way that isn't allowed any more.",
+  "host-import": "it loads code from outside its own folder.",
+  "cross-pack-import": "it loads code from another pack.",
+  "side-effect-import": "it loads code from outside its own folder.",
+  "unverified-import-call": "it loads code in a way that can't be checked.",
+  "get-config-in-on-frame": "it reads its settings in a way that isn't allowed.",
+  "host-imports-pack-src": "it loads code from outside its own folder.",
+  // #171b's uniform rules (combined with #185). The install lint doesn't block on them today
+  // (INSTALL_BLOCK_RULES), so these only keep the table complete.
+  "glsl-uniform-undeclared": "it reads a shader setting it never declares.",
+  "glsl-uniform-unset": "it reads a shader setting that nothing sets.",
+  "uniform-set-undeclared": "it sets a shader setting its shader never declares.",
+  "uniform-type-conflict": "it redefines one of the app's shader settings with a different type.",
+  "write-uniform-not-in-manifest": "it writes a shader setting it doesn't list in its manifest.",
+};
+
+export const PACK_LINT_PLAIN_FALLBACK = "it uses code the pack sandbox doesn't allow.";
+
+/** One sentence per distinct kind of finding, in first-seen order ("it …. It …."). */
+export function plainBlockSummary(violations: readonly Pick<PackLintViolation, "rule">[]): string {
+  const sentences: string[] = [];
+  for (const v of violations) {
+    const s = (PACK_LINT_PLAIN_SUMMARY as Record<string, string | undefined>)[v.rule] ?? PACK_LINT_PLAIN_FALLBACK;
+    if (!sentences.includes(s)) sentences.push(s);
+  }
+  if (!sentences.length) sentences.push(PACK_LINT_PLAIN_FALLBACK);
+  return sentences.map((s, i) => (i === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1))).join(" ");
 }

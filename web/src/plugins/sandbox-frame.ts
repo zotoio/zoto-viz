@@ -87,6 +87,7 @@ export type SandboxZoto = {
   setNodeColor(id: string, hex: number): void;
   writeBuffer(_slot: number, _data: number[] | ArrayLike<number>): void;
   writeUniform(_name: string, _value: unknown): void;
+  /** @deprecated #184: no host renderer draws pack particles; draw from the sky's UBO slots (writeBuffer + zotoVizSlots). */
   writeParticles(_data: number[] | ArrayLike<number>, _stride?: number): void;
   getConfig(): Record<string, string>;
 };

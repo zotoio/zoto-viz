@@ -14,7 +14,7 @@ slots** declared in `plugin.yml`.
 ```yaml
 capabilities:
   - viz.read    # receive VizDataFrame each monitor tick
-  - viz.write   # writeBuffer / writeUniform / writeParticles
+  - viz.write   # writeBuffer / writeUniform (writeParticles is deprecated, see below)
 viz:
   graphWalk: false          # required — plugins never walk the full graph
   presentTick: false        # opt-in: host sends VizPresentTick on rAF (requires viz.write)
@@ -118,9 +118,13 @@ zoto.onFrame = (frame) => {
   zoto.writeBuffer(0, [frame.packets[0]?.field ?? 0]);
   zoto.writeUniform("uBright", 0.8);
   zoto.writeUniform("uAccent", [0.2, 0.6, 1.0]);
-  zoto.writeParticles([x, y, z, w, ...], 4); // capped by maxParticles
 };
 ```
+
+**`writeParticles` is deprecated (#184).** No host renderer draws pack particles, so particle
+writes never reach the screen. Put per-item data in a UBO slot with `writeBuffer` and draw it in
+`sky/fragment.glsl` from `zotoVizSlots` (talker-storm's slot-1 storm cells are the worked example).
+The call still works and is still capped by `maxParticles`, and dev builds log one warning per pack.
 
 The host enforces caps in `VizBufferWriter` before applying writes:
 
@@ -229,6 +233,12 @@ or a sky shader. Set `look.stageOnly: false` only when the graph should stay.
 On the Vite dev server only, `?vizFixture=idle|idle-failed|golden-live|vm-live`
 feeds shared SDK fixtures to every viz pack instead of live traffic (see
 `plugins/sdk/README.md`). Production builds omit this path.
+
+Fixture change (#181): `plugins/sdk/fixtures/idle.json` (and `vm-live.json`, which
+carries the idle demo slice) gained two internet talkers, `host-05` (rate 36) and
+`host-06` (rate 30), and the `rf` placeholder names moved from `host-05`/`host-06`
+to `host-07`/`host-08`. A pack test that pinned those names or the talker count
+needs updating.
 
 ## Tests
 

@@ -2,6 +2,10 @@
  * Auto-tune: when the last 30 s average under 10 fps, ease expensive graph knobs down.
  * User settings stay put. Restore waits for a 1-minute recovered average (fresh after a
  * view change) and eases back over about a minute.
+ *
+ * The lean never dims the sky (#177): sky brightness and opacity stay the user's sliders.
+ * Rows and harnesses pin it off with {@link setPerfPinnedOff} (`?perf=off` in the app URL) for a
+ * deterministic un-leaned session, and read it with {@link perfLeanState} instead of scene internals.
  */
 
 import { windowFps } from "./fps";
@@ -22,12 +26,54 @@ let want = 0;
 let lastTs = -1;
 /** Start of the current 1-minute recovery sample (lean start or last view change). */
 let recoverFrom = -1;
+/** #177: the lean is pinned off (`?perf=off`), whatever the fps window reads. */
+let pinnedOff = false;
 
+/** URL query key for the pin: `?perf=off`. */
+export const PERF_PIN_PARAM = "perf";
+
+/** Also clears the pin (tests; the app never resets). */
 export function resetPerf(): void {
   stress = 0;
   want = 0;
   lastTs = -1;
   recoverFrom = -1;
+  pinnedOff = false;
+}
+
+/** True when the page query pins the lean off (`perf=off`). */
+export function perfPinFromSearch(search: string): boolean {
+  try {
+    return new URLSearchParams(search).get(PERF_PIN_PARAM) === "off";
+  } catch {
+    return false;
+  }
+}
+
+/** Pin the lean off (tune.k stays 0) or let auto-tune run again. Pinning drops any lean at once. */
+export function setPerfPinnedOff(off: boolean): void {
+  pinnedOff = off;
+  if (!off) return;
+  stress = 0;
+  want = 0;
+  recoverFrom = -1;
+}
+
+export function perfPinnedOff(): boolean {
+  return pinnedOff;
+}
+
+/** Supported read of the lean for rows and harnesses: `k` is the overlay's tune.k (0 = not leaned). */
+export interface PerfLeanState {
+  pinnedOff: boolean;
+  lean: "on" | "off";
+  k: number;
+  want: number;
+}
+
+export function perfLeanState(): PerfLeanState {
+  const k = smooth(stress);
+  return { pinnedOff, lean: k > 0 ? "on" : "off", k, want };
 }
 
 export function perfStress(): number {
@@ -61,7 +107,7 @@ export function tickPerf(ts: number, enabled: boolean, ease = 0.45): number {
   const dt = lastTs < 0 ? 0 : Math.min(0.05, Math.max(0, (ts - lastTs) / 1000));
   lastTs = ts;
   const drop = windowFps(ts, PERF_HOLD_MS);
-  if (!enabled) {
+  if (!enabled || pinnedOff) {
     want = 0;
     recoverFrom = -1;
   } else if (drop != null && drop < PERF_FPS) {
@@ -117,8 +163,10 @@ export function perfOverlay(anim: PerfSrc, s = stress): PerfOverlay {
     partPeak: Math.max(4, Math.round(mix(anim.partPeak, 6, k))),
     partSize: mix(anim.partSize, 0.55, k),
     edgeGlowAmt: mix(anim.edgeGlowAmt, 0.2, k),
-    skyBright: mix(anim.skyBright, 0.4, k),
-    skyOpacity: mix(anim.skyOpacity, 0.45, k),
+    // #177 (UX Pro): the lean never dims the sky. Brightness and opacity are the user's sliders,
+    // and the sky shader shades every pixel at any value, so a dim saved no GPU work.
+    skyBright: anim.skyBright,
+    skyOpacity: anim.skyOpacity,
     skySpeed: mix(anim.skySpeed, 0.3, k),
     dprK: k,
   };

@@ -11,7 +11,8 @@ describe("sky Starting card", () => {
     const card = pane.querySelector<HTMLElement>(".sky-starting-card")!;
     expect(card.textContent).toBe(skyStartingText("Backrooms"));
     expect(card.textContent).toBe("Backrooms · Starting…");
-    expect(card.dataset.viewState).toBe("starting");
+    // The tile's ViewState stamps the card (app/view-state); the card never writes it alone.
+    expect(card.dataset.viewState).toBeUndefined();
     expect(skyStartingShown(pane)).toBe(true);
     showSkyStartingCard(pane, "Backrooms");
     expect(pane.querySelectorAll(".sky-starting-card").length).toBe(1);

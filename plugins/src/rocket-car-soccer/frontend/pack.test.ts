@@ -61,6 +61,7 @@ import {
   setRcsOptions,
 } from "./match";
 import { probePluginSkyCompile, wrapPluginSky } from "./test/sky-compile";
+import { rcsSkyFallbackCamera, rcsSkyRay, type Vec3 } from "./test/sky-basis";
 
 const PACK_DIR = join(__dirname, "..");
 const FRAG = readFileSync(join(PACK_DIR, "sky/fragment.glsl"), "utf8");
@@ -767,5 +768,116 @@ describe("rocket-car-soccer pack", () => {
     expect(mod.rcsFrontendOptionsForTest().camera).toBe(afterTheme.camera);
     expect(mod.rcsFrontendOptionsForTest().trail).toBe(afterTheme.trail);
     expect(mod.rcsFrontendOptionsForTest().gameSpeed).toBe(afterTheme.gameSpeed);
+  });
+  // #180: the plugin sky dome hands the pack a camera-local vDir with -z forward.
+  const dot3 = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const fwdOf = (yaw: number, pitch: number): Vec3 => [
+    Math.sin(yaw) * Math.cos(pitch),
+    Math.sin(pitch),
+    Math.cos(yaw) * Math.cos(pitch),
+  ];
+  const drivenCameras = (camera: string, seconds = 40, every = 60): { ro: Vec3; yaw: number; pitch: number; ball: Vec3 }[] => {
+    resetRcsSim();
+    setRcsOptions({ ...FORM_DEFAULTS, camera });
+    rcsMount();
+    rcsTestSkipKickoff();
+    const out: { ro: Vec3; yaw: number; pitch: number; ball: Vec3 }[] = [];
+    for (let i = 0; i <= seconds * 60; i++) {
+      const tick = rcsTick(vizFrame({ t: i / 60, audio: 0.2 }), i / 60, 1 / 60, 16 / 9);
+      if (i % every !== 0) continue;
+      const s0 = tick.slot0;
+      out.push({
+        ro: [s0[RCS_SLOT.camX]!, s0[RCS_SLOT.camY]!, s0[RCS_SLOT.camZ]!],
+        yaw: s0[RCS_SLOT.camYaw]!,
+        pitch: s0[RCS_SLOT.camPitch]!,
+        ball: [tick.slot1[0]!, tick.slot1[1]!, tick.slot1[2]!],
+      });
+    }
+    rcsUnmount();
+    return out;
+  };
+
+  it("#180 sky basis: the centre pixel looks along the camera forward, not behind it", () => {
+    const fb = rcsSkyFallbackCamera(FRAG);
+    const rdFallback = rcsSkyRay(FRAG, fb, [0, 0, -1]);
+    // Fallback camera sits at +z looking toward the arena (-z).
+    expect(rdFallback[2]).toBeLessThan(0);
+    expect(dot3(rdFallback, fwdOf(fb.yaw, fb.pitch))).toBeGreaterThan(0.999);
+    for (const cam of drivenCameras("broadcast", 4)) {
+      const rd = rcsSkyRay(FRAG, cam, [0, 0, -1]);
+      expect(dot3(rd, fwdOf(cam.yaw, cam.pitch))).toBeGreaterThan(0.999);
+    }
+  });
+
+  it("#180 sky basis: screen right is camera right and screen up is up (no mirror)", () => {
+    const fb = rcsSkyFallbackCamera(FRAG);
+    const centre = rcsSkyRay(FRAG, fb, [0, 0, -1]);
+    const right = rcsSkyRay(FRAG, fb, [0.4, 0, -1]);
+    const up = rcsSkyRay(FRAG, fb, [0, 0.4, -1]);
+    // Looking down -z from +z, world +x is on the right of the frame.
+    expect(right[0]).toBeGreaterThan(centre[0] + 0.1);
+    expect(up[1]).toBeGreaterThan(centre[1] + 0.1);
+  });
+
+  it("#180 framing: the driven camera centres the ball (angle off the centre ray)", () => {
+    const stats: Record<string, { median: number; max: number }> = {};
+    for (const camera of ["broadcast", "ballcam", "orbit", "director"]) {
+      const cams = drivenCameras(camera);
+      expect(cams.length).toBeGreaterThan(30);
+      const angles: number[] = [];
+      for (const cam of cams) {
+        const rd = rcsSkyRay(FRAG, cam, [0, 0, -1]);
+        expect(rd[1], `${camera} looks down at the pitch`).toBeLessThan(-0.1);
+        const v: Vec3 = [cam.ball[0] - cam.ro[0], cam.ball[1] - cam.ro[1], cam.ball[2] - cam.ro[2]];
+        const len = Math.hypot(v[0], v[1], v[2]);
+        angles.push(Math.acos(Math.min(1, dot3(v, rd) / len)));
+      }
+      angles.sort((a, b) => a - b);
+      stats[camera] = {
+        median: Number(angles[angles.length >> 1]!.toFixed(3)),
+        max: Number(angles[angles.length - 1]!.toFixed(3)),
+      };
+    }
+    const all = JSON.stringify(stats);
+    for (const [camera, st] of Object.entries(stats)) {
+      // Ball on the centre ray most of the time; never near the frame edge (half-FOV ~0.46 rad).
+      expect(st.median, `${camera} median angle (rad) ${all}`).toBeLessThan(0.03);
+      expect(st.max, `${camera} worst angle (rad) ${all}`).toBeLessThan(0.25);
+    }
+  });
+
+  it("#180 rewrites the look uniforms on every present (presentTick)", async () => {
+    vi.resetModules();
+    const writes: Record<string, number> = {};
+    const g = globalThis as unknown as {
+      zoto: {
+        onFrame: ((frame: VizDataFrame) => void) | null;
+        onConfig: ((cfg: Record<string, string>) => void) | null;
+        onPresent?: ((tick: { frameMs: number; tileId: string }) => void) | null;
+        getConfig?: () => Record<string, string>;
+        writeBuffer: (slot: number, data: number[]) => void;
+        writeUniform: (name: string, value: number | [number, number, number]) => void;
+        writeParticles: (data: number[], stride?: number) => void;
+      };
+    };
+    g.zoto = {
+      onFrame: null,
+      onConfig: null,
+      onPresent: null,
+      getConfig: () => hostFormDefaults(),
+      writeBuffer: () => {},
+      writeUniform: (name) => {
+        writes[name] = (writes[name] ?? 0) + 1;
+      },
+      writeParticles: () => {},
+    };
+    await import("./index");
+    for (const k of Object.keys(writes)) delete writes[k];
+    for (let i = 0; i < 3; i++) g.zoto.onPresent?.({ frameMs: 16.7, tileId: "" });
+    for (const name of ["uBright", "uBg", "uAccent", "uOpacity"]) {
+      expect(writes[name] ?? 0, `${name} writes after 3 presents`).toBeGreaterThanOrEqual(3);
+    }
+    // The host only sends present ticks to packs that opt in.
+    expect(PLUGIN).toMatch(/^\s*presentTick:\s*true\s*$/m);
   });
 });

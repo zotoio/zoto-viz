@@ -1,6 +1,7 @@
 id: tile-health-black
 name: Tile health — black
 version: 1
+picker: hidden
 hint: Host dogfood pack — solid black sky (empty-panel detection).
 capabilities:
   - viz.read

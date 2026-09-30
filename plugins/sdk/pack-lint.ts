@@ -12,7 +12,7 @@ import {
   packSymlinkEscapes,
 } from "./pack-lint-import";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
-import { violationKey } from "./pack-lint-types";
+import { UNIFORM_BLOCKING_RULES, violationKey } from "./pack-lint-types";
 import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowlist";
 import { INLINE_ZOTO_DECLARE_HINT, PACK_ZOTO_BINDING_HINT } from "./viz-zoto";
 
@@ -43,10 +43,16 @@ const SANDBOX_RULES: { target: string; re: RegExp }[] = [
   { target: "indexedDB", re: /\bindexedDB\b/ },
 ];
 
-function listPackIds(packsRoot: string): string[] {
+/**
+ * The pack folders under `packsRoot` (normally `<repo>/plugins/src`), sorted. Dot-folders are
+ * skipped: `plugins/src/.pack-sdk/` is a gitignored runtime cache that the service catalog scan and
+ * `pack-bundle-install.test.ts` write, not a pack. Every lint walk over `plugins/src` (this file's
+ * `scanPluginsSrc` and the #171 (b) uniform scan) and the pack-lint tests use this one list.
+ */
+export function listPackIds(packsRoot: string): string[] {
   return fs
     .readdirSync(packsRoot, { withFileTypes: true })
-    .filter((e) => e.isDirectory())
+    .filter((e) => e.isDirectory() && !e.name.startsWith("."))
     .map((e) => e.name)
     .sort();
 }
@@ -71,7 +77,12 @@ function listPackTsFiles(packsRoot: string, packId: string): string[] {
   return out;
 }
 
-function withLoc(repoRel: string, source: string, index: number, v: Omit<PackLintViolation, "line" | "column">): PackLintViolation {
+function withLoc(
+  repoRel: string,
+  source: string,
+  index: number,
+  v: Omit<PackLintViolation, "file" | "line" | "column">,
+): PackLintViolation {
   const { line, column } = lineColAt(source, index);
   return { ...v, file: repoRel, line, column };
 }
@@ -273,6 +284,7 @@ const SDK_SKIP_DIRS = new Set([
   "pack-bundle-fixtures",
   "fixtures",
   "starter-regression",
+  "uniform-lint-fixtures",
 ]);
 
 function listSdkModuleTsFiles(sdkRoot: string, rel = ""): string[] {
@@ -308,6 +320,11 @@ export function scanSdkGuardrails(repoRoot: string): PackLintViolation[] {
   return violations;
 }
 
+/**
+ * Import-boundary guardrails only. The CI guardrail scan used by pack-lint.test.ts (which adds the
+ * #171 (b) uniform lint) is `scanAllGuardrails` in `pack-lint-test-support.ts`; this module is loaded
+ * by the install lint, so it deliberately doesn't import `pack-lint-uniforms`.
+ */
 export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
   const merged = [
     ...scanPluginsSrc(repoRoot),
@@ -373,7 +390,47 @@ export function scanPackLintFixture(
 export type ScanPackDirectoryOptions = {
   packId?: string;
   repoPathPrefix?: string;
+  /**
+   * #185 install lint: also lint the pack's frontend scripts that aren't `.ts` (`.js`, `.mjs`,
+   * `.tsx`, …) under `frontend/`, and whatever plugin.yml points at (`frontend.entry`, legacy
+   * `entry`), so unbundled packs (`frontend.bundle: false`) are linted like bundled ones.
+   */
+  frontendScripts?: boolean;
 };
+
+/** Script extensions the install lint reads under `frontend/` (plus `.ts`, which it always reads). */
+export const PACK_FRONTEND_SCRIPT_EXTENSIONS = [".js", ".mjs", ".cjs", ".jsx", ".tsx", ".mts", ".cts"] as const;
+
+function isTsSource(name: string): boolean {
+  return name.endsWith(".ts") && !name.endsWith(".d.ts");
+}
+
+function isFrontendScript(name: string): boolean {
+  if (/\.d\.[mc]?ts$/.test(name)) return false;
+  return PACK_FRONTEND_SCRIPT_EXTENSIONS.some((ext) => name.endsWith(ext));
+}
+
+/** Pack-relative files plugin.yml names as the frontend (`frontend.entry`, legacy top-level `entry`). */
+export function manifestFrontendEntries(packDirAbs: string): string[] {
+  let yml = "";
+  for (const name of ["plugin.yml", "plugin.yaml"]) {
+    try {
+      yml = fs.readFileSync(path.join(packDirAbs, name), "utf8");
+      break;
+    } catch {
+      /* try the next name */
+    }
+  }
+  const clean = (v: string | undefined) =>
+    (v ?? "").replace(/\s+#.*$/, "").trim().replace(/^(["'])(.*)\1$/, "$2").trim();
+  const out: string[] = [];
+  const top = clean(yml.match(/^entry:[ \t]*(.+?)[ \t]*$/m)?.[1]);
+  if (top) out.push(top);
+  const fe = yml.match(/^frontend:[ \t]*\r?\n((?:[ \t]+.*(?:\r?\n|$))+)/m)?.[1] ?? "";
+  const nested = clean(fe.match(/^[ \t]+entry:[ \t]*(.+?)[ \t]*$/m)?.[1]);
+  if (nested) out.push(nested);
+  return out.map((p) => path.posix.normalize(p.replace(/\\/g, "/")).replace(/^\.\//, ""));
+}
 
 const INSTALL_BLOCK_RULES = new Set<PackLintRule>(["sandbox-escape", "host-transport-escape"]);
 
@@ -400,6 +457,7 @@ export function scanPackInstallLint(packDirAbs: string, repoRoot: string): PackI
   const violations = scanPackDirectory(packDirAbs, repoRoot, {
     packId,
     repoPathPrefix: `plugins/src/${packId}`,
+    frontendScripts: true,
   });
   const legacyBlocks = legacyZotoViolationsOnDisallowedPacks(violations);
   const legacyBlockKeys = new Set(legacyBlocks.map(violationKey));
@@ -421,12 +479,18 @@ export function scanPackDirectory(
   const packId = opts.packId ?? path.basename(packDirAbs);
   const repoPrefix = opts.repoPathPrefix ?? `plugins/src/${packId}`;
   const violations: PackLintViolation[] = [...symlinkViolations(packDirAbs, repoPrefix, repoRoot)];
+  const entries = new Set(opts.frontendScripts ? manifestFrontendEntries(packDirAbs) : []);
+  const lintable = (sub: string, name: string) => {
+    if (isTsSource(name)) return true;
+    if (!opts.frontendScripts) return false;
+    return entries.has(sub) || (sub.startsWith("frontend/") && isFrontendScript(name));
+  };
   const walk = (rel: string) => {
     const dir = path.join(packDirAbs, rel);
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
       const sub = rel ? `${rel}/${ent.name}` : ent.name;
       if (ent.isDirectory()) walk(sub);
-      else if (ent.name.endsWith(".ts") && !ent.name.endsWith(".d.ts")) {
+      else if (lintable(sub, ent.name)) {
         const repoRel = `${repoPrefix}/${sub}`.replace(/\\/g, "/");
         const text = fs.readFileSync(path.join(packDirAbs, sub), "utf8");
         violations.push(
@@ -459,11 +523,15 @@ export function assertBaselineGuard(
   staleViolations: PackLintViolation[];
   disallowedLegacyZoto: PackLintViolation[];
   disallowedHostPackSrc: PackLintViolation[];
+  /** #171 (b) blocking uniform rules ({@link UNIFORM_BLOCKING_RULES}). Never baselined. */
+  disallowedUniformBlocking: PackLintViolation[];
   ok: boolean;
 } {
   const disallowedLegacyZoto = legacyZotoViolationsOnDisallowedPacks(current);
   const disallowedHostPackSrc = disallowedHostPackSrcImports(current);
-  const baselineTracked = (v: PackLintViolation) => v.rule !== "host-imports-pack-src";
+  const disallowedUniformBlocking = current.filter((v) => UNIFORM_BLOCKING_RULES.has(v.rule));
+  const baselineTracked = (v: PackLintViolation) =>
+    v.rule !== "host-imports-pack-src" && !UNIFORM_BLOCKING_RULES.has(v.rule);
   const baseSet = new Set(baseline.violations.filter(baselineTracked).map(violationKey));
   const curSet = new Set(current.filter(baselineTracked).map(violationKey));
   const newViolations = current.filter((v) => baselineTracked(v) && !baseSet.has(violationKey(v)));
@@ -475,9 +543,11 @@ export function assertBaselineGuard(
     staleViolations,
     disallowedLegacyZoto,
     disallowedHostPackSrc,
+    disallowedUniformBlocking,
     ok:
       disallowedLegacyZoto.length === 0 &&
       disallowedHostPackSrc.length === 0 &&
+      disallowedUniformBlocking.length === 0 &&
       newViolations.length === 0 &&
       staleViolations.length === 0,
   };
