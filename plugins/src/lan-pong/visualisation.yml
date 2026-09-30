@@ -3,7 +3,7 @@ look:
   theme: neon
   backdrop: space
   skyOpacity: 0.85
-  skyBright: 1.1
+  skyBright: 0.342
   gridShape: hex
   bgAudio: true
   skyAudio: true
