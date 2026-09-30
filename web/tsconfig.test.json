@@ -36,6 +36,7 @@
     "src/core/d3-force-3d.d.ts",
     "src/plugins/glsl-raw.d.ts",
     "src/ui/drawer-context.nest-devices-required.typecheck.ts",
+    "test-support/mock-partial.ts",
     "test-support/pack-mirror-rect.boundary.ts",
     "test/node/pack-mirror-readback-chrome.ts",
     "test/node/pack-mirror-readback-vite.ts"
