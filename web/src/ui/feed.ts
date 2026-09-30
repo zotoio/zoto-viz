@@ -318,6 +318,11 @@ export class LiveFeed {
     this.lastTick = 0;
   }
 
+  /** #206: page teardown (main.ts pagehide) clears the poll timer and frame loop, so no query() outlives the DOM. */
+  dispose(): void {
+    this.stop();
+  }
+
   private query(): string | null {
     if (document.body.classList.contains("arcade")) return null;
     if (!this.cfg.on) return null;
