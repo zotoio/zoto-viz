@@ -9,6 +9,7 @@ import {
   BLOB_MESH_SLOT_TO_UV,
   BLOB_MESH_SPREAD,
   BLOB_MESH_SPREAD_MARGIN,
+  blobMeshPlacement,
   blobMeshVisibleRegion,
 } from "../../../plugins/sdk/blob-mesh-budget";
 import { appLensSkySpan } from "./pack-sky-host-camera-test-helper";
@@ -165,6 +166,29 @@ describe("blob-mesh placement: on screen, whole-id angle, stable per device", ()
     }
     process.stdout.write(`[spread] ellipse centre (${cx}, ${cy}) semi-axes ${ax} x ${ay}, margin ${BLOB_MESH_SPREAD_MARGIN.toFixed(3)}: worst rim |screen| ${worst.toFixed(3)}\n`);
     expect(Math.min(ax, ay)).toBeGreaterThan(0.18);
+  });
+
+  it("home inset: 400 hashed ids stay inside the spread ellipse and keep their margin disc on screen, every 0.5 s from 0 to 60 s", () => {
+    // Homes sit (drift + wobble) inside the ellipse, so the moving blob never leaves it. The fixture
+    // ids alone don't reach the rim, so this sweeps many ids through the SDK placement.
+    const { cx, cy, ax, ay } = BLOB_MESH_SPREAD;
+    let worstEllipse = 0;
+    let worstRim = 0;
+    let at = "";
+    for (let i = 0; i < 400; i++) {
+      const id = `10.${(i * 37) % 256}.${(i * 11) % 256}.${i % 250}`;
+      for (const t of FINE) {
+        const [x, y] = blobMeshPlacement(id, t);
+        const e = Math.hypot((x * 1.7 - cx) / ax, (y * 1.7 - cy) / ay);
+        if (e > worstEllipse) { worstEllipse = e; at = `${id} t=${t}`; }
+        const d = discOnScreen(x, y, BLOB_MESH_SPREAD_MARGIN);
+        worstRim = Math.max(worstRim, d.worst);
+      }
+    }
+    const text = `worst ellipse radius ${worstEllipse.toFixed(4)} (1 = rim) at ${at}, worst margin-rim |screen| ${worstRim.toFixed(4)}`;
+    process.stdout.write(`[inset] ${text}\n`);
+    expect(worstEllipse, `inside the spread ellipse: ${text}`).toBeLessThanOrEqual(1);
+    expect(worstRim, `margin disc on screen: ${text}`).toBeLessThanOrEqual(1);
   });
 
   for (const [who, slotsOf] of writers) {
