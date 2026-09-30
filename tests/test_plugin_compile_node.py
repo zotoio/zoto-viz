@@ -22,11 +22,12 @@ def test_compile_typescript_invokes_configured_node_binary(
     monkeypatch.setattr(cursor_agent, "node_bin", lambda: custom_node)
     seen: list[list[str]] = []
 
-    def capture_run(cmd: list[str], **kwargs: object) -> subprocess.CompletedProcess[str]:
+    def capture_run(cmd: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
         seen.append(list(cmd))
         return subprocess.CompletedProcess(cmd, 1, stdout="", stderr="esbuild stub")
 
-    monkeypatch.setattr(subprocess, "run", capture_run)
+    # #185: bundle-pack-entry.mjs runs through plugins._run_pack_script (own session + group kill).
+    monkeypatch.setattr(plugins, "_run_pack_script", capture_run)
     doc = plugins.load_file(src)
     with pytest.raises(ValueError):
         plugins.compile_typescript(doc, src)

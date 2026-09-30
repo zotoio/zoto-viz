@@ -508,6 +508,11 @@ def compile_typescript(
             # #185: a timeout is "couldn't check", never a raw TimeoutExpired.
             raise pil.PackInstallLintSetupError(label) from e
         raise ValueError(f"pack bundle timed out after {PACK_BUNDLE_TIMEOUT_S} s") from e
+    except OSError as e:
+        if install_lint:
+            # node itself couldn't be started: the check couldn't run.
+            raise pil.PackInstallLintSetupError(label) from e
+        raise
     _bundle_invocations += 1
     if install_lint:
         _check_install_lint_verdict(proc, doc, label, nonce)
