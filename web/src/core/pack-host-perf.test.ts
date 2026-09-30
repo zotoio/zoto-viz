@@ -297,6 +297,35 @@ describe("pack-host-perf", () => {
       expect(on.packHostPerfSnapshot(1000).frames).toBe(1);
     });
 
+    // #199 (UX Pro): `0` and `false` (any case) mean off; a bare `?packPerf` or any other value means on; OR with the key stays.
+    for (const url of ["/?packPerf=0", "/?packPerf=false", "/?packPerf=FALSE", "/?packPerf=False"]) {
+      it(`#199 ${url} with no stored key: off, 0 frames recorded`, async () => {
+        localStorage.removeItem(PACK_PERF_STORE);
+        const mod = await bootWith(url);
+        mod.notePackHostPresentInterval(16.7);
+        expect(mod.packPerfEnabled(), `${url}: flag`).toBe(false);
+        expect(mod.packHostPerfSnapshot(1000).frames, `${url}: frames`).toBe(0);
+      });
+    }
+
+    for (const url of ["/?packPerf", "/?packPerf=", "/?packPerf=1", "/?packPerf=true", "/?packPerf=yes"]) {
+      it(`#199 ${url} with no stored key: on, 1 frame recorded`, async () => {
+        localStorage.removeItem(PACK_PERF_STORE);
+        const mod = await bootWith(url);
+        mod.notePackHostPresentInterval(16.7);
+        expect(mod.packPerfEnabled(), `${url}: flag`).toBe(true);
+        expect(mod.packHostPerfSnapshot(1000).frames, `${url}: frames`).toBe(1);
+      });
+    }
+
+    it("#199 ?packPerf=0 with the stored key on: on (precedence is OR), 1 frame recorded", async () => {
+      localStorage.setItem(PACK_PERF_STORE, "1");
+      const mod = await bootWith("/?packPerf=0");
+      mod.notePackHostPresentInterval(16.7);
+      expect(mod.packPerfEnabled(), "?packPerf=0 + stored on: flag").toBe(true);
+      expect(mod.packHostPerfSnapshot(1000).frames, "?packPerf=0 + stored on: frames").toBe(1);
+    });
+
     it("precedence is OR: boot ?packPerf stays on when localStorage goes off; without it, localStorage rules", async () => {
       const url = await bootWith("/?packPerf");
       sameTab("1", url.refreshPackPerfEnabled);
