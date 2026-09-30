@@ -2,7 +2,7 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { autoconsentEligible, autoconsentEnabled, autoconsentKind, setAutoconsent } from "./consent";
 import type { PluginView } from "./plugin";
 
-const base: PluginView = { id: "x", packName: "X", version: 1, engine: "graph", runtime: "typescript" };
+const base: PluginView = { id: "x", name: "x", packName: "X", version: 1, engine: "graph", runtime: "typescript" };
 
 describe("autoconsent", () => {
   beforeEach(() => {

@@ -22,8 +22,8 @@ describe("settings mosaic pane pick wiring > syncTiles after slot change", () =>
     const spec = loadSettingsDeclFixture();
     setPluginModes([
       compilePlugin({ ...spec, engine: "graph", base: "topology", capabilities: ["config.read"] }),
-      compilePlugin({ id: "topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
-      compilePlugin({ id: "memory", packName: "Memory", version: 1, engine: "graph", base: "memory" }),
+      compilePlugin({ id: "topology", name: "Topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
+      compilePlugin({ id: "memory", name: "Memory", packName: "Memory", version: 1, engine: "graph", base: "memory" }),
     ]);
     const settings = new Settings({ storePrefix: "zoto-mosaic-pane-sync-tiles", onChange: () => {} });
     document.body.append(settings.el);
@@ -35,7 +35,7 @@ describe("settings mosaic pane pick wiring > syncTiles after slot change", () =>
     });
     applyMosaicTiles(settings, mosaic, [PACK, "plugin:topology", "plugin:memory", "plugin:topology"]);
     settings.openView(PACK);
-    await new Promise<void>((r) => requestAnimationFrame(r));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
     const animUi = (settings as unknown as { animUi: { syncTiles: () => void } | null }).animUi;
     expect(animUi).toBeTruthy();
     let syncCount = 0;

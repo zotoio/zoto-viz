@@ -12,4 +12,4 @@ Branch: `cursor/host-models-2874` (extends phase 1 `cursor/pack-frame-path-2874`
 
 ## Reading instrumentation
 
-Same as phase 1 (`docs/perf/phase1-findings.md`): `?packPerf=1`, `GET /api/pack-perf`, MCP `get_pack_perf`. Changing `?packPerf` needs a reload. A change to the localStorage key `zoto-viz.packPerf` applies live in other tabs (the `storage` event); in the same tab it needs a reload, unless the code that writes the key calls `refreshPackPerfEnabled()` (exported from `web/src/core/pack-host-perf.ts`). Precedence is OR.
+Same as phase 1 (`docs/perf/phase1-findings.md`): `?packPerf=1`, `GET /api/pack-perf`, MCP `get_pack_perf`. `?packPerf=0` and `?packPerf=false` (case-insensitive) mean off; a bare `?packPerf` or any other value means on. Changing `?packPerf` needs a reload. A change to the localStorage key `zoto-viz.packPerf` applies live in other tabs (the `storage` event); in the same tab it needs a reload, unless the code that writes the key calls `refreshPackPerfEnabled()` (exported from `web/src/core/pack-host-perf.ts`). Precedence is OR, so `?packPerf=0` with the stored key on still reads on.

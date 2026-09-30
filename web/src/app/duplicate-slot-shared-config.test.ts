@@ -5,6 +5,8 @@ import { packScopeNoteText } from "../plugins/instances";
 import { hostModeById } from "./host-mode";
 import { setPluginModes } from "../core/modes";
 import { compilePlugin } from "../plugins/plugin";
+import type { NetScene } from "../graph/scene";
+import { mockPartial } from "../../test-support/mock-partial";
 import { Settings } from "../ui/settings";
 import { syncPluginFieldsFromSettingsEdit } from "./plugin-fields-from-settings";
 
@@ -82,7 +84,7 @@ describe("duplicate slot shared config > live edit applies to every sharing tile
     const mosaic = {
       on: true,
       tileIds: ["plugin:settings-fixture", "plugin:settings-fixture!1"],
-      graphScene: (id: string) => (id === "plugin:settings-fixture" ? sceneA : sceneB),
+      graphScene: (id: string) => mockPartial<NetScene>(id === "plugin:settings-fixture" ? sceneA : sceneB),
     };
     const opts = { gain: "9", preset: "a", mode: "x", locked: "0.5" };
     syncPluginFieldsFromSettingsEdit({

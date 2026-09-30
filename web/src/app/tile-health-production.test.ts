@@ -9,6 +9,8 @@ import {
 import { readTileHealErrors, writeTileHealErrors } from "../plugins/tile-health-monitor";
 import type { NetScene } from "../graph/scene";
 import type { RenderHost } from "../graph/render-host";
+import { viewMutAsDeviceRect } from "../graph/pack-mirror-rect";
+import { mockPartial } from "../../test-support/mock-partial";
 
 function rgbaFill(r: number, g: number, b: number): TilePatchBytes {
   const out = new Uint8Array(16 * 16 * 4);
@@ -46,9 +48,10 @@ function productionHarness(over: {
     get pictureSerial() { return serial; },
     set pictureSerial(v: number) { serial = v; },
     gpuContextLost: over.contextLost ?? false,
-    lastViewport: { x: 0, y: 0, w: 200, h: 120 },
+    lastViewport: viewMutAsDeviceRect({ x: 0, y: 0, w: 200, h: 120 }),
     tileHealthRgba: () => (patch === null ? null : patch),
-  } as NetScene;
+  };
+  const sceneView = mockPartial<NetScene>(scene);
   const host = {
     software: false,
     canvas: document.createElement("canvas"),
@@ -59,10 +62,10 @@ function productionHarness(over: {
   const listeners: Array<(ts: number) => void> = [];
   const mon = createProductionTileHealthMonitor({
     host,
-    mainScene: scene,
+    mainScene: sceneView,
     mosaic: null,
     paneEl: () => scene.viewEl,
-    sceneFor: () => scene,
+    sceneFor: () => sceneView,
     packFor: () => null,
     mayBeStatic: () => false,
     awaitingApproval: () => false,

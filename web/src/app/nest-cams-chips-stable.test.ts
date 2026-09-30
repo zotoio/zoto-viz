@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as viewDrawer from "../ui/view-drawer-module";
-import { setPluginModes } from "../core/modes";
-import { compilePlugin, configStoreId, fieldDefault, loadPluginConfig, writePluginConfig } from "../plugins/plugin";
+import { setPluginModes, type PluginField } from "../core/modes";
+import { compilePlugin, configStoreId, fieldDefault, loadPluginConfig, writePluginConfig, type PluginView } from "../plugins/plugin";
 import { Settings } from "../ui/settings";
 import { hostModeById } from "./host-mode";
 import {
@@ -27,11 +27,12 @@ describe("nest cams drawer chips", () => {
   });
 
   it("device chips and selection survive duplicate pack count 2→3 without drawer rebuild", async () => {
-    const nestSpec = {
+    const nestSpec: PluginView & { config: PluginField[] } = {
       id: "nest-cams",
+      name: "Nest cams",
       packName: "Nest cams",
       version: 1,
-      engine: "graph" as const,
+      engine: "graph",
       config: [
         { key: "live", label: "live stream", type: "boolean", default: true },
         { key: "stills", label: "motion stills", type: "boolean", default: false },
@@ -42,8 +43,8 @@ describe("nest cams drawer chips", () => {
     };
     setPluginModes([
       compilePlugin(nestSpec),
-      compilePlugin({ id: "topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
-      compilePlugin({ id: "memory", packName: "Memory", version: 1, engine: "graph", base: "memory" }),
+      compilePlugin({ id: "topology", name: "Topology", packName: "Topology", version: 1, engine: "graph", base: "topology" }),
+      compilePlugin({ id: "memory", name: "Memory", packName: "Memory", version: 1, engine: "graph", base: "memory" }),
     ]);
     const settings = new Settings({ storePrefix: "zoto-nest-chips-stable", onChange: () => {} });
     document.body.append(settings.el);
@@ -66,7 +67,7 @@ describe("nest cams drawer chips", () => {
     settings.bindView(nestSpec, nestSpec.config);
     settings.setNestDevices(devices);
     settings.openView(NEST);
-    await new Promise<void>((r) => requestAnimationFrame(r));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
 
     const viewRoot = settingsViewDrawerRoot(settings);
     const labelsBefore = cameraChipButtons(viewRoot).map((b) => b.textContent);
@@ -77,7 +78,7 @@ describe("nest cams drawer chips", () => {
     const rebuildSpy = vi.spyOn(viewDrawer, "rebuildViewDrawerContent");
     rebuildSpy.mockClear();
     pickMosaicSlot(settings, 2, NEST);
-    await new Promise<void>((r) => requestAnimationFrame(r));
+    await new Promise<void>((r) => requestAnimationFrame(() => r()));
     expect(rebuildSpy).not.toHaveBeenCalled();
     rebuildSpy.mockRestore();
 

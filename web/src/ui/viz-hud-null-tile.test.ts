@@ -11,11 +11,18 @@ import { VIZ_CLOCK_STEP_TICKS, VIZ_COST_TICKS_10MS } from "../plugins/viz-tile-b
 
 function emptyState(): StateMsg {
   return {
+    type: "state",
     ts: 0,
-    stats: { active_flows: 0, devices: 0, packets: 0 },
+    iface: "",
+    interfaces: [],
+    network: "",
+    local_ip: "",
+    gateway: "",
+    uptime: 0,
+    stats: { pps: 0, bps: 0, packets: 0, bytes: 0, devices: 0, online: 0, flows: 0, active_flows: 0 },
     devices: [],
     flows: [],
-    sources: [],
+    sources: {},
     plugin_state: {},
   };
 }

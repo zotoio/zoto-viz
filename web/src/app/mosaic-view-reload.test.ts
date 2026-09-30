@@ -28,7 +28,8 @@ const MODES = [
 
 function mosaicHost(over: Partial<SwitchPaneViewHost> & Pick<SwitchPaneViewHost, "tileIds">): SwitchPaneViewHost {
   return {
-    focusedId: null,
+    focusedId: "",
+    mainTileId: "",
     setPaneView: vi.fn(() => true),
     setPaneNotice: vi.fn(),
     focus: vi.fn(),
