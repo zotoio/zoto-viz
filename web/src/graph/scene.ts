@@ -80,7 +80,7 @@ import {
   layoutDevicePxRatio,
 } from "./render-host-device-px-ratio";
 import { observeResize } from "../core/resize";
-import { notePerfChange, perfOverlay, perfStress, perfWant, tickPerf, type PerfOverlay } from "../core/perf";
+import { notePerfChange, perfLeanState, perfOverlay, perfStress, perfWant, tickPerf, type PerfLeanState, type PerfOverlay } from "../core/perf";
 import { skyLookFor } from "./stage-sky-look";
 import { activityLookMix, centerMixForNdc } from "./cam-center";
 import { PINCH_HOLD_MS, mouseWheelTick, pinchWheel, pointerCentroid, threeFingerZoomDelta, wheelCamMotion } from "./wheel-cam";
@@ -1671,6 +1671,14 @@ export class NetScene implements HostedView, RenderScalePane {
 
   get viewEl(): HTMLElement { return this.container; }
   hostFrame(ts: FrameTs): void { this.animate(ts); }
+
+  /**
+   * #177: supported read of the perf lean (rows; `window.zotoviz.perfLean()`). The main scene's host element
+   * also carries it as `data-perf-lean` ("on" / "off" / "pinned-off") and `data-perf-k` (tune.k, 2 dp).
+   */
+  perfLean(): PerfLeanState {
+    return perfLeanState();
+  }
 
   readonly renderScaleState = new RenderScaleViewState();
   get renderScaleActive(): boolean { return this.active; }
@@ -4098,6 +4106,20 @@ export class NetScene implements HostedView, RenderScalePane {
     this.present(false);
   }
 
+  /** Last `data-perf-lean|data-perf-k` written, so the attributes change only when the lean does. */
+  private perfLeanAttrs = "";
+
+  private syncPerfLeanAttrs(): void {
+    const st = perfLeanState();
+    const lean = st.pinnedOff ? "pinned-off" : st.lean;
+    const k = st.k.toFixed(2);
+    const key = `${lean}|${k}`;
+    if (key === this.perfLeanAttrs) return;
+    this.perfLeanAttrs = key;
+    this.container.dataset.perfLean = lean;
+    this.container.dataset.perfK = k;
+  }
+
   private animate(ts: FrameTs): void {
     if (!this.host && this.active) {
       this.raf = requestAnimationFrame((raw) => this.hostFrame(frameTsFromRaf(raw)));
@@ -4124,10 +4146,11 @@ export class NetScene implements HostedView, RenderScalePane {
     }
     if (!this.satellite) {
       tickPerf(wallMs, this.anim.autoTune !== false, this.anim.moveEase);
+      this.syncPerfLeanAttrs();
       const s = perfStress();
       this.paneFps.hint((s > 0.04
         ? (perfWant() > 0.5
-          ? "this pane · auto-tune easing labels, sparks, glow, and sky down"
+          ? "this pane · auto-tune easing labels, sparks, glow, and sky motion down"
           : "this pane · auto-tune easing back up after a 1-minute recovered average")
         : "how often this pane's picture changed in the last second"
           + (this.lastVis && !this.lastVis.ok

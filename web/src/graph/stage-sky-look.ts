@@ -4,12 +4,11 @@ import type { PerfOverlay } from "../core/perf";
  * The sky opacity / brightness sliders the backdrop draws with, before the thermal factor
  * and the visibility scale (scene.ts applyLook).
  *
- * The perf lean (core/perf.ts perfOverlay) eases skyBright to 0.4 and skyOpacity to 0.45 once
- * the 30 s window reads under 10 fps. That saves no GPU work (the sky shader costs the same
- * at any brightness or opacity), and on a stage-only view the sky is the whole picture: under
- * SwiftShader, Ant Colony was drawn at 0.4 / 1.05 brightness and 45% over the clear, black by
- * area 35-60 s after the pick. Stage-only views keep the look's sliders; the graph views still
- * lean their sky behind the graph.
+ * Stage-only views always keep the look's sliders (bbf8b77d). Since #177 the perf lean
+ * (core/perf.ts perfOverlay) no longer dims the sky on any view: the overlay's skyBright and
+ * skyOpacity are the look's own, because the sky shader costs the same at any brightness or
+ * opacity. Before #177 it eased them to 0.4 / 0.45 once the 30 s window read under 10 fps, and
+ * under SwiftShader that drew Ant Colony black by area 35-60 s after the pick.
  */
 export function skyLookFor(
   anim: { skyOpacity: number; skyBright: number },
