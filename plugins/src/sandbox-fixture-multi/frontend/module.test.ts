@@ -115,7 +115,34 @@ describe("sandbox-fixture-multi module graph (#180)", () => {
       }
     }
   });
+
+  it("sky main() touches fragColor exactly once, so no constant can be added on a line of its own", () => {
+    // Pedant's #180 nit: a second statement (`fragColor += vec4(0.05)`, `fragColor.rgb = max(...)`) would add
+    // brightness that does not come from uBright. Count inside main()'s body only: a declaration such as
+    // `out vec4 fragColor;` (in the pack or prepended by the host) is outside main() and must not count.
+    const body = glslMainBody(stripGlslComments(sky));
+    expect(body, "void main() { ... } not found in sky/fragment.glsl").not.toBeNull();
+    expect(body!.match(/\bfragColor\b/g)?.length ?? 0, "fragColor references inside main()").toBe(1);
+  });
 });
+
+/** GLSL source without // and block comments. */
+function stripGlslComments(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/\/\/[^\n]*/g, "");
+}
+
+/** Text between main()'s opening brace and its matching closing brace, or null. */
+function glslMainBody(src: string): string | null {
+  const m = /\bvoid\s+main\s*\(\s*(?:void\s*)?\)\s*\{/.exec(src);
+  if (!m) return null;
+  const open = m.index + m[0].length - 1;
+  let depth = 0;
+  for (let i = open; i < src.length; i++) {
+    if (src[i] === "{") depth++;
+    else if (src[i] === "}" && --depth === 0) return src.slice(open + 1, i);
+  }
+  return null;
+}
 
 /** CPU mirror of sky/fragment.glsl (these lines must appear verbatim in the shader). */
 const SKY_LINES = [
