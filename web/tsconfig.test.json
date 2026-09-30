@@ -86,7 +86,6 @@
     "src/app/viz-frame-scope.test.ts",
     "src/app/viz-frame-tick.test.ts",
     "src/app/viz-voxel-present-camera.test.ts",
-    "src/graph/host-mesh-lane.test.ts",
     "src/graph/lint-brand-casts.test.ts",
     "src/graph/render-host-layout-dpr-getter.test.ts",
     "src/graph/render-host-layout-dpr-surfaces.test.ts",
