@@ -16,7 +16,7 @@ describe("probeWebGL", () => {
       getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext: lose } : null),
     };
     const orig = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type: string) {
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string) {
       if (String(type).includes("webgl")) return gl as never;
       return orig.call(this, type as never);
     } as typeof orig;
