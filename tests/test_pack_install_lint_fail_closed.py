@@ -43,7 +43,13 @@ from service.pack_install_lint import (
 
 ROOT = Path(__file__).resolve().parents[1]
 PULSE = ROOT / "plugins" / "src" / "pulse-ts" / "plugin.yml"
-SETUP_TAIL = ", so it wasn't installed. Run `pnpm install` in `web/` and try again."
+# #186: UX Pro split the fix by setup reason (the source is web/scripts/pack-install-lint-setup-copy.json;
+# these are literal pins). A missing, stale or unloadable built lint says `pnpm run prepare`; everything else
+# (esbuild unresolvable, the service's own timeout, no pass verdict, …) keeps #185's `pnpm install`.
+FIX_INSTALL = "Run `pnpm install` in `web/` and try again."
+FIX_PREPARE = "Run `pnpm run prepare` in `web/` and try again."
+SETUP_TAIL_INSTALL = f", so it wasn't installed. {FIX_INSTALL}"
+SETUP_TAIL_PREPARE = f", so it wasn't installed. {FIX_PREPARE}"
 _BLOCK_JSON = json.dumps(
     {
         "type": "pack-install-lint-block",
@@ -106,10 +112,43 @@ def _pulse_doc() -> dict:
 
 
 def test_setup_message_wording() -> None:
-    assert format_install_lint_setup_message("Star Sines") == (
-        "Couldn't safety-check Star Sines, so it wasn't installed. Run `pnpm install` in `web/` and try again."
+    """Each reason's own sentence (fresh install and upgrade); no reason / an unknown one: pnpm install."""
+    for reason in ("lint_prebuilt_missing", "lint_prebuilt_stale", "lint_prebuilt_unloadable"):
+        assert format_install_lint_setup_message("Star Sines", reason) == (
+            "Couldn't safety-check Star Sines, so it wasn't installed. Run `pnpm run prepare` in `web/` and try again."
+        ), reason
+        assert format_install_lint_setup_upgrade_message("Star Sines", 3, reason) == (
+            "Couldn't safety-check the new version of Star Sines, so it wasn't updated. "
+            "You're still on version 3. Run `pnpm run prepare` in `web/` and try again."
+        ), reason
+        assert str(PackInstallLintSetupError("Star Sines", reason)) == f"Couldn't safety-check Star Sines{SETUP_TAIL_PREPARE}"
+    for reason in ("esbuild_unresolvable", "lint_threw", "no_pass_verdict", "", "not_a_reason"):
+        assert format_install_lint_setup_message("Star Sines", reason) == (
+            "Couldn't safety-check Star Sines, so it wasn't installed. Run `pnpm install` in `web/` and try again."
+        ), reason
+        assert format_install_lint_setup_upgrade_message("Star Sines", 3, reason) == (
+            "Couldn't safety-check the new version of Star Sines, so it wasn't updated. "
+            "You're still on version 3. Run `pnpm install` in `web/` and try again."
+        ), reason
+    assert format_install_lint_setup_message("Star Sines") == f"Couldn't safety-check Star Sines{SETUP_TAIL_INSTALL}"
+    assert format_install_lint_setup_message("") == f"Couldn't safety-check Plugin{SETUP_TAIL_INSTALL}"
+    # UX Pro (#186 review): "version <old>", and the unknown-version fallback, for both fixes.
+    assert format_install_lint_setup_upgrade_message("Star Sines", None, "lint_prebuilt_stale") == (
+        "Couldn't safety-check the new version of Star Sines, so it wasn't updated. "
+        "The version you had is still installed. Run `pnpm run prepare` in `web/` and try again."
     )
-    assert format_install_lint_setup_message("") == f"Couldn't safety-check Plugin{SETUP_TAIL}"
+    assert format_install_lint_setup_upgrade_message("Star Sines", None, "esbuild_unresolvable") == (
+        "Couldn't safety-check the new version of Star Sines, so it wasn't updated. "
+        "The version you had is still installed. Run `pnpm install` in `web/` and try again."
+    )
+    assert format_install_lint_setup_upgrade_message("Star Sines", "", "") == (
+        "Couldn't safety-check the new version of Star Sines, so it wasn't updated. "
+        "The version you had is still installed. Run `pnpm install` in `web/` and try again."
+    )
+    for reason in ("", "lint_prebuilt_missing"):
+        for old in (3, None):
+            text = format_install_lint_setup_upgrade_message("Star Sines", old, reason)
+            assert not re.search(r"\bv\d", text) and "You're still on the version you had" not in text, text
 
 
 def test_compile_maps_lint_setup_exit_to_setup_error(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -119,7 +158,7 @@ def test_compile_maps_lint_setup_exit_to_setup_error(monkeypatch: pytest.MonkeyP
     plugins.reset_bundles()
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
-    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL}"
+    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL_INSTALL}", "no reason code: pnpm install"
     assert "was blocked" not in str(e.value)
 
 
@@ -228,7 +267,7 @@ def test_install_local_zip_refused_when_the_built_lint_is_missing(
     out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
     assert out.get("ok") is False, out
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}"
+    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL_PREPARE}"
     assert not (paths.plugin_local_runtime_dir(create=True) / "upgrade-probe").exists()
 
 
@@ -251,9 +290,9 @@ def test_upgrade_refused_when_the_built_lint_is_missing_keeps_v1(
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
     assert out.get("message") == (
         "Couldn't safety-check the new version of Upgrade Probe, so it wasn't updated. "
-        "You're still on v1. Run `pnpm install` in `web/` and try again."
+        "You're still on version 1. Run `pnpm run prepare` in `web/` and try again."
     )
-    assert out.get("message") == format_install_lint_setup_upgrade_message("Upgrade Probe", 1)
+    assert out.get("message") == format_install_lint_setup_upgrade_message("Upgrade Probe", 1, "lint_prebuilt_missing")
     assert "was blocked" not in str(out.get("message"))
     assert "version: 1" in (runtime / "plugin.yml").read_text(encoding="utf-8"), "v1 is still installed"
 
@@ -303,13 +342,13 @@ def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
     with pytest.raises(PackInstallLintSetupError) as e:
         plugins.compile_typescript(doc, PULSE, update_cache=False, install_lint=True)
     assert time.monotonic() - t0 < 15
-    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL}"
+    assert str(e.value) == f"Couldn't safety-check Pulse TS{SETUP_TAIL_INSTALL}", "service timeout: pnpm install"
     for pid in (int(p) for p in pids.read_text().split()):
         assert _gone(pid), f"pid {pid} left running after the service timeout"
     _repo(tmp_path, monkeypatch)
     out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}"
+    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL_INSTALL}"
 
 
 # --- unbundled and no-frontend packs go through the same gate -----------------------------------
@@ -381,7 +420,7 @@ def test_no_frontend_pack_is_refused_when_the_built_lint_is_missing(
     out = plugin_local.install_local_zip(_shipped_zip(tmp_path, "cores"), overwrite=True)
     assert out.get("ok") is False, out
     assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert out.get("message") == f"Couldn't safety-check CPU cores{SETUP_TAIL}"
+    assert out.get("message") == f"Couldn't safety-check CPU cores{SETUP_TAIL_PREPARE}"
 
 
 def test_koi_pond_block_is_plain_words_and_the_raw_findings_are_logged(
@@ -450,13 +489,13 @@ def test_setup_messages_and_the_lint_block_share_no_text(
     plugins.reset_bundles()
     upgrade_msg = str(plugin_local.install_local_zip(_probe(tmp_path, 2), overwrite=True).get("message"))
     fresh_msg = str(plugin_local.install_local_zip(_shipped_zip(tmp_path, "cores"), overwrite=True).get("message"))
-    assert fresh_msg == f"Couldn't safety-check CPU cores{SETUP_TAIL}"
+    assert fresh_msg == f"Couldn't safety-check CPU cores{SETUP_TAIL_PREPARE}"
     assert upgrade_msg.startswith("Couldn't safety-check the new version of Upgrade Probe")
     for setup in (fresh_msg, upgrade_msg):
         assert setup not in block_msg and block_msg not in setup
         for token in ("was blocked", "sandbox-escape", "indexedDB", "Nothing was installed", "pack lint"):
             assert token not in setup, (token, setup)
-        for token in ("safety-check", "pnpm install", "wasn't installed", "wasn't updated", "still on v"):
+        for token in ("safety-check", "pnpm install", "pnpm run prepare", "wasn't installed", "wasn't updated", "still on version"):
             assert token not in block_msg, (token, block_msg)
     assert fresh_msg != upgrade_msg and fresh_msg not in upgrade_msg and upgrade_msg not in fresh_msg
 
@@ -587,9 +626,14 @@ def _every_block_and_setup_text() -> tuple[list[str], list[str]]:
         catalog_sdk_contract_error("plugins/src/koi/plugin.yml", {"id": "koi", "name": "Koi"}, 0, 1)["message"],
     ]
     setup = [
-        format_install_lint_setup_message("Koi Pond"),
-        format_install_lint_setup_upgrade_message("Koi Pond", 3),
-        str(PackInstallLintSetupError("Koi Pond")),
+        text
+        for reason in ("", "esbuild_unresolvable", "lint_prebuilt_missing", "lint_prebuilt_stale", "lint_prebuilt_unloadable")
+        for text in (
+            format_install_lint_setup_message("Koi Pond", reason),
+            format_install_lint_setup_upgrade_message("Koi Pond", 3, reason),
+            format_install_lint_setup_upgrade_message("Koi Pond", None, reason),
+            str(PackInstallLintSetupError("Koi Pond", reason)),
+        )
     ]
     return blocks, setup
 

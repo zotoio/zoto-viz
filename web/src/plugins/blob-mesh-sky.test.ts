@@ -24,13 +24,13 @@ import {
 import {
   appFivePatches,
   fivePatchSummary,
-  hostLookUniforms,
   lanFrames35s,
   LAN_35S_PPS,
   noteRowNumbers,
   UXPRO_MAX_DARK,
 } from "./pack-sky-lan-frame-test-helper";
 import { runPackFrameHandler } from "./viz-pack-host";
+import { blobMeshLookNumber, blobMeshPackLook, blobMeshPackWrites } from "./blob-mesh-look-test-helper";
 import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
 
 /**
@@ -55,11 +55,11 @@ function wrappedSky(src = rawSky, ray: SkyRay = IDENTITY_SKY_RAY, span?: SkySpan
   return w.frag;
 }
 
-/** Plugin sky material defaults before any pack write (backdrop.ts pluginUniforms / blob-mesh look). */
+/** Plugin sky material defaults before any pack write (backdrop.ts pluginUniforms / blob-mesh look from visualisation.yml). */
 const HOST_DEFAULTS: PluginSkySmokeUniforms = {
   uTime: 3,
-  uOpacity: 0.96,
-  uBright: 1.18,
+  uOpacity: blobMeshLookNumber("skyOpacity"),
+  uBright: blobMeshLookNumber("skyBright"),
   uAudio: 0,
   uAccent: [0x7e / 255, 0xe0 / 255, 0xff / 255],
   uBg: [0x0b / 255, 0x14 / 255, 0x1c / 255],
@@ -184,8 +184,11 @@ describe("blob-mesh sky draws on the host camera", () => {
  * deliver. The earlier rows drove only the pack frontend writer, never this case.
  */
 describe("blob-mesh on the app's production path (host runPackFrameHandler, live LAN)", () => {
-  /** blob-mesh look: theme ice (rim 0x4cc9f0, bg 0x0b141c), skyBright 1.18, skyOpacity 0.96. */
-  const APP_LOOK = hostLookUniforms({ skyBright: 1.18, skyOpacity: 0.96, rim: 0x4cc9f0, bg: 0x0b141c });
+  /**
+   * The uniforms the app draws blob-mesh with (#180 H1): visualisation.yml skyBright / skyOpacity and
+   * its theme's bg, times the pack's own uBright, with the pack's uAudio / uAccent.
+   */
+  const appLookFor = (frame: VizDataFrame): PluginSkySmokeUniforms => blobMeshPackLook(frame).u;
   const SLOT = VIZ_UBO.slotFloats;
 
   function hostCaseSlots(frame: VizDataFrame): Float32Array {
@@ -214,17 +217,24 @@ describe("blob-mesh on the app's production path (host runPackFrameHandler, live
   it("lights the wall for a 7-talker 420 pkt/s LAN at the host camera (UX Pro five-patch rule)", async () => {
     const [frame] = lanFrames35s({ fixture: "host" }, 2);
     const slots = hostCaseSlots(frame!);
+    // The look is the pack's: yml skyBright x the uBright the pack writes for this frame (no copy of either here).
+    const look = appLookFor(frame!);
+    const packBright = blobMeshPackWrites(frame!).uBright;
+    const skyBright = blobMeshLookNumber("skyBright");
+    expect(typeof packBright, "the pack writes uBright").toBe("number");
+    expect(look.uBright, `rendered uBright ${look.uBright} vs visualisation.yml skyBright ${skyBright} x pack uBright ${String(packBright)}`)
+      .toBeCloseTo(skyBright * (packBright as number), 9);
     // App camera: lensFov-clamped 64 x 42.7 degrees at 1280 x 800; QE samples the app's scene region.
     const frag = wrappedSky(rawSky, parentedSkyRay("blob-mesh", rawSky, HOST_DEFAULT_PITCH_DEG), appLensSkySpan());
-    const r = await smokeRenderPluginSky(frag, slots, APP_LOOK, { keepLuma: true, pngPath: pluginSkySmokePngPath("blob-mesh-prod-lan-35s") });
+    const r = await smokeRenderPluginSky(frag, slots, look, { keepLuma: true, pngPath: pluginSkySmokePngPath("blob-mesh-prod-lan-35s") });
     const five = fivePatchSummary(appFivePatches(r.luma!));
-    const why = `app-region ${five.text}; canvas ${fivePatchSummary(r.qePatches).text}; ${r.assertion} blobs=${Array.from(slots.slice(0, 28)).map((v) => v.toFixed(2)).join(",")}`;
+    const why = `uBright=${look.uBright.toFixed(3)} app-region ${five.text}; canvas ${fivePatchSummary(r.qePatches).text}; ${r.assertion} blobs=${Array.from(slots.slice(0, 28)).map((v) => v.toFixed(2)).join(",")}`;
     noteRowNumbers("blob-mesh prod LAN 35s", why);
     expect(five.dark, why).toBeLessThanOrEqual(UXPRO_MAX_DARK);
     expect(() => assertPluginSkySmokeDraws(r), why).not.toThrow();
     // Readable metaballs, not one flat iso: QE flagged the black wall "uniform" at 19/18/18/22/20,
     // and the 6b172413 pack writer's rate / 60 radii (every talker > 17 pkt/s at 0.44) fill the
-    // dome at 212/208/212/211/211. A full-iso blob is authored at ~210 luma (rim * uBright 1.18),
+    // dome at 212/208/212/211/211. A full-iso blob tops out near ~215 luma (teal tint clamps),
     // so the cap is white, not 200.
     expect(Math.max(...five.lums) - Math.min(...five.lums), `not a uniform wall: ${why}`).toBeGreaterThanOrEqual(30);
     expect(Math.max(...five.lums), `not white: ${why}`).toBeLessThan(240);

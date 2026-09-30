@@ -1,7 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["vite/client", "vitest/globals", "node"]
+    "types": ["vite/client", "vitest/globals", "node"],
+    "paths": { "plugins/sdk/*": ["../plugins/sdk/*"] }
   },
   "include": [
     // #192: every test file the tsgap error metric counts (web/src, plugins/src, plugins/sdk, scripts/,
@@ -31,6 +32,7 @@
     "../plugins/src/rocket-car-soccer/frontend/index.ts",
     "../plugins/src/roto-proto/frontend/index.ts",
     "../plugins/src/talker-storm/frontend/index.ts",
+    "src/app/__tests__/main-entry-harness.ts",
     "src/core/d3-force-3d.d.ts",
     "src/plugins/glsl-raw.d.ts",
     "src/ui/drawer-context.nest-devices-required.typecheck.ts",
@@ -171,7 +173,6 @@
     "src/ui/viz-hud-f4.test.ts",
     "src/ui/viz-hud-null-tile.test.ts",
     "src/ui/viz-hud-write-steady.test.ts",
-    "src/ui/viz-hud.test.ts",
     // HELD (#192): scripts/revert-proof* is a held path. Do not fix, edit or move these files, and do
     // not remove them from this list; ask ZotoBoss. Exempt from the shrink-only rule above.
     "../scripts/revert-proof.dogfood.test.ts",

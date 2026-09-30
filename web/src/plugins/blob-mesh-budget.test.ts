@@ -64,11 +64,12 @@ function hostSlot0(frame: VizDataFrame): number[] {
 
 let packOnFrame: ((f: VizDataFrame) => void) | null = null;
 let packSlot0: number[] = [];
+let packUniforms: Record<string, unknown> = {};
 beforeAll(async () => {
   (globalThis as { zoto?: unknown }).zoto = {
     onTick: null, onConfig: null, onFrame: null,
     writeBuffer: (slot: number, data: number[] | Float32Array) => { if (slot === 0) packSlot0 = Array.from(data); },
-    writeUniform: () => {},
+    writeUniform: (name: string, value: unknown) => { packUniforms[name] = value; },
     writeParticles: () => {},
   };
   await import("../../../plugins/src/blob-mesh/frontend/index");
@@ -335,4 +336,35 @@ describe("blob-mesh coverage budget (#174)", () => {
       expect(packSlot0Of(frame), name).toEqual(hostSlot0(frame));
     }
   });
+});
+
+/**
+ * #174 UX Pro (option 2): size is the only thing that shows rate, so the pack's sky brightness
+ * must not follow the busiest device. Both writers, at fixed audio, write the same uBright for a
+ * busiest device at 0.5 pkt/s and at 80 pkt/s. Revert: the old `min(0.35, rate / 80)` term -> red.
+ */
+describe("blob-mesh uBright does not follow rate (#174 option 2)", () => {
+  const uBrightOf: Record<string, (f: VizDataFrame) => unknown> = {
+    "host mirror": (f) => {
+      let v: unknown;
+      runPackFrameHandler("blob-mesh", f, { writeBuffer: () => {}, writeUniform: (n, x) => { if (n === "uBright") v = x; }, writeParticles: () => {} });
+      return v;
+    },
+    "pack frontend": (f) => {
+      packUniforms = {};
+      packOnFrame!(f);
+      return packUniforms.uBright;
+    },
+  };
+  for (const [writer, of] of Object.entries(uBrightOf)) {
+    it(`${writer}: uBright is identical at audio 0, 0.5 and 1 whether the busiest device runs 0.5 or 80 pkt/s`, () => {
+      for (const audio of [0, 0.5, 1]) {
+        const quiet = of({ ...frameOf([talker("172.30.0.10", 0.5), talker("172.30.0.11", 0.5)]), audio });
+        const busy = of({ ...frameOf([talker("172.30.0.10", 80), talker("172.30.0.11", 0.5)]), audio });
+        process.stdout.write(`[ubright-rate] ${writer} audio ${audio}: busiest 0.5 pkt/s -> ${String(quiet)}, 80 pkt/s -> ${String(busy)}\n`);
+        expect(typeof quiet, `${writer} audio ${audio}: uBright written`).toBe("number");
+        expect(busy, `${writer} audio ${audio}: uBright ${String(quiet)} at busiest 0.5 pkt/s vs ${String(busy)} at 80 pkt/s`).toBe(quiet);
+      }
+    });
+  }
 });

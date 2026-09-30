@@ -19,6 +19,8 @@ export type UnavailablePack = {
   id: string;
   name: string;
   reason: string;
+  /** plugin.yml `picker: hidden`: never a picker row or banner count; a saved tile still shows its notice. */
+  pickerHidden?: true;
 };
 
 /** Picker value prefix for a greyed-out row; never a mode id, so nothing can apply it. */
@@ -41,7 +43,7 @@ function toUnavailable(raw: unknown): UnavailablePack | null {
   if (!id) return null;
   const name = typeof o.name === "string" && o.name.trim() ? o.name.trim() : id;
   const reason = o.reason === UNAVAILABLE_BUNDLE_FAILED ? UNAVAILABLE_BUNDLE_FAILED : UNAVAILABLE_ESBUILD;
-  return { id, name, reason };
+  return o.picker === "hidden" ? { id, name, reason, pickerHidden: true } : { id, name, reason };
 }
 
 /** Store this catalog's unavailable rows (replaces the last catalog's). */
