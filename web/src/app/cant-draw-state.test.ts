@@ -9,12 +9,22 @@
  * notice) over a fake renderer; one row drives a real RenderHost through its canvas events.
  */
 import * as THREE from "three";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { RenderHost, type HostedView } from "../graph/render-host";
 import { RenderHostTileShader, type RenderHostShaderGpu } from "../graph/render-host-tile-shader";
 import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
 import { bindCantDrawViewState } from "./cant-draw-state";
-import { clearViewState, onViewStateChange, resetViewStatesForTests, setViewState, viewStateCopy, viewStateOf, type ViewState } from "./view-state";
+import {
+  clearViewState,
+  onViewStateChange,
+  resetViewStatesForTests,
+  setViewState,
+  viewStateCopy,
+  viewStateOf,
+  viewStateTile,
+  type ViewState,
+  type ViewStateCopyTile,
+} from "./view-state";
 
 type FakeGl = { isContextLost(): boolean; getShaderInfoLog(s: object): string; getProgramInfoLog(p: object): string };
 type FakeRenderer = {
@@ -188,7 +198,7 @@ describe("#171 (c) per-tile cant-draw view state", () => {
   });
 
   it("copy: context-lost is word for word the wall notice: GFX_INTERRUPTED_NOTICE until Reload, then GFX_NO_RESTORE_NOTICE (#171 c)", () => {
-    for (const tile of [{ tileId: "main" }, { tileId: "pane-b", tileCount: 3 }]) {
+    for (const tile of [{ tileId: "main", tileCount: 1 }, { tileId: "pane-b", tileCount: 3 }]) {
       expect(viewStateCopy({ kind: "cant-draw", reason: "context-lost" }, "Graph cloth", tile).text).toBe(GFX_INTERRUPTED_NOTICE);
       expect(viewStateCopy({ kind: "cant-draw", reason: "context-lost", reload: true }, "Graph cloth", tile).text).toBe(GFX_NO_RESTORE_NOTICE);
     }
@@ -198,9 +208,41 @@ describe("#171 (c) per-tile cant-draw view state", () => {
     const shader: ViewState = { kind: "cant-draw", reason: "shader", packId: "graph-cloth" };
     const solo = "Graph cloth couldn't draw. Pick another view, or reload to try again.";
     const mosaic = "Graph cloth couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.";
-    expect(viewStateCopy(shader, "Graph cloth", { tileId: "main" }).text, "solo wall (tile main)").toBe(solo);
+    expect(viewStateCopy(shader, "Graph cloth", { tileId: "main", tileCount: 1 }).text, "solo wall (tile main)").toBe(solo);
     expect(viewStateCopy(shader, "Graph cloth", { tileId: "pane-b", tileCount: 1 }).text, "the only tile").toBe(solo);
     expect(viewStateCopy(shader, "Graph cloth", { tileId: "pane-b", tileCount: 3 }).text, "mosaic tile").toBe(mosaic);
+  });
+
+  it("type: viewStateCopy's tile is required and whole, so leaving it out (or its tileId / tileCount) fails tsc (#171 c)", () => {
+    // Checked by tsc -p tsconfig.test.json, not at runtime: an optional or defaulted `tile`, or an
+    // optional field, no longer matches these and the test program fails to compile.
+    expectTypeOf(viewStateCopy).parameter(2).toEqualTypeOf<ViewStateCopyTile>();
+    expectTypeOf<ViewStateCopyTile>().toEqualTypeOf<{ tileId: string; tileCount: number }>();
+    // At runtime a default parameter drops out of Function.length, so a defaulted `tile` is red here too.
+    expect(viewStateCopy.length, "viewStateCopy's required parameters").toBe(3);
+  });
+
+  it("viewStateTile: solo wall is 1 tile; a mosaic pane counts its wall's panes; a lone pane is 1 (#171 c)", () => {
+    const wall = document.createElement("div");
+    const panes = ["a", "b", "c"].map((id) => {
+      const el = document.createElement("div");
+      el.className = "mosaic-pane";
+      el.dataset.mode = id;
+      wall.appendChild(el);
+      return el;
+    });
+    const notice = document.createElement("div");
+    notice.className = "gfx-wall-notice";
+    wall.appendChild(notice);
+    expect(viewStateTile("main", document.createElement("div"))).toEqual({ tileId: "main", tileCount: 1 });
+    expect(viewStateTile("main", null)).toEqual({ tileId: "main", tileCount: 1 });
+    expect(viewStateTile("b", panes[1])).toEqual({ tileId: "b", tileCount: 3 });
+    const lone = document.createElement("div");
+    const only = document.createElement("div");
+    only.className = "mosaic-pane";
+    lone.appendChild(only);
+    expect(viewStateTile("x", only)).toEqual({ tileId: "x", tileCount: 1 });
+    expect(viewStateTile("x", null), "no element: nothing else is known to share the wall").toEqual({ tileId: "x", tileCount: 1 });
   });
 });
 

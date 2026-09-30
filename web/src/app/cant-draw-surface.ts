@@ -10,20 +10,19 @@
  * A tile whose shader pack already shows its own simple-view fallback (`.tile-shader-fallback`,
  * painted by the host's tile-shader latch) is left to that fallback, so no tile carries two messages.
  * The shader copy offers no button ("Pick another view, or reload to try again": both live elsewhere).
+ * Where it lands comes from TSE's `viewStateTile(tileId, el)`: "main" is the solo wall (1 tile), a
+ * mosaic pane counts the panes on its wall, so a solo tile drops "Other tiles aren't affected".
  */
 
-import { onViewStateChange, viewStateCopy, viewStateOf, viewStateTileEl, viewStateViewId } from "./view-state";
+import { onViewStateChange, viewStateCopy, viewStateOf, viewStateTile, viewStateTileEl, viewStateViewId } from "./view-state";
 
 const SURFACE = "tile-cant-draw";
 
 /** Display name for a tile's view (the copy falls back to "This view" when empty). */
 export type CantDrawViewName = (viewId: string, packId: string) => string;
 
-/** How many tiles are on the wall now (1 = solo: the shader copy drops "Other tiles aren't affected"). */
-export type CantDrawTileCount = () => number;
-
 /** Paint, update or remove the tile's surface to match its view state now. */
-export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName, tileCount?: CantDrawTileCount): void {
+export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName): void {
   const el = viewStateTileEl(tileId);
   if (!el) return;
   const found = el.querySelector(`:scope > .${SURFACE}`);
@@ -33,7 +32,7 @@ export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName,
     existing?.remove();
     return;
   }
-  const copy = viewStateCopy(state, viewName(viewStateViewId(tileId) ?? tileId, state.packId), { tileId, tileCount: tileCount?.() });
+  const copy = viewStateCopy(state, viewName(viewStateViewId(tileId) ?? tileId, state.packId), viewStateTile(tileId, el));
   const box = existing ?? document.createElement("div");
   if (!existing) {
     box.className = SURFACE;
@@ -50,6 +49,6 @@ export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName,
 }
 
 /** Keep every tile's surface in step with its view state; returns the unsubscribe. */
-export function bindCantDrawSurface(viewName: CantDrawViewName, tileCount?: CantDrawTileCount): () => void {
-  return onViewStateChange((tileId) => paintCantDrawSurface(tileId, viewName, tileCount));
+export function bindCantDrawSurface(viewName: CantDrawViewName): () => void {
+  return onViewStateChange((tileId) => paintCantDrawSurface(tileId, viewName));
 }

@@ -21,6 +21,7 @@ import {
   setViewState,
   setViewStateTileResolver,
   viewStateCopy,
+  viewStateTile,
   viewStateOf,
 } from "./view-state";
 
@@ -96,7 +97,7 @@ function bootWall(tileIds: string[], opts: { software?: boolean } = {}): Wall {
   }
   setViewStateTileResolver((id) => panes.get(id) ?? null);
   const stopState = bindCantDrawViewState(host);
-  const stopSurface = bindCantDrawSurface((_viewId, packId) => (packId === "fluid" ? "Fluid" : packId), () => host.drawTileIds().length);
+  const stopSurface = bindCantDrawSurface((_viewId, packId) => (packId === "fluid" ? "Fluid" : packId));
   const stop = () => { stopState(); stopSurface(); };
   let ts = 0;
   return {
@@ -191,9 +192,11 @@ describe("#179 part (c): every tile on the shared host goes cant-draw / context-
   });
 
   it("copy: context-lost is the wall notice's own words (Restoring until reload:true, then the Reload sentence), never 'other tiles', no tile button", () => {
-    const lost = viewStateCopy({ kind: "cant-draw", reason: "context-lost" }, "Backrooms");
+    // The loss copy is the wall's own words whichever tile asks: a mosaic pane or the solo wall.
+    const lost = viewStateCopy({ kind: "cant-draw", reason: "context-lost" }, "Backrooms", { tileId: "b", tileCount: 3 });
     expect(lost.text).toBe(GFX_INTERRUPTED_NOTICE);
-    const reload = viewStateCopy({ kind: "cant-draw", reason: "context-lost", reload: true }, "Backrooms");
+    expect(viewStateCopy({ kind: "cant-draw", reason: "context-lost" }, "Backrooms", viewStateTile("main", null)).text).toBe(GFX_INTERRUPTED_NOTICE);
+    const reload = viewStateCopy({ kind: "cant-draw", reason: "context-lost", reload: true }, "Backrooms", { tileId: "b", tileCount: 3 });
     expect(reload.text).toBe(GFX_NO_RESTORE_NOTICE);
     expect(reload.text).not.toMatch(/restoring/i);
     for (const c of [lost, reload]) {

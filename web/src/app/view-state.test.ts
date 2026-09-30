@@ -15,7 +15,11 @@ import {
   viewStateOf,
   viewStatePickerSuffix,
   type ViewState,
+  type ViewStateCopyTile,
 } from "./view-state";
+
+/** These kinds' copy doesn't depend on the tile; the solo wall is the real tile they land on. */
+const SOLO: ViewStateCopyTile = { tileId: "main", tileCount: 1 };
 
 describe("viewStateCopy: one switch, plain words, at most one button", () => {
   const rows: Array<[ViewState, string, string | null]> = [
@@ -28,22 +32,25 @@ describe("viewStateCopy: one switch, plain words, at most one button", () => {
     [{ kind: "couldnt-start", reason: "load-failed", packId: "backrooms", log: "403" }, "Backrooms couldn't start.", "Retry"],
     [{ kind: "couldnt-start", reason: "grant-failed", packId: "backrooms" }, "Backrooms couldn't start.", "Retry"],
     [{ kind: "couldnt-start", reason: "missing", packId: "backrooms" }, "Backrooms isn't installed. Pick another view for this tile.", null],
-    [{ kind: "cant-draw", reason: "shader", packId: "backrooms" }, "Backrooms couldn't draw. Other tiles aren't affected.", null],
+    [{ kind: "cant-draw", reason: "shader", packId: "backrooms" }, "Backrooms couldn't draw. Pick another view, or reload to try again.", null],
     [{ kind: "cant-draw", reason: "context-lost" }, "Graphics were interrupted. Restoring the wall…", null],
     [{ kind: "cant-draw", reason: "context-lost", reload: true }, "Graphics didn't come back. Reload to restore the wall.", null],
   ];
   for (const [state, text, button] of rows) {
     it(`${state.kind}${"reason" in state ? `/${state.reason}` : ""}`, () => {
-      const copy = viewStateCopy(state, "Backrooms");
+      const copy = viewStateCopy(state, "Backrooms", SOLO);
       expect(copy.text ?? "").toContain(text);
       expect(copy.button).toBe(button);
     });
   }
 
   it("an unknown kind is a thrown error, not blank copy (assertNever)", () => {
-    // cant-draw is a real kind now (#179 part (c)); a kind nobody wrote copy for still throws.
-    expect(() => viewStateCopy(JSON.parse('{"kind":"not-a-kind"}'), "Backrooms")).toThrow(/unhandled view state/);
-    expect(() => viewStateCopy(JSON.parse('{"kind":"cant-draw","reason":"not-a-reason"}'), "Backrooms")).toThrow(/unhandled view state/);
+    // A persisted or foreign state the union doesn't know (cant-draw with no reason), as it would arrive at runtime.
+    const unknownKind: ViewState = JSON.parse('{"kind":"cant-draw"}');
+    expect(() => viewStateCopy(unknownKind, "Backrooms", SOLO)).toThrow(/unhandled view state/);
+    // cant-draw is a real kind now (#179 part (c)); a kind or reason nobody wrote copy for still throws.
+    expect(() => viewStateCopy(JSON.parse('{"kind":"not-a-kind"}'), "Backrooms", SOLO)).toThrow(/unhandled view state/);
+    expect(() => viewStateCopy(JSON.parse('{"kind":"cant-draw","reason":"not-a-reason"}'), "Backrooms", SOLO)).toThrow(/unhandled view state/);
     expect(() => assertNever("x" as never)).toThrow(/unhandled view state/);
   });
 
