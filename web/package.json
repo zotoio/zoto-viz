@@ -16,6 +16,7 @@
     "test": "pnpm asbuild && vitest run",
     "test:coverage": "pnpm asbuild && vitest run --coverage",
     "dogfood": "pnpm asbuild && node scripts/dogfood-viz.mjs",
+    "pack-lint": "tsx scripts/pack-lint-cli.ts",
     "lint": "node scripts/lint-brand-casts-core.mjs",
     "lint:eslint": "node --require ./eslint-ts6-resolver.cjs ./node_modules/eslint/bin/eslint.js src",
     "lint:verify-frame-ts": "bash scripts/verify-frame-ts-lint.sh",

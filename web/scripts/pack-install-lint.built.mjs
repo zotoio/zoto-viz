@@ -751,6 +751,9 @@ var SANDBOX_RULES = [
   { target: "sessionStorage", re: /\bsessionStorage\b/ },
   { target: "indexedDB", re: /\bindexedDB\b/ }
 ];
+function isPackTestOrConfigFile(name) {
+  return name.endsWith(".test.ts") || /^vitest\.config\.[cm]?[jt]s$/.test(name);
+}
 function withLoc(repoRel, source, index, v) {
   const { line, column } = lineColAt(source, index);
   return { ...v, file: repoRel, line, column };
@@ -981,6 +984,7 @@ function scanPackDirectory(packDirAbs, repoRoot, opts = {}) {
   const violations = [...symlinkViolations(packDirAbs, repoPrefix, repoRoot)];
   const entries = new Set(opts.frontendScripts ? manifestFrontendEntries(packDirAbs) : []);
   const lintable = (sub, name) => {
+    if (!opts.frontendScripts && isPackTestOrConfigFile(name)) return false;
     if (isTsSource(name)) return true;
     if (!opts.frontendScripts) return false;
     return entries.has(sub) || sub.startsWith("frontend/") && isFrontendScript(name);
@@ -1104,5 +1108,5 @@ export const PACK_INSTALL_LINT_BUILD = {
     "plugins/sdk/pack-lint.ts",
     "plugins/sdk/viz-zoto.ts"
   ],
-  "sha256": "2b20ad9dcf0eeebe7f31bf0f0728e8b77d84abb9a46cae27f7129e8888935265"
+  "sha256": "d2a799867d01ba14119db58e8cd162fb6934ff18696923d1e8bc700fb43db3c9"
 };
