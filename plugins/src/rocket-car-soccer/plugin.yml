@@ -30,6 +30,7 @@ assets:
     triangles: 3968
 viz:
   graphWalk: false
+  presentTick: true
   idle:
     fixture: host
   maxBuffers: 8
