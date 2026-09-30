@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 // #180: the sandbox iframe CSP is `connect-src 'none'` (service/pack_assets.py). Chrome fetches JSON
 // modules (`import x from "./a.json" with { type: "json" }`) under connect-src, so the import fails,
@@ -30,27 +30,48 @@ describe("sandbox-fixture-multi module graph (#180)", () => {
     expect(src).not.toMatch(/type\s*:\s*["']json["']/);
   });
 
-  describe("onPresent", () => {
+  describe("hooks", () => {
     const g = globalThis as { zoto?: unknown };
-    afterEach(() => {
+    const writes: [string, number][] = [];
+    const z: {
+      onPresent?: (() => void) | null;
+      onFrame?: ((frame: unknown) => void) | null;
+      writeUniform: (n: string, v: number) => void;
+    } = { writeUniform: (n, v) => writes.push([n, v]) };
+
+    beforeAll(async () => {
+      g.zoto = z;
+      await import("./module.js");
+    });
+    afterAll(() => {
       delete g.zoto;
     });
 
-    it("writes uBright from the fixture bright times the pulse", async () => {
-      const writes: [string, number][] = [];
-      const z: { onPresent?: () => void; writeUniform: (n: string, v: number) => void } = {
-        writeUniform: (n, v) => writes.push([n, v]),
-      };
-      g.zoto = z;
-      await import("./module.js");
-      expect(typeof z.onPresent).toBe("function");
-      for (let k = 0; k < 3; k++) z.onPresent!();
-      expect(writes.length).toBe(3);
-      for (const [n, v] of writes) {
-        expect(n).toBe("uBright");
+    function expectBrightWrites(n: number): void {
+      expect(writes.length).toBe(n);
+      for (const [name, v] of writes) {
+        expect(name).toBe("uBright");
         expect(v).toBeGreaterThanOrEqual(0.92 * 0.1 - 1e-9);
         expect(v).toBeLessThanOrEqual(0.92 + 1e-9);
       }
+    }
+
+    it("onPresent writes uBright from the fixture bright times the pulse", () => {
+      writes.length = 0;
+      expect(typeof z.onPresent).toBe("function");
+      for (let k = 0; k < 3; k++) z.onPresent!();
+      expectBrightWrites(3);
+    });
+
+    it("writes on data frames too, because the manifest has no viz.presentTick (host sends no present ticks)", () => {
+      // Red at c20802db: onPresent never fires without presentTick, so the pack makes no viz writes while
+      // frames arrive; tile health reads that as drawing-nothing and heals the view to Topology.
+      const yml = readFileSync(path.join(here, "..", "plugin.yml"), "utf8");
+      expect(/^\s*presentTick:\s*true\b/m.test(yml)).toBe(false);
+      writes.length = 0;
+      expect(typeof z.onFrame, "module.js must set zoto.onFrame").toBe("function");
+      for (let k = 0; k < 3; k++) z.onFrame!({ t: k, dt: 0.1, audio: 0, packets: [], rf: [], talkers: [] });
+      expectBrightWrites(3);
     });
   });
 });
