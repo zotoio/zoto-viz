@@ -13,6 +13,7 @@ import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../pl
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
 import { packBlobMeshSlots } from "../../../plugins/sdk/blob-mesh-budget";
+import { blobMeshNoticeLatchFor } from "./blob-mesh-devices-notice";
 import {
   CANVAS_DEFAULT,
   NIXIE_LOOK_KEYS,
@@ -114,6 +115,8 @@ export interface VizPackHandlers {
   writeBuffer: (slot: number, data: number[]) => void;
   writeUniform: (name: string, value: VizUniformValue) => void;
   writeParticles: (data: number[], stride?: number) => void;
+  /** Tile info caption (paintPackInfoCaption); null clears it. Called every frame. */
+  setInfoNotice?: (text: string | null) => void;
 }
 
 function roleHue(role: string): number {
@@ -150,6 +153,8 @@ export function runPackFrameHandler(
   handlers: VizPackHandlers,
   opts?: Record<string, string>,
 ): void {
+  // Only blob-mesh sets a tile info caption today; any other pack clears a stale one.
+  if (packId !== "blob-mesh") handlers.setInfoNotice?.(null);
   switch (packId) {
     case "packet-tunnel": {
       const sample = packetTunnelSample(frame);
@@ -220,7 +225,13 @@ export function runPackFrameHandler(
       // the draw (viz-frame-tick.ts), so its slot 0 is what the app shows. Both writers share
       // plugins/sdk/blob-mesh-budget.ts: floor first, then one scale above it inside the
       // coverage budget (#174).
-      handlers.writeBuffer(0, packBlobMeshSlots(frame.talkers, frame.t).slot0);
+      const blob = packBlobMeshSlots(frame.talkers, frame.t);
+      handlers.writeBuffer(0, blob.slot0);
+      // #173: when the minimums don't all fit, the quietest devices are dropped (never a silent
+      // overlap) and the tile says how many, with ~3 s hysteresis each way.
+      handlers.setInfoNotice?.(
+        blobMeshNoticeLatchFor(nixiePackTileId(opts)).update(blob.plan.shownIdx.length, blob.plan.hidden, Date.now()),
+      );
       handlers.writeUniform("uBright", 0.8 + Math.min(0.35, (frame.talkers[0]?.rate ?? 0) / 80) + frame.audio * 0.2);
       handlers.writeUniform("uAudio", frame.audio);
       handlers.writeUniform("uAccent", [0.25, 0.75, 0.95]);
