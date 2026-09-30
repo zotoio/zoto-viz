@@ -52,8 +52,29 @@ export class GfxWallNotice {
     if (hadLateReload) this.opts.onDismissLateReload?.();
   }
 
+  /** Drop the notice and its timer without the restored side effects (host disposed). */
+  dispose(): void {
+    if (this.restoreTimer) {
+      clearTimeout(this.restoreTimer);
+      this.restoreTimer = null;
+    }
+    this.el?.remove();
+    this.el = null;
+    this.shown = false;
+    this.reloadOffered = false;
+  }
+
+  /** The host has stopped trying to restore: switch to the Reload copy now (idempotent). */
+  offerReload(): void {
+    if (this.restoreTimer) {
+      clearTimeout(this.restoreTimer);
+      this.restoreTimer = null;
+    }
+    this.onRestoreTimeout();
+  }
+
   private onRestoreTimeout(): void {
-    if (!this.el) return;
+    if (!this.el || this.reloadOffered) return;
     this.reloadOffered = true;
     this.el.textContent = "";
     const msg = document.createElement("span");

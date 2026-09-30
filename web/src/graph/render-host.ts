@@ -116,6 +116,20 @@ export class SoftwareGpu {
 
 export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
+/**
+ * Delays (ms) between the host's own attempts to bring a lost WebGL context back (#179).
+ * A loss the host caused (heal ladder / pack `loseHostContext`) is restored right after its
+ * `webglcontextlost` event has been handled, then retried on this schedule; a loss the browser
+ * caused gets the browser's own restore first and the host's attempts after these delays.
+ * When the last attempt has not brought it back, the wall offers Reload (the cant-draw state).
+ * The attempts plus the final beat add up to the wall notice's own 10 s "Restoring…" window, so
+ * the Reload copy never shows earlier than it did before.
+ */
+export const CONTEXT_RESTORE_RETRY_MS: readonly number[] = [1000, 3000, 5000];
+
+/** Where the shared context's loss recovery stands. */
+export type ContextRecovery = "ok" | "restoring" | "gave-up";
+
 function copyViewBox(dst: SoftRect, out: CssRectLoose): CssRect {
   out.x = dst.x;
   out.y = dst.y;
@@ -178,6 +192,12 @@ export class RenderHost {
   private _canvasDeviceHeight: CanvasDeviceHeight = asCanvasDeviceHeight(1);
   glContextLost = false;
   readonly tileShader: RenderHostTileShader;
+  /** `recreateContext` asked for this loss; restore as soon as its lost event has been handled. */
+  private selfLossPending = false;
+  private restoreTimer: ReturnType<typeof setTimeout> | null = null;
+  private restoreDelays: readonly number[] = CONTEXT_RESTORE_RETRY_MS;
+  private restoreAttempts = 0;
+  private _contextRecovery: ContextRecovery = "ok";
 
   constructor(
     readonly wall: HTMLElement,
@@ -236,18 +256,8 @@ export class RenderHost {
     this.canvas.className = "render-host";
     this.canvas.setAttribute("aria-hidden", "true");
     if (this.software) this.canvas.dataset.softgl = "";
-    this.canvas.addEventListener("webglcontextlost", (e) => {
-      e.preventDefault();
-      this.tileShader.onSharedContextLost();
-      for (const v of this.views) v.hostContextLost();
-    });
-    this.canvas.addEventListener("webglcontextrestored", () => {
-      this.tileShader.onSharedContextRestored();
-      this.dirty = true;
-      this.refreshContextAntialias();
-      this.markMirrorScopeDirty();
-      for (const v of this.views) v.hostContextRestored();
-    });
+    this.canvas.addEventListener("webglcontextlost", (e) => this.onGlContextLost(e));
+    this.canvas.addEventListener("webglcontextrestored", () => this.onGlContextRestored());
     this.attach();
     this.syncSize();
     this.refreshCanvasDeviceHeight();
@@ -284,6 +294,8 @@ export class RenderHost {
   get pixelRatio(): number { return this.pr; }
   get viewCount(): number { return this.views.length; }
   get contextLost(): boolean { return this.tileShader.contextLost; }
+  /** "restoring" while the host is still trying to get a lost context back, "gave-up" once Reload is offered. */
+  get contextRecovery(): ContextRecovery { return this._contextRecovery; }
   get canvasDeviceHeight(): CanvasDeviceHeight { return this._canvasDeviceHeight; }
   get gfxWallNotice(): GfxWallNotice { return this.tileShader.gfxNotice; }
 
@@ -364,19 +376,92 @@ export class RenderHost {
     this.markMirrorScopeDirty();
   }
 
-  /** Force a WebGL context loss so panes can rebuild GL state (tile heal ladder). */
+  /**
+   * Force a WebGL context loss so panes can rebuild GL state (tile heal ladder, pack
+   * `loseHostContext`). The restore is requested from the `webglcontextlost` handler, never from
+   * the next animation frame: Chrome refuses `restoreContext()` until the lost event has been
+   * dispatched and default-prevented, and a frame can run before that task (#179 row 4).
+   */
   recreateContext(): void {
-    if (this.software) return;
+    if (this.software || this.disposed) return;
     const r = this.renderer as THREE.WebGLRenderer;
+    if (this.glContextLost) {
+      // Already lost and handled: just try to bring it back now.
+      this.scheduleContextRestore(0);
+      return;
+    }
+    if (this.gl?.isContextLost?.() === true) return; // lost event still queued; its handler restores
+    this.selfLossPending = true;
     try {
       r.forceContextLoss();
-    } catch { /* already lost */ }
-    requestAnimationFrame(() => {
-      try {
-        r.forceContextRestore();
-      } catch { /* extension missing */ }
-      this.dirty = true;
-    });
+    } catch {
+      this.selfLossPending = false; /* extension missing */
+    }
+    this.dirty = true;
+  }
+
+  private onGlContextLost(e: Event): void {
+    e.preventDefault();
+    if (this.disposed) return;
+    const selfLoss = this.selfLossPending;
+    this.selfLossPending = false;
+    this.tileShader.onSharedContextLost();
+    for (const v of this.views) v.hostContextLost();
+    // Every loss gets a fresh recovery, including one right after a restore (#179 row 4).
+    this.restoreAttempts = 0;
+    this.restoreDelays = selfLoss ? [0, ...CONTEXT_RESTORE_RETRY_MS] : CONTEXT_RESTORE_RETRY_MS;
+    this._contextRecovery = "restoring";
+    this.scheduleContextRestore(this.restoreDelays[0] ?? 0);
+  }
+
+  private onGlContextRestored(): void {
+    this.clearContextRestoreTimer();
+    this.restoreAttempts = 0;
+    this._contextRecovery = "ok";
+    if (this.disposed) return;
+    this.tileShader.onSharedContextRestored();
+    this.dirty = true;
+    this.refreshContextAntialias();
+    this.markMirrorScopeDirty();
+    for (const v of this.views) v.hostContextRestored();
+  }
+
+  private scheduleContextRestore(delayMs: number): void {
+    this.clearContextRestoreTimer();
+    this.restoreTimer = setTimeout(() => this.attemptContextRestore(), delayMs);
+  }
+
+  private clearContextRestoreTimer(): void {
+    if (this.restoreTimer !== null) {
+      clearTimeout(this.restoreTimer);
+      this.restoreTimer = null;
+    }
+  }
+
+  /** Ask for the context back; retry on the schedule, then offer Reload rather than stop silently. */
+  private attemptContextRestore(): void {
+    this.restoreTimer = null;
+    if (this.disposed || this.software || !this.glContextLost) return;
+    this.restoreAttempts += 1;
+    try {
+      (this.renderer as THREE.WebGLRenderer).forceContextRestore();
+    } catch { /* extension missing */ }
+    this.dirty = true;
+    const next = this.restoreDelays[this.restoreAttempts];
+    if (next !== undefined) {
+      this.restoreTimer = setTimeout(() => {
+        this.restoreTimer = null;
+        if (this.glContextLost) this.attemptContextRestore();
+      }, next);
+      return;
+    }
+    // Last attempt made: give the restore it asked for one more beat, then the cant-draw state.
+    this.restoreTimer = setTimeout(() => {
+      this.restoreTimer = null;
+      if (this.disposed || !this.glContextLost) return;
+      this._contextRecovery = "gave-up";
+      this.tileShader.gfxNotice.offerReload();
+    }, CONTEXT_RESTORE_RETRY_MS[0] ?? 1000);
   }
 
   /** Pack-mirror tile metadata changed without add/remove (mosaic coalesce). */
@@ -734,6 +819,7 @@ export class RenderHost {
 
   dispose(): void {
     this.disposed = true;
+    this.clearContextRestoreTimer();
     cancelAnimationFrame(this.raf);
     this.ro?.disconnect();
     this.unsubLayoutDpi?.();
