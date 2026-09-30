@@ -50,10 +50,12 @@ from .pack_zip_blocks import record_zip_block, row_for_start_failure
 from .pack_zip_install_ux import zip_unsafe_blocked_payload
 from .pack_install_wall_notices import wall_notice_for_install_result
 from .plugin_install import (
+    InstallCheckUnavailableError,
     InstallStartFailedError,
     InstallUpgradeRollbackError,
     InstallV2BlockedError,
     _install_staged_to_runtime_locked,
+    install_unchecked_payload,
     install_zip_to_runtime,
     pack_install_lock,
 )
@@ -505,6 +507,10 @@ def install_local_zip(
                 {"ok": False, "error": "pack_install_blocked", "message": str(e), **payload},
                 activate=False,
             )
+        except InstallCheckUnavailableError as e:
+            # #200: a fresh install whose check couldn't run. Nothing installed, and nothing stored: the
+            # zip is only written to the drop zone after a successful install.
+            return _finish({"ok": False, **install_unchecked_payload(e)}, activate=False)
         except ValueError as e:
             text = str(e)
             if isinstance(e, PackInstallLintSetupError):
@@ -603,6 +609,10 @@ def adopt_local_zip_file(path: Path, *, activate: bool = True) -> dict[str, Any]
     except InstallUpgradeRollbackError as e:
         psz.cleanup_staging_dir(pack_read.staging_dir)
         return _finish(_upgrade_rollback_result(e), activate=activate)
+    except InstallCheckUnavailableError as e:
+        # #200: the zip is already in the drop zone; the next scan lists it as this blocked pack.
+        psz.cleanup_staging_dir(pack_read.staging_dir)
+        return _finish({"ok": False, **install_unchecked_payload(e)}, activate=False)
     info = _install_result(doc, dest, unpacked, wrote=True)
     if reminted_from:
         info["remintedFrom"] = reminted_from
@@ -883,7 +893,9 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
                     **payload,
                 }
             except (InstallStartFailedError, RuntimeError):
-                msg = format_retry_start_failed_message(name, version)
+                # #111: the version you had is back in place (restored after the failed start).
+                old_version = installed_runtime_version(runtime)
+                msg = format_retry_start_failed_message(name, version, old_version)
                 record_zip_block(
                     digest,
                     row_for_start_failure(
@@ -903,6 +915,7 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
                     "id": pid,
                     "name": name,
                     "version": version,
+                    "installedVersion": "" if old_version is None else str(old_version),
                     "zipSha256": digest,
                     "blockReason": "couldnt_start",
                     "retryable": "true",

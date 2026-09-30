@@ -1,9 +1,15 @@
 {
-  "about": "#186: the one table for the install-lint setup-refusal copy. service/pack_install_lint.py and web/scripts/pack-install-lint-setup-copy.mjs (bundle-pack-entry.mjs) both read this file; neither has a copy of its own. `reasons` maps each machine-readable setup reason code to a `fixes` entry; a code that isn't listed (or none) uses `default`. `reason_overrides` points a reason at a named `overrides` entry, its own `install` / `upgrade` templates where the shared ones don't fit (`in_time`: \"in time\", and an upgrade that keeps the old version needs no fix); lint_timeout (the script's timer) and bundle_timeout (the service's backstop) share it, so the user sees one sentence for either kill. A template the entry doesn't list stays the shared one. Placeholders: {name}, {old}, {still}, {fix}. tests/test_pack_install_lint_setup_copy.py fails if the service and the script render any entry differently.",
+  "about": "#186: the one table for the install-lint setup-refusal copy. service/pack_install_lint.py and web/scripts/pack-install-lint-setup-copy.mjs (bundle-pack-entry.mjs) both read this file; neither has a copy of its own. `reasons` maps each machine-readable setup reason code to a `fixes` entry; a code that isn't listed (or none) uses `default`. `reason_overrides` points a reason at a named `overrides` entry, its own `install` / `upgrade` templates where the shared ones don't fit (`in_time`: \"in time\", and an upgrade that keeps the old version needs no fix); lint_timeout (the script's timer) and bundle_timeout (the service's backstop) share it, so the user sees one sentence for either kill. `update_refused` (#111) is the upgrade sentence for an update refused because its check couldn't run at all (no setup reason, so no fix); the service renders it (service/pack_install_lint.py format_update_refused_message) next to reasonCode \"update_refused\". A template the entry doesn't list stays the shared one. `install_unchecked` (#111): a fresh install whose check couldn't run for a reason that isn't a setup one (the staged pack couldn't be read), so the #185 install sentence without a fix, and never a \"still on\" ending. `updates` (#111): the update that couldn't start, didn't finish, or still couldn't start on Retry; each ends with {still}. The service renders these (service/pack_install_lint.py) and web/src/plugins/pack-install-copy-table.ts reads the same file. Placeholders: {name}, {old}, {new}, {still}, {fix}. tests/test_pack_install_lint_setup_copy.py fails if the service and the script render any entry differently.",
   "install": "Couldn't safety-check {name}, so it wasn't installed. {fix}",
   "upgrade": "Couldn't safety-check the new version of {name}, so it wasn't updated. {still} {fix}",
   "still": "You're still on version {old}.",
   "still_unknown": "The version you had is still installed.",
+  "install_unchecked": "Couldn't safety-check {name}, so it wasn't installed.",
+  "updates": {
+    "couldnt_start": "{name} version {new} couldn't start, so it wasn't updated. {still}",
+    "interrupted": "The update to {name} didn't finish, so nothing changed. {still}",
+    "retry_couldnt_start": "{name} version {new} still couldn't start. {still}"
+  },
   "fixes": {
     "pnpm_install": "Run `pnpm install` in `web/` and try again.",
     "pnpm_run_prepare": "Run `pnpm run prepare` in `web/` and try again.",
@@ -28,6 +34,9 @@
     "in_time": {
       "install": "Couldn't safety-check {name} in time, so it wasn't installed. {fix}",
       "upgrade": "Couldn't safety-check the new version of {name} in time, so it wasn't updated. {still}"
+    },
+    "update_refused": {
+      "upgrade": "Couldn't safety-check the new version of {name}, so it wasn't updated. {still}"
     }
   },
   "reason_overrides": {
