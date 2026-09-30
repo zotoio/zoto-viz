@@ -14,11 +14,11 @@ import type { PluginView } from "./plugin";
 describe("fillPluginFields", () => {
   it("renders an empty plugin and typed fields", () => {
     const host = document.createElement("div");
-    fillPluginFields(host, { id: "empty", packName: "Empty", version: 1, engine: "graph" }, [], () => {});
+    fillPluginFields(host, { id: "empty", name: "empty", packName: "Empty", version: 1, engine: "graph" }, [], () => {});
     expect(host.textContent).toMatch(/no extra settings/);
 
     const spec: PluginView = {
-      id: "pulse", packName: "Pulse", version: 2, engine: "graph", base: "topology", hint: "demo",
+      id: "pulse", name: "pulse", packName: "Pulse", version: 2, engine: "graph", base: "topology", hint: "demo",
       config: [
         { key: "on", label: "on", type: "boolean", default: true },
         { key: "mode", label: "mode", type: "select", values: [["a", "A"], ["b", "B"]], default: "a" },
@@ -39,7 +39,7 @@ describe("fillPluginFields", () => {
 
   it("renders a profile prompt textarea", () => {
     const host = document.createElement("div");
-    fillPluginFields(host, { id: "cores", packName: "CPU cores", version: 1, engine: "graph", base: "cores" }, [
+    fillPluginFields(host, { id: "cores", name: "cores", packName: "CPU cores", version: 1, engine: "graph", base: "cores" }, [
       { key: "prompt", label: "prompt", type: "textarea", default: "", hint: "brief" },
     ], () => {});
     const ta = host.querySelector("textarea");
@@ -50,7 +50,7 @@ describe("fillPluginFields", () => {
 
   it("skips the empty hint when more controls follow", () => {
     const host = document.createElement("div");
-    fillPluginFields(host, { id: "pong", packName: "Pong", version: 1, engine: "netpong" }, [], () => {}, { skipEmpty: true });
+    fillPluginFields(host, { id: "pong", name: "pong", packName: "Pong", version: 1, engine: "netpong" }, [], () => {}, { skipEmpty: true });
     expect(host.textContent).toMatch(/Pong/);
     expect(host.textContent).not.toMatch(/no extra settings/);
   });
@@ -246,7 +246,7 @@ describe("fillPluginFields", () => {
 
   it("renders nest-cams layout and camera chips instead of a pane slider", () => {
     const host = document.createElement("div");
-    fillPluginFields(host, { id: "nest-cams", packName: "Nest cams", version: 1, engine: "graph" }, [
+    fillPluginFields(host, { id: "nest-cams", name: "nest-cams", packName: "Nest cams", version: 1, engine: "graph" }, [
       { key: "live", label: "live stream", type: "boolean", default: true },
       { key: "stills", label: "motion stills", type: "boolean", default: false },
       { key: "grid", label: "layout", type: "select", values: [["auto", "all"], ["4", "2×2"]], default: "auto" },
@@ -270,7 +270,7 @@ describe("fillPluginFields", () => {
     document.body.append(notice);
     let got: string | null | undefined;
     renderPackReview(notice, {
-      id: "pulse", packName: "Pulse", version: 1, engine: "graph", runtime: "typescript",
+      id: "pulse", name: "pulse", packName: "Pulse", version: 1, engine: "graph", runtime: "typescript",
       service: "service/__init__.py", file: "/tmp/pulse-ts/plugin.yml",
     }, { onChoice: (k) => { got = k; } });
     expect(document.body.classList.contains("modal-open")).toBe(false);
@@ -292,7 +292,7 @@ describe("fillPluginFields", () => {
       [...notice.querySelectorAll("button")].find((b) => b.textContent === label)!.click();
       return got;
     };
-    expect(pick("Not now", { id: "x", packName: "X", version: 1, engine: "graph", runtime: "typescript" })).toBeNull();
-    expect(pick("I wrote this", { id: "y", packName: "Y", version: 1, engine: "graph", service: "service.py" })).toBe("authored");
+    expect(pick("Not now", { id: "x", name: "x", packName: "X", version: 1, engine: "graph", runtime: "typescript" })).toBeNull();
+    expect(pick("I wrote this", { id: "y", name: "y", packName: "Y", version: 1, engine: "graph", service: "service.py" })).toBe("authored");
   });
 });

@@ -4,6 +4,7 @@ import { liveMic } from "../audio/want";
 import { Settings } from "./settings";
 import { AgentPanel } from "./agent";
 import { askUserMedia, resetMediaAsk } from "./media-ask";
+import { mockPartial } from "../../test-support/mock-partial";
 
 function mockCapture(getUserMedia: unknown) {
   Object.defineProperty(navigator, "mediaDevices", {
@@ -141,7 +142,7 @@ describe("media ask UX", () => {
 
   it("runs capture only after close with returnValue allow", async () => {
     expect.hasAssertions();
-    const stream = { getTracks: () => [] } as MediaStream;
+    const stream = mockPartial<MediaStream>({ getTracks: () => [] });
     const getUserMedia = vi.fn(async () => stream);
     mockCapture(getUserMedia);
     const pending = askUserMedia({ audio: true, video: false }, "watchword listening");
@@ -175,8 +176,8 @@ describe("media ask UX", () => {
 
   it("pins the combined microphone and camera heading copy byte-for-byte", async () => {
     expect.hasAssertions();
-    const audio = { getTracks: () => [] } as MediaStream;
-    const video = { getTracks: () => [] } as MediaStream;
+    const audio = mockPartial<MediaStream>({ getTracks: () => [] });
+    const video = mockPartial<MediaStream>({ getTracks: () => [] });
     mockCapture(vi.fn(async (c: MediaStreamConstraints) => (c.audio ? audio : video)));
     liveCam.setPolicy("auto", false);
     const a = askUserMedia({ audio: true, video: false }, "watchword listening");

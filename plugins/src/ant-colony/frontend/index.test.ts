@@ -17,8 +17,9 @@ import {
 
 const EMPTY_SYS: VizSysTelemetry = EMPTY_SYS_TELEMETRY;
 
-function frame(slice: VizDataFrame): VizDataFrame {
-  return slice;
+/** Frame slices here leave out rf/headlines (the colony never reads them); they default to empty. */
+function frame(slice: Omit<VizDataFrame, "rf" | "headlines"> & Partial<Pick<VizDataFrame, "rf" | "headlines">>): VizDataFrame {
+  return { rf: [], headlines: [], ...slice };
 }
 
 describe("ant-colony pack", () => {

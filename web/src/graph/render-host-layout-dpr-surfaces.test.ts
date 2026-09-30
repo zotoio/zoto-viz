@@ -10,6 +10,7 @@ import {
   devicePxRatioNumber,
 } from "../../test-support/layout-device-px-ratio";
 import { LiveFeed } from "../ui/feed";
+import { mockPartial } from "../../test-support/mock-partial";
 import { probeWebGL } from "./webgl";
 
 vi.mock("./webgl", () => ({
@@ -51,10 +52,10 @@ function defineClientSize(el: HTMLElement, w: number, h: number): void {
 }
 
 function sceneStub(): NetScene {
-  return {
-    pulseNow: { level: 0, bass: 0 },
+  return mockPartial<NetScene>({
+    pulseNow: mockPartial<NetScene["pulseNow"]>({ level: 0, bass: 0 }),
     selectIp: () => {},
-  } as NetScene;
+  });
 }
 
 function mountStage3d(cssW: number, cssH: number): HTMLCanvasElement {

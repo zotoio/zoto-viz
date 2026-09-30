@@ -3,6 +3,8 @@ import * as packHost from "../plugins/viz-pack-host";
 import { deliverCoalescedMosaicPacks, mosaicPackGroups, resetMosaicPackCoalesceWriters } from "./mosaic-pack-coalesce";
 import { setPluginModes, topology } from "../core/modes";
 import type { VizDataFrame } from "../plugins/viz-host";
+import type { NetScene } from "./scene";
+import { mockPartial } from "../../test-support/mock-partial";
 
 describe("mosaic pack coalesce", () => {
   afterEach(() => {
@@ -28,20 +30,21 @@ describe("mosaic pack coalesce", () => {
     const uboBySlot = new Map<string, Float32Array>();
     const mosaic = {
       tileIds: ["plugin:star-sines", "plugin:star-sines!1"],
-      graphScene: (slot: string) => ({
+      graphScene: (slot: string) => mockPartial<NetScene>({
         setPluginUboBuffer: (buf: Float32Array) => { uboBySlot.set(slot, buf); },
         setPluginUniform: () => true,
         setPackCoalesce: () => {},
       }),
     };
-    const frame = {
+    const frame: VizDataFrame = {
       t: 1,
+      dt: 0,
       audio: 0.1,
       packets: [{ proto: "tcp", size: 10, field: 0.5 }],
       talkers: [],
       rf: [],
       headlines: [],
-    } as VizDataFrame;
+    };
     const budget = { stats: { lastMs: 1, overBudget: 0, skipped: 3, total: 4 } };
     const spy = vi.spyOn(packHost, "runPackFrameHandler").mockImplementation((_packId, _frame, handlers) => {
       handlers.writeBuffer(0, [1, 2, 3]);
@@ -66,7 +69,7 @@ describe("mosaic pack coalesce", () => {
     const uboBySlot: string[] = [];
     const mosaic = {
       tileIds: ["plugin:star-sines", "plugin:star-sines!1"],
-      graphScene: (slot: string) => ({
+      graphScene: (slot: string) => mockPartial<NetScene>({
         setPluginUboBuffer: () => { uboBySlot.push(slot); },
         setPluginUniform: () => true,
         setPackCoalesce: () => {},
@@ -80,12 +83,13 @@ describe("mosaic pack coalesce", () => {
       mosaic,
       frame: {
         t: 1,
+        dt: 0,
         audio: 0.1,
         packets: [],
         talkers: [],
         rf: [],
         headlines: [],
-      } as VizDataFrame,
+      },
       modeById: (id) => ({ pluginId: "star-sines", id }) as never,
       pluginSpecForMode: () => ({
         id: "star-sines",

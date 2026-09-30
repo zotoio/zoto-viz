@@ -43,9 +43,9 @@ describe("recent views", () => {
     const sel = document.createElement("select");
     fillViewSelect(sel, "plugin:topology");
     expect(sel.querySelector("optgroup")?.label).toBe("recent");
-    const first = sel.querySelector("option");
+    const first = sel.querySelector<HTMLOptionElement>("option");
     expect(first?.textContent).toMatch(/Talkers/);
     expect(first?.selected).toBe(false);
-    expect(sel.querySelector("option[value='plugin:topology']")?.selected).toBe(true);
+    expect(sel.querySelector<HTMLOptionElement>("option[value='plugin:topology']")?.selected).toBe(true);
   });
 });

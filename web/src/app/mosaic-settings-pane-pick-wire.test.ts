@@ -23,6 +23,7 @@ describe("settings mosaic pane pick wire", () => {
     const m = {
       tileIds: ["plugin:topology", "plugin:wifi"],
       focusedId: "plugin:topology",
+      mainTileId: "",
       setPaneView: vi.fn(() => true),
       setPaneNotice: vi.fn(),
       focus: vi.fn(),
@@ -54,7 +55,7 @@ describe("settings mosaic pane pick wire", () => {
     s.addAnimation(() => {}, { el: document.createElement("div") });
     s.applyAnim({
       ...DEFAULT_DREAM,
-      mosaic: "2",
+      mosaic: "4",
       mosaicTiles: ["plugin:topology", "plugin:wifi"],
     });
     s.open("view");

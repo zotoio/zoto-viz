@@ -1,6 +1,7 @@
 import { describe, expect, it, afterEach, vi } from "vitest";
 import { AI_ID, LEGACY_SHIPPED_ID, ProfileStore, SHIPPED_ID, SHIPPED_LABEL, USER_ID, agentProfileId, aiCycleSettings, headerBrandProfile, homeAiActive, isAgentProfile, isQuiet, isShippedId, normalizeHomeGlobal, normalizeSettings, quiet, shippedSettings, suggestId, workingProfileId, type ProfileList } from "./profiles";
 import { setPluginModes, topology } from "./modes";
+import { mockPartial } from "../../test-support/mock-partial";
 
 afterEach(() => setPluginModes([]));
 
@@ -159,10 +160,10 @@ describe("profiles", () => {
   it("does not rename a different agent profile when saving AI settings", async () => {
     const puts: string[] = [];
     const orig = globalThis.fetch;
-    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+    globalThis.fetch = async (url: RequestInfo | URL, init?: RequestInit) => {
       if ((init?.method || "GET").toUpperCase() === "PUT") puts.push(String(url));
       return jsonOk({});
-    }) as typeof fetch;
+    };
     try {
       const store = new ProfileStore(
         { collect: shippedSettings, apply: () => {} },
@@ -200,13 +201,13 @@ describe("profiles", () => {
   });
 });
 
-function jsonOk(body: unknown, status = 200) {
-  return {
+function jsonOk(body: unknown, status = 200): Response {
+  return mockPartial<Response>({
     ok: status >= 200 && status < 300,
     status,
-    headers: { get: () => null },
+    headers: mockPartial<Headers>({ get: () => null }),
     json: async () => body,
-  };
+  });
 }
 
 function profileList(overrides: Partial<ProfileList> = {}): ProfileList {

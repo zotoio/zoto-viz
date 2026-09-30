@@ -21,6 +21,8 @@ class TileShaderSlot {
   shaderPack: ShaderPack = {};
   compileFailed = false;
   mountedFallbackPackKey = "";
+  /** Info log of the last failed compile (for the tile's cant-draw state; console only). */
+  failLog = "";
 
   swapPack(
     packKey: string,
@@ -34,6 +36,7 @@ class TileShaderSlot {
       this.packId = packId;
       this.latch.reset();
       this.compileFailed = false;
+      this.failLog = "";
       this.fallback?.dispose();
       this.fallback = null;
       this.mountedFallbackPackKey = "";
@@ -50,7 +53,25 @@ export interface RenderHostShaderGpu {
   readonly renderer: THREE.WebGLRenderer | { getContext(): WebGL2RenderingContext | null };
   glContextLost: boolean;
   invalidate(): void;
+  /** Tile ids of the views drawn on this host (every tile a lost context stops). */
+  drawTileIds?(): readonly string[];
 }
+
+/**
+ * What the host knows about a tile's ability to draw (#171 c / #179). The app turns these into
+ * each tile's `cant-draw` view state; the graph layer never writes view state itself.
+ * - `context-lost`: the shared context is lost, every tile on the host stops drawing.
+ * - `reload-offered`: the wall notice now shows Reload (no longer "restoring").
+ * - `context-drawn`: the context is back and a real frame has drawn (the wall notice clears now).
+ * - `shader-failed`: one tile's shader failed to compile or link.
+ * - `shader-cleared`: that tile's shader compiled, or its pack was swapped or cleared.
+ */
+export type TileDrawEvent =
+  | { type: "context-lost"; tileIds: readonly string[] }
+  | { type: "reload-offered"; tileIds: readonly string[] }
+  | { type: "context-drawn"; tileIds: readonly string[] }
+  | { type: "shader-failed"; tileId: string; packId: string; log: string }
+  | { type: "shader-cleared"; tileId: string };
 
 /** Per-tile shader compile latch, simple-view fallback, and wall context-loss notice. */
 export class RenderHostTileShader {
@@ -58,12 +79,36 @@ export class RenderHostTileShader {
   readonly gfxNotice: GfxWallNotice;
   private readonly fallbackTileIds = new Set<string>();
   private fallbackTick: ReturnType<typeof setInterval> | null = null;
+  private readonly drawListeners = new Set<(e: TileDrawEvent) => void>();
 
   constructor(
     private readonly wall: HTMLElement,
     private readonly host: RenderHostShaderGpu,
   ) {
-    this.gfxNotice = new GfxWallNotice(wall, { onDismissLateReload: () => host.invalidate() });
+    this.gfxNotice = new GfxWallNotice(wall, {
+      onDismissLateReload: () => host.invalidate(),
+      onReloadOffered: () => this.emit({ type: "reload-offered", tileIds: this.drawTileIds() }),
+    });
+  }
+
+  /** Subscribe to tile draw events (see `TileDrawEvent`); returns the unsubscribe. */
+  onDrawEvent(fn: (e: TileDrawEvent) => void): () => void {
+    this.drawListeners.add(fn);
+    return () => { this.drawListeners.delete(fn); };
+  }
+
+  private drawTileIds(): readonly string[] {
+    return this.host.drawTileIds?.() ?? [];
+  }
+
+  private emit(e: TileDrawEvent): void {
+    for (const fn of [...this.drawListeners]) {
+      try {
+        fn(e);
+      } catch (err) {
+        console.warn("zoto-viz tile draw listener:", err);
+      }
+    }
   }
 
   get contextLost(): boolean {
@@ -98,8 +143,10 @@ export class RenderHostTileShader {
     isShaderPack = false,
   ): void {
     const slot = this.tileSlot(tileId);
-    if (slot.packKey !== packKey) this.stopFallbackTile(tileId, slot);
+    const swapped = slot.packKey !== packKey;
+    if (swapped) this.stopFallbackTile(tileId, slot);
     slot.swapPack(packKey, packId, packName, mount, isShaderPack);
+    if (swapped) this.emit({ type: "shader-cleared", tileId });
   }
 
   probeTileSky(
@@ -154,7 +201,8 @@ export class RenderHostTileShader {
         || gl.getProgramInfoLog(program)
         || "shader failed"
       ).trim();
-      latch.fail(msg || "shader failed", log);
+      slot.failLog = msg || "shader failed";
+      latch.fail(slot.failLog, log);
     };
     try {
       rd.compile(scene, camera);
@@ -170,6 +218,8 @@ export class RenderHostTileShader {
 
   onTileShaderCompileFailed(tileId: string): void {
     this.mountShaderFallback(tileId);
+    const slot = this.tileSlot(tileId);
+    this.emit({ type: "shader-failed", tileId, packId: slot.packId, log: slot.failLog || "shader failed" });
   }
 
   onTileShaderCompileOk(tileId: string): void {
@@ -188,6 +238,7 @@ export class RenderHostTileShader {
     slot.fallback = null;
     slot.mountedFallbackPackKey = "";
     slot.compileFailed = false;
+    this.emit({ type: "shader-cleared", tileId });
   }
 
   onSharedContextLost(): void {
@@ -199,6 +250,7 @@ export class RenderHostTileShader {
     }
     this.fallbackTileIds.clear();
     this.gfxNotice.onContextLost();
+    this.emit({ type: "context-lost", tileIds: this.drawTileIds() });
   }
 
   onSharedContextRestored(): void {
@@ -211,6 +263,7 @@ export class RenderHostTileShader {
   /** The first real frame has drawn since the restore: now the wall notice may clear (#179 row 4). */
   onFirstFrameAfterRestore(): void {
     this.gfxNotice.onContextRestored();
+    this.emit({ type: "context-drawn", tileIds: this.drawTileIds() });
   }
 
   dispose(): void {

@@ -1,6 +1,7 @@
 """Realism pass: schema, caps, model slot, teardown, smoke vitest hooks for three packs."""
 from __future__ import annotations
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -86,13 +87,22 @@ def test_realism_pack_vitest_smoke(pid: str, config: str) -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
 
 
-def test_realism_sdk_model_slot_vitest() -> None:
+# Every plugins/sdk test file this CI row must run (plugins/sdk/vitest.config.cjs is not part of web's
+# `pnpm test`, so a file that drops out of that config's include would otherwise go silent).
+SDK_VITEST_FILES = {"host-mesh-frame.test.ts", "pack-host-mesh.test.ts", "pack-model-slot.test.ts", "talker-slots.test.ts"}
+
+
+def test_realism_sdk_model_slot_vitest(tmp_path: Path) -> None:
     if not (WEB / "node_modules").is_dir():
         subprocess.run(["pnpm", "install"], cwd=WEB, check=True, capture_output=True)
     proc = subprocess.run(
-        ["pnpm", "exec", "vitest", "run", "--config", str(ROOT / "plugins" / "sdk" / "vitest.config.cjs")],
+        ["pnpm", "exec", "vitest", "run", "--config", str(ROOT / "plugins" / "sdk" / "vitest.config.cjs"),
+         "--reporter=default", "--reporter=json", f"--outputFile.json={tmp_path / 'sdk-vitest.json'}"],
         cwd=WEB,
         capture_output=True,
         text=True,
     )
     assert proc.returncode == 0, proc.stdout + proc.stderr
+    report = json.loads((tmp_path / "sdk-vitest.json").read_text())
+    passed = {Path(r["name"]).name: sum(a["status"] == "passed" for a in r["assertionResults"]) for r in report["testResults"]}
+    assert {f for f in SDK_VITEST_FILES if passed.get(f, 0) == 0} == set(), passed

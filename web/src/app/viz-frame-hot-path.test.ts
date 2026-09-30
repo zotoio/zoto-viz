@@ -5,7 +5,9 @@ import { VizFrameScopeCache } from "./viz-frame-scope";
 import { vizFrameHostPerFrameTick } from "./viz-frame-host-tick";
 import type { VizDataFrame } from "../plugins/viz-host";
 import { applyVizFrameContractV2, resolveVizFrameCollectOpts } from "../plugins/viz-frame-collect";
-import type { StateMsg } from "../core/types";
+import type { Device, Flow, StateMsg } from "../core/types";
+import { emptyMonitorState } from "../plugins/fixtures/viz-sdk-frame-build";
+import { mockPartial } from "../../test-support/mock-partial";
 
 const mode: ViewMode = {
   id: "topology",
@@ -35,10 +37,10 @@ describe("viz frame hot path steady-state", () => {
 
   it("reuses contract v2 link scratch buffers over 600 identical enrich passes (0 link array allocations)", () => {
     const state: StateMsg = {
-      ts: 1,
-      devices: [{ ip: "10.0.0.1", packets: 1, bytes: 1, role: "lan" }],
-      flows: [{ a: "10.0.0.1", b: "10.0.0.2", packets: 1, bytes: 1, rate_pkt_ab: 3 }],
-      sources: [],
+      ...emptyMonitorState(1),
+      devices: [mockPartial<Device>({ ip: "10.0.0.1", packets: 1, role: "lan" })],
+      flows: [mockPartial<Flow>({ a: "10.0.0.1", b: "10.0.0.2", packets: 1, bytes: 1, rate_pkt_ab: 3 })],
+      sources: {},
       host: { vizFrame: { links: true, linksMax: 8 } },
     };
     const frame: VizDataFrame = {

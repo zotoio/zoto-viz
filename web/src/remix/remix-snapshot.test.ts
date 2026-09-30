@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { mergeDemoSnapshotIntoFrame } from "./remix-snapshot";
 import type { DemoSnapshotPayload } from "./remix-types";
+import { monoMs } from "../core/viz-time";
 
 describe("mergeDemoSnapshotIntoFrame", () => {
   it("marks frame demo and applies headline slice", () => {
@@ -13,7 +14,7 @@ describe("mergeDemoSnapshotIntoFrame", () => {
         ],
       },
     };
-    const frame = mergeDemoSnapshotIntoFrame(payload, 1000, 0.2);
+    const frame = mergeDemoSnapshotIntoFrame(payload, monoMs(1000), 0.2);
     expect(frame.demo).toBe(true);
     expect(frame.headlines[0]?.text).toBe("DEMO story");
     expect(frame.demoSlices?.headlines).toBe(true);

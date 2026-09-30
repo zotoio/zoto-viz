@@ -49,7 +49,9 @@ describe("plugin sky load wiring", () => {
     const block = loadPluginSkyOntoBlock();
     // One shared request per pack sky (fetchSkyOnce wraps fetchPluginSky).
     expect(block).toContain("fetchSkyOnce(spec.id");
-    expect(block).toContain("setPluginShader({ id: spec.id, source })");
+    // Installed with its pack, so a failed compile reaches the tile as cant-draw / shader (#171 c / #179).
+    expect(block).toContain("installTileSkyShader(target, spec, source, packKey)");
+    expect(block).not.toContain("setPluginShader({ id: spec.id, source })");
     expect(block).toContain("spec.sky_error = err");
     expect(block).toContain("spec.sky_available = false");
   });
