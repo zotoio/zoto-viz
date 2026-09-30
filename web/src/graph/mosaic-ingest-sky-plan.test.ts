@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { topology, setPluginModes } from "../core/modes";
 import { themeById } from "../core/themes";
-import { DEFAULT_DREAM } from "./scene";
+import { DEFAULT_DREAM, type DreamAnim } from "./scene";
+import type { BackdropKind } from "./backdrop";
 import { applyPluginCatalog } from "../plugins/plugin";
 import { Mosaic } from "./mosaic";
 import { RenderHost } from "./render-host";
@@ -24,10 +25,11 @@ function mosaicWall(ids: readonly string[]) {
   const main = new NetScene(sceneEl, { host });
   main.retargetPanel(ids[0]!);
 
-  let anim = {
+  const skies: BackdropKind[] = ["fire", "space", "aurora", "ocean"];
+  let anim: DreamAnim = {
     ...DEFAULT_DREAM,
     mosaicUniqueSkies: true as const,
-    mosaicSkies: Object.fromEntries(ids.map((id, i) => [id, ["fire", "space", "aurora", "ocean"][i]!])),
+    mosaicSkies: Object.fromEntries(ids.map((id, i) => [id, skies[i]!])),
   };
 
   const mosaic = new Mosaic({
@@ -52,7 +54,7 @@ function mosaicWall(ids: readonly string[]) {
     }),
   });
 
-  mosaic.setSize(String(ids.length) as "3", ids[0], "off", { tiles: [...ids] });
+  mosaic.setSize("4", ids[0], "off", { tiles: [...ids] });
 
   return {
     mosaic,
