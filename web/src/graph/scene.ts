@@ -1359,6 +1359,8 @@ export class NetScene implements HostedView, RenderScalePane {
   private readonly ro: ResizeObserver;
   private readonly onWinResize: () => void;
   private readonly onCamPtrLost: (e: PointerEvent) => void;
+  /** One signal for every tile/canvas listener the constructor adds; dispose() aborts it (#171 c). */
+  private readonly listenerAbort = new AbortController();
   /** layout stretch so a wide viewport fills with the graph instead of a sphere sitting in the middle */
   private spreadX = 1;
   private spreadZ = 1;
@@ -1437,6 +1439,7 @@ export class NetScene implements HostedView, RenderScalePane {
         clearHex: this.clearHex,
         onLost: () => this.hostContextLost(),
         onRestored: () => this.hostContextRestored(),
+        signal: this.listenerAbort.signal,
       });
       this.inputEl = this.renderer.domElement;
     }
@@ -1463,6 +1466,7 @@ export class NetScene implements HostedView, RenderScalePane {
       _handleMouseWheel(e: { deltaY: number; clientX: number; clientY: number }): void;
       _customWheelEvent(e: WheelEvent): { deltaY: number; clientX: number; clientY: number };
     };
+    const { signal } = this.listenerAbort;
     this.inputEl.addEventListener("wheel", (e) => {
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -1487,14 +1491,14 @@ export class NetScene implements HostedView, RenderScalePane {
         this.controls.update();
       }
       this.captureDreamRest();
-    }, { capture: true, passive: false });
+    }, { capture: true, passive: false, signal });
     type GestureScale = Event & { scale: number; clientX: number; clientY: number };
     let gestureScale = 1;
     this.inputEl.addEventListener("gesturestart", (e) => {
       e.preventDefault();
       gestureScale = 1;
       this.pinUserCamera();
-    }, { passive: false });
+    }, { passive: false, signal });
     this.inputEl.addEventListener("gesturechange", (e) => {
       e.preventDefault();
       const g = e as GestureScale;
@@ -1503,7 +1507,7 @@ export class NetScene implements HostedView, RenderScalePane {
       this.pinchWheelUntil = performance.now() + PINCH_HOLD_MS;
       (this.controls as OrbitWheel)._handleMouseWheel({ deltaY, clientX: g.clientX, clientY: g.clientY });
       this.captureDreamRest();
-    }, { passive: false });
+    }, { passive: false, signal });
     this.controls.autoRotate = false;
     this.controls.autoRotateSpeed = 0.35;
     this.controls.addEventListener("start", () => {
@@ -1593,10 +1597,10 @@ export class NetScene implements HostedView, RenderScalePane {
     this.inputEl.addEventListener("pointermove", (e) => {
       setPointer(e);
       if (this.dragging) this.moveDrag();
-    });
+    }, { signal });
     this.inputEl.addEventListener("pointerleave", () => {
       if (!this.dragging) this.pointer.set(2, 2);
-    });
+    }, { signal });
     let downAt = 0, downX = 0, downY = 0;
     const camPts = new Map<number, { x: number; y: number }>();
     let lastFinger = { x: 0, y: 0 };
@@ -1624,7 +1628,7 @@ export class NetScene implements HostedView, RenderScalePane {
       e.stopImmediatePropagation();
       this.beginDrag(n);
       this.inputEl.setPointerCapture(e.pointerId);
-    }, true);
+    }, { capture: true, signal });
     this.inputEl.addEventListener("pointermove", (e) => {
       if (!camPts.has(e.pointerId)) return;
       camPts.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -1645,7 +1649,7 @@ export class NetScene implements HostedView, RenderScalePane {
         if (deltaY) orbit._handleMouseWheel({ deltaY, clientX: c.x, clientY: c.y });
       }
       this.captureDreamRest();
-    }, true);
+    }, { capture: true, signal });
     const finishPointer = (e: PointerEvent) => {
       if (isOverlayControl(e.target)) return void dropCamPtr(e.pointerId);
       const multi = camPts.size >= 2;
@@ -1660,16 +1664,16 @@ export class NetScene implements HostedView, RenderScalePane {
         this.select(wasDrag);
       }
     };
-    this.inputEl.addEventListener("pointerup", finishPointer);
+    this.inputEl.addEventListener("pointerup", finishPointer, { signal });
     this.inputEl.addEventListener("pointercancel", (e) => {
       dropCamPtr(e.pointerId);
       if (this.dragging) this.endDrag();
-    });
+    }, { signal });
     this.inputEl.addEventListener("dblclick", () => {
       this.lookPinned = false;
       this.camCoastUntil = 0;
       this.cameraGoalDir = null;
-    });
+    }, { signal });
     this.animate = this.animate.bind(this);
     // the host drives hosted scenes from its own loop
     if (!this.host && this.active) {
@@ -4998,6 +5002,7 @@ export class NetScene implements HostedView, RenderScalePane {
     window.removeEventListener("resize", this.onWinResize);
     window.removeEventListener("pointerup", this.onCamPtrLost);
     window.removeEventListener("pointercancel", this.onCamPtrLost);
+    this.listenerAbort.abort();
     this.pulse.disable();
     this.layout?.dispose();
     this.fabric.dispose();
@@ -5037,6 +5042,7 @@ function ownRenderer(container: HTMLElement, opts: {
   clearHex: number;
   onLost: () => void;
   onRestored: () => void;
+  signal: AbortSignal;
 }): HostGpu {
   if (probeWebGL()) {
     try {
@@ -5052,8 +5058,8 @@ function ownRenderer(container: HTMLElement, opts: {
       renderer.setSize(bootW, bootH);
       renderer.setClearColor(opts.clearHex);
       container.appendChild(renderer.domElement);
-      renderer.domElement.addEventListener("webglcontextlost", (e) => { e.preventDefault(); opts.onLost(); });
-      renderer.domElement.addEventListener("webglcontextrestored", () => opts.onRestored());
+      renderer.domElement.addEventListener("webglcontextlost", (e) => { e.preventDefault(); opts.onLost(); }, { signal: opts.signal });
+      renderer.domElement.addEventListener("webglcontextrestored", () => opts.onRestored(), { signal: opts.signal });
       return renderer;
     } catch { /* fall through to canvas 2D */ }
   }
