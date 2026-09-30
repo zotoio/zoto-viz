@@ -113,3 +113,66 @@ def test_scan_lists_an_unchecked_fresh_pack_as_blocked_and_the_catalog_still_loa
     assert REASON_INSTALL_UNCHECKED == "install_unchecked"
     assert BAD not in [p.get("id") for p in body.get("plugins") or []]
     assert not (paths.plugin_local_runtime_dir(create=True) / BAD).exists(), "nothing installed"
+
+
+def _no_block_record(zip_bytes: bytes, tmp_path: Path) -> None:
+    from service import plugin_zip as pz
+    from service.pack_install_blocked_store import blocked_row_for_sha, pack_info_blocked_line
+    from service.pack_zip_blocks import zip_block_for_sha
+
+    probe = tmp_path / "sha-probe.zip"
+    probe.write_bytes(zip_bytes)
+    sha = pz.plugin_sha256(probe)
+    assert zip_block_for_sha(sha) is None, "no remembered zip block"
+    assert blocked_row_for_sha(sha) is None, "no stored blocked row"
+    assert pack_info_blocked_line(BAD) is None, "no stored blocked line for the pack"
+
+
+_UNCHECKED = {"ok": False, "error": "pack_install_check_unavailable", "message": SENTENCE, "reasonCode": "install_unchecked"}
+
+
+def test_install_local_zip_whose_check_cant_run_answers_the_sentence_and_installs_nothing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(b) install (POST /api/plugins/publish): ok false with the fresh-install sentence and codes; no
+    runtime dir, no drop-zone zip, no block record; the next catalog answers 200. On (a) alone it raises."""
+    from service import plugin_local
+
+    _repo(tmp_path, monkeypatch)
+    _check_cant_run_for_bad(monkeypatch)
+    raw = _pack(tmp_path, BAD)
+
+    info = plugin_local.install_local_zip(raw, overwrite=True, activate=True)
+
+    assert {k: info.get(k) for k in _UNCHECKED} == _UNCHECKED, info
+    assert info.get("id") is None and not info.get("ok"), info
+    assert not (paths.plugin_local_runtime_dir(create=True) / BAD).exists(), "nothing installed"
+    assert not (paths.plugin_local_dir(create=True) / f"{BAD}.zip").exists(), "no zip kept in the drop zone"
+    _no_block_record(raw, tmp_path)
+    status, body = _catalog()
+    assert status == 200, body
+    assert BAD not in [p.get("id") for p in body.get("plugins") or []]
+    assert [e for e in body.get("errors") or [] if BAD in json.dumps(e)] == [], body
+
+
+def test_adopting_a_dropped_zip_whose_check_cant_run_is_the_same_blocked_pack(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """(b) a zip dropped in the folder (drop watcher adopt): the same answer, nothing installed, and the
+    catalog lists it as the one blocked pack. On (a) alone the adopt raises."""
+    from service import plugin_local
+
+    _repo(tmp_path, monkeypatch)
+    _check_cant_run_for_bad(monkeypatch)
+    drop = paths.plugin_local_dir(create=True)
+    zpath = drop / f"{BAD}.zip"
+    zpath.write_bytes(_pack(tmp_path, BAD))
+
+    info = plugin_local.adopt_local_zip_file(zpath, activate=True)
+
+    assert {k: info.get(k) for k in _UNCHECKED} == _UNCHECKED, info
+    assert not (paths.plugin_local_runtime_dir(create=True) / BAD).exists(), "nothing installed"
+    status, body = _catalog()
+    assert status == 200, body
+    rows = [e for e in body.get("errors") or [] if BAD in str(e.get("zip") or "")]
+    assert [(r.get("message"), r.get("reasonCode")) for r in rows] == [(SENTENCE, "install_unchecked")], body
