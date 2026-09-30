@@ -19,7 +19,7 @@
  * and all three lean rows go red. On Ant's stage-only view the exemption in skyLookFor still keeps
  * the drawn value, so there it is the overlay check that goes red.
  *
- * Talker Storm (uBright 0.4-0.9) and RF Constellation (uOpacity 0.65-0.9) are graph views with a
+ * Talker Storm (its own uBright, 0.8-1.2 since #184) and RF Constellation (uOpacity 0.65-0.9) are graph views with a
  * plugin sky: numbers only, for QE / UX Pro's headed re-shoot. No pass line. Set
  * PLUGIN_SKY_PNG_DIR to get the numbers in rows.txt there.
  */
@@ -67,15 +67,18 @@ const zoto = {
   writeUniform: (name: string, value: number | [number, number, number]) => { written[name] = value; },
 };
 
+/**
+ * A pack's frontend, loaded for its side effect (it sets zoto.onFrame). The path is built from the id
+ * so web/tsconfig.test.json type-checks this file without compiling the pack sources, which build
+ * under their own pack config (plugins/sdk alias, pack-local types).
+ */
+const loadPackFrontend = (id: string): Promise<unknown> => import(`../../../plugins/src/${id}/frontend/index.ts`);
+
 beforeAll(async () => {
   (globalThis as { zoto?: unknown }).zoto = zoto;
-  for (const [id, load] of [
-    ["ant-colony", () => import("../../../plugins/src/ant-colony/frontend/index")],
-    ["talker-storm", () => import("../../../plugins/src/talker-storm/frontend/index")],
-    ["rf-constellation", () => import("../../../plugins/src/rf-constellation/frontend/index")],
-  ] as const) {
+  for (const id of ["ant-colony", "talker-storm", "rf-constellation"] as const) {
     zoto.onFrame = null;
-    await load();
+    await loadPackFrontend(id);
     expect(zoto.onFrame, `${id} registers zoto.onFrame`).toBeTypeOf("function");
     packs[id] = zoto.onFrame!;
   }
@@ -221,11 +224,13 @@ describe("#180 H1 × perf lean: effective values for Talker Storm and RF Constel
   /** Both looks are `backdrop: plugin` on a graph view with the scene's default sliders (1 / 1). */
   const DEFAULT_LOOK = { skyBright: 1, skyOpacity: 1 };
 
-  it("talker-storm: pack uBright 0.4 (silent) .. 0.9 (audio 1) at default host settings and at the lowest lean", () => {
+  it("talker-storm: the pack's own uBright (silent and audio 1) at default host settings and at the lowest lean", () => {
     const rows: string[] = [];
     for (const audio of [0, 1]) {
       const w = packWrites("talker-storm", [{ ...EMPTY, audio }]);
-      expect(w.uBright).toBeCloseTo(0.4 + audio * 0.5, 9);
+      // The pack's formula is pinned in plugins/src/talker-storm/frontend/pack.test.ts (#184); here only
+      // that it writes one, and what the sky makes of it (the host mirror no longer writes its own).
+      expect(w.uBright, "talker-storm writes its own uBright").toBeTypeOf("number");
       expect(w.uOpacity, "talker-storm writes no uOpacity").toBeUndefined();
       const off = effective("talker-storm", w, { stageOnly: false, look: DEFAULT_LOOK, stress: 0 });
       const on = effective("talker-storm", w, { stageOnly: false, look: DEFAULT_LOOK, stress: 1 });
