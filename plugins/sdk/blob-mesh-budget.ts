@@ -11,28 +11,28 @@
  * - Contrast: when the busiest drawn device's rate is at least BLOB_MESH_CONTRAST_RATE (2x) the
  *   quietest drawn one's, the busiest radius is at least BLOB_MESH_CONTRAST (1.4x) the quietest's.
  *   Equal rates stay equal size.
- * - Growth reserve: the fit count is decided with the busiest blob already at 1.4x the floor,
- *   (n - 1) floor^2 + (1.4 floor)^2 <= B, so the contrast always fits. At B = 0.1152 and floor
- *   0.12 that's 7 blobs (8 would need 0.1296). The quietest devices past that are dropped
- *   (#173 option b) and the host says so; the minimum is never shrunk and blobs never silently
- *   overlap past the budget.
+ * - Growth reserve, only when the drawn rates differ: the fit count is the most busiest-first
+ *   devices whose minimum shape fits, (n - 1) floor^2 + (floor (1 + G_n))^2 <= B, with G_n the
+ *   contrast gain of those n (below; 0 when their rates are all equal). Equal devices fit 8 at the
+ *   floor; with differing rates the busiest's growth is held back first, so 7 fit at 0.12 when
+ *   they are 2x apart (8 would need 0.1296). The quietest devices past that are dropped (#173
+ *   option b) and the host says so ("more" instead of "quieter" when a dropped device ties the
+ *   quietest shown); the minimum is never shrunk and blobs never silently overlap past the budget.
  * - Radii for the n drawn devices, all in one pass (host and pack share this):
  *   1. target t_i = floor * (1 + G * pos_i): pos_i is the device's place between the quietest (0)
  *      and busiest (1) drawn rate on a log scale, G = 0.4 * min(1, log2(max / min)).
- *   2. the busiest keeps its target; the others' growth above the floor is scaled by one
- *      lambda in [0, 1] so the sum fits the budget (the reserve guarantees lambda >= 0 fits).
- *   3. everything is then scaled up by one s >= 1 while budget allows, capped so the busiest
- *      stays <= floor + BLOB_MESH_GROWTH * min(1, peak / BLOB_MESH_BUSY_PPS) (one busy device
- *      alone still grows to 0.22; a quiet single device stays near the floor).
+ *   2. the busiest (every device tied for busiest) keeps its target; the others' growth above the
+ *      floor is scaled by one lambda in [0, 1] so the sum fits (the reserve guarantees lambda >= 0
+ *      fits). Radius order matches rate order, and equal rates get equal radii.
+ *   3. everything is then scaled up by one s >= 1 until the drawn devices use the whole budget
+ *      (sum r^2 = B). No absolute-traffic cap: one device alone is one big blob (sqrt(B) = 0.339),
+ *      and a quiet LAN's devices share the budget evenly.
  */
 
 /** Slots the sky draws (sky/fragment.glsl loops over 8 zotoVizSlots). */
 export const BLOB_MESH_MAX_BLOBS = 8;
 /** Minimum blob radius; must match `max(<floor>, b.z)` in sky/fragment.glsl. #174 option 1: 0.16 -> 0.12. */
 export const BLOB_MESH_FLOOR = 0.12;
-/** Most a blob grows above the floor for absolute traffic (busiest at >= BLOB_MESH_BUSY_PPS). */
-export const BLOB_MESH_GROWTH = 0.1;
-export const BLOB_MESH_BUSY_PPS = 60;
 /** Busiest / quietest radius the plan guarantees once the rates differ by BLOB_MESH_CONTRAST_RATE. */
 export const BLOB_MESH_CONTRAST = 1.4;
 export const BLOB_MESH_CONTRAST_RATE = 2;
@@ -51,20 +51,21 @@ export type BlobMeshPlan = {
   radii: number[];
   /** Devices in the frame that aren't drawn (quietest first to go). */
   hidden: number;
+  /** A hidden device is exactly as busy as the quietest shown one (a tie at the cut). */
+  tieAtCut: boolean;
   /** Scale on the non-busiest growth toward their targets, in [0, 1]. */
   lambda: number;
   /** Uniform scale applied last, >= 1. */
   scale: number;
 };
 
-/**
- * Devices that fit inside the budget with the growth reserve held back: one blob at
- * BLOB_MESH_CONTRAST x floor plus the rest at the floor (at least 1, at most the slot count).
- */
-export function blobMeshFitCount(budget = BLOB_MESH_SLOT_BUDGET, floor = BLOB_MESH_FLOOR): number {
-  const reserve = (BLOB_MESH_CONTRAST * floor) ** 2 - floor * floor; // growth reserve
-  const fit = Math.floor((budget - reserve) / (floor * floor) + 1e-9);
-  return Math.max(1, Math.min(BLOB_MESH_MAX_BLOBS, fit));
+/** Contrast gain G for these drawn rates: 0.4 * min(1, log2(max / min)); 0 when all equal. */
+export function blobMeshContrastGain(drawn: readonly number[]): number {
+  const hi = Math.max(...drawn);
+  const lo = Math.min(...drawn);
+  if (hi > 0 && lo > 0 && hi > lo) return (BLOB_MESH_CONTRAST - 1) * Math.min(1, Math.log(hi / lo) / Math.log(BLOB_MESH_CONTRAST_RATE));
+  if (hi > 0 && lo <= 0) return BLOB_MESH_CONTRAST - 1;
+  return 0;
 }
 
 export function planBlobMesh(
@@ -72,16 +73,24 @@ export function planBlobMesh(
   budget = BLOB_MESH_SLOT_BUDGET,
   floor = BLOB_MESH_FLOOR,
 ): BlobMeshPlan {
-  const fit = blobMeshFitCount(budget, floor);
   const order = rates.map((_, i) => i).sort((a, b) => (rates[b]! - rates[a]!) || a - b);
-  const shownIdx = order.slice(0, Math.min(fit, rates.length)).sort((a, b) => a - b);
+  const clean = (i: number) => Math.max(0, rates[i]!);
+  let fit = Math.min(BLOB_MESH_MAX_BLOBS, rates.length);
+  for (; fit > 1; fit--) {
+    const top = order.slice(0, fit).map(clean);
+    const g = blobMeshContrastGain(top); // reserve only when rates differ
+    const k = top.filter((r) => r === top[0]).length; // devices tied for busiest keep the same size
+    if ((fit - k) * floor * floor + k * (floor * (1 + g)) ** 2 <= budget + 1e-12) break;
+  }
+  const shownIdx = order.slice(0, fit).sort((a, b) => a - b);
   const hidden = rates.length - shownIdx.length;
+  const tieAtCut = hidden > 0 && clean(order[fit]!) === clean(order[fit - 1]!);
   const n = shownIdx.length;
-  if (n === 0) return { shownIdx, radii: [], hidden, lambda: 1, scale: 1 };
+  if (n === 0) return { shownIdx, radii: [], hidden, tieAtCut, lambda: 1, scale: 1 };
   const drawn = shownIdx.map((i) => Math.max(0, rates[i]!));
   const hi = Math.max(...drawn);
   const lo = Math.min(...drawn);
-  const top = drawn.indexOf(hi);
+  const isTop = drawn.map((r) => r === hi);
   // 1. contrast targets
   let gain = 0;
   let pos: (r: number) => number = () => 0;
@@ -96,24 +105,27 @@ export function planBlobMesh(
   // 2. the busiest keeps its target; the others' growth shares what's left of the budget
   let a = 0;
   let b = 0;
+  let k = 0;
   for (let j = 0; j < n; j++) {
-    if (j === top) continue;
+    if (isTop[j]) {
+      k++;
+      continue;
+    }
     const d = target[j]! - floor;
     a += d * d;
     b += 2 * floor * d;
   }
-  const c = (n - 1) * floor * floor + target[top]! ** 2 - budget;
+  const c = (n - k) * floor * floor + k * target[drawn.indexOf(hi)]! ** 2 - budget;
   let lambda = 1;
   if (a > 0) {
     lambda = (-b + Math.sqrt(Math.max(0, b * b - 4 * a * c))) / (2 * a);
     lambda = Math.min(1, Math.max(0, lambda));
   }
-  const radii = target.map((t, j) => (j === top ? t : floor + lambda * (t - floor)));
-  // 3. uniform growth while the budget allows, capped by absolute traffic
+  const radii = target.map((t, j) => (isTop[j] ? t : floor + lambda * (t - floor)));
+  // 3. grow into the whole budget (no absolute-traffic cap)
   const sumR2 = radii.reduce((s, r) => s + r * r, 0);
-  const busyCap = (floor + BLOB_MESH_GROWTH * Math.min(1, hi / BLOB_MESH_BUSY_PPS)) / radii[top]!;
-  const scale = Math.max(1, Math.min(Math.sqrt(budget / sumR2), busyCap));
-  return { shownIdx, radii: radii.map((r) => r * scale), hidden, lambda, scale };
+  const scale = Math.max(1, Math.sqrt(budget / sumR2)); // grow into budget
+  return { shownIdx, radii: radii.map((r) => r * scale), hidden, tieAtCut, lambda, scale };
 }
 
 export function blobMeshRoleHue(role: string): number {

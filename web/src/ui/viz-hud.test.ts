@@ -303,6 +303,9 @@ describe("viz hud helpers", () => {
     expect(vizHudMetric("blob-mesh", frameOf(8), state)).toEqual({ label: "devices", value: "7 of 8" });
     expect(vizHudMetric("blob-mesh", frameOf(11), state)).toEqual({ label: "devices", value: "7 of 11" });
     expect(vizHudMetric("blob-mesh", frameOf(0), state)).toEqual({ label: "devices", value: "0" });
+    const equal = (n: number) => ({ ...frameOf(n), talkers: frameOf(n).talkers.map((t) => ({ ...t, rate: 60 })) });
+    expect(vizHudMetric("blob-mesh", equal(8), state), "8 equal devices all fit").toEqual({ label: "devices", value: "8" });
+    expect(vizHudMetric("blob-mesh", equal(9), state)).toEqual({ label: "devices", value: "8 of 9" });
   });
 
   it("picks pack-specific metrics from host state", () => {

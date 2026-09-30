@@ -194,11 +194,14 @@ export function darkPatchReport(frame: VizDataFrame, src = SKY, radiusOverride?:
   const radii: number[] = [];
   for (let i = 0; i < 8; i++) if (slots[i * 4 + 2]! > 0) radii.push(slots[i * 4 + 2]!);
   const sumR2 = radii.reduce((s, r) => s + r * r, 0);
+  // What the sky draws: every written slot at max(shader floor, r); no data at all -> 8 idle at the floor.
+  const onScreen = radii.length > 0 ? radii.map((r) => Math.max(shape.floor, r)) : Array<number>(8).fill(shape.floor);
+  const onScreenSumR2 = onScreen.reduce((s, r) => s + r * r, 0);
   const spread = Math.max(...five.lums) - Math.min(...five.lums);
   const regions = connectedDarkRegions(luma);
   const text = `${five.text} spread=${spread} max=${Math.max(...five.lums)} connectedDarkRegions=${regions} `
     + `radii=${radii.map((r) => r.toFixed(3)).join(",")} sumR2=${sumR2.toFixed(4)} floor=${shape.floor} gate=${shape.gate}`;
-  return { five, spread, regions, sumR2, text };
+  return { five, spread, regions, sumR2, onScreen, onScreenSumR2, text };
 }
 
 const EMPTY: VizDataFrame = { t: 35, dt: 1 / 6, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
@@ -210,8 +213,14 @@ const SINGLE: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 300)] }
 const FULL8: VizDataFrame = { ...EMPTY, talkers: Array.from({ length: 8 }, (_, i) => talker(`172.30.0.${10 + i}`, 120 - i * 12, i === 1 ? "gateway" : "lan")) };
 
 const LAN11 = lanFrames35s({ fixture: "host" }, 2, 1, 6, 11)[0]!;
+/** The quiet LAN from blob-mesh-sky.test.ts ("lights the wall on a quiet LAN"): 5 devices at 0.5 pkt/s. */
+const QUIET5: VizDataFrame = { ...EMPTY, talkers: ["gateway", "lan", "internet", "lan", "local"].map((role, i) => talker(`192.168.1.${10 + i}`, 0.5, role)) };
+/** A 1 pkt/s device next to a 400 pkt/s one. */
+const LOW_BESIDE_BUSY: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 400), talker("172.30.0.31", 1)] };
+const EQUAL8: VizDataFrame = { ...EMPTY, talkers: Array.from({ length: 8 }, (_, i) => talker(`172.30.0.${10 + i}`, 60)) };
+const HALF: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 120), talker("172.30.0.11", 60), talker("172.30.0.12", 2)] };
 
-export const DARK_PATCH_CASES = { LAN7, LAN11, EQUAL7, BUSY1_IDLE6, SINGLE, FULL8, EMPTY } as const;
+export const DARK_PATCH_CASES = { LAN7, LAN11, EQUAL7, EQUAL8, BUSY1_IDLE6, SINGLE, QUIET5, LOW_BESIDE_BUSY, HALF, FULL8, EMPTY } as const;
 
 describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_SLOT_BUDGET.toFixed(4)}, floor ${BLOB_MESH_FLOOR})`, () => {
   it("mirror inputs: the live LAN frame is 7 devices at 420 pkt/s and the shader floor is the writers' floor", () => {
@@ -220,6 +229,7 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
     expect(mirrorShape(SKY)).toEqual({ floor: BLOB_MESH_FLOOR, gate: "live-gated" });
     // 8 devices draw 7 since the growth reserve (the 8th is dropped and the notice says so)
     expect(planBlobMesh(FULL8.talkers.map((t) => t.rate)).hidden).toBe(1);
+    expect(planBlobMesh(EQUAL8.talkers.map((t) => t.rate)).hidden).toBe(0);
     expect(LAN11.talkers).toHaveLength(11);
     expect(planBlobMesh(LAN11.talkers.map((t) => t.rate)).shownIdx).toHaveLength(7);
   });
@@ -263,6 +273,21 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
       expect(r.five.dark, r.text).toBeLessThanOrEqual(UXPRO_MAX_DARK);
     });
   }
+
+  /**
+   * Floor row: BUSY1_IDLE6's six 1 pkt/s devices are sized by the floor alone next to a 400 pkt/s
+   * one, so the floor decides the result. On screen (each written slot at max(shader floor, r)) the
+   * quiet devices must be >= 0.12 (the lowest dark-free floor in #174's scan), the whole draw must
+   * stay inside the budget, and <= 2 patches may be dark. A lower floor (writer and shader) fails
+   * the first; the old 0.16 floor (shader alone, or with the old writer) fails the budget.
+   */
+  it(`floor decides: BUSY1_IDLE6 draws its quiet devices at >= 0.12, inside the budget on screen, with <= ${UXPRO_MAX_DARK} dark`, () => {
+    const r = darkPatchReport(BUSY1_IDLE6);
+    process.stdout.write(`[floor-row] BUSY1_IDLE6: ${r.text} onScreenSumR2=${r.onScreenSumR2.toFixed(4)}\n`);
+    expect(Math.min(...r.onScreen), `quietest on screen: ${r.text}`).toBeGreaterThanOrEqual(0.12 - 1e-9);
+    expect(r.onScreenSumR2, `on-screen sum r^2: ${r.text}`).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + 1e-6);
+    expect(r.five.dark, r.text).toBeLessThanOrEqual(UXPRO_MAX_DARK);
+  });
 
   /** Sparse tiles over time: 1, 2 and 3 devices, every 5 s from 0 to 60 s, <= 2 dark at every step. */
   const PAIR: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 400), talker("172.30.0.31", 1)] };

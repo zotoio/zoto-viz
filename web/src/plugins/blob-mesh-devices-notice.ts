@@ -10,10 +10,16 @@ export const BLOB_MESH_NOTICE_SHOW_MS = 3000;
 /** Back under budget this long before it hides (a LAN hovering at the edge must not flicker it). */
 export const BLOB_MESH_NOTICE_HIDE_MS = 3000;
 
-/** UX Pro copy (#173): N shown, M hidden. */
-export function blobMeshDevicesNoticeText(shown: number, hidden: number): string | null {
+/**
+ * UX Pro copy (#173): N shown, M hidden. "quieter" only when every hidden device is strictly
+ * quieter than the quietest shown; with a tie at the cut (a hidden device as busy as the smallest
+ * shown) it says "more" instead.
+ */
+export function blobMeshDevicesNoticeText(shown: number, hidden: number, tieAtCut = false): string | null {
   if (hidden <= 0) return null;
-  const rest = hidden === 1 ? "1 quieter one doesn't fit." : `${hidden} quieter ones don't fit.`;
+  const rest = tieAtCut
+    ? (hidden === 1 ? "1 more doesn't fit." : `${hidden} more don't fit.`) // tie copy
+    : (hidden === 1 ? "1 quieter one doesn't fit." : `${hidden} quieter ones don't fit.`);
   return `Showing the ${shown} busiest devices. ${rest}`;
 }
 
@@ -24,8 +30,8 @@ export class BlobMeshDevicesNoticeLatch {
   private visible = false;
   private text: string | null = null;
 
-  update(shown: number, hidden: number, nowMs: number): string | null {
-    const next = blobMeshDevicesNoticeText(shown, hidden);
+  update(shown: number, hidden: number, nowMs: number, tieAtCut = false): string | null {
+    const next = blobMeshDevicesNoticeText(shown, hidden, tieAtCut);
     if (next) {
       this.underSince = null;
       this.overSince ??= nowMs;

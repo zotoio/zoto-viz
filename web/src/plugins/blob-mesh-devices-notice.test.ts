@@ -23,6 +23,13 @@ const PLURAL = "Showing the 7 busiest devices. 4 quieter ones don't fit.";
 const SINGULAR = "Showing the 7 busiest devices. 1 quieter one doesn't fit.";
 const FRAME_MS = 100;
 
+const TIE_SINGULAR = "Showing the 8 busiest devices. 1 more doesn't fit.";
+const TIE_PLURAL = "Showing the 8 busiest devices. 3 more don't fit.";
+function equal(n: number, extra: number[] = []): VizDataFrame {
+  const talkers = [...Array(n).fill(60), ...extra].map((rate, i) => ({ id: `172.30.0.${10 + i}`, rate, role: "lan" }));
+  return { t: 35, dt: FRAME_MS / 1000, audio: 0, packets: [], rf: [], talkers, headlines: [] };
+}
+
 function lan(n: number): VizDataFrame {
   const talkers = Array.from({ length: n }, (_, i) => ({ id: `172.30.0.${10 + i}`, rate: 200 - i * 15, role: i === 1 ? "gateway" : "lan" }));
   return { t: 35, dt: FRAME_MS / 1000, audio: 0, packets: [], rf: [], talkers, headlines: [] };
@@ -98,6 +105,28 @@ describe("blob-mesh over-budget devices notice (#173)", () => {
   it("8 devices: exact singular copy", () => {
     drive(lan(8), 3000);
     expect(caption()?.textContent).toBe(SINGULAR);
+  });
+
+  it("8 equal devices: all 8 drawn at one size, no notice, ever", () => {
+    drive(equal(8), 10_000);
+    const radii = slot0.filter((_, i) => i % 4 === 2);
+    expect(radii).toHaveLength(8);
+    for (const r of radii) expect(r).toBeCloseTo(radii[0]!, 12);
+    expect(caption()).toBeNull();
+    expect(notices.every((n) => n === null)).toBe(true);
+  });
+
+  it("tie at the cut, singular: 9 equal devices say \"1 more doesn't fit\" (not quieter)", () => {
+    drive(equal(9), 3000);
+    expect(caption()?.textContent).toBe(TIE_SINGULAR);
+  });
+
+  it("tie at the cut, plural: 11 equal devices say \"3 more don't fit\"; a tie plus a quieter one says \"2 more\"", () => {
+    drive(equal(11), 3000);
+    expect(caption()?.textContent).toBe(TIE_PLURAL);
+    resetBlobMeshNoticeLatches();
+    drive(equal(9, [30]), 3000);
+    expect(caption()?.textContent).toBe("Showing the 8 busiest devices. 2 more don't fit.");
   });
 
   it("7 devices (the live demo, under budget): no notice, ever", () => {

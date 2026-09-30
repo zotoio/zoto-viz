@@ -223,14 +223,14 @@ export function runPackFrameHandler(
     case "blob-mesh": {
       // Mirror of plugins/src/blob-mesh/frontend/index.ts (#161). This case runs right before
       // the draw (viz-frame-tick.ts), so its slot 0 is what the app shows. Both writers share
-      // plugins/sdk/blob-mesh-budget.ts: floor first, then one scale above it inside the
-      // coverage budget (#174).
+      // plugins/sdk/blob-mesh-budget.ts: floor first, then growth up to the whole coverage
+      // budget (#174); placement from the device id, always in view.
       const blob = packBlobMeshSlots(frame.talkers, frame.t);
       handlers.writeBuffer(0, blob.slot0);
       // #173: when the minimums don't all fit, the quietest devices are dropped (never a silent
       // overlap) and the tile says how many, with ~3 s hysteresis each way.
       handlers.setInfoNotice?.(
-        blobMeshNoticeLatchFor(nixiePackTileId(opts)).update(blob.plan.shownIdx.length, blob.plan.hidden, Date.now()),
+        blobMeshNoticeLatchFor(nixiePackTileId(opts)).update(blob.plan.shownIdx.length, blob.plan.hidden, Date.now(), blob.plan.tieAtCut),
       );
       handlers.writeUniform("uBright", 0.8 + Math.min(0.35, (frame.talkers[0]?.rate ?? 0) / 80) + frame.audio * 0.2);
       handlers.writeUniform("uAudio", frame.audio);
