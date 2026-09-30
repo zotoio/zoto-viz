@@ -214,13 +214,14 @@ describe("#195 host-mesh-demo: the fixture mesh shows at the default stage camer
     const lane = new HostMeshLane();
     await lane.ensureAssets(PACK, decls);
     expect(lane.allAssetsFailed(), `${PACK}'s fixture asset loads into the host lane`).toBe(false);
-    const f32 = (m: ArrayLike<number>) => Array.from(Float32Array.from(Array.from(m)));
+    // float32 as the lane stores it; `+ 0` folds -0 into 0 (the host decoder's `|| 0` does the same)
+    const f32 = (m: ArrayLike<number>) => Array.from(Float32Array.from(Array.from(m)), (v) => v + 0);
     const before = writeAt(0);
     lane.applySlotBuffer(before);
     const drawnPose = () => {
       const root = lane.group.children[0];
       if (!root) throw new Error("the host lane drew no instance");
-      return Array.from(root.matrix.elements);
+      return Array.from(root.matrix.elements, (v) => v + 0);
     };
     expect(drawnPose(), "t=0: the lane draws the pack's pose").toEqual(f32(sentMatrix(before)));
     const pkt = decodeHostMeshSlotPacket(edge);
