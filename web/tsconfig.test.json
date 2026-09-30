@@ -23,7 +23,9 @@
     "../plugins/src/talker-storm/frontend/index.ts",
     "../plugins/sdk/pack-lint.ts",
     "../plugins/sdk/pack-lint-import.ts",
-    "../plugins/src/ant-colony/frontend/index.ts"
+    "../plugins/src/ant-colony/frontend/index.ts",
+    "../plugins/src/aquarium/frontend/aquarium.ts",
+    "../plugins/src/aquarium/frontend/fixtures/idle-viz-frame.ts"
   ],
   "exclude": []
 }

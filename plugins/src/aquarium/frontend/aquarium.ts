@@ -181,8 +181,8 @@ export function tileInternalResScale(canvasW: number, canvasH: number): number {
 }
 
 function defaultStringForOptionKey(key: string): string | undefined {
-  const d = DEFAULT_OPTIONS as Record<string, unknown>;
-  const v = d[key];
+  // `key` is any host config key; an unknown one reads undefined, hence `unknown` and the checks below.
+  const v: unknown = DEFAULT_OPTIONS[key as keyof AquariumOptions];
   if (typeof v === "boolean") return v ? "true" : "false";
   if (typeof v === "number") return String(v);
   if (typeof v === "string") return v;
