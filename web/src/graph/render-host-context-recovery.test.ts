@@ -14,6 +14,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NetScene } from "./scene";
 import { RenderHost, type HostedView } from "./render-host";
 import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "./shader-fallback-copy";
+import { SandboxBitmapGl } from "./pack-mirror-gl";
+import { surfaceLetterboxFill } from "./letterbox-fill";
 
 const SKY = `
 void main() {
@@ -101,6 +103,8 @@ type Harness = {
   compile: ReturnType<typeof vi.fn>;
   rafQueue: FrameRequestCallback[];
   frame: () => void;
+  /** The light view that draws through `present` (runTimedViewDraw). */
+  probe: HostedView;
 };
 
 function rect(w: number, h: number): () => DOMRect {
@@ -152,7 +156,7 @@ function bootBackrooms(): Harness {
   const frame = () => { ts += 16; host.advanceFrame(ts); };
   expect(pick(scene, BACKROOMS)).toBeNull();
   expect(compile).toHaveBeenCalledTimes(1);
-  return { host, wall, pane, scene, gl, render, compile, rafQueue, frame };
+  return { host, wall, pane, scene, gl, render, compile, rafQueue, frame, probe };
 }
 
 /** The pack sky installed on the tile (the backdrop only reports it while its kind is "plugin"). */
@@ -210,6 +214,7 @@ describe("#179 render host context recovery (Backrooms boot)", () => {
     h = null;
     vi.useRealTimers();
     vi.unstubAllGlobals();
+    vi.restoreAllMocks();
   });
 
   it("heal-ladder recreate: a frame before the lost event does not strand the context; the host restores and later picks draw", () => {
@@ -369,5 +374,154 @@ describe("#179 render host context recovery (Backrooms boot)", () => {
     next.dispose();
     wall.remove();
     h = null;
+  });
+
+  // ---- #179 QE replay: rows for reverts that turned nothing red at b7560ada ----
+
+  it("replay a (offerReload): when the host's last restore attempt fails it tells the notice to offer Reload, once, at the give-up", () => {
+    h = bootBackrooms();
+    const offerReload = vi.spyOn(h.host.gfxWallNotice, "offerReload");
+    h.gl.browserLoss({ restorable: false });
+    vi.advanceTimersByTime(0);
+    vi.advanceTimersByTime(9_999);
+    expect(h.host.contextRecovery).toBe("restoring");
+    expect(offerReload).toHaveBeenCalledTimes(0);
+    vi.advanceTimersByTime(1);
+    expect(h.host.contextRecovery).toBe("gave-up");
+    expect(offerReload).toHaveBeenCalledTimes(1);
+    vi.advanceTimersByTime(20_000);
+    expect(offerReload).toHaveBeenCalledTimes(1);
+  });
+
+  it("replay b (attempts reset on loss): a second lost event before any restore gets the full attempt ladder again, not the leftovers", () => {
+    h = bootBackrooms();
+    h.gl.browserLoss({ restorable: false });
+    vi.advanceTimersByTime(0);
+    vi.advanceTimersByTime(4_500); // attempts at 1 s and 4 s, no restored event
+    expect(h.gl.restoreCalls).toBe(2);
+    // The GPU process is lost again before anything came back: a fresh loss event on the same canvas.
+    h.host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    const calls = h.gl.restoreCalls;
+    vi.advanceTimersByTime(9_999);
+    expect(h.gl.restoreCalls - calls, "a full ladder: one attempt per CONTEXT_RESTORE_RETRY_MS step").toBe(3);
+    expect(h.host.contextRecovery).toBe("restoring");
+    vi.advanceTimersByTime(1);
+    expect(h.host.contextRecovery).toBe("gave-up");
+  });
+
+  it("replay c (dispose clears the restore timer): dispose while restoring leaves no host timer behind", () => {
+    h = bootBackrooms();
+    vi.advanceTimersByTime(0);
+    const idle = vi.getTimerCount();
+    h.gl.browserLoss({ restorable: false });
+    vi.advanceTimersByTime(0);
+    expect(h.host.contextRecovery).toBe("restoring");
+    expect(vi.getTimerCount(), "the notice window and the host's restore timer").toBe(idle + 2);
+    h.host.dispose();
+    expect(vi.getTimerCount()).toBe(idle);
+    h.wall.remove();
+    h = null;
+  });
+
+  it("replay d (drawn-frame flag, sandbox-bitmap path): after a restore, a frame drawn only by a sandbox bitmap mirror clears the notice", () => {
+    h = bootBackrooms();
+    const pluginId = "plugin:replay-bitmap";
+    // The host gets its per-pack bitmap GPU from sandboxBitmapGl(); stub the class so no real GL runs.
+    vi.spyOn(SandboxBitmapGl.prototype, "uploadFrame").mockReturnValue(new THREE.Texture());
+    const present = vi.spyOn(SandboxBitmapGl.prototype, "present").mockImplementation((_rd, _tex, _fill, dst) => dst);
+    const bitmap = (): ImageBitmap => {
+      const bmp = Object.create(ImageBitmap.prototype) as ImageBitmap;
+      Object.defineProperties(bmp, { width: { value: 64 }, height: { value: 64 }, close: { value: () => {} } });
+      return bmp;
+    };
+    const fill = surfaceLetterboxFill(0x000000, 0);
+    const view: HostedView = {
+      viewEl: h.pane,
+      hostFrame: () => { h!.host.presentBitmapMirror(view, bitmap(), fill, 1, pluginId); },
+      hostContextLost: () => {},
+      hostContextRestored: () => {},
+    };
+    h.host.remove(h.probe);
+    h.host.add(view);
+    h.gl.browserLoss({ autoRestoreMs: 1_500 });
+    vi.advanceTimersByTime(0);
+    vi.advanceTimersByTime(1_500);
+    expect(h.host.glContextLost).toBe(false);
+    expect(notices(h.wall).length).toBe(1);
+    h.frame();
+    expect(present).toHaveBeenCalledTimes(1);
+    expect(h.render).not.toHaveBeenCalled();
+    expect(notices(h.wall).length).toBe(0);
+  });
+
+  it("replay e (drawn-frame flag, pack-primary path): after a restore, a frame drawn only by a pack-mirror primary clears the notice", () => {
+    h = bootBackrooms();
+    const renderPrimary = vi.spyOn(h.host.packMirrors, "renderPrimary").mockImplementation(() => undefined as never);
+    vi.spyOn(h.host.packMirrors, "presentPack").mockImplementation(() => null as never);
+    const view = {
+      viewEl: h.pane,
+      packCoalesceGroupKey: "plugin:replay-pack",
+      packCoalesceTileCount: 2,
+      isPackMirrorPrimary: true,
+      hostFrame: () => { h!.host.present(view, 0x000000, new THREE.Scene(), new THREE.PerspectiveCamera()); },
+      hostContextLost: () => {},
+      hostContextRestored: () => {},
+    };
+    h.host.remove(h.probe);
+    h.host.add(view);
+    h.gl.browserLoss({ autoRestoreMs: 1_500 });
+    vi.advanceTimersByTime(0);
+    vi.advanceTimersByTime(1_500);
+    expect(h.host.glContextLost).toBe(false);
+    expect(notices(h.wall).length).toBe(1);
+    h.frame();
+    expect(renderPrimary).toHaveBeenCalledTimes(1);
+    expect(h.render).not.toHaveBeenCalled();
+    expect(notices(h.wall).length).toBe(0);
+  });
+
+  it("replay f (recreateContext while lost): after the host gave up, a heal-ladder recreate asks for the context back again and recovers", () => {
+    h = bootBackrooms();
+    h.gl.browserLoss({ restorable: false });
+    vi.advanceTimersByTime(0);
+    vi.advanceTimersByTime(10_500);
+    expect(h.host.contextRecovery).toBe("gave-up");
+    const calls = h.gl.restoreCalls;
+    // The browser would now honour a restore; nothing arrives on its own.
+    h.gl.unrestorable = false;
+    h.gl.restoreAllowed = true;
+    h.host.recreateContext();
+    vi.advanceTimersByTime(50); // host restore + restored event
+    expect(h.gl.restoreCalls).toBe(calls + 1);
+    expectRecovered(h);
+    expectPickLandsAndDraws(h, FLUID);
+  });
+
+  it("software host: a context loss never schedules a restore; the notice's 10 s window is the only timer it adds", () => {
+    const wall = document.createElement("div");
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall, { software: true });
+    expect(host.software).toBe(true);
+    const before = vi.getTimerCount();
+    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    expect(notices(wall).length).toBe(1);
+    expect(vi.getTimerCount()).toBe(before + 1);
+    host.dispose();
+    expect(vi.getTimerCount()).toBe(before);
+    wall.remove();
+  });
+
+  it("GL host whose renderer has no forceContextRestore: a context loss never schedules a restore either", () => {
+    const wall = document.createElement("div");
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall);
+    Object.defineProperty(host, "software", { value: false });
+    expect(typeof (host.renderer as Partial<THREE.WebGLRenderer>).forceContextRestore).toBe("undefined");
+    const before = vi.getTimerCount();
+    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    expect(notices(wall).length).toBe(1);
+    expect(vi.getTimerCount()).toBe(before + 1);
+    host.dispose();
+    wall.remove();
   });
 });
