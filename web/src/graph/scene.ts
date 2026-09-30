@@ -1684,6 +1684,7 @@ export class NetScene implements HostedView, RenderScalePane {
   // ------------------------------------------------------------------ HostedView
 
   get viewEl(): HTMLElement { return this.container; }
+  get viewId(): string { return this.mode.id; }
   hostFrame(ts: FrameTs): void { this.animate(ts); }
 
   /**

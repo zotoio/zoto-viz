@@ -77,6 +77,8 @@ export interface HostedView {
   readonly viewEl: HTMLElement;
   /** The tile this view draws ("main", or the mosaic pane id): the key of its view state. */
   readonly tileId?: string;
+  /** The view this tile shows (its mode id): names a tile with no pack in its shader console line (#171 c). */
+  readonly viewId?: string;
   /** update and draw one frame; call `host.present(...)` from inside */
   hostFrame(ts: FrameTs): void;
   hostContextLost(): void;
@@ -121,6 +123,13 @@ export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 
 /** three's `renderer.debug.onShaderError`: it calls this instead of logging when a program fails. */
 type ShaderErrorHook = NonNullable<THREE.WebGLRenderer["debug"]["onShaderError"]>;
+
+/** The stage of a program three reported as failed: a shader that didn't compile, else the link. */
+function failedShaderStage(gl: WebGLRenderingContext, vs: WebGLShader, fs: WebGLShader): "vertex" | "fragment" | "link" {
+  if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) return "vertex";
+  if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) return "fragment";
+  return "link";
+}
 
 /**
  * Delays (ms) between the host's own attempts to bring a lost WebGL context back (#179).
@@ -848,14 +857,20 @@ export class RenderHost {
   private tileShaderErrorHook(tileId: string): ShaderErrorHook {
     let hook = this.tileShaderErrorHooks.get(tileId);
     if (hook) return hook;
-    hook = (gl, program, _vs, fs) => {
+    hook = (gl, program, vs, fs) => {
       // Empty logs from a context that just died say nothing about the shader.
       if (typeof gl.isContextLost === "function" && gl.isContextLost()) return;
       const slot = this.tileShader.tileSlot(tileId);
       if (slot.latch.dead) return;
       const msg = (gl.getShaderInfoLog(fs) || gl.getProgramInfoLog(program) || "shader failed").trim();
       slot.failLog = msg || "shader failed";
-      slot.latch.fail(slot.failLog, () => {});
+      // One console line per latch trip (the tile's move to cant-draw): its pack id, else `view:<viewId>`.
+      slot.latch.fail(slot.failLog, () => {
+        const id = slot.packId || `view:${this.gpuTimedView?.viewId || tileId}`;
+        const stage = failedShaderStage(gl, vs, fs);
+        const infoLog = (stage === "link" ? gl.getProgramInfoLog(program) : gl.getShaderInfoLog(stage === "vertex" ? vs : fs)) ?? "";
+        console.warn("zoto-viz tile shader:", id, "failed to compile", stage, infoLog);
+      });
       this.lazyCompileFailedTile = tileId;
     };
     this.tileShaderErrorHooks.set(tileId, hook);
