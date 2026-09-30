@@ -16,6 +16,7 @@ import type { VizDemoPackId } from "../ui/viz-hud";
  */
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(path.resolve(here, "../style.css"), "utf8");
+const MANIFEST = readFileSync(path.resolve(here, "../../../plugins/src/blob-mesh/plugin.yml"), "utf8");
 
 /** 7 drawn: the plan holds back room for the busiest blob to reach 1.4x before counting what fits. */
 const PLURAL = "Showing the 7 busiest devices. 4 quieter ones don't fit.";
@@ -141,5 +142,13 @@ describe("blob-mesh over-budget devices notice (#173)", () => {
     expect(caption()).not.toBeNull();
     runPackFrameHandler("star-sines", lan(11), handlers());
     expect(caption()).toBeNull();
+  });
+});
+
+describe("blob-mesh pack hint copy (UX Pro)", () => {
+  it("says devices, not talkers or blobs-as-talkers", () => {
+    const hint = MANIFEST.match(/^hint: (.*)$/m)?.[1];
+    expect(hint).toBe("90s-style metaballs. Each blob is one of your busiest devices, and the busier it is, the bigger it grows and the more it melts into its neighbours.");
+    expect(hint).not.toMatch(/talker/i);
   });
 });
