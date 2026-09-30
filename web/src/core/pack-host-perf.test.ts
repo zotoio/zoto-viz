@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { countPackPerfReads as countReads } from "../../test-support/pack-perf-read-counts";
 import {
   packHostPerfIsOn,
   packHostPerfSnapshot,
@@ -15,7 +16,12 @@ import {
 import type { StateMsg } from "./types";
 import { resetVizClockInjectors, setVizBuildCostTicksInjector } from "./viz-clock";
 import { monoMs, type MonoMs } from "./viz-time";
-import { maybeReportPackHostPerf } from "../app/pack-perf-report";
+import {
+  maybeReportPackHostPerf,
+  notePackPerfPresent,
+  packPerfReportGateRunsForTests,
+  resetPackPerfReportGateRunsForTests,
+} from "../app/pack-perf-report";
 import { tickVizPresentDeliver, type VizPresentDeliverHost } from "../app/viz-present-deliver";
 import { NetScene } from "../graph/scene";
 import { PluginSandbox } from "../plugins/host";
@@ -31,45 +37,6 @@ import { deliverPluginPresentTick, type PresentDriveBinding } from "../plugins/v
 
 const FRAMES = 10;
 const BOOT_URL = window.location.href;
-const RealURLSearchParams = globalThis.URLSearchParams;
-
-type ReadCounts = { storageReads: () => number; packStoreReads: () => number; urlParses: () => number; searchReads: () => number };
-
-/**
- * Spy `Storage.prototype.getItem`, `new URLSearchParams` and the `location.search` getter. happy-dom
- * binds Storage methods onto the instance on first use (plugins/host.ts reads storage at import), which
- * bypasses prototype and instance spies, so `localStorage` is also stubbed with a counting view.
- */
-function countReads(): ReadCounts {
-  const protoGetItem = vi.spyOn(Storage.prototype, "getItem");
-  const keys: unknown[] = [];
-  const real = window.localStorage;
-  vi.stubGlobal("localStorage", new Proxy(real, {
-    get(target, prop) {
-      if (prop === "getItem") return (key: string) => { keys.push(key); return target.getItem(key); };
-      const v: unknown = Reflect.get(target, prop);
-      return typeof v === "function" ? (v as (...a: unknown[]) => unknown).bind(target) : v;
-    },
-  }));
-  const getItemCalls = (): unknown[] => [...protoGetItem.mock.calls.map(([k]) => k), ...keys];
-  let parses = 0;
-  vi.stubGlobal("URLSearchParams", class extends RealURLSearchParams {
-    constructor(init?: ConstructorParameters<typeof URLSearchParams>[0]) {
-      super(init);
-      parses++;
-    }
-  });
-  let owner: object | null = window.location;
-  while (owner && !Object.getOwnPropertyDescriptor(owner, "search")) owner = Object.getPrototypeOf(owner) as object | null;
-  if (!owner) throw new Error("location.search accessor not found");
-  const search = vi.spyOn(owner as { search: string }, "search", "get");
-  return {
-    storageReads: () => getItemCalls().length,
-    packStoreReads: () => getItemCalls().filter((k) => k === PACK_PERF_STORE).length,
-    urlParses: () => parses,
-    searchReads: () => search.mock.calls.length,
-  };
-}
 
 /** Cross-tab change: another tab wrote the store, this tab gets a `storage` event. */
 function crossTab(value: "1" | null): void {
@@ -137,6 +104,8 @@ function perFrameCallers() {
   const box = new PluginSandbox();
   const boxPriv = box as unknown as { caps: string[]; dispatchPluginMsg(d: unknown): void };
   boxPriv.caps = ["viz.write"];
+  let writeBatches = 0;
+  box.handlers.writeBatch = () => { writeBatches++; };
   const binding: PresentDriveBinding = {
     sandbox: { deliverPresentTick: () => { presentTicks++; } } as unknown as PluginSandbox,
     contract: { presentTick: true } as PresentDriveBinding["contract"],
@@ -149,8 +118,9 @@ function perFrameCallers() {
     /** One simulated frame through every per-frame pack-perf site. */
     frame(i: number): void {
       const ts = 1000 + i * 16;
-      // app/main.ts present listener: gate, interval hook, report (which gates again).
-      if (packPerfEnabled()) notePackHostPresentInterval(16.7);
+      // app/main.ts present listener's pack-perf step (the helper main.ts calls; booted in main-entry.pack-perf).
+      notePackPerfPresent(ts, () => 16.7);
+      // app/pack-perf-report.ts: the report's own gate (main.ts only reaches it when perf is on).
       void maybeReportPackHostPerf(ts);
       // app/viz-present-deliver.ts: gate + notePackSandboxFrame inside onFrame.
       tickVizPresentDeliver(state, host);
@@ -169,6 +139,7 @@ function perFrameCallers() {
       packHostPerfIsOn();
     },
     sandboxFrames: () => sandboxFrames,
+    writeBatches: () => writeBatches,
     presentTicks: () => presentTicks,
     gpuNotes: () => gpuNotes.length,
     dispose: () => box.unload(),
@@ -190,6 +161,7 @@ describe("pack-host-perf", () => {
     window.history.replaceState(null, "", BOOT_URL);
     crossTab(null);
     resetPackHostPerf();
+    resetPackPerfReportGateRunsForTests();
     setVizBuildCostTicksInjector(() => 0);
   });
 
@@ -212,10 +184,14 @@ describe("pack-host-perf", () => {
       searchReads: reads.searchReads(),
     };
     callers.dispose();
-    // The callers really ran: every frame reached the sandbox, the present tick and the GPU note.
-    expect(callers.sandboxFrames()).toBe(FRAMES);
-    expect(callers.presentTicks()).toBe(FRAMES);
-    expect(callers.gpuNotes()).toBe(FRAMES);
+    // The callers really ran: every frame reached each gate / hook site.
+    const gates = packPerfReportGateRunsForTests();
+    expect(callers.sandboxFrames(), "viz-present-deliver onFrame").toBe(FRAMES);
+    expect(callers.presentTicks(), "viz-present-tick deliverPluginPresentTick").toBe(FRAMES);
+    expect(callers.gpuNotes(), "scene noteFrameCost").toBe(FRAMES);
+    expect(callers.writeBatches(), "host.ts writeBatch dispatch").toBe(FRAMES);
+    expect(gates.present, "main.ts present step notePackPerfPresent").toBe(FRAMES);
+    expect(gates.report, "maybeReportPackHostPerf gate").toBe(FRAMES);
     expect(counts.packStoreReads).toBe(0);
     expect(counts.storageReads).toBe(0);
     expect(counts.urlParses).toBe(0);
@@ -315,9 +291,10 @@ describe("pack-host-perf", () => {
       const reads2 = countReads();
       window.history.replaceState(null, "", "/");
       on.notePackHostPresentInterval(16.7);
+      expect(reads2.urlParses()).toBe(0);
+      expect(reads2.searchReads()).toBe(0);
       expect(on.packPerfEnabled()).toBe(true);
       expect(on.packHostPerfSnapshot(1000).frames).toBe(1);
-      expect(reads2.urlParses()).toBe(0);
     });
 
     it("precedence is OR: boot ?packPerf stays on when localStorage goes off; without it, localStorage rules", async () => {

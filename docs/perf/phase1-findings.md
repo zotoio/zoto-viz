@@ -11,7 +11,7 @@ The monitor WebSocket broadcast loop (`service/monitor.py` `broadcast_loop`) sti
 ## Instrumentation
 
 Enable with `?packPerf=1` or `localStorage.setItem('zoto-viz.packPerf', '1')`.
-The flag is read once at page load and cached (#196): changing `?packPerf` needs a reload; localStorage changes are live (other tabs via the `storage` event, same tab via `refreshPackPerfEnabled()`). Either source enables it (OR), so with `?packPerf` in the URL, clearing localStorage keeps it on until a reload.
+The flag is read once at page load and cached (#196). Changing `?packPerf` needs a reload. A localStorage change applies live in other tabs (the `storage` event); in the same tab (e.g. devtools) it needs a reload, unless the code that writes the key calls `refreshPackPerfEnabled()`. Either source enables it (OR), so with `?packPerf` in the URL, clearing localStorage keeps it on until a reload.
 
 | Signal | Meaning |
 |--------|---------|

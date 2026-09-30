@@ -39,7 +39,8 @@
     "src/app/__tests__/main-entry.wall-view.test.ts",
     "src/app/apply-mode.test.ts",
     "src/plugins/pack-install-lint-prebuilt.test.ts",
-    "src/core/pack-host-perf.test.ts"
+    "src/core/pack-host-perf.test.ts",
+    "src/app/__tests__/main-entry.pack-perf.test.ts"
   ],
   "exclude": []
 }

@@ -2,10 +2,12 @@
  * Pack-host frame instrumentation (near-zero cost when disabled).
  * Enabled = localStorage `zoto-viz.packPerf` === "1" OR the boot URL has `?packPerf` (OR, as before #196).
  * The flag is resolved once at module init and cached: hooks and caller gates read a boolean, never
- * storage or the URL (#196). `?packPerf` is read at init only, so changing it needs a reload.
- * localStorage changes are live: other tabs via the `storage` event, same tab via
- * {@link refreshPackPerfEnabled}. While the boot URL has `?packPerf`, turning localStorage off does
- * not disable recording until a reload.
+ * storage or the URL (#196).
+ * - `?packPerf` is read at init only: changing it needs a reload.
+ * - localStorage changes apply live in OTHER tabs (the `storage` event). In the SAME tab (e.g. a
+ *   devtools edit) they need a reload, unless the code that writes the key calls
+ *   {@link refreshPackPerfEnabled} (nothing in the app writes it today).
+ * - With `?packPerf` in the boot URL, turning localStorage off does not disable recording until a reload.
  */
 
 import { harvestGpu } from "./gpu-time";
@@ -97,8 +99,9 @@ function applyFlag(): boolean {
 }
 
 /**
- * Re-read localStorage `zoto-viz.packPerf` after a same-tab change (other tabs arrive via the
- * `storage` event). One storage read per call; never per frame.
+ * Re-read localStorage `zoto-viz.packPerf` after a same-tab write (the `storage` event only fires in
+ * other tabs). Code that writes the key must call this; otherwise a same-tab change needs a reload.
+ * One storage read per call; never per frame.
  */
 export function refreshPackPerfEnabled(): boolean {
   if (typeof window === "undefined") return false;

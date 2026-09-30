@@ -260,13 +260,7 @@ import { mosaicFocusSlot, revertModeSelection } from "./apply-mode-mosaic";
 import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-view-restore";
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { applyVizWriteBatch } from "../plugins/viz-write-batch";
-import {
-  notePackHostPresentInterval,
-  notePackSandboxFrame,
-  packHostPerfSnapshot,
-  packPerfEnabled,
-} from "../core/pack-host-perf";
-import { maybeReportPackHostPerf } from "./pack-perf-report";
+import { notePackPerfPresent } from "./pack-perf-report";
 import { createHostMeshBridge, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
@@ -590,11 +584,7 @@ addPresentListener((ts) => {
   const mode = modeById(modeSel.value);
   const packId = normalizeVizDemoPackId(mode.pluginId ?? tsWatchId);
   if (packId) vizBudget.markPresent(ts);
-  if (packPerfEnabled()) {
-    const dt = presentInterval();
-    if (dt > 0) notePackHostPresentInterval(dt);
-    void maybeReportPackHostPerf(ts);
-  }
+  notePackPerfPresent(ts, presentInterval);
   deliverPluginPresentTick(presentDrive, ts);
   if (mode.pluginId === "backrooms") {
     pluginSfx.syncBackroomsViewConfig(currentOpts);
