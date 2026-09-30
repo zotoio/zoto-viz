@@ -166,10 +166,29 @@ function hostSlots(frame: VizDataFrame): Float32Array {
   return slots;
 }
 
-export function darkPatchReport(frame: VizDataFrame, src = SKY, radiusOverride?: number) {
+/**
+ * The pre-hash writer's placement (first character + slot index, orbiting the plane's origin), which
+ * is what #174's SwiftShader floor scan rendered; the calibration rows need the same slots.
+ */
+function preHashSlots(frame: VizDataFrame): Float32Array {
+  const slots = new Float32Array(VIZ_UBO.totalFloats);
+  const hue = (role: string) => (role === "gateway" ? 0.08 : role === "internet" ? 0.78 : role === "lan" ? 0.45 : 0.22);
+  frame.talkers.slice(0, 8).forEach((d, i) => {
+    const h = (d.id.charCodeAt(0) + i * 19) % 97;
+    const ang = (h / 97) * 6.283 + frame.t * (0.15 + i * 0.03);
+    const r = 0.25 + (h % 20) / 50;
+    slots.set([Math.cos(ang) * r, Math.sin(ang) * r, 0, hue(d.role)], i * 4);
+  });
+  return slots;
+}
+
+export function darkPatchReport(frame: VizDataFrame, src = SKY, radiusOverride?: number, placement: "writer" | "pre-hash" = "writer") {
   const shape = mirrorShape(src);
-  const slots = hostSlots(frame);
-  if (radiusOverride !== undefined) for (let i = 0; i < 8; i++) if (slots[i * 4 + 2]! > 0) slots[i * 4 + 2] = radiusOverride;
+  const slots = placement === "pre-hash" ? preHashSlots(frame) : hostSlots(frame);
+  if (placement === "pre-hash" && radiusOverride === undefined) throw new Error("pre-hash slots need a radius");
+  if (radiusOverride !== undefined) {
+    for (let i = 0; i < Math.min(8, frame.talkers.length); i++) if (placement === "pre-hash" || slots[i * 4 + 2]! > 0) slots[i * 4 + 2] = radiusOverride;
+  }
   const luma = cpuLuma(slots, APP_LOOK, RAY, SPAN, shape);
   const five = fivePatchSummary(appFivePatches(luma));
   const radii: number[] = [];
@@ -207,7 +226,8 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
 
   /**
    * Calibration against SwiftShader: #174's floor scan (/workspace/pedant-blob-ant-logs/
-   * budget-floor-scan.txt, the old always-draw shader, every radius at the floor) recorded these
+   * budget-floor-scan.txt, the old always-draw shader, the pre-hash placement, every radius at the
+   * floor) recorded these
    * app five-patch lumas. The mirror must land within 2 luma of each.
    */
   const SCAN: [frameName: "EMPTY" | "LAN7", floor: number, lums: number[]][] = [
@@ -226,7 +246,7 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
         .replace(/float drawn = [^;]*;\s*/, "")
         .replace(/float rad = max\([0-9.]+, b\.z\) \* drawn;/, `float rad = max(${floor}, b.z);`);
       expect(mirrorShape(oldShape)).toEqual({ floor, gate: "always" });
-      const r = darkPatchReport(DARK_PATCH_CASES[frameName], oldShape, floor);
+      const r = darkPatchReport(DARK_PATCH_CASES[frameName], oldShape, floor, "pre-hash");
       process.stdout.write(`[calibration] ${frameName}@${floor}: mirror ${r.five.lums.join("/")} vs swiftshader ${lums.join("/")}\n`);
       // Within 2 luma wherever SwiftShader read < 100 (the range the dark call is made in); bright
       // blob cores may run up to 8 hot (LAN7 centre patch reads +3..+6: float64 vs float32 and the
@@ -235,18 +255,23 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
     });
   }
 
-  /**
-   * SINGLE is a known fail at this budget/floor, kept visible with it.fails (not tuned here; the
-   * budget is retuned later): one device draws one blob (radius 0.22) and, with no idle blobs,
-   * nothing else lights the dome, so all five app patches read 0 (5/5 dark). If a later change
-   * lights the single-device tile, this row flips and it.fails must come off.
-   */
-  const KNOWN_DARK: ReadonlySet<string> = new Set(["SINGLE"]);
+  // SINGLE was it.fails (5/5 dark) while first-character angles parked a lone blob off screen.
   for (const [name, frame] of Object.entries(DARK_PATCH_CASES)) {
-    (KNOWN_DARK.has(name) ? it.fails : it)(`${name}: at most ${UXPRO_MAX_DARK} of QE's five app patches are dark${KNOWN_DARK.has(name) ? " (known fail, #174)" : ""}`, () => {
+    it(`${name}: at most ${UXPRO_MAX_DARK} of QE's five app patches are dark`, () => {
       const r = darkPatchReport(frame);
       process.stdout.write(`[dark-patch] ${name}: ${r.text}\n`);
       expect(r.five.dark, r.text).toBeLessThanOrEqual(UXPRO_MAX_DARK);
+    });
+  }
+
+  /** Sparse tiles over time: 1, 2 and 3 devices, every 5 s from 0 to 60 s, <= 2 dark at every step. */
+  const PAIR: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 400), talker("172.30.0.31", 1)] };
+  const TRIPLE: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 120), talker("172.30.0.11", 60), talker("172.30.0.12", 2)] };
+  for (const [name, frame] of [["SINGLE", SINGLE], ["PAIR", PAIR], ["TRIPLE", TRIPLE]] as const) {
+    it(`${name} sweep: at most ${UXPRO_MAX_DARK} of five dark at every 5 s step from 0 to 60 s`, () => {
+      const rows = Array.from({ length: 13 }, (_, i) => i * 5).map((t) => ({ t, r: darkPatchReport({ ...frame, t }) }));
+      process.stdout.write(`[sweep] ${name}: ${rows.map(({ t, r }) => `t${t}=${r.five.dark}`).join(" ")}\n`);
+      for (const { t, r } of rows) expect(r.five.dark, `t=${t}: ${r.text}`).toBeLessThanOrEqual(UXPRO_MAX_DARK);
     });
   }
 });

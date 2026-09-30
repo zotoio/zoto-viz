@@ -125,6 +125,75 @@ export function blobMeshRoleHue(role: string): number {
 
 export type BlobMeshTalker = { id: string; rate: number; role: string };
 
+/** FNV-1a 32-bit over the whole id (stable across host and pack; replaces the first-character seed). */
+export function blobMeshIdHash(id: string): number {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h >>> 0;
+}
+
+/*
+ * Visible region. The sky maps a camera ray to the blob plane as
+ *   dir = (c.x, T (c.y + c.z), T (c.z - c.y)),  uv = dir.xz / (L + |dir.y|),  T = cos 45, L = 0.35
+ * (sky/fragment.glsl), and draws a slot at uv = xy * 1.7. The host camera looks down -z with the
+ * default lens: base vertical FOV 55 deg with the horizontal capped at 64 deg (graph/lens-fov.ts),
+ * so on the app's 1280 x 800 view the ray spans tan(32 deg) x tan(32 deg) / 1.6. Pushing the view's
+ * centre and edge rays through that map gives the part of the plane the camera sees: centred at
+ * uv (0, -0.669), from uv.y -1.22 (top edge) to -0.32 (bottom edge), half-width 0.44 at the bottom
+ * edge; the inscribed circle around the centre has radius 0.352 (bottom edge). The upper half of the
+ * plane (uv.y > 0) is never on screen, which is where first-character angles parked lone blobs.
+ */
+export const BLOB_MESH_SKY_TILT = 0.70710678;
+export const BLOB_MESH_SKY_LIFT = 0.35;
+export const BLOB_MESH_SLOT_TO_UV = 1.7;
+/** Host camera ray span at the app's default lens and 1280 x 800 (tan of the half-FOVs). */
+export const BLOB_MESH_HOST_SPAN: readonly [number, number] = [Math.tan((32 * Math.PI) / 180), Math.tan((32 * Math.PI) / 180) / 1.6];
+
+/** The sky's uv for a camera-space ray (x, y, -1) (same map as the shader). */
+export function blobMeshSkyUv(x: number, y: number): [number, number] {
+  const len = Math.hypot(x, y, 1);
+  const cx = x / len;
+  const cy = y / len;
+  const cz = -1 / len;
+  const dy = BLOB_MESH_SKY_TILT * (cy + cz);
+  const dz = BLOB_MESH_SKY_TILT * (cz - cy);
+  const k = 1 / (BLOB_MESH_SKY_LIFT + Math.abs(dy));
+  return [cx * k, dz * k];
+}
+
+/** Centre and inscribed radius (uv) of what the camera sees of the blob plane. */
+export function blobMeshVisibleRegion(span: readonly [number, number] = BLOB_MESH_HOST_SPAN): { cx: number; cy: number; half: number } {
+  const [sx, sy] = span;
+  const [cx, cy] = blobMeshSkyUv(0, 0);
+  const top = blobMeshSkyUv(0, sy)[1];
+  const bottom = blobMeshSkyUv(0, -sy)[1];
+  const halfH = Math.min(Math.abs(top - cy), Math.abs(bottom - cy));
+  const halfW = Math.min(blobMeshSkyUv(sx, -sy)[0], blobMeshSkyUv(sx, 0)[0], blobMeshSkyUv(sx, sy)[0]);
+  return { cx, cy, half: Math.min(halfW, halfH) };
+}
+
+/** Each device orbits the visible centre at a hashed radius between these shares of the inscribed radius. */
+export const BLOB_MESH_ORBIT_MIN = 0.15;
+export const BLOB_MESH_ORBIT_MAX = 0.5;
+const VISIBLE = blobMeshVisibleRegion();
+
+/**
+ * Where a device's blob sits at time t, from its id alone (never its slot, rank or the other
+ * devices): it circles the visible centre at a hashed radius, phase and speed, so every drawn blob
+ * stays on screen and a device keeps its place as others come and go. Returns slot xy (uv / 1.7).
+ */
+export function blobMeshPlacement(id: string, t: number): [number, number] {
+  const h = blobMeshIdHash(id); // whole-id hash
+  const phase = ((h & 0xffff) / 65536) * 6.283;
+  const orbit = VISIBLE.half * (BLOB_MESH_ORBIT_MIN + (BLOB_MESH_ORBIT_MAX - BLOB_MESH_ORBIT_MIN) * (((h >>> 16) & 0xff) / 255));
+  const speed = (0.12 + 0.08 * ((h >>> 24) / 255)) * ((h & 0x10000) ? 1 : -1);
+  const ang = phase + t * speed;
+  return [(VISIBLE.cx + Math.cos(ang) * orbit) / BLOB_MESH_SLOT_TO_UV, (VISIBLE.cy + Math.sin(ang) * orbit) / BLOB_MESH_SLOT_TO_UV]; // in-view placement
+}
+
 /** Slot 0 (x, y, radius, hue per drawn device) plus the plan it came from. */
 export function packBlobMeshSlots(
   talkers: readonly BlobMeshTalker[],
@@ -134,10 +203,8 @@ export function packBlobMeshSlots(
   const slot0: number[] = [];
   plan.shownIdx.forEach((ti, j) => {
     const d = talkers[ti]!;
-    const h = (d.id.charCodeAt(0) + j * 19) % 97;
-    const ang = (h / 97) * 6.283 + t * (0.15 + j * 0.03);
-    const r = 0.25 + (h % 20) / 50;
-    slot0.push(Math.cos(ang) * r, Math.sin(ang) * r, plan.radii[j]!, blobMeshRoleHue(d.role));
+    const [x, y] = blobMeshPlacement(d.id, t);
+    slot0.push(x, y, plan.radii[j]!, blobMeshRoleHue(d.role));
   });
   return { slot0, plan };
 }
