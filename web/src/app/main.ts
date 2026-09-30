@@ -266,6 +266,7 @@ import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
 import { hasKeptTileAnswer, showNeedsYou, waitForTileReview, type TileReviewRunner } from "./needs-you";
 import { clearViewState, setViewState, setViewStateTileResolver, viewStateOf, viewStatePickerSuffix, viewStateViewId } from "./view-state";
+import { bindCantDrawViewState } from "./cant-draw-state";
 import { packNeedsConsent, shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { livePatchIsConsentOnly, mergePluginConsentLivePatch } from "./plugin-consent-live";
@@ -306,6 +307,8 @@ applyThemeChrome(theme);
 
 // one WebGL context for the whole wall: the main graph and every mosaic tile draw through it
 const renderHost = new RenderHost($("wall"));
+// Each tile's cant-draw view state follows the host: lost context, Reload offered, drawn again, shader failures (#171 c).
+bindCantDrawViewState(renderHost);
 mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
