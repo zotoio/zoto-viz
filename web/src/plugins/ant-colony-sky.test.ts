@@ -290,14 +290,13 @@ describe("ant-colony on the app's production path (live LAN frame, host look uni
    * of its brightness and 45% over the ember clear.
    * Timeline: the real fps.ts trail + tickPerf at APP_FPS from boot, notePerfChange at each pick
    * (scene.ts:1996), then the real perfOverlay + skyLookFor. The draw is composited like the
-   * app's transparent sky over the clear (0x1a1412 on the default framebuffer): with a
-   * premultiplied-free SRC_ALPHA blend, out = sky * uOpacity + clear * (1 - uOpacity) per byte,
-   * so the luma composites the same way. Pass lines are the app's own: UX Pro five-patch
+   * app's transparent sky over the clear (0x1a1412 on the default framebuffer): the harness
+   * blends SRC_ALPHA over that clear (#188), out = sky * uOpacity + clear * (1 - uOpacity) per byte. Pass lines are the app's own: UX Pro five-patch
    * (<= 2 of 5 below 24) and QE v5 area (>= 1% of the view at luma >= 40).
    */
   const ANT_LOOK_SLIDERS = { skyBright: 1.05, skyOpacity: 1 };
   const APP_FPS = 6;
-  const APP_CLEAR_LUMA = 0.2126 * 0x1a + 0.7152 * 0x14 + 0.0722 * 0x12;
+  const APP_CLEAR: [number, number, number] = [0x1a / 255, 0x14 / 255, 0x12 / 255];
   const PERF_SRC: PerfSrc = {
     labelCount: 20, partAmt: 1, partCap: 400, partPeak: 24, partSize: 1, edgeGlowAmt: 1, skySpeed: 0.35,
     ...ANT_LOOK_SLIDERS,
@@ -326,8 +325,8 @@ describe("ant-colony on the app's production path (live LAN frame, host look uni
     const look = appSkyLookAt(picks, at);
     const uniforms = { ...APP_LOOK, uBright: look.bright, uOpacity: look.opacity };
     const frag = wrappedSky(parentedSkyRay("ant-colony", rawSky, 0), appLensSkySpan());
-    const r = await smokeRenderPluginSky(frag, appSlots(), uniforms, { keepLuma: true, pngPath: pluginSkySmokePngPath(png) });
-    const luma = r.luma!.map((v) => v * look.opacity + APP_CLEAR_LUMA * (1 - look.opacity));
+    const r = await smokeRenderPluginSky(frag, appSlots(), uniforms, { keepLuma: true, pngPath: pluginSkySmokePngPath(png), clear: APP_CLEAR });
+    const luma = r.luma!;
     const five = fivePatchSummary(appFivePatches(luma));
     const lit40 = luma.filter((v) => v >= 40).length / luma.length;
     const sorted = [...luma].sort((a, b) => a - b);

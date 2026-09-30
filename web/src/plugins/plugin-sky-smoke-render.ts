@@ -71,18 +71,26 @@ export function pluginSkySmokePngPath(name: string): string | undefined {
   return dir ? path.join(dir, `${name}.png`) : undefined;
 }
 
-/** One full-screen plugin-sky draw; asserts non-black via median luma + channel variance. */
+/** The colour the harness clears to before the sky draw (0-1 RGB), unless a row passes `clear`. */
+export const PLUGIN_SKY_SMOKE_CLEAR: readonly [number, number, number] = [0.02, 0.04, 0.09];
+
+/**
+ * One full-screen plugin-sky draw; asserts non-black via median luma + channel variance.
+ * The sky is composited like the app's transparent plugin material (three.js NormalBlending):
+ * out = sky * a + clear * (1 - a), with `a` the alpha the shader writes (uOpacity for pack skies),
+ * over `opts.clear` (default PLUGIN_SKY_SMOKE_CLEAR). #188: before this the draw ignored uOpacity.
+ */
 export async function smokeRenderPluginSky(
   wrappedFrag: string,
   ubo: Float32Array,
   uniforms: PluginSkySmokeUniforms,
-  opts: { keepLuma?: boolean; pngPath?: string } = {},
+  opts: { keepLuma?: boolean; pngPath?: string; clear?: readonly [number, number, number] } = {},
 ): Promise<PluginSkySmokeResult> {
   const b = await browser();
   const page = await b.newPage();
   try {
     const result = await page.evaluate(
-      ({ frag, slots, uni, vert, keepLuma, wantPng }) => {
+      ({ frag, slots, uni, vert, keepLuma, wantPng, clear }) => {
         const canvas = document.createElement("canvas");
         canvas.width = 128;
         canvas.height = 128;
@@ -137,8 +145,12 @@ export async function smokeRenderPluginSky(
         gl.uniform3fv(gl.getUniformLocation(prog, "uBg"), uni.uBg);
 
         gl.viewport(0, 0, 128, 128);
-        gl.clearColor(0.02, 0.04, 0.09, 1);
+        gl.clearColor(clear[0]!, clear[1]!, clear[2]!, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
+        // Composite the sky's alpha over the clear (colour: SRC_ALPHA / ONE_MINUS_SRC_ALPHA); keep
+        // the framebuffer's alpha at 1 so the read-back is the composited picture.
+        gl.enable(gl.BLEND);
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE);
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
         const px = new Uint8Array(128 * 128 * 4);
@@ -188,6 +200,7 @@ export async function smokeRenderPluginSky(
         vert: VERT,
         keepLuma: opts.keepLuma === true,
         wantPng: !!opts.pngPath,
+        clear: [...(opts.clear ?? PLUGIN_SKY_SMOKE_CLEAR)],
       },
     );
 

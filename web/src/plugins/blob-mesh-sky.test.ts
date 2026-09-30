@@ -6,6 +6,7 @@ import { wrapPluginSky } from "./plugin-sky-probe";
 import {
   assertPluginSkySmokeDraws,
   closePluginSkySmokeBrowser,
+  PLUGIN_SKY_SMOKE_CLEAR,
   pluginSkySmokePngPath,
   smokeRenderPluginSky,
   type PluginSkySmokeUniforms,
@@ -96,7 +97,12 @@ afterAll(async () => {
   await closePluginSkySmokeBrowser();
 });
 
-function packWriterInputs(frame: VizDataFrame): { slots: Float32Array; uniforms: PluginSkySmokeUniforms } {
+/**
+ * The pack frontend's writes for `frame`, drawn the way the app draws them (#180 H1, #188): the
+ * pack's uBright / uOpacity multiply the host look's (visualisation.yml skyBright / skyOpacity);
+ * its uAudio / uAccent win. `packBright` is the pack's raw uBright write (1 when it writes none).
+ */
+function packWriterInputs(frame: VizDataFrame): { slots: Float32Array; uniforms: PluginSkySmokeUniforms; packBright: number } {
   expect(onFrame, "blob-mesh frontend registers host.onFrame").toBeTypeOf("function");
   expect(frame.talkers.length).toBeGreaterThan(0);
   onFrame!(frame);
@@ -104,11 +110,14 @@ function packWriterInputs(frame: VizDataFrame): { slots: Float32Array; uniforms:
   const slots = new Float32Array(VIZ_UBO.totalFloats);
   slots.set(captured.slot0);
   const u = captured.uniforms;
+  const packBright = typeof u.uBright === "number" ? u.uBright : 1;
   return {
     slots,
+    packBright,
     uniforms: {
       ...HOST_DEFAULTS,
-      uBright: typeof u.uBright === "number" ? u.uBright : HOST_DEFAULTS.uBright,
+      uBright: HOST_DEFAULTS.uBright * packBright,
+      uOpacity: HOST_DEFAULTS.uOpacity * (typeof u.uOpacity === "number" ? u.uOpacity : 1),
       uAudio: typeof u.uAudio === "number" ? u.uAudio : 0,
       uAccent: Array.isArray(u.uAccent) ? u.uAccent : HOST_DEFAULTS.uAccent,
     },
@@ -244,7 +253,7 @@ describe("blob-mesh on the app's production path (host runPackFrameHandler, live
     const quiet = { ...EMPTY, t: 35, talkers: ["gateway", "lan", "internet"].map((role, i) => ({ id: `192.168.1.${10 + i}`, rate: 0.5, role })) };
     const frames = [...lanFrames35s({ fixture: "host" }, 2, 3), mergeVizIdleFrame({ ...EMPTY, t: 35 }, { fixture: "host" }), quiet];
     for (const frame of frames) {
-      const { slots, uniforms } = packWriterInputs(frame);
+      const { slots, packBright } = packWriterInputs(frame);
       captured = { slot0: [], uniforms: {} };
       let hostBright: number | null = null;
       const host = new Float32Array(VIZ_UBO.totalFloats);
@@ -254,7 +263,50 @@ describe("blob-mesh on the app's production path (host runPackFrameHandler, live
         writeParticles: () => {},
       });
       expect(Array.from(host.slice(0, 32)), `t=${frame.t} talkers=${frame.talkers.length}`).toEqual(Array.from(slots.slice(0, 32)));
-      expect(hostBright).toBe(uniforms.uBright);
+      expect(hostBright).toBe(packBright);
     }
   });
+
+  /**
+   * #188 item 2: the pack-writer rows draw the uBright the app renders, host look x pack write
+   * (blobMeshPackLook, the #180 H1 rule), not the pack's raw write the app would overwrite.
+   * Revert: packWriterInputs back to the pack's uBright alone -> red on every frame.
+   */
+  it("pack-writer rows draw the app's uBright: visualisation.yml skyBright x the pack's write, on live, idle and quiet frames", () => {
+    const quiet = { ...EMPTY, t: 35, talkers: ["gateway", "lan", "internet"].map((role, i) => ({ id: `192.168.1.${10 + i}`, rate: 0.5, role })) };
+    const frames = [...lanFrames35s({ fixture: "host" }, 2, 3), mergeVizIdleFrame({ ...EMPTY, t: 35 }, { fixture: "host" }), quiet, { ...quiet, audio: 1 }];
+    const skyBright = blobMeshLookNumber("skyBright");
+    for (const frame of frames) {
+      const { uniforms, packBright } = packWriterInputs(frame);
+      captured = { slot0: [], uniforms: {} };
+      const app = appLookFor(frame);
+      const why = `t=${frame.t} audio=${frame.audio} talkers=${frame.talkers.length}: harness uBright ${uniforms.uBright} vs app ${app.uBright} (skyBright ${skyBright} x pack ${packBright})`;
+      expect(uniforms.uBright, why).toBeCloseTo(app.uBright, 9);
+      expect(uniforms.uBright, why).toBeCloseTo(skyBright * packBright, 9);
+      expect(uniforms.uOpacity, why).toBeCloseTo(app.uOpacity, 9);
+    }
+  });
+
+  /**
+   * #188 item 1 on Blob's own frame: at the app's skyOpacity (< 1) the harness output is the
+   * opaque draw composited over its clear, pixel by pixel (+-1 luma), so an opacity regression
+   * shows in Blob's frame rows. Revert: the harness without its blend -> red.
+   */
+  it("the live-LAN frame at the app's skyOpacity is the opaque draw composited over the clear (harness honours uOpacity)", async () => {
+    const [frame] = lanFrames35s({ fixture: "host" }, 2);
+    const slots = hostCaseSlots(frame!);
+    const look = appLookFor(frame!);
+    expect(look.uOpacity, "blob-mesh draws below full opacity").toBeLessThan(1);
+    const frag = wrappedSky(rawSky, parentedSkyRay("blob-mesh", rawSky, HOST_DEFAULT_PITCH_DEG), appLensSkySpan());
+    const seen = await smokeRenderPluginSky(frag, slots, look, { keepLuma: true });
+    const opaque = await smokeRenderPluginSky(frag, slots, { ...look, uOpacity: 1 }, { keepLuma: true });
+    const c = PLUGIN_SKY_SMOKE_CLEAR;
+    const clearLuma = 0.2126 * Math.round(255 * c[0]) + 0.7152 * Math.round(255 * c[1]) + 0.0722 * Math.round(255 * c[2]);
+    const errs = seen.luma!.map((v, i) => Math.abs(v - (opaque.luma![i]! * look.uOpacity + clearLuma * (1 - look.uOpacity))));
+    const worst = Math.max(...errs);
+    const why = `uOpacity ${look.uOpacity}: worst pixel off the composite by ${worst.toFixed(2)} luma; checksums ${seen.pixelChecksum} vs opaque ${opaque.pixelChecksum}`;
+    process.stdout.write(`[blob-opacity] ${why}\n`);
+    expect(seen.pixelChecksum, why).not.toBe(opaque.pixelChecksum);
+    expect(worst, why).toBeLessThanOrEqual(1.5);
+  }, 60_000);
 });
