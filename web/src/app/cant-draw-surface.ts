@@ -19,8 +19,11 @@ const SURFACE = "tile-cant-draw";
 /** Display name for a tile's view (the copy falls back to "This view" when empty). */
 export type CantDrawViewName = (viewId: string, packId: string) => string;
 
+/** How many tiles are on the wall now (1 = solo: the shader copy drops "Other tiles aren't affected"). */
+export type CantDrawTileCount = () => number;
+
 /** Paint, update or remove the tile's surface to match its view state now. */
-export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName): void {
+export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName, tileCount?: CantDrawTileCount): void {
   const el = viewStateTileEl(tileId);
   if (!el) return;
   const existing = el.querySelector<HTMLElement>(`:scope > .${SURFACE}`);
@@ -29,7 +32,7 @@ export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName)
     existing?.remove();
     return;
   }
-  const copy = viewStateCopy(state, viewName(viewStateViewId(tileId) ?? tileId, state.packId));
+  const copy = viewStateCopy(state, viewName(viewStateViewId(tileId) ?? tileId, state.packId), { tileId, tileCount: tileCount?.() });
   const box = existing ?? document.createElement("div");
   if (!existing) {
     box.className = SURFACE;
@@ -46,6 +49,6 @@ export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName)
 }
 
 /** Keep every tile's surface in step with its view state; returns the unsubscribe. */
-export function bindCantDrawSurface(viewName: CantDrawViewName): () => void {
-  return onViewStateChange((tileId) => paintCantDrawSurface(tileId, viewName));
+export function bindCantDrawSurface(viewName: CantDrawViewName, tileCount?: CantDrawTileCount): () => void {
+  return onViewStateChange((tileId) => paintCantDrawSurface(tileId, viewName, tileCount));
 }

@@ -96,7 +96,7 @@ function bootWall(tileIds: string[], opts: { software?: boolean } = {}): Wall {
   }
   setViewStateTileResolver((id) => panes.get(id) ?? null);
   const stopState = bindCantDrawViewState(host);
-  const stopSurface = bindCantDrawSurface((_viewId, packId) => (packId === "fluid" ? "Fluid" : packId));
+  const stopSurface = bindCantDrawSurface((_viewId, packId) => (packId === "fluid" ? "Fluid" : packId), () => host.drawTileIds().length);
   const stop = () => { stopState(); stopSurface(); };
   let ts = 0;
   return {
@@ -190,12 +190,17 @@ describe("#179 part (c): every tile on the shared host goes cant-draw / context-
     for (const id of ["a", "b"]) expect(viewStateOf(id)).toEqual({ kind: "ready" });
   });
 
-  it("copy: context-lost never says other tiles are fine, and offers no tile button (the wall notice owns Reload)", () => {
+  it("copy: context-lost is the wall notice's own words (Restoring until reload:true, then the Reload sentence), never 'other tiles', no tile button", () => {
     const lost = viewStateCopy({ kind: "cant-draw", reason: "context-lost" }, "Backrooms");
-    expect(lost.text).toBe("Graphics stopped responding. Reload to get it back.");
-    expect(lost.text).not.toMatch(/other tiles/i);
-    expect(lost.button).toBeNull();
-    const shader = viewStateCopy({ kind: "cant-draw", reason: "shader", packId: "graph-cloth" }, "Graph cloth");
+    expect(lost.text).toBe(GFX_INTERRUPTED_NOTICE);
+    const reload = viewStateCopy({ kind: "cant-draw", reason: "context-lost", reload: true }, "Backrooms");
+    expect(reload.text).toBe(GFX_NO_RESTORE_NOTICE);
+    expect(reload.text).not.toMatch(/restoring/i);
+    for (const c of [lost, reload]) {
+      expect(c.text).not.toMatch(/other tiles/i);
+      expect(c.button).toBeNull();
+    }
+    const shader = viewStateCopy({ kind: "cant-draw", reason: "shader", packId: "graph-cloth" }, "Graph cloth", { tileId: "b", tileCount: 3 });
     expect(shader.text).toBe("Graph cloth couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.");
   });
 });
@@ -341,6 +346,13 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
     expect(lossStatusRegions(w).length).toBe(0);
     expect(viewStateOf("b")).toEqual({ kind: "cant-draw", reason: "shader", packId: "fluid" });
     expect(tileSurfaces(w).length, "b's own shader failure still stands").toBe(1);
+  });
+
+  it("shader on the solo wall (tile main, one tile): the line drops 'Other tiles aren't affected'", () => {
+    w = bootWall(["main"]);
+    enterCantDrawShader("main", "fluid");
+    expect(w.panes.get("main")!.querySelector(":scope > .tile-cant-draw")?.textContent)
+      .toBe("Fluid couldn't draw. Pick another view, or reload to try again.");
   });
 
   it("a shader tile that already shows the pack's own fallback gets no second message", () => {

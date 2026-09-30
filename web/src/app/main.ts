@@ -312,7 +312,10 @@ const renderHost = new RenderHost($("wall"));
 // Each tile's cant-draw view state follows the host: lost context, Reload offered, drawn again, shader failures (#171 c).
 bindCantDrawViewState(renderHost);
 // One tile's shader failure gets its own "couldn't draw" line; a lost context is the wall notice's alone (#179 c).
-bindCantDrawSurface((viewId, packId) => sanitizePackDisplayName(pluginSpecForMode(viewId)?.name ?? packId));
+bindCantDrawSurface(
+  (viewId, packId) => sanitizePackDisplayName(pluginSpecForMode(viewId)?.name ?? packId),
+  () => renderHost.drawTileIds().length,
+);
 mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
