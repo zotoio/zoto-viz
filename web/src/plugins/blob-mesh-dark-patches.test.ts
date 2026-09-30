@@ -2,7 +2,17 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { BLOB_MESH_FLOOR, BLOB_MESH_SLOT_BUDGET, planBlobMesh } from "../../../plugins/sdk/blob-mesh-budget";
+import {
+  BLOB_MESH_FLOOR,
+  BLOB_MESH_SITES,
+  BLOB_MESH_SLOT_BUDGET,
+  BLOB_MESH_SLOT_TO_UV,
+  BLOB_MESH_SPREAD,
+  blobMeshPlacement,
+  packBlobMeshSlots,
+  planBlobMesh,
+  type BlobMeshSiteMap,
+} from "../../../plugins/sdk/blob-mesh-budget";
 import { blobMeshLookNumber, blobMeshPackLook } from "./blob-mesh-look-test-helper";
 import { appLensSkySpan, HOST_DEFAULT_PITCH_DEG, parentedSkyRay, type SkyRay, type SkySpan } from "./pack-sky-host-camera-test-helper";
 import {
@@ -16,7 +26,7 @@ import {
   UXPRO_MAX_DARK,
 } from "./pack-sky-lan-frame-test-helper";
 import type { PluginSkySmokeUniforms } from "./plugin-sky-smoke-render";
-import { runPackFrameHandler } from "./viz-pack-host";
+import { runPackFrameHandler, VIZ_PACK_TILE_ID_OPT } from "./viz-pack-host";
 import { VIZ_UBO, type VizDataFrame } from "./viz-host";
 
 /**
@@ -204,7 +214,13 @@ const SCAN_LOOK = hostLookUniforms({ skyBright: 1.18, skyOpacity: 0.96, rim: 0x4
 const RAY = parentedSkyRay("blob-mesh", SKY, HOST_DEFAULT_PITCH_DEG);
 const SPAN = appLensSkySpan();
 
-function hostSlots(frame: VizDataFrame): Float32Array {
+let hostTiles = 0;
+/**
+ * The slots the app draws for `frame` (host runPackFrameHandler). Each call is its own tile (fresh
+ * #193 site map, just like the app on the first frame of a set), unless a row passes `tile` to carry a
+ * site map across a frame sequence.
+ */
+function hostSlots(frame: VizDataFrame, tile = `dark-patches-${hostTiles++}`): Float32Array {
   const slots = new Float32Array(VIZ_UBO.totalFloats);
   runPackFrameHandler("blob-mesh", frame, {
     writeBuffer: (slot, data) => {
@@ -213,7 +229,7 @@ function hostSlots(frame: VizDataFrame): Float32Array {
     },
     writeUniform: () => {},
     writeParticles: () => {},
-  });
+  }, { [VIZ_PACK_TILE_ID_OPT]: tile });
   return slots;
 }
 
@@ -325,6 +341,46 @@ export function mergeDistance(r1: number, r2: number, falloff: Falloff): number 
 /** How many blobs stand apart: centre distance to every other blob >= their merge distance. */
 export function separatedBlobs(blobs: readonly { x: number; y: number; r: number }[], falloff: Falloff): number {
   return blobs.filter((a, i) => blobs.every((b, j) => j === i || Math.hypot(a.x - b.x, a.y - b.y) >= mergeDistance(a.r, b.r, falloff))).length;
+}
+
+/** Inside the safe spread ellipse (BLOB_MESH_SPREAD, uv): the field every drawn centre may use. */
+function inSafeEllipse(x: number, y: number): boolean {
+  const { cx, cy, ax, ay } = BLOB_MESH_SPREAD;
+  return ((x - cx) / ax) ** 2 + ((y - cy) / ay) ** 2 <= 1 + 1e-12;
+}
+
+/** Lumps: blobs joined (union-find) when their centres are closer than their merge distance. */
+export function blobLumps(blobs: readonly { x: number; y: number; r: number }[], falloff: Falloff): number {
+  const parent = blobs.map((_, i) => i);
+  const root = (i: number): number => (parent[i] === i ? i : (parent[i] = root(parent[i]!)));
+  for (let i = 0; i < blobs.length; i++) for (let j = i + 1; j < blobs.length; j++) {
+    const a = blobs[i]!, b = blobs[j]!;
+    if (Math.hypot(a.x - b.x, a.y - b.y) < mergeDistance(a.r, b.r, falloff)) parent[root(i)] = root(j);
+  }
+  return new Set(blobs.map((_, i) => root(i))).size;
+}
+
+type PlacedBlob = { id: string; x: number; y: number; r: number; site: number | undefined };
+
+/**
+ * #193 real placement for one step of a sequence: packBlobMeshSlots settles `sites` (the site map
+ * the sequence carries) and places every drawn device with blobMeshPlacement(id, t, sites). Throws
+ * unless each slot is exactly blobMeshPlacement's answer and the slots the app draws (host
+ * runPackFrameHandler on tile `tile`, fed the same sequence) match, so the rows measure the wall.
+ */
+function placedStep(frame: VizDataFrame, t: number, shape: Shape, sites: BlobMeshSiteMap, tile: string): PlacedBlob[] {
+  const f = { ...frame, t };
+  const pack = packBlobMeshSlots(f.talkers, t, sites);
+  const drawn = hostSlots(f, tile);
+  return pack.plan.shownIdx.map((ti, j) => {
+    const id = f.talkers[ti]!.id;
+    const [sx, sy] = blobMeshPlacement(id, t, sites);
+    if (pack.slot0[j * 4] !== sx || pack.slot0[j * 4 + 1] !== sy) throw new Error(`placement: slot ${j} is not blobMeshPlacement(${id}, ${t})`);
+    if (Math.abs(drawn[j * 4]! - sx) > 1e-6 || Math.abs(drawn[j * 4 + 1]! - sy) > 1e-6) {
+      throw new Error(`placement: drawn slot ${j} (${drawn[j * 4]}, ${drawn[j * 4 + 1]}) is not blobMeshPlacement(${id}, ${t}) = (${sx}, ${sy})`);
+    }
+    return { id, x: sx * BLOB_MESH_SLOT_TO_UV, y: sy * BLOB_MESH_SLOT_TO_UV, r: Math.max(shape.floor, pack.plan.radii[j]!), site: sites.get(id) };
+  });
 }
 
 const EMPTY: VizDataFrame = { t: 35, dt: 1 / 6, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
@@ -467,7 +523,7 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
    * #174 b (UX Pro): size is the only thing that shows rate, and the sky reads as background, so its
    * brightest pixel stays under the dimmest blob. Sky peak and dimmest blob come from the CPU mirror
    * (blobVsSky) with the uniforms the pack draws with at the audio peak (packLook: yml skyBright x
-   * the pack's uBright, the pack's uAudio / uAccent). Reverts: skyBright 1.04 (over the limit), the authored r^2/d^2 falloff -> red.
+   * the pack's uBright, the pack's uAudio / uAccent). Reverts: the authored r^2/d^2 falloff -> red. (skyBright 1.04 was red on the hashed placement; on the lattice the gap is 31.9 there, see the uniform row.)
    */
   for (const [name, frame] of [["LAN7", LAN7], ["LAN11", LAN11]] as const) {
     it(`${name} sky under the blobs: at the audio peak the sky's brightest pixel is >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob at every 5 s step from 0 to 60 s`, () => {
@@ -490,8 +546,11 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
    * on the same mirror the brightest uBright up to which the sky stays >= 5 luma under the dimmest blob at
    * every 5 s step from 0 to 60 s (no copy of either number lives in the test). The yml skyBright
    * must clear it, and be the tightest two-decimal value that does (skyBright + 0.01 must not).
+   * The gap is not monotonic in uBright: once the dimmest blob's centre clamps at 255 the sky
+   * catches up, then clamps too and the gap reopens. So walk up from the floor in 0.01 steps to the
+   * first uBright that doesn't clear, then bisect that step.
    */
-  it(`uniform: the pack's effective sky uBright at the audio peak (LAN7, LAN11) is at most the brightest that keeps the sky >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob, and skyBright is the tightest two-decimal value`, () => {
+  const uniformRow = () => {
     const frames = [LAN7, LAN11].flatMap((f) => Array.from({ length: 13 }, (_, i) => ({ ...f, t: i * 5, audio: AUDIO_PEAK })));
     const looks = frames.map((f) => packLook(f));
     const clears = (uBright: number) => frames.every((f, i) => {
@@ -517,7 +576,23 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
     process.stdout.write(`[sky-uniform] LAN7+LAN11: ${text}\n`);
     expect(eff, text).toBeLessThanOrEqual(lo);
     expect(Math.round((sky + 0.01) * 100) / 100, `tightest two-decimal skyBright: ${text}`).toBeGreaterThan(limit);
-  }, 240_000);
+  };
+  /**
+   * Known gap since #193's lattice placement (it.fails on the no-limit assertion only): with the
+   * busiest 4 on separate sites the sky stays >= 5 luma under the dimmest blob at every uBright up
+   * to 3 (worst gap 7.7 at uBright 1.3; 33.3 at 1.03), so no tightest skyBright exists under this
+   * rule and 1.03 (UX Pro's value, the tightest on the old hashed placement) can't be pinned by it.
+   * Any other failure, or a limit showing up again, makes this row red.
+   */
+  const NO_LIMIT = /^some uBright under 3 must not clear: expected true to be false/;
+  it.fails(`uniform (known gap, it.fails on the no-limit assertion): the pack's effective sky uBright at the audio peak (LAN7, LAN11) is at most the brightest that keeps the sky >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob, and skyBright is the tightest two-decimal value`, () => {
+    let msg = "(no failure)";
+    let err: unknown = null;
+    try { uniformRow(); } catch (e) { err = e; msg = e instanceof Error ? e.message : String(e); }
+    const hit = NO_LIMIT.test(msg);
+    process.stdout.write(`[sky-uniform] ${hit ? "no-limit assertion (known gap)" : "NOT the no-limit assertion"}: ${msg}\n`);
+    if (hit) throw err;
+  }, 600_000);
 
   /**
    * #193 (UX Pro spec): a steeper falloff with compact support, the iso threshold left alone. The
@@ -562,48 +637,49 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
   });
 
   /**
-   * #193 target, shader side: LAN7's seven drawn radii (from the real writer at t=0) laid on a hex
-   * lattice whose spacing is the largest pairwise merge distance (max ri + rj + BLOB_GAP) all stand
-   * apart. Only the layout is constructed (the view and the safe ellipse are
-   * not asked here); it shows the falloff delivers >= 5 of 7 once placement honours the merge
-   * distance. Revert: the authored r^2/d^2 falloff (merge distance Infinity) -> 0 of 7, red.
+   * #193 acceptance (UX Pro via ZotoBoss: 4 of 7 clearly separate, lattice placement) on the REAL
+   * placement: LAN7 and LAN11, every 5 s from 0 to 60 s in one sequence (the site map carries
+   * across steps like the app's tile), blobs at blobMeshPlacement(id, t, sites), cross-checked
+   * against the slots the app draws. Merge distance r1 + r2 + BLOB_GAP with BLOB_GAP read from
+   * fragment.glsl. At every step: every drawn centre inside the safe ellipse; the busiest 4 hold 4
+   * distinct sites and every pair of them is at least its merge distance apart; the 7 blobs form at
+   * least 4 separate lumps (no blob within merge distance of two site lumps). Strict isolation of 4
+   * (each >= merge distance from all 6 others) can't fit: the other 3 have to sit somewhere in the
+   * ellipse, and every point of it is within 0.36 of a site; they join a site's lump instead.
+   * Reverts: today's hashed placement -> red; the authored r^2/d^2 falloff (merge distance
+   * Infinity) -> red.
    */
-  it("#193 separation, shader side: LAN7's seven radii on a hex lattice at the shader's merge distance stand apart (>= 5 of 7)", () => {
+  it("#193 acceptance on the real blobMeshPlacement: LAN7 and LAN11 keep every centre inside the safe ellipse and >= 4 of 7 clearly separated at the shader's merge distance (busiest 4 on distinct sites, 4 lumps) at every 5 s step from 0 to 60 s", () => {
     const shape = mirrorShape(SKY);
-    const gap = shaderConst(SKY, "BLOB_GAP")!;
-    const radii = drawnBlobs({ ...LAN7, t: 0 }, shape).map((b) => b.r);
-    expect(radii).toHaveLength(7);
-    const sorted = [...radii].sort((a, b) => b - a);
-    const spacing = sorted[0]! + sorted[1]! + gap;
-    const sites = [[0, 0], ...Array.from({ length: 6 }, (_, k) => [Math.cos((k * Math.PI) / 3), Math.sin((k * Math.PI) / 3)])];
-    const blobs = radii.map((r, i) => ({ x: sites[i]![0]! * spacing, y: sites[i]![1]! * spacing, r }));
-    const n = separatedBlobs(blobs, shape.falloff);
-    process.stdout.write(`[separation] lattice LAN7: ${n} of 7 apart (spacing ${spacing.toFixed(3)} = ${sorted[0]!.toFixed(3)} + ${sorted[1]!.toFixed(3)} + BLOB_GAP ${gap})\n`);
-    expect(n, `LAN7 radii ${radii.map((r) => r.toFixed(3)).join(",")} on a lattice at spacing ${spacing.toFixed(3)}`).toBeGreaterThanOrEqual(5);
-  });
-
-  /**
-   * #193 target on the live placement (known gap, it.fails on the count assertion only): LAN7 and
-   * LAN11 at every 5 s from 0 to 60 s with today's hashed homes. 0 of 7 stand apart at any step for
-   * any BLOB_GAP > 0: the closest pairs sit 0.0325 uv apart against r1 + r2 >= 0.24, and the safe
-   * home ellipse (0.355 x 0.225 uv after drift + wobble) holds at most 4 sites 0.39 uv apart
-   * (floor pair + BLOB_GAP 0.12 + 2 x wobble). Reaching 5 needs Performance Pedant's lattice
-   * placement spec (#193 comments) and a bigger field or smaller blobs. Turns red once it holds.
-   */
-  const SEPARATION_FAIL = /^(LAN7|LAN11) t=\d+: \d+ of 7 apart: expected (\d+) to be greater than or equal to 5$/;
-  it.fails("#193 separation, live placement (known gap, it.fails on the count assertion): >= 5 of 7 drawn blobs stand apart on LAN7 and LAN11 at every 5 s step from 0 to 60 s", () => {
-    const shape = mirrorShape(SKY);
-    const counts: string[] = [];
-    let err: unknown = null;
-    let msg = "(no failure)";
-    try {
-      const live: [string, VizDataFrame][] = [["LAN7", LAN7], ["LAN11", LAN11]];
-      const rows = live.map(([name, frame]) => ({ name, row: Array.from({ length: 13 }, (_, i) => i * 5).map((t) => ({ t, n: separatedBlobs(drawnBlobs({ ...frame, t }, shape), shape.falloff) })) }));
-      for (const { name, row } of rows) counts.push(`${name} ${row.map(({ t, n }) => `t${t}=${n}`).join(" ")}`);
-      for (const { name, row } of rows) for (const { t, n } of row) expect(n, `${name} t=${t}: ${n} of 7 apart`).toBeGreaterThanOrEqual(5);
-    } catch (e) { err = e; msg = e instanceof Error ? e.message : String(e); }
-    const m = msg.match(SEPARATION_FAIL);
-    process.stdout.write(`[separation] live: ${counts.join(" | ")} :: ${m ? "count assertion" : "NOT the count assertion"}: ${msg}\n`);
-    if (m) throw err;
+    const gap = shaderConst(SKY, "BLOB_GAP");
+    expect(shape.falloff.kind, "merge distance needs the compact falloff (fragment.glsl)").toBe("compact");
+    expect(gap !== null && gap > 0, "BLOB_GAP read from fragment.glsl and > 0").toBe(true);
+    for (const [x, y] of BLOB_MESH_SITES) expect(inSafeEllipse(x, y), `site (${x}, ${y}) inside the safe ellipse`).toBe(true);
+    const lines: string[] = [];
+    const live: [string, VizDataFrame][] = [["LAN7", LAN7], ["LAN11", LAN11]];
+    for (const [name, frame] of live) {
+      const sites: BlobMeshSiteMap = new Map();
+      const tile = `accept-${name}-${hostTiles++}`;
+      for (let t = 0; t <= 60; t += 5) {
+        const blobs = placedStep(frame, t, shape, sites, tile);
+        expect(blobs, `${name} t=${t}: drawn`).toHaveLength(7);
+        for (const b of blobs) expect(inSafeEllipse(b.x, b.y), `${name} t=${t}: ${b.id} (${b.x.toFixed(3)}, ${b.y.toFixed(3)}) inside the safe ellipse`).toBe(true);
+        const holders = blobs.filter((b) => b.site !== undefined);
+        let closest = { d: Infinity, merge: Infinity, ids: "" };
+        for (let i = 0; i < holders.length; i++) for (let j = i + 1; j < holders.length; j++) {
+          const A = holders[i]!, B = holders[j]!;
+          const d = Math.hypot(A.x - B.x, A.y - B.y);
+          if (d - mergeDistance(A.r, B.r, shape.falloff) < closest.d - closest.merge || closest.ids === "") closest = { d, merge: mergeDistance(A.r, B.r, shape.falloff), ids: `${A.id}/${B.id}` };
+        }
+        const lumps = blobLumps(blobs, shape.falloff);
+        const strict = separatedBlobs(blobs, shape.falloff);
+        const why = `${name} t=${t}: holders ${holders.map((h) => `${h.id}@${h.site}`).join(" ")}; closest holder pair ${closest.ids} ${closest.d.toFixed(4)} uv vs merge ${closest.merge.toFixed(4)}; ${lumps} lumps; ${strict} of 7 strictly isolated`;
+        lines.push(why);
+        expect(new Set(holders.map((h) => h.site)).size, `4 distinct sites: ${why}`).toBe(4);
+        expect(closest.d, `busiest 4 pairwise apart: ${why}`).toBeGreaterThanOrEqual(closest.merge);
+        expect(lumps, `>= 4 separate lumps: ${why}`).toBeGreaterThanOrEqual(4);
+      }
+    }
+    process.stdout.write(`[separation] acceptance:\n  ${lines.join("\n  ")}\n`);
   });
 });

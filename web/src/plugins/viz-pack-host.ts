@@ -12,7 +12,7 @@ import { HnTermFrameDriver } from "../../../plugins/src/hn-term/frontend/frame";
 import { hnRainCanvasSize, packHnRainBuffer, parseHnRainLook } from "../../../plugins/src/hn-rain/frontend/crawl";
 import { packStereoDrive, parseStereoTiming, stereoClockNow } from "../../../plugins/src/stereo-gram/frontend/drive";
 import { packetTunnelSample } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
-import { packBlobMeshSlots } from "../../../plugins/sdk/blob-mesh-budget";
+import { packBlobMeshSlots, type BlobMeshSiteMap } from "../../../plugins/sdk/blob-mesh-budget";
 import { blobMeshNoticeLatchFor } from "./blob-mesh-devices-notice";
 import {
   CANVAS_DEFAULT,
@@ -44,6 +44,17 @@ export function packNixieWallBuffer(
 export function resetHostNixieWallScope(): void {
   hostNixieWallSecond.reset();
   nixieUploadLatches.clear();
+}
+
+/** #193: per-tile blob-mesh site maps (the busiest 4 keep their lattice site across frames). */
+const blobMeshSiteMaps = new Map<string, BlobMeshSiteMap>();
+function blobMeshSitesFor(tileId: string): BlobMeshSiteMap {
+  let sites = blobMeshSiteMaps.get(tileId);
+  if (!sites) {
+    sites = new Map();
+    blobMeshSiteMaps.set(tileId, sites);
+  }
+  return sites;
 }
 
 function nixiePackTileId(opts?: Record<string, string> | null): string {
@@ -216,8 +227,8 @@ export function runPackFrameHandler(
       // Mirror of plugins/src/blob-mesh/frontend/index.ts (#161). This case runs right before
       // the draw (viz-frame-tick.ts), so its slot 0 is what the app shows. Both writers share
       // plugins/sdk/blob-mesh-budget.ts: floor first, then growth up to the whole coverage
-      // budget (#174); placement from the device id, always in view.
-      const blob = packBlobMeshSlots(frame.talkers, frame.t);
+      // budget (#174); the busiest 4 on their held lattice sites (#193, per-tile site map).
+      const blob = packBlobMeshSlots(frame.talkers, frame.t, blobMeshSitesFor(nixiePackTileId(opts)));
       handlers.writeBuffer(0, blob.slot0);
       // #173: when the minimums don't all fit, the quietest devices are dropped (never a silent
       // overlap) and the tile says how many, with ~3 s hysteresis each way.
