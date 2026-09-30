@@ -86,7 +86,7 @@ describe("koi-pond shipped pack", () => {
     expect(FRAG).not.toMatch(/vec3\(\s*xz\s*\*[^)]*,[^)]*,/);
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
     expect(FRONT).toContain("KoiPondSim");
-    expect(FRONT).not.toContain("parent.document");
+    expect(FRONT).not.toMatch(/\bparent\s*\.\s*document\b/);
     expect(FRONT).not.toMatch(/zoto\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{[\s\S]*?getConfig/);
     expect(VIS).toContain("Applies to all Koi Pond tiles");
     expect(VIS).toContain("moonlit_lotus");
