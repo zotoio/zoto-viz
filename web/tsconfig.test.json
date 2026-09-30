@@ -26,7 +26,8 @@
     "../plugins/src/ant-colony/frontend/index.ts",
     "../plugins/src/aquarium/frontend/aquarium.ts",
     "../plugins/src/aquarium/frontend/fixtures/idle-viz-frame.ts",
-    "../plugins/src/fractal-zoom/frontend/index.ts"
+    "../plugins/src/fractal-zoom/frontend/index.ts",
+    "../plugins/src/koi-pond/frontend/koi-pond.ts"
   ],
   "exclude": []
 }

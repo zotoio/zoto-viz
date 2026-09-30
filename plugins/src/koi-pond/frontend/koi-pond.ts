@@ -303,8 +303,8 @@ function parsePatternFlags(cfg?: Record<string, string> | null): number[] {
 }
 
 function defaultStringForOptionKey(key: string): string | undefined {
-  const d = DEFAULT_OPTIONS as Record<string, unknown>;
-  const v = d[key];
+  // `key` is any host config key; an unknown one reads undefined, hence `unknown` and the checks below.
+  const v: unknown = DEFAULT_OPTIONS[key as keyof KoiPondOptions];
   if (typeof v === "boolean") return v ? "true" : "false";
   if (typeof v === "number") return String(v);
   if (typeof v === "string") return v;
@@ -613,7 +613,11 @@ export class KoiPondSim {
   private pondBloom = 0.2;
   private seedUndo: number | null = null;
   lastPacketIngest = 0;
-  lastWork = { koi: 0, particles: 0, raymarchSteps: KOI_WORK_BUDGET.raymarchSteps };
+  lastWork: { koi: number; particles: number; raymarchSteps: number } = {
+    koi: 0,
+    particles: 0,
+    raymarchSteps: KOI_WORK_BUDGET.raymarchSteps,
+  };
   private opts: KoiPondOptions;
   readonly slot0 = new Float32Array(64);
   readonly slot1 = new Float32Array(64);
