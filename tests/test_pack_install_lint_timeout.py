@@ -13,7 +13,9 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
+import signal
 from pathlib import Path
 
 import pytest
@@ -136,3 +138,39 @@ def test_an_upgrade_whose_lint_runs_too_long_keeps_the_old_version(
     assert "lint_timeout" not in str(out)
     assert "version: 3" in (runtime / "plugin.yml").read_text(encoding="utf-8"), "v3 is still installed"
     _all_gone(pids)
+
+
+def test_a_lint_stuck_in_a_native_call_is_still_refused_with_lint_timeout(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The lint blocks in open() of a FIFO nobody writes: the worker can't be stopped and Node can't
+    exit 3 past it, so the script kills itself after writing the lint_timeout line. The service reads
+    that line (not the exit status) and still gives lint_timeout's sentence, before its own timeout."""
+    _needs_node_tree()
+    fifo = tmp_path / "never-written"
+    os.mkfifo(fifo)
+    pids = tmp_path / "pids"
+    stuck = (
+        "import { appendFileSync, readFileSync } from 'node:fs';\n"
+        "export function runPackInstallLint() {\n"
+        f"  appendFileSync({json.dumps(str(pids))}, `${{process.pid}}\\n`);\n"
+        f"  readFileSync({json.dumps(str(fifo))});\n"
+        "  return { kind: 'pass' };\n"
+        "}\n"
+        f"export const PACK_INSTALL_LINT_BUILD = {_real_stamp()};\n"
+    )
+    monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", script_tree(tmp_path, built=stuck, name="tree-native-stuck"))
+    monkeypatch.setenv("ZOTO_PACK_INSTALL_LINT_TIMEOUT_MS", str(INNER_MS))
+    codes = _spy_codes(monkeypatch)
+    caplog.set_level(logging.WARNING, logger="service.plugins")
+    plugins.reset_bundles()
+    with pytest.raises(PackInstallLintSetupError) as e:
+        plugins.compile_typescript(_pulse_doc(), PULSE, update_cache=False, install_lint=True)
+    assert codes and codes[0] in (EXIT_LINT_SETUP, -signal.SIGKILL), codes
+    assert e.value.reason == "lint_timeout"
+    assert _setup_reasons(caplog) == ["lint_timeout"], caplog.text
+    assert str(e.value) == f"Couldn't safety-check Pulse TS in time, so it wasn't installed. {TRY_AGAIN}"
+    got = [int(p) for p in pids.read_text().split()]
+    assert got and all(_gone(p) for p in got), got

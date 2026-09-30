@@ -11,7 +11,7 @@
  * Every row's teardown SIGKILLs the groups it started, so a red run leaves no orphan. The service side
  * (reason code and sentence, fresh and upgrade) is tests/test_pack_install_lint_timeout.py.
  */
-import { spawn, type ChildProcess } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import os from "node:os";
@@ -147,6 +147,23 @@ function spinningLint(pidFile: string, withChild = true): string {
         : "  const c = { pid: 0 };",
       `  appendFileSync(${JSON.stringify(pidFile)}, \`\${process.pid} \${c.pid}\\n\`);`,
       "  for (;;) {}",
+      "}",
+    ].join("\n"),
+  );
+}
+
+/**
+ * A lint stuck in a sync native call (open() of a FIFO nobody writes): worker.terminate() can't stop
+ * it and process.exit() would wait for it, so the script has to kill itself (its group, as leader).
+ */
+function nativeStuckLint(fifo: string, pidFile: string): string {
+  return fakeBuilt(
+    [
+      'import { appendFileSync, readFileSync } from "node:fs";',
+      "export function runPackInstallLint() {",
+      `  appendFileSync(${JSON.stringify(pidFile)}, \`\${process.pid}\\n\`);`,
+      `  readFileSync(${JSON.stringify(fifo)});`,
+      '  return { kind: "pass" };',
       "}",
     ].join("\n"),
   );
@@ -332,6 +349,31 @@ describe.runIf(process.platform === "linux")("#186 lint_timeout: a spinning lint
     expect(existsSync(pidFile), "the lint really ran").toBe(true);
     const left = await groupAfter(pgid, MARGIN_MS);
     expect(left, `the lint's setInterval child went with the group: ${describeMembers(left)}`).toEqual([]);
+  }, 60_000);
+
+  it("stuck in a sync native call: the refusal line is written first, then the script kills its own group (it can't wait for the worker)", async () => {
+    const dir = tmp("native");
+    const fifo = path.join(dir, "never-written");
+    const pidFile = path.join(dir, "pids");
+    expect(spawnSync("mkfifo", [fifo]).status, "mkfifo").toBe(0);
+    const { argv, env } = scriptArgs(scriptTree({ built: nativeStuckLint(fifo, pidFile) }), packHome(), INNER_MS);
+    const child = spawn(process.execPath, argv, { env, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    const pgid = child.pid ?? 0;
+    pids.add(pgid);
+    groups.add(pgid);
+    const r = await exited(child, INNER_MS + MARGIN_MS, pgid);
+    const why = `exit ${r.code} signal ${r.signal} capped ${r.capped}; stderr: ${r.stderr.slice(0, 900)}`;
+    expect(r.capped, `the script hung on its stuck worker for ${INNER_MS + MARGIN_MS} ms: ${why}`).toBe(false);
+    expect(existsSync(pidFile), "the lint really ran").toBe(true);
+    // Exit 3 isn't possible here (Node joins the worker on exit); the line is what the service reads.
+    expect(r.code === EXIT_LINT_SETUP || r.signal === "SIGKILL", why).toBe(true);
+    expect(verdicts(r.stderr, "pack-install-lint-setup-error").map((v) => [v.reason, v.message]), why).toEqual([
+      ["lint_timeout", TIMEOUT_MSG(PACK_NAME)],
+    ]);
+    expect(verdicts(r.stderr, "pack-install-lint-pass"), "no pass line").toEqual([]);
+    expect(r.stdout, "no bundle written").toBe("");
+    const left = await groupAfter(pgid, MARGIN_MS);
+    expect(left, describeMembers(left)).toEqual([]);
   }, 60_000);
 
   it("group-leader guard: a script that doesn't lead its group refuses on timeout without killing its parent's group", async () => {
