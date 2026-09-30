@@ -53,6 +53,13 @@ import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
 import type { ManifestBlockedPlugin } from "./plugin-manifest-blocked";
 import {
+  isUnavailableRow,
+  setUnavailableCatalog,
+  unavailableBanner,
+  unavailablePackForView,
+  unavailablePickerRows,
+} from "./plugin-unavailable";
+import {
   manifestBlockedViewSelectRow,
   setManifestBlockedCatalog,
 } from "./plugin-manifest-blocked";
@@ -314,6 +321,8 @@ export interface PluginList {
   plugins: PluginView[];
   errors: { file: string; error: string; message?: string; id?: string; name?: string; import?: string }[];
   blocked?: ManifestBlockedPlugin[];
+  /** #169: packs kept in the catalog that can't load (esbuild missing, or one pack's bundle failed). */
+  unavailable?: { id: string; name: string; reason: string; available?: false }[];
   installNotices?: { error: string; message: string }[];
   pythonService?: boolean;
 }
@@ -758,7 +767,7 @@ export function fillViewSelect(
   suffix?: (value: string) => string,
 ): void {
   sel.replaceChildren();
-  const modes = viewSelectOptions();
+  const modes: { value: string; label: string; group: string; disabled?: boolean }[] = viewPickerOptions();
   let groupEl: HTMLOptGroupElement | null = null;
   let lastGroup = "";
   for (const m of modes) {
@@ -771,7 +780,8 @@ export function fillViewSelect(
     const o = document.createElement("option");
     o.value = m.value;
     // The suffix is for choices in the open list only, never the view this select is running.
-    o.textContent = m.label + (m.value === current ? "" : (suffix?.(m.value) ?? ""));
+    o.textContent = m.label + (m.value === current || m.disabled ? "" : (suffix?.(m.value) ?? ""));
+    if (m.disabled) o.disabled = true;
     if (m.value === current) o.selected = true;
     (groupEl ?? sel).appendChild(o);
   }
@@ -780,7 +790,8 @@ export function fillViewSelect(
     const known = allModes().find((m) => m.id === current);
     const o = document.createElement("option");
     o.value = current;
-    o.textContent = known ? viewCaption(known) : current;
+    // #169: a tile on an unavailable pack shows the pack's name here, never its raw view id.
+    o.textContent = known ? viewCaption(known) : (unavailablePackForView(current)?.name ?? current);
     o.selected = true;
     sel.appendChild(o);
     sel.value = current;
@@ -825,6 +836,24 @@ export function viewSelectOptions(
     : numbered;
   const blocked = blockedViewSelectRow(blockedCatalogEntries());
   return blocked ? [...marked, blocked] : marked;
+}
+
+/**
+ * #169: what the view picker shows: every loadable row (viewSelectOptions), then each unavailable
+ * pack greyed out and unpickable. Automatic picks (wall fill, digit keys, default slots) read
+ * viewSelectOptions(), which never holds an unavailable pack.
+ */
+export function viewPickerOptions(
+  suffixFor?: (viewId: string) => string | null,
+): {
+  value: string; label: string; hint: string; group: string; disabled?: boolean;
+}[] {
+  return [...viewSelectOptions(suffixFor), ...unavailablePickerRows()];
+}
+
+/** #169: one banner per catalog when setup isn't finished, else null. */
+export function viewPickerBanner(): string | null {
+  return unavailableBanner();
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
@@ -877,6 +906,10 @@ export async function installPlugins(): Promise<PluginView[]> {
     clearPluginSettingsUiState();
     const data = await fetchPlugins();
     setManifestBlockedCatalog((data.blocked ?? []) as ManifestBlockedPlugin[]);
+    // #169: unavailable packs are listed, never loaded. The service keeps them out of `plugins`;
+    // a row marked `available: false` there is treated the same way.
+    const plugins = data.plugins ?? [];
+    setUnavailableCatalog([...(data.unavailable ?? []), ...plugins.filter(isUnavailableRow)]);
     consumePackInstallNotices(data.installNotices);
     syncBlockedCatalogFromErrors(data.errors as Record<string, unknown>[]);
     for (const e of data.errors) {
@@ -902,7 +935,8 @@ export async function installPlugins(): Promise<PluginView[]> {
       console.warn("zoto-viz plugin:", e.file, err || msg);
     }
     const specs: PluginView[] = [];
-    for (const raw of data.plugins) {
+    for (const raw of plugins) {
+      if (isUnavailableRow(raw)) continue;
       try {
         specs.push(toPluginView(raw));
       } catch (e) {
@@ -916,6 +950,7 @@ export async function installPlugins(): Promise<PluginView[]> {
   } catch (e) {
     console.warn("zoto-viz plugins:", e);
     setManifestBlockedCatalog([]);
+    setUnavailableCatalog([]);
     looks = new Map();
     setPluginModes([]);
     syncBlockedCatalogFromErrors([]);

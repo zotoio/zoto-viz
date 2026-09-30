@@ -12,6 +12,7 @@ export interface ZotoVizPluginHost<TFrame> {
   getConfig?: () => Record<string, string>;
   writeBuffer: (slot: number, data: number[] | Float32Array) => void;
   writeUniform: (name: string, value: ZotoUniformValue) => void;
+  /** @deprecated #184: no host renderer draws pack particles; draw from the sky's UBO slots (writeBuffer + zotoVizSlots). */
   writeParticles?: (data: number[] | Float32Array, stride?: number) => void;
   setStyle?: (style: unknown) => void;
   setNodeColor?: (id: string, hex: string) => void;

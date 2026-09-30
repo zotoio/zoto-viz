@@ -866,6 +866,11 @@ export function bindVizWriterCore(
 }
 
 /** Enforces per-slot float caps; reuses preallocated slot + UBO buffers. */
+/** Dev-only warning for a pack that still calls writeParticles (#184). */
+export const VIZ_WRITE_PARTICLES_DEPRECATED =
+  "[zoto-viz] writeParticles is deprecated (#184): no host renderer draws pack particles. "
+  + "Draw from zotoVizSlots via writeBuffer instead.";
+
 export class VizBufferWriter {
   readonly contract: VizPluginContract;
   /** std140 mirror backing store (8 × 64 floats). */
@@ -874,6 +879,8 @@ export class VizBufferWriter {
   private readonly lengths: Uint16Array;
   private readonly particles: Float32Array;
   private particleCount = 0;
+  /** #184: the deprecation warning is shown once per writer (one writer per bound pack). */
+  private warnedParticles = false;
 
   constructor(contract: VizPluginContract) {
     this.contract = contract;
@@ -919,7 +926,16 @@ export class VizBufferWriter {
     return { ok: true };
   }
 
+  /**
+   * @deprecated #184: no host renderer reads pack particles (nothing draws `particleSnapshot()`), so
+   * these writes never reach the screen. Draw from the sky's UBO slots (`writeBuffer` +
+   * `zotoVizSlots`) instead. Still capped by `maxParticles`; dev builds warn once per writer.
+   */
   writeParticles(data: ArrayLike<number>, stride = 4): VizParticleWriteResult {
+    if (import.meta.env.DEV && !this.warnedParticles) {
+      this.warnedParticles = true;
+      console.warn(VIZ_WRITE_PARTICLES_DEPRECATED);
+    }
     const cap = this.contract.maxParticles;
     if (cap <= 0) return { ok: false, written: 0, error: "particles disabled (maxParticles is 0)" };
     if (stride < 1 || stride > 8) return { ok: false, written: 0, error: "invalid particle stride" };

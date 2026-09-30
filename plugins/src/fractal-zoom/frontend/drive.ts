@@ -4,7 +4,9 @@ import {
   SEAHORSE_X,
   SEAHORSE_Y,
   type Canyon3,
+  type DeParams,
   type Cruise2,
+  de3,
   itersForScale,
   packOrbit,
   referenceOrbit,
@@ -96,6 +98,71 @@ let lastRebaseT = -10;
 let cruise: Cruise2 = { x: SEAHORSE_X, y: SEAHORSE_Y, vx: 0, vy: 0, heading: 0.7 };
 let canyon: Canyon3 = { ...CANYON_HOME };
 
+/** Camera clearance the canyon pre-roll waits for (the SDK canyon flies at clearance 0.04). */
+export const FRACTAL_PREROLL_CLEARANCE = 0.04;
+/** After the pre-roll the camera must keep at least this much room for FRACTAL_PREROLL_SETTLE steps. */
+export const FRACTAL_PREROLL_FLOOR = 0.02;
+export const FRACTAL_PREROLL_SETTLE = 31;
+/** Upper bound on pre-roll steps (dt 1/60 each); the Mandelbulb home needs ~470. */
+export const FRACTAL_PREROLL_MAX_STEPS = 1500;
+const PREROLL_DT = 1 / 60;
+const prerollCache = new Map<string, Canyon3>();
+
+function deParams(opts: FractalOptions): DeParams {
+  return {
+    power: opts.power,
+    scale: opts.scale,
+    fold: opts.fold,
+    sym: opts.kaleidoSym,
+    jx: opts.juliaCr,
+    jy: opts.juliaCi,
+    jz: opts.quatC2,
+    jw: opts.quatC3,
+  };
+}
+
+/**
+ * #180: CANYON_HOME (SDK) puts the first stepped canyon camera inside the Mandelbulb
+ * (de(cam) -0.0157 at frame 1, still < 0 at frame 60), so the sky is one flat colour for
+ * seconds. Step the canyon off-screen from home and start the view at the first pose where
+ * the camera has FRACTAL_PREROLL_CLEARANCE and keeps more than FRACTAL_PREROLL_FLOOR for the
+ * next FRACTAL_PREROLL_SETTLE steps. Deterministic per fractal type + DE params, so it is cached.
+ */
+export function settledCanyon(opts: FractalOptions): Canyon3 {
+  if (opts.type === "mandel2d" || opts.type === "julia2d") return { ...CANYON_HOME };
+  const kind = fractalTypeIndex(opts.type);
+  const params = deParams(opts);
+  const key = `${kind}|${params.power}|${params.scale}|${params.fold}|${params.sym}|${params.jx}|${params.jy}|${params.jz}|${params.jw}`;
+  const hit = prerollCache.get(key);
+  if (hit) return { ...hit };
+  let c: Canyon3 = { ...CANYON_HOME };
+  let start: Canyon3 | null = null;
+  let firstClear: Canyon3 | null = null;
+  let run = 0;
+  for (let i = 0; i < FRACTAL_PREROLL_MAX_STEPS; i++) {
+    c = stepCanyon(c, PREROLL_DT, kind, params, 0);
+    const dCam = de3(kind, c.cx, c.cy, c.cz, params);
+    if (!Number.isFinite(dCam) || dCam <= FRACTAL_PREROLL_FLOOR) {
+      start = null;
+      run = 0;
+      continue;
+    }
+    if (!start) {
+      if (dCam > FRACTAL_PREROLL_CLEARANCE) {
+        start = { ...c };
+        firstClear ??= start;
+        run = 1;
+      }
+      continue;
+    }
+    run += 1;
+    if (run >= FRACTAL_PREROLL_SETTLE) break;
+  }
+  const out = start && run >= FRACTAL_PREROLL_SETTLE ? start : (firstClear ?? c);
+  prerollCache.set(key, { ...out });
+  return { ...out };
+}
+
 function reseedPose(opts: FractalOptions): void {
   const julia = opts.type === "julia2d";
   cruise = {
@@ -105,7 +172,7 @@ function reseedPose(opts: FractalOptions): void {
     vy: 0,
     heading: 0.7,
   };
-  canyon = { ...CANYON_HOME };
+  canyon = settledCanyon(opts);
   camX = CANYON_HOME.cx;
   camY = CANYON_HOME.cy;
   camZ = CANYON_HOME.cz;
@@ -128,13 +195,13 @@ export function resetFractalCamera(): void {
   generation = 0;
   lastRebaseT = -10;
   cruise = { x: SEAHORSE_X, y: SEAHORSE_Y, vx: 0, vy: 0, heading: 0.7 };
-  canyon = { ...CANYON_HOME };
+  canyon = settledCanyon(optsCache);
 }
 
 export function resetFractalDrive(): void {
-  resetFractalCamera();
   optsJson = "";
   optsCache = parseFractalOptions();
+  resetFractalCamera();
   lastFrameMs = 0;
   resetCamLatched = false;
   fractalHudCaption = "Mandelbrot 2D · Seahorse Valley";
