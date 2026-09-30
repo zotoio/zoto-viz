@@ -38,6 +38,8 @@ import { assessVisibility, type VisibilityReport } from "../core/visibility";
 import { Backdrop, PHOTO_LOOP_MAX_S, PHOTO_LOOP_MIN_S, PHOTO_LOOP_S, type BackdropKind } from "./backdrop";
 import { stageMeshPackId, stageMeshPose } from "./stage-mesh-camera";
 import { LumaProbe } from "./lumaProbe";
+import { AsyncRgbaPatchProbe } from "./async-rgba-patch";
+import { TILE_SKY_CONFIRM_PX } from "../plugins/tile-health";
 import { ensureSkyRecipe } from "./sky-ai";
 import { liveCam } from "../camera/livecam";
 import { cameraConsumers } from "../camera/want";
@@ -1714,6 +1716,14 @@ export class NetScene implements HostedView, RenderScalePane {
     this._gpuContextLost = true;
     this.lumaProbe.reset();
     this.changeProbe.reset();
+    this.dropSkyConfirm();
+  }
+
+  private dropSkyConfirm(): void {
+    if (!this.skyConfirm) return;
+    this.skyConfirm.probe.reset(null);
+    this.skyConfirm.rt.dispose();
+    this.skyConfirm = null;
   }
   hostContextRestored(): void {
     this._gpuContextLost = false;
@@ -3004,6 +3014,8 @@ export class NetScene implements HostedView, RenderScalePane {
   /** Last sampled WebGL luma behind labels; -1 until the first read. */
   private sampledLuma = -1;
   private readonly lumaProbe = new LumaProbe(16, 150);
+  /** #180 tile-health confirm: this tile's sky alone, coarse, over the whole tile (async). */
+  private skyConfirm: { rt: THREE.WebGLRenderTarget; probe: AsyncRgbaPatchProbe; issuedAt: number } | null = null;
   private readonly changeProbe = new PaneChangeProbe();
   private readonly canvasProbe = new CanvasChangeProbe();
   private lastVis: VisibilityReport | null = null;
@@ -3095,6 +3107,42 @@ export class NetScene implements HostedView, RenderScalePane {
     const vp = this.lastVp;
     if (!vp || vp.w < 4 || vp.h < 4) return null;
     return this.lumaProbe.sampleForHealth(gl, vp, now);
+  }
+
+  /**
+   * #180 tile-health confirm: this tile's pack sky alone (no floor grid, graph or labels), rendered
+   * at {@link TILE_SKY_CONFIRM_PX}² over the whole tile and read back asynchronously. Returns the
+   * finished read (and queues the next), "pending" while one is in flight, or null when there is
+   * no pack sky of this tile's own to judge (no confirm; the five-patch verdict stands).
+   */
+  tileHealthSkyRgba(gl: WebGL2RenderingContext, maxStaleMs = 5000): Uint8Array | "pending" | null {
+    if (this.packCoalesce?.role === "mirror") return null;
+    const b = this.backdrop;
+    if (!b.mesh.visible || !b.pluginSkyId()) return null;
+    const rd = this.renderer;
+    if (!(rd instanceof THREE.WebGLRenderer) || gl.isContextLost()) return null;
+    const px = TILE_SKY_CONFIRM_PX;
+    const c = this.skyConfirm ??= {
+      rt: new THREE.WebGLRenderTarget(px, px, { depthBuffer: false }),
+      probe: new AsyncRgbaPatchProbe(px),
+      issuedAt: -Infinity,
+    };
+    const got = c.probe.tryHarvest(gl);
+    const fresh = got && performance.now() - c.issuedAt <= maxStaleMs;
+    if (!c.probe.pending) {
+      const prev = rd.getRenderTarget();
+      const restore = b.probeResolution(px, px);
+      try {
+        rd.setRenderTarget(c.rt);
+        rd.clear();
+        rd.render(b.mesh, this.camera);
+        if (c.probe.issue(gl, 0, 0)) c.issuedAt = performance.now();
+      } finally {
+        rd.setRenderTarget(prev);
+        restore();
+      }
+    }
+    return fresh ? c.probe.bytes : "pending";
   }
 
   /** Ease sky/floor dimming and blending toward the visibility tool's fix. Overlay only. */
@@ -4927,6 +4975,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.arrows.geometry.dispose();
     (this.arrows.material as THREE.Material).dispose();
     this.lumaProbe.reset();
+    this.dropSkyConfirm();
     this.backdrop.setPluginShader(null);
     this.controls.dispose();
     if (this.host) {
