@@ -7,10 +7,15 @@
     // #192: every test file the tsgap error metric counts (web/src, plugins/src, plugins/sdk, scripts/,
     // web/scripts) is type-checked by default; new test files are covered without editing this file.
     "src/**/*.test.ts",
+    "src/**/*.test.tsx",
     "scripts/**/*.test.ts",
+    "scripts/**/*.test.tsx",
     "../plugins/src/**/*.test.ts",
+    "../plugins/src/**/*.test.tsx",
     "../plugins/sdk/**/*.test.ts",
+    "../plugins/sdk/**/*.test.tsx",
     "../scripts/**/*.test.ts",
+    "../scripts/**/*.test.tsx",
     // Non-test sources and declarations the test program needs to resolve.
     "../plugins/sdk/pack-lint-import.ts",
     "../plugins/sdk/pack-lint.ts",

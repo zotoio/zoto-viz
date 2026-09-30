@@ -28,14 +28,38 @@ const HELD_PREFIX = "../scripts/revert-proof";
 
 type ExcludeBlocks = { shrinkOnly: string[]; held: string[] };
 
+const TEST_CONFIG_REL = "web/tsconfig.test.json";
+const TEST_FILE = /\.test\.tsx?$/;
+
 /**
- * Splits `exclude` at the `// HELD` comment line. tsconfig allows `//` comments; tsconfig.test.json
- * only uses whole-line ones, so the list is read line by line.
+ * tsconfig.test.json as JSON (tsconfig allows `//` comments; this file only uses whole-line ones).
+ * A file that doesn't parse fails every row with the parser's message, not with a list of paths.
  */
+function readTestConfig(): { exclude: string[] } {
+  // Blank the comment lines rather than drop them, so the parser's line numbers match the file.
+  const text = readFileSync(TEST_CONFIG, "utf8")
+    .split("\n")
+    .map((line) => (line.trimStart().startsWith("//") ? "" : line))
+    .join("\n");
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw new Error(`could not parse ${TEST_CONFIG_REL}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  const exclude = (parsed as { exclude?: unknown } | null)?.exclude;
+  if (!Array.isArray(exclude) || !exclude.every((p) => typeof p === "string")) {
+    throw new Error(`could not parse ${TEST_CONFIG_REL}: "exclude" is not a list of paths`);
+  }
+  return { exclude };
+}
+
+/** Splits `exclude` at the `// HELD` comment line (the list is read line by line to see the comments). */
 function readExcludeBlocks(): ExcludeBlocks {
+  readTestConfig();
   const lines = readFileSync(TEST_CONFIG, "utf8").split("\n");
   const start = lines.findIndex((line) => line.trim().startsWith('"exclude": ['));
-  if (start < 0) throw new Error("tsconfig.test.json has no exclude list");
+  if (start < 0) throw new Error(`could not parse ${TEST_CONFIG_REL}: no "exclude": [ line`);
   const blocks: ExcludeBlocks = { shrinkOnly: [], held: [] };
   let inHeld = false;
   for (const raw of lines.slice(start + 1)) {
@@ -44,24 +68,25 @@ function readExcludeBlocks(): ExcludeBlocks {
     if (line.startsWith(HELD_MARKER)) inHeld = true;
     if (line.startsWith("//") || line === "") continue;
     const entry = /^"([^"]+)",?$/.exec(line);
-    if (!entry) throw new Error(`unexpected exclude line: ${raw}`);
+    if (!entry) throw new Error(`could not parse ${TEST_CONFIG_REL}: unexpected exclude line: ${raw}`);
     (inHeld ? blocks.held : blocks.shrinkOnly).push(entry[1]);
   }
   return blocks;
 }
 
-/** `exclude` as tsc sees it (whole-line `//` comments dropped). */
-function readExcludeJson(): string[] {
-  const text = readFileSync(TEST_CONFIG, "utf8")
-    .split("\n")
-    .filter((line) => !line.trimStart().startsWith("//"))
-    .join("\n");
-  return (JSON.parse(text) as { exclude: string[] }).exclude;
+let blocksCache: ExcludeBlocks | undefined;
+/** Read lazily inside each row, so a parse failure is reported by the rows themselves. */
+function excludeBlocks(): ExcludeBlocks {
+  blocksCache ??= readExcludeBlocks();
+  return blocksCache;
 }
 
 type ExecError = { code?: string; signal?: string | null; status?: number | null; stdout?: string; stderr?: string };
 
-/** tsc exits 2 when it reports errors; that output is the result. A timeout or spawn failure is not. */
+/**
+ * tsc exits non-zero (1 with tsc 7.0.2) when it reports errors; that output is the result. A timeout
+ * or spawn failure is not.
+ */
 function tscOutput(err: unknown): string {
   const e = err as ExecError;
   if (e.code === "ETIMEDOUT" || e.signal) {
@@ -92,6 +117,10 @@ function testFilesWithTscErrors(): Set<string> {
     } catch (err) {
       out = tscOutput(err);
     }
+    const configErrors = out.split("\n").filter((line) => /tsconfig[^/\\]*\.json\(\d+,\d+\): error TS/.test(line));
+    if (configErrors.length > 0) {
+      throw new Error(`could not parse ${TEST_CONFIG_REL} (tsc):\n${configErrors.join("\n")}`);
+    }
     const files = new Set<string>();
     for (const line of out.split("\n")) {
       const m = TSC_ERROR_LINE.exec(line);
@@ -105,26 +134,28 @@ function testFilesWithTscErrors(): Set<string> {
 }
 
 describe("tsconfig.test.json exclude list (#192)", () => {
-  const { shrinkOnly, held } = readExcludeBlocks();
-
   it("each block lists sorted, unique test files", () => {
+    const { shrinkOnly, held } = excludeBlocks();
     for (const block of [shrinkOnly, held]) {
-      expect(block.filter((p) => !p.endsWith(".test.ts"))).toEqual([]);
+      expect(block.filter((p) => !TEST_FILE.test(p))).toEqual([]);
       expect(block).toEqual([...new Set(block)].sort());
     }
     expect(shrinkOnly.filter((p) => held.includes(p))).toEqual([]);
-    expect([...shrinkOnly, ...held].sort()).toEqual([...readExcludeJson()].sort());
+    expect([...shrinkOnly, ...held].sort()).toEqual([...readTestConfig().exclude].sort());
   });
 
   it("every excluded path exists (shrink-only and held)", () => {
+    const { shrinkOnly, held } = excludeBlocks();
     expect([...shrinkOnly, ...held].filter((p) => !existsSync(path.resolve(webRoot, p)))).toEqual([]);
   });
 
   it("the held block only names scripts/revert-proof* files", () => {
+    const { held } = excludeBlocks();
     expect(held.filter((p) => !p.startsWith(HELD_PREFIX))).toEqual([]);
   });
 
   it("every shrink-only path still has a tsc error (delete fixed files from the shrink-only block)", () => {
+    const { shrinkOnly } = excludeBlocks();
     const withErrors = testFilesWithTscErrors();
     expect(shrinkOnly.filter((p) => !withErrors.has(p))).toEqual([]);
   });
