@@ -9,6 +9,7 @@
  * - mosaic header pick: the header keeps naming the pick while its pane shows Needs you.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { Select } from "../ui/ui";
 import type { Mosaic } from "../graph/mosaic";
 import type { PluginView } from "../plugins/plugin";
 import * as pluginModule from "../plugins/plugin";
@@ -264,10 +265,14 @@ describe("stage 2 via the main host", { timeout: 60_000 }, () => {
       on: true, heroPos: "off", heroMode: "topology", current: "2", tileIds: ["topology", "talkers"],
       focusedId: "topology", mainTileId: "topology", mainMode: "topology",
       setPaneView: vi.fn(() => true), setPaneNotice: vi.fn(), focus: vi.fn(), graphScene: () => null,
-      setSize: vi.fn(), graphs: [], markSkyPending: vi.fn(), settlePanes: vi.fn(), settlePane: vi.fn(), paneSky: () => undefined,
+      setSize: vi.fn(), graphs: [], syncPreviewCaptions: vi.fn(), markSkyPending: vi.fn(), settlePanes: vi.fn(), settlePane: vi.fn(), paneSky: () => undefined,
     } as unknown as Mosaic;
     h.configureApplyModeForTests({ liveMode: "topology", lastConsentedMode: "topology", pluginSpecs: [pack({})], mosaic: fakeMosaic });
-    h.getApplyModeHostForTests().modeSel.value = "topology";
+    const sel = h.getApplyModeHostForTests().modeSel as unknown as Select;
+    // Both views are real picker rows, so a snap back to Topology would be visible.
+    sel.setOptions([{ value: "topology", label: "Topology" }, { value: "plugin:fractal-zoom", label: "Fractal Zoom" }]);
+    sel.value = "topology";
+    expect(sel.value, "a snap back would be visible").toBe("topology");
     h.applyMode("plugin:fractal-zoom");
     await vi.waitFor(() => { expect(viewStateOf("topology")?.kind).toBe("needs-you"); });
     await new Promise((r) => setTimeout(r, 30));
