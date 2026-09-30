@@ -32,7 +32,7 @@ import {
   presentDrive,
   refreshPluginDriveState,
 } from "./present-drive-app";
-import { applyModeImpl, type ApplyModeFlags, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
+import { applyModeImpl, showPickCouldntStart, type ApplyModeFlags, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
 import type { ConsentReviewResult } from "./pack-consent";
 import {
   consentErrorOf,
@@ -2438,6 +2438,14 @@ tileHealth = createProductionTileHealthMonitor({
   previewOnly: (id) => mosaicPanePreviewOnly(id),
   skyStarting: (id) => tileSkyStarting(id),
   onLiveBlank: (id, packId, blank) => onLiveBlank(id, packId, blank),
+  onCantStart: (id) => {
+    const m = modeById(tileHealthModeId(id));
+    const spec = pluginSpecForMode(m.id);
+    if (!pluginHasFrontend(spec)) return false;
+    showPickCouldntStart(buildApplyModeHost(), m, spec, "load-failed");
+    return true;
+  },
+  couldntStart: (id) => viewStateOf(id)?.kind === "couldnt-start",
 });
 function onLiveBlank(tileId: string, packId: string, blank: boolean): void {
   const paneId = tileId === "main" ? modeSel.value : tileId;

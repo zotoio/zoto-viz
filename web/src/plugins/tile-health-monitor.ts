@@ -74,6 +74,14 @@ export interface TileHealthDeps {
    * (the pack is running), but the wall must say so — `blank` false clears the notice.
    */
   onLiveBlank?: (tileId: string, packId: string, blank: boolean) => void;
+  /**
+   * Optional (#216): a tile still empty after its one resend-frame. `true`: it is a pack tile and
+   * now shows the pack's couldn't-start (Retry), staying on the pack: no restart, recreate, demo
+   * or fallback. `false` (a built-in view): the ladder goes on.
+   */
+  onCantStart?: (tileId: string, packId: string) => boolean;
+  /** Optional (#216): the tile shows couldn't-start. Not judged until Retry starts it again. */
+  couldntStart?: (tileId: string) => boolean;
 }
 
 export class TileHealthMonitor {
@@ -254,7 +262,7 @@ export class TileHealthMonitor {
       this.liveBlankReads.delete(tileId);
       this.setLiveBlank(tileId, null);
     }
-    if (this.deps.previewOnly?.(tileId) || this.deps.skyStarting?.(tileId)) {
+    if (this.deps.previewOnly?.(tileId) || this.deps.skyStarting?.(tileId) || this.deps.couldntStart?.(tileId)) {
       this.resetProgress(tileId);
       this.setLiveBlank(tileId, null);
       return;
@@ -388,6 +396,14 @@ export class TileHealthMonitor {
       tileId,
       packId,
     );
+    if (outcome.heal && outcome.heal !== "resend-frame" && this.deps.onCantStart?.(tileId, packId)) {
+      // #216: past the one resend-frame a pack tile hands off to couldn't-start (Retry starts it
+      // afresh) and never leaves the pick for another view (apply-mode's couldn't-start contract).
+      this.states.set(tileId, freshTileHealthState());
+      this.paintLabel(tileId, this.stateFor(tileId));
+      console.info(`[zoto-viz tile-heal] tile=${tileId} pack=${packId} step=cant-start reason=${outcome.empty}`);
+      return;
+    }
     this.states.set(tileId, outcome.state);
     this.paintLabel(tileId, outcome.state);
     if (outcome.log) this.logHeal(outcome.log);

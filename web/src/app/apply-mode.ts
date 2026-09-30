@@ -171,7 +171,7 @@ function showPickNeedsYou(host: ApplyModeHost, m: ViewMode, spec: PluginView): v
 }
 
 /** Couldn't start on the pick's own tile, with Retry. Never the previous view in its place. */
-function showPickCouldntStart(
+export function showPickCouldntStart(
   host: ApplyModeHost,
   m: ViewMode,
   spec: PluginView | null,
