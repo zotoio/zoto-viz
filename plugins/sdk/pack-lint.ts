@@ -77,7 +77,12 @@ function listPackTsFiles(packsRoot: string, packId: string): string[] {
   return out;
 }
 
-function withLoc(repoRel: string, source: string, index: number, v: Omit<PackLintViolation, "line" | "column">): PackLintViolation {
+function withLoc(
+  repoRel: string,
+  source: string,
+  index: number,
+  v: Omit<PackLintViolation, "file" | "line" | "column">,
+): PackLintViolation {
   const { line, column } = lineColAt(source, index);
   return { ...v, file: repoRel, line, column };
 }

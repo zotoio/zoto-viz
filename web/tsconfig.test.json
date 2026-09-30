@@ -1,7 +1,7 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "types": ["vite/client", "vitest/globals"]
+    "types": ["vite/client", "vitest/globals", "node"]
   },
   "include": [
     "src/core/d3-force-3d.d.ts",
@@ -20,7 +20,9 @@
     "../plugins/src/hn-term/frontend/index.ts",
     "../plugins/src/rf-constellation/frontend/index.ts",
     "../plugins/src/roto-proto/frontend/index.ts",
-    "../plugins/src/talker-storm/frontend/index.ts"
+    "../plugins/src/talker-storm/frontend/index.ts",
+    "../plugins/sdk/pack-lint.ts",
+    "../plugins/sdk/pack-lint-import.ts"
   ],
   "exclude": []
 }
