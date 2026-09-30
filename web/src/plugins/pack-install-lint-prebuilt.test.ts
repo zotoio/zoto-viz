@@ -75,10 +75,11 @@ function packHome(opts: { bad?: boolean; id?: string } = {}): string {
 /**
  * A copy of web/scripts (every top-level file, so a revert that brings back an old helper is copied
  * too), web/package.json, esbuild (unless `esbuild: false`) and plugins/sdk (linked, or copied with
- * `sdkCopy` so a row can edit it). `built: null` deletes the built lint; a string replaces it.
- * Never tsx.
+ * `sdkCopy` so a row can edit it). The built lint (with its stamp) is copied by default:
+ * `built: null` deletes it, a string replaces it, `stale: true` edits a copied plugins/sdk source
+ * after the build so its stamp no longer matches. Never tsx.
  */
-function scriptTree(opts: { esbuild?: boolean; built?: string | null; sdkCopy?: boolean } = {}): string {
+function scriptTree(opts: { esbuild?: boolean; built?: string | null; sdkCopy?: boolean; stale?: boolean } = {}): string {
   const root = tmp("tree");
   mkdirSync(path.join(root, "web/scripts"), { recursive: true });
   mkdirSync(path.join(root, "web/node_modules"), { recursive: true });
@@ -92,8 +93,9 @@ function scriptTree(opts: { esbuild?: boolean; built?: string | null; sdkCopy?: 
   if (opts.esbuild !== false) {
     symlinkSync(realpathSync(path.join(webRoot, "node_modules/esbuild")), path.join(root, "web/node_modules/esbuild"), "dir");
   }
-  if (opts.sdkCopy) cpSync(sdkRoot, path.join(root, "plugins/sdk"), { recursive: true });
+  if (opts.sdkCopy || opts.stale) cpSync(sdkRoot, path.join(root, "plugins/sdk"), { recursive: true });
   else symlinkSync(sdkRoot, path.join(root, "plugins/sdk"), "dir");
+  if (opts.stale) appendFileSync(path.join(root, "plugins/sdk/pack-lint.ts"), "\n// edited after the build (#186 row)\n");
   return root;
 }
 
@@ -150,9 +152,16 @@ function expectSandboxBlock(r: Run): void {
   expect(verdicts(r.stderr, "pack-install-lint-pass")).toEqual([]);
 }
 
-/** Exit 3, #185's sentence and nothing raw for the user: no exit code, signal, error class or stack. */
-function expectSetupRefusal(r: Run, detail: RegExp, name = PACK_NAME): void {
+/** #186: bundle-pack-entry.mjs's machine-readable setup reasons (diagnostic line only, never user text). */
+type SetupReason = "lint_prebuilt_missing" | "lint_prebuilt_stale" | "esbuild_unresolvable" | "lint_threw" | "lint_no_verdict";
+
+/**
+ * Exit 3, this cause's own reason code, #185's sentence and nothing raw for the user: no exit code,
+ * signal, error class or stack.
+ */
+function expectSetupRefusal(r: Run, reason: SetupReason, detail: RegExp, name = PACK_NAME): void {
   expect(r.status, `refused with the setup exit, not installed: ${why(r)}`).toBe(EXIT_LINT_SETUP);
+  expect(verdicts(r.stderr, "pack-install-lint-setup-error")[0]?.reason, `setup reason code: ${why(r)}`).toBe(reason);
   expect(r.stdout, "no bundle written").toBe("");
   expect(r.stderr.split(/\r?\n/)[0], "first stderr line is the user sentence").toBe(setupMsg(name));
   const setup = verdicts(r.stderr, "pack-install-lint-setup-error");
@@ -253,27 +262,26 @@ describe("#186 the built lint fails closed at install (exit 3, #185's sentence)"
   it("built lint deleted: the install is refused with the setup sentence, no raw exit code or stack; lint-only too", () => {
     const tree = scriptTree({ built: null });
     expect(existsSync(path.join(tree, "web/scripts", BUILT)), "built lint really missing").toBe(false);
-    expectSetupRefusal(bundle(tree, packHome()), /built lint not importable: ERR_MODULE_NOT_FOUND/);
-    expectSetupRefusal(bundle(tree, packHome({ id: "cores" }), { lintOnly: true }), /built lint not importable/, "CPU cores");
+    expectSetupRefusal(bundle(tree, packHome()), "lint_prebuilt_missing", /built lint not importable: ERR_MODULE_NOT_FOUND/);
+    expectSetupRefusal(bundle(tree, packHome({ id: "cores" }), { lintOnly: true }), "lint_prebuilt_missing", /built lint not importable/, "CPU cores");
   }, 60_000);
 
   it("built lint stale (plugins/sdk edited after the build): refused with the setup sentence", () => {
-    const tree = scriptTree({ sdkCopy: true });
-    appendFileSync(path.join(tree, "plugins/sdk/pack-lint.ts"), "\n// edited after the build (#186 row)\n");
-    expectSetupRefusal(bundle(tree, packHome()), /built lint is stale: sources changed since it was built/);
+    const tree = scriptTree({ stale: true });
+    expectSetupRefusal(bundle(tree, packHome()), "lint_prebuilt_stale", /built lint is stale: sources changed since it was built/);
     // Control: the same copy, unedited, passes.
     expectPass(bundle(scriptTree({ sdkCopy: true }), packHome()), "star-sines");
   }, 120_000);
 
   it("a built lint that throws: refused with the setup sentence, the error only in the diagnostic line", async () => {
     const built = await fakeBuilt('export function runPackInstallLint() { throw new TypeError("lint broke (#186 row)"); }');
-    expectSetupRefusal(bundle(scriptTree({ built }), packHome()), /lint threw: lint broke \(#186 row\)/);
+    expectSetupRefusal(bundle(scriptTree({ built }), packHome()), "lint_threw", /lint threw: lint broke \(#186 row\)/);
   }, 60_000);
 
   it("a built lint that returns no verdict (undefined, a string, an unknown kind): refused, never a pass", async () => {
     for (const ret of ["undefined", '"pass"', '{ kind: "PASS", warnings: [] }', "{}"]) {
       const built = await fakeBuilt(`export function runPackInstallLint() { return ${ret}; }`);
-      expectSetupRefusal(bundle(scriptTree({ built }), packHome()), /lint gave no verdict/);
+      expectSetupRefusal(bundle(scriptTree({ built }), packHome()), "lint_no_verdict", /lint gave no verdict/);
     }
   }, 120_000);
 });

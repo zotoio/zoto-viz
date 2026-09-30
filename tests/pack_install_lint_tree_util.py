@@ -21,12 +21,15 @@ def script_tree(
     built: bool | str = True,
     esbuild: bool = True,
     sdk_copy: bool = False,
+    stale: bool = False,
     name: str = "tree",
 ) -> Path:
     """Return the copy's ``web/scripts/bundle-pack-entry.mjs``.
 
-    ``built``: True copies the committed built lint, False leaves it out, a string replaces it.
-    ``sdk_copy`` copies plugins/sdk (so a row can edit it) instead of linking it.
+    ``built``: True (default) copies the committed built lint with its stamp, False leaves it out, a
+    string replaces it. ``stale`` copies plugins/sdk and edits a source after the build, so the stamp
+    no longer matches. ``sdk_copy`` copies plugins/sdk (so a row can edit it) instead of linking it.
+    ``esbuild=False`` leaves esbuild out.
     """
     tree = tmp_path / name
     scripts = tree / "web" / "scripts"
@@ -42,8 +45,11 @@ def script_tree(
     shutil.copy2(ROOT / "web" / "package.json", tree / "web" / "package.json")
     if esbuild:
         os.symlink((ROOT / "web" / "node_modules" / "esbuild").resolve(), tree / "web" / "node_modules" / "esbuild")
-    if sdk_copy:
+    if sdk_copy or stale:
         shutil.copytree(ROOT / "plugins" / "sdk", tree / "plugins" / "sdk", symlinks=True)
+        if stale:
+            with (tree / "plugins" / "sdk" / "pack-lint.ts").open("a", encoding="utf-8") as fh:
+                fh.write("\n// edited after the build (#186 row)\n")
     else:
         os.symlink(ROOT / "plugins" / "sdk", tree / "plugins" / "sdk")
     assert not any(tree.rglob("tsx")), "no tsx in the copy"

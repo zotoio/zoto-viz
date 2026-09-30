@@ -10,6 +10,7 @@ missing, stale or replaced. The vitest side is web/src/plugins/pack-install-lint
 from __future__ import annotations
 
 import json
+import logging
 import re
 import shutil
 import subprocess
@@ -48,6 +49,16 @@ def _real_stamp() -> str:
     m = re.search(r"^export const PACK_INSTALL_LINT_BUILD = (\{.*?\});\s*\Z", BUILT_PATH.read_text(encoding="utf-8"), re.S | re.M)
     assert m, "PACK_INSTALL_LINT_BUILD footer"
     return m.group(1)
+
+
+def _setup_reasons(caplog: pytest.LogCaptureFixture) -> list[str]:
+    """#186: the reason codes the service logged for setup refusals (log only, never user text)."""
+    out = []
+    for r in caplog.records:
+        m = re.match(r"pack install lint setup refusal \((\w+)\)", r.getMessage())
+        if m:
+            out.append(m.group(1))
+    return out
 
 
 def _spy_codes(monkeypatch: pytest.MonkeyPatch) -> list[int]:
@@ -92,43 +103,38 @@ def test_zip_installs_with_no_tsx_present_and_a_finding_is_still_blocked(
     assert unbundled.get("wrote") is True, unbundled
 
 
-def test_zip_install_refused_when_the_built_lint_is_missing_exit_3_for_169(
+@pytest.mark.parametrize(
+    ("tree", "reason"),
+    [
+        pytest.param({"built": False}, "lint_prebuilt_missing", id="built-lint-missing"),
+        pytest.param({"stale": True}, "lint_prebuilt_stale", id="built-lint-stale"),
+        pytest.param({"esbuild": False}, "esbuild_unresolvable", id="esbuild-unresolvable"),
+    ],
+)
+def test_zip_install_setup_refusal_names_its_own_cause(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
     _isolate_plugin_local: Path,
+    tree: dict,
+    reason: str,
 ) -> None:
-    """Built lint deleted: no install, #185's sentence, and the script's refusal code is 3 (what #169's
-    ``bundle_setup_missing`` keys on); nothing raw in the user text."""
+    """Built lint deleted / stale (plugins/sdk edited after the build) / esbuild unresolvable: no
+    install, #185's one sentence (``pnpm install`` in web/ fixes all three), the script's refusal code
+    is 3 (what #169's ``bundle_setup_missing`` keys on), and the log names this cause's own reason."""
     _needs_node_tree()
     _repo(tmp_path, monkeypatch)
-    monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", script_tree(tmp_path, built=False))
+    monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", script_tree(tmp_path, **tree))
     codes = _spy_codes(monkeypatch)
+    caplog.set_level(logging.WARNING, logger="service.plugins")
     plugins.reset_bundles()
     out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
+    assert codes == [EXIT_LINT_SETUP], codes
+    assert _setup_reasons(caplog) == [reason], caplog.text
     assert out.get("ok") is False and out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
     assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}", out
-    assert not re.search(r"ERR_|Error\b|\bexit \d|\bat .+:\d+|node:|\b3\b", str(out.get("message")))
-    assert codes == [EXIT_LINT_SETUP], codes
+    assert reason not in str(out) and not re.search(r"ERR_|Error\b|\bexit \d|\bat .+:\d+|node:|\b3\b", str(out.get("message")))
     assert not (paths.plugin_local_runtime_dir(create=True) / "upgrade-probe").exists()
-
-
-def test_zip_install_refused_when_the_built_lint_is_stale(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    _isolate_plugin_local: Path,
-) -> None:
-    """plugins/sdk edited after the build (a pull or edit without `pnpm install`): refused, same sentence."""
-    _needs_node_tree()
-    _repo(tmp_path, monkeypatch)
-    script = script_tree(tmp_path, sdk_copy=True)
-    sdk = script.parent.parent.parent / "plugins" / "sdk"
-    with (sdk / "pack-lint.ts").open("a", encoding="utf-8") as fh:
-        fh.write("\n// edited after the build (#186 row)\n")
-    monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", script)
-    plugins.reset_bundles()
-    out = plugin_local.install_local_zip(_probe(tmp_path, 1), overwrite=True)
-    assert out.get("error") == REASON_INSTALL_CHECK_UNAVAILABLE, out
-    assert out.get("message") == f"Couldn't safety-check Upgrade Probe{SETUP_TAIL}", out
 
 
 def test_a_lint_that_hangs_in_process_is_refused_at_the_service_timeout_and_leaves_no_process(

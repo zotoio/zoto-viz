@@ -81,10 +81,11 @@ function packHome(bad = false, id = "star-sines"): string {
 
 /**
  * The tree bundle-pack-entry.mjs needs, copied: its scripts (and the #186 built lint), web/package.json,
- * esbuild, the SDK. `esbuild: false` leaves esbuild out; `built: null` leaves the built lint out.
- * No tsx anywhere (#186: the install path doesn't use it).
+ * esbuild, the SDK. The built lint (with its stamp) is copied by default; `built: null` leaves it
+ * out, `stale: true` copies plugins/sdk and edits a source after the build so the stamp no longer
+ * matches; `esbuild: false` leaves esbuild out. No tsx anywhere (#186: the install path doesn't use it).
  */
-function scriptTree(opts: { esbuild?: boolean; built?: null } = {}): string {
+function scriptTree(opts: { esbuild?: boolean; built?: null; stale?: boolean } = {}): string {
   const root = tmp(opts.built === null ? "tree-no-built-lint" : "tree");
   mkdirSync(path.join(root, "web/scripts"), { recursive: true });
   mkdirSync(path.join(root, "web/node_modules"), { recursive: true });
@@ -97,7 +98,12 @@ function scriptTree(opts: { esbuild?: boolean; built?: null } = {}): string {
   if (opts.esbuild !== false) {
     symlinkSync(realpathSync(path.join(webRoot, "node_modules/esbuild")), path.join(root, "web/node_modules/esbuild"), "dir");
   }
-  symlinkSync(sdkRoot, path.join(root, "plugins/sdk"), "dir");
+  if (opts.stale) {
+    cpSync(sdkRoot, path.join(root, "plugins/sdk"), { recursive: true });
+    appendFileSync(path.join(root, "plugins/sdk/pack-lint.ts"), "\n// edited after the build (#186 row)\n");
+  } else {
+    symlinkSync(sdkRoot, path.join(root, "plugins/sdk"), "dir");
+  }
   return root;
 }
 
@@ -154,8 +160,10 @@ function expectPlainUserMessage(message: string): void {
   expect(message).not.toMatch(/\b1[0-9]{2}\b|\bSIG[A-Z]+\b|Error\b|ERR_|\bat .+:\d+|node:|exit \d/);
 }
 
-function expectSetupRefusal(r: SpawnSyncReturns<string>, detail: RegExp, name = PACK_NAME): Record<string, unknown> {
+/** `reason`: #186's machine-readable setup cause on the diagnostic line (never user text). */
+function expectSetupRefusal(r: SpawnSyncReturns<string>, reason: string, detail: RegExp, name = PACK_NAME): Record<string, unknown> {
   expect(r.status, `refused with the setup exit, not installed: ${why(r)}`).toBe(EXIT_LINT_SETUP);
+  expect(verdicts(r.stderr, "pack-install-lint-setup-error")[0]?.reason, `setup reason code: ${why(r)}`).toBe(reason);
   expect(r.stdout, "no bundle written").toBe("");
   expect(r.stderr, "setup message").toContain(setupMsg(name));
   const setup = verdicts(r.stderr, "pack-install-lint-setup-error");
@@ -201,7 +209,7 @@ describe("#185 pack install lint fails closed (bundle-pack-entry.mjs)", () => {
     const tree = scriptTree({ esbuild: false });
     expect(existsSync(path.join(tree, "web/node_modules/esbuild")), "esbuild really absent").toBe(false);
     const r = bundle(tree, packHome());
-    const setup = expectSetupRefusal(r, /esbuild not importable: ERR_MODULE_NOT_FOUND/);
+    const setup = expectSetupRefusal(r, "esbuild_unresolvable", /esbuild not importable: ERR_MODULE_NOT_FOUND/);
     expect(String(setup.message)).not.toMatch(/esbuild|Cannot find|ERR_MODULE_NOT_FOUND|\n/);
     expect(r.stderr, "no stack trace anywhere in the output").not.toMatch(/\n\s+at .+:\d+:\d+/);
   }, 60_000);
@@ -288,7 +296,7 @@ describe("#185 unbundled and no-frontend packs go through the same gate", () => 
     const r = bundle(repoRoot, home, { lintOnly: true });
     expectServicePass(r, "cores");
     // ...and the gate still fails closed for it: no built lint, no pass.
-    expectSetupRefusal(bundle(scriptTree({ built: null }), packHome(false, "cores"), { lintOnly: true }), /built lint not importable/, "CPU cores");
+    expectSetupRefusal(bundle(scriptTree({ built: null }), packHome(false, "cores"), { lintOnly: true }), "lint_prebuilt_missing", /built lint not importable/, "CPU cores");
   }, 60_000);
 });
 
