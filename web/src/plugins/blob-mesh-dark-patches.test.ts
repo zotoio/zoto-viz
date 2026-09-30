@@ -45,17 +45,63 @@ const SKY = readFileSync(path.resolve(here, "../../../plugins/src/blob-mesh/sky/
 const SIZE = 128;
 
 type Gate = "live-gated" | "always" | "only-written";
-type Shape = { floor: number; gate: Gate };
+/** The blob falloff: the authored r^2/d^2 (reaches the whole field) or #193's compact kernel (0 past rad + gap / 2). */
+type Falloff = { kind: "inverse-square" } | { kind: "compact"; gap: number };
+type Shape = { floor: number; gate: Gate; falloff: Falloff; skyFloor: number };
 
-/** Read the two lines this row is about from the shader; refuse to guess on anything else. */
+const INVERSE_SQUARE_LINE = "float contrib = rad * rad / max(0.0012, dot(d, d));";
+const COMPACT_LINES = [
+  "float reach = rad + 0.5 * BLOB_GAP;",
+  "float edge = rad * rad / (reach * reach);",
+  "float contrib = max(0.0, (rad * rad / max(0.0012, dot(d, d)) - edge) / (1.0 - edge));",
+];
+const BLACK_SKY_LINE = "vec3 col = mix(uBg * 0.12, tint, iso);";
+const FLOOR_SKY_LINE = "vec3 col = mix(mix(uBg * 0.12, uAccent, SKY_FLOOR), tint, iso);";
+
+/** A `const float NAME = <number>;` from the shader source, or null when the shader has none. */
+export function shaderConst(src: string, name: string): number | null {
+  const m = src.match(new RegExp(`^const float ${name} = ([0-9.]+);$`, "m"));
+  return m ? Number(m[1]) : null;
+}
+
+/** Read the lines these rows are about from the shader; refuse to guess on anything else. */
 export function mirrorShape(src: string): Shape {
   const floorM = src.match(/float rad = max\(([0-9.]+), b\.z\)( \* drawn)?;/);
   if (!floorM) throw new Error("blob-mesh sky: `float rad = max(<floor>, b.z)` not found; update the CPU mirror");
   const floor = Number(floorM[1]);
-  if (!floorM[2]) return { floor, gate: "always" };
-  if (/float drawn = max\(step\(0\.001, b\.z\), 1\.0 - live\);/.test(src)) return { floor, gate: "live-gated" };
-  if (/float drawn = step\(0\.001, b\.z\);/.test(src)) return { floor, gate: "only-written" };
-  throw new Error("blob-mesh sky: unrecognised `drawn` gate; update the CPU mirror");
+  let falloff: Falloff;
+  const gap = shaderConst(src, "BLOB_GAP");
+  if (src.includes(INVERSE_SQUARE_LINE)) falloff = { kind: "inverse-square" };
+  else if (COMPACT_LINES.every((l) => src.includes(l)) && gap !== null) falloff = { kind: "compact", gap };
+  else throw new Error("blob-mesh sky: unrecognised blob falloff; update the CPU mirror");
+  let skyFloor: number;
+  const sf = shaderConst(src, "SKY_FLOOR");
+  if (src.includes(BLACK_SKY_LINE)) skyFloor = 0;
+  else if (src.includes(FLOOR_SKY_LINE) && sf !== null) skyFloor = sf;
+  else throw new Error("blob-mesh sky: unrecognised empty-sky colour; update the CPU mirror");
+  let gate: Gate;
+  if (!floorM[2]) gate = "always";
+  else if (/float drawn = max\(step\(0\.001, b\.z\), 1\.0 - live\);/.test(src)) gate = "live-gated";
+  else if (/float drawn = step\(0\.001, b\.z\);/.test(src)) gate = "only-written";
+  else throw new Error("blob-mesh sky: unrecognised `drawn` gate; update the CPU mirror");
+  return { floor, gate, falloff, skyFloor };
+}
+
+/** The authored falloff and black empty sky (what #174's SwiftShader floor scan rendered), from any current source. */
+export function authoredFalloff(src: string): string {
+  let out = src.replace(COMPACT_LINES.join("\n    "), INVERSE_SQUARE_LINE).replace(FLOOR_SKY_LINE, BLACK_SKY_LINE);
+  if (!out.includes(INVERSE_SQUARE_LINE) || !out.includes(BLACK_SKY_LINE)) throw new Error("blob-mesh sky: can't fold back to the authored falloff");
+  out = out.replace(/^const float (BLOB_GAP|SKY_FLOOR) = [0-9.]+;\n/gm, "");
+  return out;
+}
+
+/** One blob's field contribution at squared distance d2 (fragment.glsl's contrib line). */
+function blobContrib(rad: number, d2: number, falloff: Falloff): number {
+  const inv = (rad * rad) / Math.max(0.0012, d2);
+  if (falloff.kind === "inverse-square") return inv;
+  const reach = rad + 0.5 * falloff.gap;
+  const edge = (rad * rad) / (reach * reach);
+  return Math.max(0, (inv - edge) / (1 - edge));
 }
 
 const clamp = (x: number, a: number, b: number) => Math.min(b, Math.max(a, x));
@@ -91,12 +137,12 @@ function shadePixel(cam: number[], slots: Float32Array, u: PluginSkySmokeUniform
     const drawn = shape.gate === "always" ? 1 : shape.gate === "live-gated" ? Math.max(step(0.001, bz), 1 - live) : step(0.001, bz);
     const rad = Math.max(shape.floor, bz) * drawn;
     const dx = uvx - px, dy = uvy - py;
-    const contrib = (rad * rad) / Math.max(0.0012, dx * dx + dy * dy);
+    const contrib = blobContrib(rad, dx * dx + dy * dy, shape.falloff);
     field += contrib;
     tint = mix3(tint, mix3(u.uAccent, [0.15, 1.0, 0.72], Math.max(bw, fi / 8)), clamp(contrib * 0.12, 0, 0.4));
   }
   const iso = smoothstep(0.55, 1.25, field + 0.45 + u.uAudio * 0.3);
-  const bg = u.uBg.map((c) => c * 0.12);
+  const bg = mix3(u.uBg.map((c) => c * 0.12), u.uAccent, shape.skyFloor);
   let col = mix3(bg, tint, iso);
   const glow = Math.pow(clamp(field * 0.18, 0, 1), 2.4) * 0.7;
   col = col.map((c, j) => c + tint[j]! * glow);
@@ -278,15 +324,12 @@ const HALF: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 120), tal
 /** #174 "Done when": live LAN patch spread >= 30 and every patch below 240. */
 const MIN_SPREAD = 30;
 const MAX_LUMA = 240;
-const CONTRAST_CASES = ["LAN7", "LAN11", "PAIR", "TRIPLE", "EQUAL7", "EQUAL8", "BUSY1_IDLE6", "LOW_BESIDE_BUSY", "HALF", "FULL8"] as const;
 /**
- * Known gaps at the #174 sky (option 2: no rate term in uBright, skyBright at the tightest value
- * that keeps the sky under the blobs): a lone device (SINGLE, spread min 26 at t=20 s) and a quiet
- * LAN (QUIET5, 5 devices at 0.5 pkt/s, spread min 22 at t=10 s) stay under 30. Shader and rule
- * unchanged. it.fails that only "passes" on the spread assertion itself (see contrastGapRow): turns
- * red once they reach the bounds, or if anything else throws.
+ * Every swept case. SINGLE (a lone device) and QUIET5 (5 devices at 0.5 pkt/s) were it.fails known
+ * gaps under the authored r^2/d^2 falloff and black empty sky (spread min 26 at t=20 s and 22 at
+ * t=10 s); the compact falloff (BLOB_GAP) and the accent sky floor (SKY_FLOOR) bring them over 30.
  */
-const CONTRAST_GAPS = ["SINGLE", "QUIET5"] as const;
+const CONTRAST_CASES = ["LAN7", "LAN11", "SINGLE", "PAIR", "TRIPLE", "EQUAL7", "EQUAL8", "BUSY1_IDLE6", "QUIET5", "LOW_BESIDE_BUSY", "HALF", "FULL8"] as const;
 /** #174 b (UX Pro): the sky's brightest pixel sits at least this far (luma) under the dimmest blob. */
 const SKY_UNDER_BLOB_MARGIN = 5;
 /** The audio peak (frame.audio is 0..1): the pack's uBright and the shader's iso both rise with it. */
@@ -298,7 +341,7 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
   it("mirror inputs: the live LAN frame is 7 devices at 420 pkt/s and the shader floor is the writers' floor", () => {
     expect(LAN7.talkers).toHaveLength(7);
     expect(LAN7.talkers.reduce((s, t) => s + t.rate, 0)).toBe(LAN_35S_PPS);
-    expect(mirrorShape(SKY)).toEqual({ floor: BLOB_MESH_FLOOR, gate: "live-gated" });
+    expect(mirrorShape(SKY)).toMatchObject({ floor: BLOB_MESH_FLOOR, gate: "live-gated" });
     // FULL8 (120 down to 36 pkt/s) draws 7 (count first); the quietest is dropped and the notice says so
     expect(planBlobMesh(FULL8.talkers.map((t) => t.rate)).hidden).toBe(1);
     expect(planBlobMesh(EQUAL8.talkers.map((t) => t.rate)).hidden).toBe(0);
@@ -324,10 +367,10 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
   ];
   for (const [frameName, floor, lums] of SCAN) {
     it(`calibration: ${frameName} at floor ${floor} (old always-draw shader, radii at the floor) matches SwiftShader ${lums.join("/")}`, () => {
-      const oldShape = SKY
+      const oldShape = authoredFalloff(SKY)
         .replace(/float drawn = [^;]*;\s*/, "")
         .replace(/float rad = max\([0-9.]+, b\.z\) \* drawn;/, `float rad = max(${floor}, b.z);`);
-      expect(mirrorShape(oldShape)).toEqual({ floor, gate: "always" });
+      expect(mirrorShape(oldShape)).toEqual({ floor, gate: "always", falloff: { kind: "inverse-square" }, skyFloor: 0 });
       const r = darkPatchReport(DARK_PATCH_CASES[frameName], oldShape, floor, "pre-hash", SCAN_LOOK);
       process.stdout.write(`[calibration] ${frameName}@${floor}: mirror ${r.five.lums.join("/")} vs swiftshader ${lums.join("/")}\n`);
       // Within 2 luma wherever SwiftShader read < 100 (the range the dark call is made in); bright
@@ -397,29 +440,12 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
   for (const name of CONTRAST_CASES) {
     it(`${name} contrast: patch spread >= ${MIN_SPREAD} and every patch < ${MAX_LUMA} at every 5 s step from 0 to 60 s`, contrastRow(name, swept(name)));
   }
-  /**
-   * Known-gap body: run the contrast row, and rethrow only the spread assertion (`t=<t> spread: ...
-   * spread=<n> ...: expected <n> to be greater than or equal to 30`). Any other failure (setup throw,
-   * the < 240 assertion) or no failure makes the body return normally, so it.fails goes red.
-   */
-  const SPREAD_FAIL = new RegExp(`^t=\\d+ spread: .* spread=(\\d+) .*: expected (\\d+) to be greater than or equal to ${MIN_SPREAD}$`);
-  const contrastGapRow = (name: string, frame: VizDataFrame) => () => {
-    let msg = "(no failure)";
-    let err: unknown = null;
-    try { contrastRow(name, frame)(); } catch (e) { err = e; msg = e instanceof Error ? e.message : String(e); }
-    const m = msg.match(SPREAD_FAIL);
-    process.stdout.write(`[contrast-gap] ${name}: ${m && m[1] === m[2] && Number(m[1]) < MIN_SPREAD ? "spread assertion" : "NOT the spread assertion"}: ${msg}\n`);
-    if (m && m[1] === m[2] && Number(m[1]) < MIN_SPREAD) throw err;
-  };
-  for (const name of CONTRAST_GAPS) {
-    it.fails(`${name} contrast (known gap, it.fails on the spread assertion): patch spread >= ${MIN_SPREAD} and every patch < ${MAX_LUMA} at every 5 s step from 0 to 60 s`, contrastGapRow(name, swept(name)));
-  }
 
   /**
    * #174 b (UX Pro): size is the only thing that shows rate, and the sky reads as background, so its
    * brightest pixel stays under the dimmest blob. Sky peak and dimmest blob come from the CPU mirror
    * (blobVsSky) with the uniforms the pack draws with at the audio peak (packLook: yml skyBright x
-   * the pack's uBright, the pack's uAudio / uAccent). Reverts: skyBright 1.18, or 0.01 over the limit -> red.
+   * the pack's uBright, the pack's uAudio / uAccent). Reverts: skyBright 1.06 (over the limit), the authored r^2/d^2 falloff -> red.
    */
   for (const [name, frame] of [["LAN7", LAN7], ["LAN11", LAN11]] as const) {
     it(`${name} sky under the blobs: at the audio peak the sky's brightest pixel is >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob at every 5 s step from 0 to 60 s`, () => {
@@ -438,8 +464,8 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
 
   /**
    * Uniform row (#195 pattern): drive the pack's onFrame at the audio peak on LAN7 and LAN11, read
-   * the effective sky uBright from the uniforms (yml skyBright x pack uBright), and find by bisection
-   * on the same mirror the brightest uBright that keeps the sky >= 5 luma under the dimmest blob at
+   * the effective sky uBright from the uniforms (yml skyBright x pack uBright), and find by a 0.01 walk plus bisection
+   * on the same mirror the brightest uBright up to which the sky stays >= 5 luma under the dimmest blob at
    * every 5 s step from 0 to 60 s (no copy of either number lives in the test). The yml skyBright
    * must clear it, and be the tightest two-decimal value that does (skyBright + 0.01 must not).
    */
@@ -450,9 +476,15 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
       const r = blobVsSky(f, { ...looks[i]!.u, uBright });
       return r.dimmestBlob - r.skyPeak >= SKY_UNDER_BLOB_MARGIN;
     });
-    let lo = 0.5, hi = 2;
-    expect(clears(lo), "bisection floor must clear").toBe(true);
-    expect(clears(hi), "bisection ceiling must not clear").toBe(false);
+    // The gap is not monotonic in uBright: once the dimmest blob's centre clamps at 255 the sky
+    // catches up, then clamps too and the gap reopens (it clears again at uBright 2). So walk up
+    // from the floor in 0.01 steps to the first uBright that doesn't clear, then bisect that step:
+    // the limit is the brightest uBright up to which every value clears.
+    let lo = 0.5;
+    expect(clears(lo), "search floor must clear").toBe(true);
+    while (lo < 3 && clears(lo + 0.01)) lo += 0.01;
+    let hi = lo + 0.01;
+    expect(clears(hi), "some uBright under 3 must not clear").toBe(false);
     while (hi - lo > 0.0005) { const mid = (lo + hi) / 2; if (clears(mid)) lo = mid; else hi = mid; }
     expect(new Set(looks.map((l) => l.u.uBright)).size, "uBright does not move with t or with LAN7 vs LAN11").toBe(1);
     const sky = lookNumber("skyBright");
