@@ -418,7 +418,10 @@ def _check_install_lint_verdict(
 ) -> None:
     """Setup refusal / lint block / pass, from one install-lint run of bundle-pack-entry.mjs."""
     if pil.install_lint_setup_failed(proc.returncode, proc.stderr):
-        raise pil.PackInstallLintSetupError(label)
+        reason = pil.install_lint_setup_reason(proc.stderr) or f"exit_{proc.returncode}"
+        # #186: the cause is for the log only; the user gets the one setup sentence.
+        _LOG.warning("pack install lint setup refusal (%s) for %s", reason, doc.get("id"))
+        raise pil.PackInstallLintSetupError(label, reason)
     if proc.returncode != 0:
         block = boundary_from_compile(doc, proc.stderr)
         if block:
@@ -430,7 +433,8 @@ def _check_install_lint_verdict(
         raise ValueError(proc.stderr.strip() or "esbuild failed")
     if not pil.install_lint_passed(proc.returncode, proc.stderr, nonce=nonce, pack=str(doc.get("id") or "")):
         # #185: fail closed. Only the nonce-bound pass line, last on stderr, is a pass.
-        raise pil.PackInstallLintSetupError(label)
+        _LOG.warning("pack install lint setup refusal (no_pass_verdict) for %s", doc.get("id"))
+        raise pil.PackInstallLintSetupError(label, "no_pass_verdict")
 
 
 def verify_pack_bundle_home(home: Path, doc: dict[str, Any], sha256: str | None = None) -> None:

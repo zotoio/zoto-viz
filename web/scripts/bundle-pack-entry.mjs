@@ -78,10 +78,26 @@ const packId = manifestField(manifest, "id") || path.basename(packHome);
 /** plugin.yml display name (top-level `name:`), else `id:`, else the pack folder name. */
 const packName = manifestField(manifest, "name") || packId;
 
-function refuseLintSetup(detail) {
+/**
+ * #186: `reason` is a machine-readable code for the log and the rows (never user text): which setup
+ * step failed. The user sentence is the same for all of them — `pnpm install` in web/ fixes each.
+ */
+const SETUP_REASONS = Object.freeze({
+  noRepoRoot: "no_repo_root",
+  esbuild: "esbuild_unresolvable",
+  sdk: "sdk_unresolvable",
+  stampModule: "lint_stamp_unresolvable",
+  missing: "lint_prebuilt_missing",
+  unloadable: "lint_prebuilt_unloadable",
+  stale: "lint_prebuilt_stale",
+  threw: "lint_threw",
+  noVerdict: "lint_no_verdict",
+});
+
+function refuseLintSetup(detail, reason) {
   const message = `Couldn't safety-check ${packName}, so it wasn't installed. Run \`pnpm install\` in \`web/\` and try again.`;
   console.error(message);
-  console.error(JSON.stringify({ type: LINT_SETUP, message, detail }));
+  console.error(JSON.stringify({ type: LINT_SETUP, message, reason, detail }));
   process.exit(EXIT_LINT_SETUP);
 }
 
@@ -95,20 +111,20 @@ function emitServicePass() {
 }
 
 /** A module the bundle needs (esbuild after `pnpm install --prod`, plugins/sdk) can't load. */
-async function importOrRefuse(spec, what) {
+async function importOrRefuse(spec, what, reason) {
   try {
     return await import(spec);
   } catch (err) {
-    if (lintMode) refuseLintSetup(`${what} not importable: ${errCode(err)}`);
+    if (lintMode) refuseLintSetup(`${what} not importable: ${errCode(err)}`, reason);
     console.error(`${what} not importable (${errCode(err)}); run \`pnpm install\` in \`web/\``);
     process.exit(1);
   }
 }
 
-const esbuild = lintOnly ? null : await importOrRefuse("esbuild", "esbuild");
+const esbuild = lintOnly ? null : await importOrRefuse("esbuild", "esbuild", SETUP_REASONS.esbuild);
 const bundleResolve = lintOnly
   ? null
-  : await importOrRefuse("../../plugins/sdk/pack-bundle-resolve.mjs", "plugins/sdk/pack-bundle-resolve.mjs");
+  : await importOrRefuse("../../plugins/sdk/pack-bundle-resolve.mjs", "plugins/sdk/pack-bundle-resolve.mjs", SETUP_REASONS.sdk);
 
 /**
  * #186: the install lint, in this process. The built lint is plain JS (no tsx); a missing or stale one
@@ -116,26 +132,27 @@ const bundleResolve = lintOnly
  * stays true. Only a `{kind: "pass"}` return value lets the install go ahead.
  */
 async function runInstallLint() {
-  if (!repoRoot) refuseLintSetup("no repo root passed to bundle-pack-entry.mjs");
+  if (!repoRoot) refuseLintSetup("no repo root passed to bundle-pack-entry.mjs", SETUP_REASONS.noRepoRoot);
   let lint;
   let stamp;
   try {
     stamp = await import("./pack-install-lint-stamp.mjs");
   } catch (err) {
-    refuseLintSetup(`lint stamp check not importable: ${errCode(err)}`);
+    refuseLintSetup(`lint stamp check not importable: ${errCode(err)}`, SETUP_REASONS.stampModule);
   }
   try {
     lint = await import(`./${stamp.BUILT_LINT_FILE}`);
   } catch (err) {
-    refuseLintSetup(`built lint not importable: ${errCode(err)}`);
+    const missing = err?.code === "ERR_MODULE_NOT_FOUND" && String(err?.message || "").includes(stamp.BUILT_LINT_FILE);
+    refuseLintSetup(`built lint not importable: ${errCode(err)}`, missing ? SETUP_REASONS.missing : SETUP_REASONS.unloadable);
   }
   const stale = stamp.staleReason(lint.PACK_INSTALL_LINT_BUILD, scriptRepoRoot);
-  if (stale) refuseLintSetup(stale);
+  if (stale) refuseLintSetup(stale, SETUP_REASONS.stale);
   let verdict;
   try {
     verdict = lint.runPackInstallLint(packHome, repoRoot, { unbundled: lintOnly });
   } catch (err) {
-    refuseLintSetup(`lint threw: ${errCode(err)}`);
+    refuseLintSetup(`lint threw: ${errCode(err)}`, SETUP_REASONS.threw);
   }
   const kind = verdict && typeof verdict === "object" ? verdict.kind : undefined;
   for (const w of Array.isArray(verdict?.warnings) ? verdict.warnings : []) console.warn(String(w));
@@ -151,7 +168,7 @@ async function runInstallLint() {
     console.error(JSON.stringify({ type: "pack-bundle-boundary", file: verdict.file, import: verdict.import, reason: verdict.reason }));
     process.exit(EXIT_LINT_BLOCK);
   }
-  if (kind !== "pass") refuseLintSetup(`lint gave no verdict (${kind === undefined ? typeof verdict : JSON.stringify(kind)})`);
+  if (kind !== "pass") refuseLintSetup(`lint gave no verdict (${kind === undefined ? typeof verdict : JSON.stringify(kind)})`, SETUP_REASONS.noVerdict);
 }
 
 if (lintMode) await runInstallLint();
