@@ -2,7 +2,13 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "types": ["vite/client", "vitest/globals", "node"],
-    "paths": { "plugins/sdk/*": ["../plugins/sdk/*"] }
+    "paths": {
+      "plugins/sdk/*": ["../plugins/sdk/*"],
+      // #192: test files under plugins/ import vitest but have no node_modules above them. Map it to
+      // web's own install (the pnpm link; tsc follows it to the realpath web already resolves).
+      "vitest": ["./node_modules/vitest"],
+      "vitest/*": ["./node_modules/vitest/*"]
+    }
   },
   "include": [
     // #192: every test file the tsgap error metric counts (web/src, plugins/src, plugins/sdk, scripts/,
@@ -46,25 +52,13 @@
   "exclude": [
     // SHRINK-ONLY: test files that still have tsc errors. Fix a file, then delete its line; never add
     // a path here (a new test file must type-check). Each path here must still have >= 1 tsc error.
-    "../plugins/sdk/host-mesh-frame.test.ts",
-    "../plugins/sdk/pack-host-mesh.test.ts",
-    "../plugins/sdk/pack-model-slot.test.ts",
-    "../plugins/sdk/talker-slots.test.ts",
     "../plugins/src/ant-colony/frontend/index.test.ts",
     "../plugins/src/aquarium/frontend/aquarium.test.ts",
-    "../plugins/src/backrooms/shipped-pack.test.ts",
-    "../plugins/src/fluid-dyn/frontend/fluid.test.ts",
-    "../plugins/src/fractal-zoom/frontend/cruise.test.ts",
-    "../plugins/src/fractal-zoom/frontend/pack.test.ts",
     "../plugins/src/koi-pond/frontend/index.test.ts",
     "../plugins/src/marble-run/frontend/marble-run.test.ts",
     "../plugins/src/metro-lines/frontend/index.test.ts",
-    "../plugins/src/packet-tunnel/frontend/pack.test.ts",
-    "../plugins/src/rf-constellation/frontend/pack.test.ts",
     "../plugins/src/rocket-car-soccer/frontend/pack.test.ts",
     "../plugins/src/sandbox-fixture-multi/frontend/module.test.ts",
-    "../plugins/src/talker-storm/frontend/pack.test.ts",
-    "../plugins/src/voxel-world/frontend/world.test.ts",
     "src/app/consent-pack-start.test.ts",
     "src/app/consent-preserve-ubo.test.ts",
     "src/app/duplicate-slot-scope-note-guards.test.ts",
