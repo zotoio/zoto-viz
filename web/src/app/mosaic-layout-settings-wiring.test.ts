@@ -76,10 +76,10 @@ describe("main mosaic layout wiring > settings drawer", () => {
     gain.value = "8";
     gain.dispatchEvent(new Event("input", { bubbles: true }));
 
-    const mosaic = mosaicFake("2:off:plugin:topology,plugin:memory:");
+    const mosaic = mosaicFake("4:off:plugin:topology,plugin:memory:");
     const anim = {
       ...DEFAULT_DREAM,
-      mosaic: "2" as const,
+      mosaic: "4" as const,
       mosaicTiles: ["plugin:memory", "plugin:disk"],
     };
     applyMosaicLayoutFromAnim(mosaic as never, anim, settingsHost(s), {

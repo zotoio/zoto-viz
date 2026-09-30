@@ -12,14 +12,15 @@ describe("deliverVizPluginFrame", () => {
   it("mosaic with demo + TS plugin: exactly one sandbox.frame per frame over 10 frames", () => {
     const sandbox = { frame: vi.fn(), handlers: {} };
     const deliverSpy = vi.spyOn(coalesce, "deliverCoalescedMosaicPacks").mockImplementation(() => {});
-    const frameBase = {
+    const frameBase: VizDataFrame = {
       t: 0,
+      dt: 0,
       audio: 0,
       packets: [],
       talkers: [],
       rf: [],
       headlines: [],
-    } as VizDataFrame;
+    };
     const mosaic = {
       on: true,
       tileIds: ["plugin:star-sines", "plugin:ts-watch"],
@@ -49,7 +50,7 @@ describe("deliverVizPluginFrame", () => {
     const sandbox = { frame: vi.fn(), handlers: {} };
     const packSpy = vi.spyOn(packHost, "runPackFrameHandler").mockImplementation(() => {});
     deliverVizPluginFrame({
-      frame: { t: 1, audio: 0, packets: [], talkers: [], rf: [], headlines: [] } as VizDataFrame,
+      frame: { t: 1, dt: 0, audio: 0, packets: [], talkers: [], rf: [], headlines: [] },
       sandbox,
       mosaic: null,
       mosaicDemoPacks: false,

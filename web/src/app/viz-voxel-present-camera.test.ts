@@ -10,6 +10,7 @@ import {
   VizBufferWriter,
   VizFrameBudget,
   defaultVizContract,
+  type VizDataFrame,
 } from "../plugins/viz-host";
 import { syncVizTileScope } from "../plugins/viz-tile-budget";
 import { mainVizBuildFrame, mainVizDeliver } from "./viz-main-deliver";
@@ -44,7 +45,8 @@ describe("voxel world camera via host viz loop", () => {
     const api: SandboxZoto = {
       onTick: null,
       onConfig: (cfg) => setVoxConfig(cfg),
-      onFrame: (frame) => {
+      onFrame: (raw) => {
+        const frame = raw as VizDataFrame;
         const out = tickVoxelWorld(
           {
             t: frame.t,

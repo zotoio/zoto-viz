@@ -13,6 +13,7 @@ import {
   resetLayoutDevicePxRatioWatch,
 } from "../../test-support/layout-device-px-ratio";
 import { LiveFeed } from "../ui/feed";
+import { mockPartial } from "../../test-support/mock-partial";
 import { probeWebGL } from "./webgl";
 
 const hostRaf = vi.hoisted(() => {
@@ -142,10 +143,10 @@ class TestStage3D extends Stage3D {
 }
 
 function sceneStub(): NetScene {
-  return {
-    pulseNow: { level: 0, bass: 0 },
+  return mockPartial<NetScene>({
+    pulseNow: mockPartial<NetScene["pulseNow"]>({ level: 0, bass: 0 }),
     selectIp: () => {},
-  } as NetScene;
+  });
 }
 
 function defineClientSize(el: HTMLElement, w: number, h: number): void {
@@ -227,7 +228,11 @@ function mountThreeSurfaceFixture(initialDpr: number): Fixture {
   });
 
   const feed = new LiveFeed(feedPane, sceneStub());
+  // #198: with no `on` the feed is on and queues its own rAF loop. This fixture draws the bars from
+  // hostFrame and counts per-frame work, so drop that one queued frame (nothing else is queued here).
+  expect(hostRaf.hasPending()).toBe(false);
   feed.setConfig({ layout: "bars", modulate: false });
+  hostRaf.clear();
   const barsWrap = feedPane.querySelector(".feed-bars") as HTMLElement;
   barsWrap.hidden = false;
   defineClientSize(barsWrap, 100, 80);
@@ -279,7 +284,10 @@ function mountThreeSurfaceFixture(initialDpr: number): Fixture {
   return {
     wall,
     host,
-    dispose: () => host.dispose(),
+    dispose: () => {
+      feed.setConfig({ on: false }); // #198: the feed runs now; stop its poll interval with the fixture
+      host.dispose();
+    },
     stage,
     stageCanvas,
     feedCanvas,

@@ -18,6 +18,7 @@ describe("consent deny clears viz UBO preserve", () => {
     const m = {
       tileIds: ["plugin:topology", "plugin:wifi"],
       focusedId: "plugin:topology",
+      mainTileId: "",
       setPaneView: vi.fn(() => true),
       setPaneNotice: vi.fn(),
       focus: vi.fn(),

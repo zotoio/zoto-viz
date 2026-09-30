@@ -1,3 +1,5 @@
+// @ts-check
+// #192: type-checked through JSDoc (web/tsconfig.test.json includes this file; allowJs, checkJs off).
 import { readFileSync, globSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,7 +30,13 @@ const castPattern = new RegExp(`\\sas\\s+(${brands.join("|")})\\b`, "g");
 const devicePxRatioReadPattern = /\bdevicePixelRatio\b/g;
 
 /** @typedef {{ file: string, rule: string, line: number, col: number }} LintViolation */
+/** @typedef {{ brandCasts?: boolean, devicePxRatioReads?: boolean }} LintOptions */
 
+/**
+ * @param {string} text
+ * @param {number} index
+ * @returns {{ line: number, col: number }}
+ */
 function indexToLineCol(text, index) {
   const before = text.slice(0, index);
   const line = before.split("\n").length;
@@ -40,12 +48,13 @@ function indexToLineCol(text, index) {
 /**
  * @param {string} file relative path under web/
  * @param {string} text
- * @param {{ brandCasts?: boolean, devicePxRatioReads?: boolean }} options
+ * @param {LintOptions} [options]
  * @returns {LintViolation[]}
  */
 export function lintSourceText(file, text, options = {}) {
   const brandCasts = options.brandCasts ?? true;
   const devicePxRatioReads = options.devicePxRatioReads ?? true;
+  /** @type {LintViolation[]} */
   const violations = [];
 
   if (file.endsWith(".test.ts") || mintFiles.has(file)) {
@@ -72,10 +81,11 @@ export function lintSourceText(file, text, options = {}) {
 
 /**
  * @param {string} webRoot absolute path to web/
- * @param {{ brandCasts?: boolean, devicePxRatioReads?: boolean }} options
+ * @param {LintOptions} [options]
  * @returns {LintViolation[]}
  */
 export function lintProductionTree(webRoot, options = {}) {
+  /** @type {LintViolation[]} */
   const violations = [];
   for (const file of globSync("src/**/*.ts", { cwd: webRoot })) {
     const text = readFileSync(`${webRoot}/${file}`, "utf8");
@@ -84,6 +94,10 @@ export function lintProductionTree(webRoot, options = {}) {
   return violations;
 }
 
+/**
+ * @param {LintViolation} violation
+ * @returns {string}
+ */
 export function formatViolation({ file, rule, line, col }) {
   return `${file}:${line}:${col}: ${rule}`;
 }

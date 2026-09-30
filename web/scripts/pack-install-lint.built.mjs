@@ -1104,5 +1104,5 @@ export const PACK_INSTALL_LINT_BUILD = {
     "plugins/sdk/pack-lint.ts",
     "plugins/sdk/viz-zoto.ts"
   ],
-  "sha256": "6db7742c929c4eb33236bd2e71ae54790c02f39f244cc3f1e15e0f1f3e7c20a6"
+  "sha256": "2b20ad9dcf0eeebe7f31bf0f0728e8b77d84abb9a46cae27f7129e8888935265"
 };

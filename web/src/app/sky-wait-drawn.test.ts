@@ -11,7 +11,7 @@ class FakeTile implements SkyDrawnSource {
   get listeners() { return this.cbs.size; }
 }
 
-function waitsOn(pane: HTMLElement, tile: FakeTile, retry = vi.fn()) {
+function waitsOn(pane: HTMLElement, tile: FakeTile, retry: (key: string) => void = vi.fn()) {
   return new SkyWaits({ hostEl: () => pane, name: () => "Backrooms", skyReady: () => tile.pluginSkyDrawn === "backrooms", retry });
 }
 
