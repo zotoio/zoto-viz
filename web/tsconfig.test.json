@@ -20,6 +20,7 @@
     "src/graph/scene-stage-sky-lean.test.ts",
     "src/app/__tests__/main-entry.perf-pin.test.ts",
     "src/plugins/viz-particles-deprecated-184.test.ts",
+    "src/plugins/viz-write-api-consumers-184.test.ts",
     "src/plugins/talker-storm-host-184.test.ts",
     "src/plugins/dogfood.test.ts",
     "src/plugins/pack-sky-lean-h1.test.ts",
