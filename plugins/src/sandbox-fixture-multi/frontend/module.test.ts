@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import yml from "../plugin.yml?raw";
+import sky from "../sky/fragment.glsl?raw";
+import fixture from "./fixture.js";
 import src from "./module.js?raw";
 
 // #180: the sandbox iframe CSP is `connect-src 'none'` (service/pack_assets.py). Chrome fetches JSON
@@ -31,12 +33,17 @@ describe("sandbox-fixture-multi module graph (#180)", () => {
 
   describe("hooks", () => {
     const g = globalThis as { zoto?: unknown };
-    const writes: [string, number][] = [];
+    const uniforms: [string, number][] = [];
+    const buffers: [number, number[]][] = [];
     const z: {
       onPresent?: (() => void) | null;
       onFrame?: ((frame: unknown) => void) | null;
       writeUniform: (n: string, v: number) => void;
-    } = { writeUniform: (n, v) => writes.push([n, v]) };
+      writeBuffer: (slot: number, data: number[]) => void;
+    } = {
+      writeUniform: (n, v) => uniforms.push([n, v]),
+      writeBuffer: (slot, data) => buffers.push([slot, Array.from(data)]),
+    };
 
     beforeAll(async () => {
       g.zoto = z;
@@ -46,30 +53,101 @@ describe("sandbox-fixture-multi module graph (#180)", () => {
       delete g.zoto;
     });
 
-    function expectBrightWrites(n: number): void {
-      expect(writes.length).toBe(n);
-      for (const [name, v] of writes) {
-        expect(name).toBe("uBright");
-        expect(v).toBeGreaterThanOrEqual(0.92 * 0.1 - 1e-9);
-        expect(v).toBeLessThanOrEqual(0.92 + 1e-9);
+    /** uBright on every call is fixture.js's bright (0.92), unscaled; helper.js's pulse goes to slot 0 only. */
+    function expectFixtureBright(n: number): void {
+      expect(uniforms.map(([name]) => name)).toEqual(Array(n).fill("uBright"));
+      for (const [, v] of uniforms) {
+        expect(v, "uBright written equals fixture.js bright").toBe(fixture.bright);
+        expect(v, "fixture.js bright").toBe(0.92);
+      }
+      expect(buffers.length).toBe(n);
+      for (const [slot, data] of buffers) {
+        expect(slot).toBe(0);
+        expect(data.length).toBe(1);
+        expect(data[0]).toBeGreaterThanOrEqual(0.1 - 1e-9);
+        expect(data[0]).toBeLessThanOrEqual(1 + 1e-9);
       }
     }
 
-    it("onPresent writes uBright from the fixture bright times the pulse", () => {
-      writes.length = 0;
+    it("onPresent writes uBright = fixture.js bright", () => {
+      uniforms.length = 0;
+      buffers.length = 0;
       expect(typeof z.onPresent).toBe("function");
       for (let k = 0; k < 3; k++) z.onPresent!();
-      expectBrightWrites(3);
+      expectFixtureBright(3);
     });
 
     it("writes on data frames too, because the manifest has no viz.presentTick (host sends no present ticks)", () => {
       // Red at c20802db: onPresent never fires without presentTick, so the pack makes no viz writes while
       // frames arrive; tile health reads that as drawing-nothing and heals the view to Topology.
       expect(/^\s*presentTick:\s*true\b/m.test(yml)).toBe(false);
-      writes.length = 0;
+      uniforms.length = 0;
+      buffers.length = 0;
       expect(typeof z.onFrame, "module.js must set zoto.onFrame").toBe("function");
       for (let k = 0; k < 3; k++) z.onFrame!({ t: k, dt: 0.1, audio: 0, packets: [], rf: [], talkers: [] });
-      expectBrightWrites(3);
+      expectFixtureBright(3);
     });
   });
+
+  it("the sky takes all its brightness from uBright (none of its own), in a pattern tile health reads as not uniform", () => {
+    // #180 review: with no sky the board was empty (mean luma 14, 0 px >= 60) under `backdrop: plugin`.
+    const declared = [...yml.matchAll(/^\s+-\s+(u\w+)\s*$/gm)].map((m) => m[1]);
+    expect(declared, "viz.uniforms").toContain("uBright");
+    for (const line of SKY_LINES) expect(sky, `mirror line missing from the sky: ${line}`).toContain(line);
+    const main = sky.slice(sky.indexOf("void main()"));
+    expect(main.match(/\bfragColor\s*=/g)?.length, "one fragColor write").toBe(1);
+    const five = [[0.5, 0.5], [0.25, 0.25], [0.75, 0.25], [0.25, 0.75], [0.75, 0.75]] as const;
+    for (const time of [0, 7.5]) {
+      for (const pulse of [0.1, 1]) {
+        const lums = five.map(([u, v]) => patchLum(u, v, time, pulse, 1));
+        // Linear in uBright with no offset: 0 -> black, 0.92 -> exactly 0.92 x the uBright = 1 picture.
+        for (const [u, v] of five) {
+          expect(patchLum(u, v, time, pulse, 0)).toBe(0);
+          expect(patchLum(u, v, time, pulse, 0.92)).toBeCloseTo(0.92 * patchLum(u, v, time, pulse, 1), 12);
+        }
+        // Tile health (tile-health.ts): a 16x16 patch is near-uniform when its luma spread is < 6/255.
+        for (const [u, v] of five) expect(patchSpread(u, v, time, pulse, fixture.bright) * 255).toBeGreaterThan(6);
+        expect(Math.max(...lums)).toBeGreaterThan(0.2);
+      }
+    }
+  });
 });
+
+/** CPU mirror of sky/fragment.glsl (these lines must appear verbatim in the shader). */
+const SKY_LINES = [
+  "float stripes = 0.5 + 0.5 * sin(40.0 * dir.x + 30.0 * dir.y + uTime + 6.28318 * zotoVizSlots[0].x);",
+  "vec3 tint = 0.5 + 0.5 * cos(6.28318 * (0.5 * dir.y + vec3(0.0, 0.33, 0.67)));",
+  "fragColor = vec4(uBright * stripes * tint, uOpacity);",
+] as const;
+const TAN_V = Math.tan((55 / 2) * (Math.PI / 180));
+
+function skyRgb(u: number, v: number, time: number, pulse: number, bright: number): [number, number, number] {
+  const x = (u * 2 - 1) * TAN_V * 1.6;
+  const y = (v * 2 - 1) * TAN_V;
+  const l = Math.hypot(x, y, 1);
+  const dx = x / l;
+  const dy = y / l;
+  const stripes = 0.5 + 0.5 * Math.sin(40 * dx + 30 * dy + time + 6.28318 * pulse);
+  const tint = [0, 0.33, 0.67].map((o) => 0.5 + 0.5 * Math.cos(6.28318 * (0.5 * dy + o)));
+  return [bright * stripes * tint[0]!, bright * stripes * tint[1]!, bright * stripes * tint[2]!];
+}
+
+const lumOf = (c: readonly number[]) => 0.2126 * c[0]! + 0.7152 * c[1]! + 0.0722 * c[2]!;
+
+/** Mean linear luma of a 16 px patch centred at (u, v) on a 1280x800 stage. */
+function patchLum(u: number, v: number, time: number, pulse: number, bright: number): number {
+  let s = 0;
+  for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) s += lumOf(skyRgb(u + (i - 7.5) / 1280, v + (j - 7.5) / 800, time, pulse, bright));
+  return s / 256;
+}
+
+function patchSpread(u: number, v: number, time: number, pulse: number, bright: number): number {
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let j = 0; j < 16; j++) for (let i = 0; i < 16; i++) {
+    const l = lumOf(skyRgb(u + (i - 7.5) / 1280, v + (j - 7.5) / 800, time, pulse, bright));
+    lo = Math.min(lo, l);
+    hi = Math.max(hi, l);
+  }
+  return hi - lo;
+}
