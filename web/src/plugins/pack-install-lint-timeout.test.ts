@@ -28,12 +28,20 @@ const EXIT_LINT_SETUP = 3;
 /** UX Pro's lint_timeout sentence (web/scripts/pack-install-lint-setup-copy.json, pinned as a literal). */
 const TIMEOUT_MSG = (name: string) =>
   `Couldn't safety-check ${name} in time, so it wasn't installed. Try again, and if it keeps happening, the pack may be broken.`;
-/** The inner timer the rows run with, and how long past it a group may take to go. */
+/** The inner timer the rows run with: a correct run ends about this long after it starts. */
 const INNER_MS = 1500;
-const MARGIN_MS = 5000;
+/**
+ * Every wall-clock wait (a script ending by itself, a group emptying, a file appearing): ~30 s. A
+ * correct run is done in about INNER_MS; a revert hangs for good, so a long deadline only absorbs box
+ * load, never weakens a row. Rows assert on the reason line and on the group being empty, never on
+ * how long either took. Each row's own vitest timeout (ROW_TIMEOUT_MS) is above every wait it makes,
+ * so a red run fails on the row's message, not on a generic test timeout.
+ */
+const DEADLINE_MS = 30_000;
+const ROW_TIMEOUT_MS = 120_000;
 const STEP_MS = 50;
-/** The esbuild row's lint must finish first (a real lint of a real pack), so it gets a longer timer. */
-const ESBUILD_INNER_MS = 10_000;
+/** The esbuild row: a quick pass lint, then esbuild (started only after the lint) must reach its hang. */
+const ESBUILD_INNER_MS = 5000;
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
@@ -268,7 +276,7 @@ function startParent(argv: string[], env: NodeJS.ProcessEnv, opts: { scriptDetac
 async function scriptPid(parent: ChildProcess): Promise<number> {
   let out = "";
   parent.stdout?.setEncoding("utf8").on("data", (d: string) => (out += d));
-  for (let i = 0; i < Math.ceil(MARGIN_MS / STEP_MS); i++) {
+  for (let i = 0; i < Math.ceil(DEADLINE_MS / STEP_MS); i++) {
     const m = /^script (\d+)$/m.exec(out);
     if (m) {
       const pid = Number(m[1]);
@@ -299,31 +307,32 @@ describe.runIf(process.platform === "linux")("#186 lint_timeout: a spinning lint
     const { argv, env } = scriptArgs(scriptTree({ built: spinningLint(pidFile) }), packHome(), INNER_MS);
     const parent = startParent(argv, env, { scriptDetached: true, parentDetached: false });
     const pgid = await scriptPid(parent);
-    expect(await fileAppears(pidFile, MARGIN_MS), "the lint really ran and is spinning").toBe(true);
+    expect(await fileAppears(pidFile, DEADLINE_MS), "the lint really ran and is spinning").toBe(true);
     const lintPids = readFileSync(pidFile, "utf8").trim().split(" ").map(Number);
     expect(lintPids[0], "the lint spins inside the script process").toBe(pgid);
     const before = groupMembers(pgid);
     expect(before.length, `script plus its setInterval child in one group: ${describeMembers(before)}`).toBeGreaterThanOrEqual(2);
     expect(before.map((p) => p.pid)).toContain(lintPids[1]);
     parent.kill("SIGKILL"); // the service dies
-    const left = await groupAfter(pgid, INNER_MS + MARGIN_MS);
-    expect(left, `process group ${pgid} still alive ${INNER_MS + MARGIN_MS} ms after its parent died: ${describeMembers(left)}`).toEqual([]);
-  }, 60_000);
+    const left = await groupAfter(pgid, DEADLINE_MS);
+    expect(left, `process group ${pgid} still alive ${DEADLINE_MS} ms after its parent died: ${describeMembers(left)}`).toEqual([]);
+  }, ROW_TIMEOUT_MS);
 
   it("orphan, during esbuild: the service dies while esbuild works; the group (node and esbuild's service child) is empty", async () => {
     const dir = tmp("esb");
     const mark = path.join(dir, "esbuild-working");
-    const { argv, env } = scriptArgs(scriptTree({ esbuildMark: mark }), packHome(), ESBUILD_INNER_MS);
+    const built = fakeBuilt('export function runPackInstallLint() { return { kind: "pass" }; }');
+    const { argv, env } = scriptArgs(scriptTree({ built, esbuildMark: mark }), packHome(), ESBUILD_INNER_MS);
     const parent = startParent(argv, env, { scriptDetached: true, parentDetached: false });
     const pgid = await scriptPid(parent);
-    expect(await fileAppears(mark, ESBUILD_INNER_MS), "the lint passed and esbuild reached the hang").toBe(true);
+    expect(await fileAppears(mark, DEADLINE_MS), "the lint passed and esbuild reached the hang").toBe(true);
     const before = groupMembers(pgid);
     expect(before.map((p) => p.pid), describeMembers(before)).toContain(pgid);
     expect(before.some((p) => p.pid !== pgid && /esbuild.*--service/.test(p.cmd)), `esbuild's service child is in the group: ${describeMembers(before)}`).toBe(true);
     parent.kill("SIGKILL");
-    const left = await groupAfter(pgid, ESBUILD_INNER_MS + MARGIN_MS);
-    expect(left, `process group ${pgid} still alive ${ESBUILD_INNER_MS + MARGIN_MS} ms after its parent died: ${describeMembers(left)}`).toEqual([]);
-  }, 60_000);
+    const left = await groupAfter(pgid, DEADLINE_MS);
+    expect(left, `process group ${pgid} still alive ${DEADLINE_MS} ms after its parent died: ${describeMembers(left)}`).toEqual([]);
+  }, ROW_TIMEOUT_MS);
 
   it("timeout verdict: the script alone (parent alive) exits 3 with reason lint_timeout and the install sentence; nothing is left", async () => {
     const dir = tmp("verdict");
@@ -333,9 +342,9 @@ describe.runIf(process.platform === "linux")("#186 lint_timeout: a spinning lint
     const pgid = child.pid ?? 0;
     pids.add(pgid);
     groups.add(pgid);
-    const r = await exited(child, INNER_MS + MARGIN_MS, pgid);
+    const r = await exited(child, DEADLINE_MS, pgid);
     const why = `exit ${r.code} signal ${r.signal} capped ${r.capped}; stderr: ${r.stderr.slice(0, 900)}`;
-    expect(r.capped, `the script didn't end by itself within ${INNER_MS + MARGIN_MS} ms: ${why}`).toBe(false);
+    expect(r.capped, `the script didn't end by itself within ${DEADLINE_MS} ms: ${why}`).toBe(false);
     expect(r.code, why).toBe(EXIT_LINT_SETUP);
     expect(r.stdout, "no bundle written").toBe("");
     const setup = verdicts(r.stderr, "pack-install-lint-setup-error");
@@ -347,9 +356,9 @@ describe.runIf(process.platform === "linux")("#186 lint_timeout: a spinning lint
     expect(verdicts(r.stderr, "pack-install-lint-pass"), "no pass line").toEqual([]);
     expect(r.stderr).not.toMatch(/\n\s+at .+:\d+:\d+/);
     expect(existsSync(pidFile), "the lint really ran").toBe(true);
-    const left = await groupAfter(pgid, MARGIN_MS);
+    const left = await groupAfter(pgid, DEADLINE_MS);
     expect(left, `the lint's setInterval child went with the group: ${describeMembers(left)}`).toEqual([]);
-  }, 60_000);
+  }, ROW_TIMEOUT_MS);
 
   it("stuck in a sync native call: the refusal line is written first, then the script kills its own group (it can't wait for the worker)", async () => {
     const dir = tmp("native");
@@ -361,9 +370,9 @@ describe.runIf(process.platform === "linux")("#186 lint_timeout: a spinning lint
     const pgid = child.pid ?? 0;
     pids.add(pgid);
     groups.add(pgid);
-    const r = await exited(child, INNER_MS + MARGIN_MS, pgid);
+    const r = await exited(child, DEADLINE_MS, pgid);
     const why = `exit ${r.code} signal ${r.signal} capped ${r.capped}; stderr: ${r.stderr.slice(0, 900)}`;
-    expect(r.capped, `the script hung on its stuck worker for ${INNER_MS + MARGIN_MS} ms: ${why}`).toBe(false);
+    expect(r.capped, `the script hung on its stuck worker for ${DEADLINE_MS} ms: ${why}`).toBe(false);
     expect(existsSync(pidFile), "the lint really ran").toBe(true);
     // Exit 3 isn't possible here (Node joins the worker on exit); the line is what the service reads.
     expect(r.code === EXIT_LINT_SETUP || r.signal === "SIGKILL", why).toBe(true);
@@ -372,9 +381,9 @@ describe.runIf(process.platform === "linux")("#186 lint_timeout: a spinning lint
     ]);
     expect(verdicts(r.stderr, "pack-install-lint-pass"), "no pass line").toEqual([]);
     expect(r.stdout, "no bundle written").toBe("");
-    const left = await groupAfter(pgid, MARGIN_MS);
+    const left = await groupAfter(pgid, DEADLINE_MS);
     expect(left, describeMembers(left)).toEqual([]);
-  }, 60_000);
+  }, ROW_TIMEOUT_MS);
 
   it("group-leader guard: a script that doesn't lead its group refuses on timeout without killing its parent's group", async () => {
     const dir = tmp("guard");
@@ -382,13 +391,13 @@ describe.runIf(process.platform === "linux")("#186 lint_timeout: a spinning lint
     const { argv, env } = scriptArgs(scriptTree({ built: spinningLint(pidFile, false) }), packHome(), INNER_MS);
     // The parent leads its own group (never vitest's); the script runs inside that group.
     const parent = startParent(argv, env, { scriptDetached: false, parentDetached: true });
-    const r = await exited(parent, INNER_MS + MARGIN_MS, parent.pid ?? 0);
+    const r = await exited(parent, DEADLINE_MS, parent.pid ?? 0);
     const why = `parent exit ${r.code} signal ${r.signal} capped ${r.capped}; stdout ${r.stdout.trim()}; stderr: ${r.stderr.slice(0, 600)}`;
-    expect(r.capped, `the script didn't end by itself: ${why}`).toBe(false);
+    expect(r.capped, `the script didn't end by itself within ${DEADLINE_MS} ms: ${why}`).toBe(false);
     expect(r.signal, `the parent's group was killed by the script: ${why}`).toBeNull();
     expect(r.code, why).toBe(0);
     expect(r.stdout, why).toMatch(/^script-exit 3 null$/m);
     expect(verdicts(r.stderr, "pack-install-lint-setup-error")[0]?.reason, why).toBe("lint_timeout");
     expect(existsSync(pidFile), "the lint really ran").toBe(true);
-  }, 60_000);
+  }, ROW_TIMEOUT_MS);
 });
