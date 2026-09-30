@@ -476,7 +476,7 @@ export abstract class ArcadeView {
     const q = this.query();
     if (!this.running || !q || !q.ip) return;
     // #199: the last fetch (same query) has not settled by the next tick (a hung request): a quiet poll, no second fetch
-    if (this.inflight) { if (tick && this.inflightGen === this.gen) this.pps *= 0.6; return; }
+    if (this.inflight) { if (tick && this.inflightGen === this.gen) this.noAnswer(); return; }
     this.inflight = true;
     const gen = this.gen;
     this.inflightGen = gen;
@@ -504,17 +504,33 @@ export abstract class ArcadeView {
       }
     } catch {
       // server away; the next tick retries. No packets this poll either: the rate falls back (#199, as netpong #197)
-      if (gen === this.gen) this.pps *= 0.6;
+      if (gen === this.gen) this.noAnswer();
     } finally {
       if (gen === this.gen) this.inflight = false;
     }
   }
 
-  /** The demo is back after live traffic: drop the board, keep the live poll cursor (no replay of old packets). */
+  /**
+   * #199: no answer this tick (the fetch failed, or is still in flight): the rate falls back x0.6. Once it reads 0,
+   * or while the demo is on, the tick also goes through the empty-reply path: the demo takes the board at once (an
+   * empty board is a Fail) and plays locally, with no fetch of its own.
+   */
+  private noAnswer(): void {
+    const demo = !!this.idle && (this.idle.on || Math.round(this.pps) === 0);
+    this.pps *= 0.6;
+    if (demo) this.idle?.pollEmpty(this.idleMe(), undefined, true);
+  }
+
+  /**
+   * The demo is back after live traffic: drop the board, keep the live poll cursor (no replay of old packets) and
+   * (#199) a live fetch still in flight for this run: its answer still takes over, and no second fetch starts.
+   */
   private clearForIdle(): void {
-    const cursor = this.lastT;
+    const cursor = this.lastT, gen = this.gen, inflight = this.inflight;
     this.reset();
     this.lastT = cursor;
+    this.gen = gen;
+    this.inflight = inflight;
   }
 
   /**

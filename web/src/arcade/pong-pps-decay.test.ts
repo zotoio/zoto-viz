@@ -67,7 +67,7 @@ function cleanHomeState(): StateMsg {
   return { ...g, local_ip: self.ip, gateway: gw.ip, devices: [self, gw], flows: [] };
 }
 
-type Mode = "live" | "empty" | "error" | "away" | "hang";
+type Mode = "live" | "empty" | "error" | "away" | "hang" | "hold";
 
 describe("netpong: the packets-per-second reading drops back once packets stop", () => {
   let rec: Recorder;
@@ -75,6 +75,8 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
   let fetches = 0;
   let seq = 0;
   let liveK: number = K;
+  /** resolvers of fetches held in "hold" mode (a hung fetch that the row answers later) */
+  let held: ((r: Response) => void)[] = [];
 
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
   /** liveK real packets, newest first like the server, all newer than the previous poll's (and inside REPLAY_S) */
@@ -94,12 +96,13 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame", "performance", "Date"] });
     rec = recordingCtx();
     vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockReturnValue(rec.ctx);
-    mode = "live"; fetches = 0; seq = 0; liveK = K;
+    mode = "live"; fetches = 0; seq = 0; liveK = K; held = [];
     vi.stubGlobal("fetch", vi.fn(async (url: string) => {
       fetches++;
       const ip = new URL(url, "http://x").searchParams.get("ip") ?? "";
       if (mode === "away") throw new TypeError("Failed to fetch");
       if (mode === "hang") return new Promise<Response>(() => {}); // never settles
+      if (mode === "hold") return new Promise<Response>((res) => held.push(res));
       if (mode === "error") return json({ error: "unknown device" }, 404);
       return json(mode === "live" ? liveBody(ip) : { ip, packets: [] });
     }));
@@ -135,7 +138,9 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
     /** one poll interval that must not start a fetch (the previous one is still in flight) */
     const tick = async () => { const f = fetches; await vi.advanceTimersByTimeAsync(1000); expect(fetches, "no second fetch while one is in flight").toBe(f); };
     const demoShowing = () => view["idle"].showing;
-    return { view, pps, hud, poll, tick, demoShowing };
+    /** demo batches the idle feed has handed to the real ingest */
+    const delivered = () => view["idle"].delivered;
+    return { view, pps, hud, poll, tick, demoShowing, delivered };
   }
 
   /** LIVE_POLLS polls of K live packets each (the poll at start + LIVE_POLLS - 1 interval polls) */
@@ -173,13 +178,13 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
     const v = mount();
     await flowLive(v);
     mode = "away";
-    const quiet = 12; // 4.352 x 0.6^12 = 0.0095 → "0 pkt/s"
+    const quiet = 5; // 4.352 x 0.6^5 = 0.338 → "0 pkt/s" (the first zero; #199: the next tick is the demo's, rows below)
     for (let i = 1; i <= quiet; i++) {
       await v.poll();
       expect(v.pps(), `after ${i} failed fetch(es)`).toBeCloseTo(LIVE * 0.6 ** i, 9);
     }
     const row = await v.hud();
-    expect(row, `HUD after ${quiet} s with the server away`).toMatch(/^0 pkt\/s · /);
+    expect(row, `HUD after ${quiet} failed polls with the server away`).toMatch(/^0 pkt\/s · /);
     expect(row, "no demo cue: the demo feed sends nothing while the server is away").not.toMatch(/· demo\b/);
     expect(v.demoShowing(), "demo while the server is away").toBe(false);
   });
@@ -210,11 +215,20 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
       for (let i = 1; i <= r.n; i++) {
         await v.poll();
         expect(v.pps(), `after ${i} failed fetch(es): r0 x 0.6^${i}`).toBeCloseTo(r.r0 * 0.6 ** i, 9);
+        expect(v.demoShowing(), `no demo on failed poll ${i} (up to the first zero)`).toBe(false);
         seen.push(await reading(v));
       }
       expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before failed poll ${r.n}: ${seen.join(", ")}`).toBe(true);
       expect(seen[r.n - 1], `HUD reading on failed poll ${r.n} (all: ${seen.join(", ")})`).toBe(0);
       expect(v.demoShowing(), "no demo while the server is away").toBe(false);
+      // #199 (UX Pro, an empty board is a Fail): the tick after the first zero hands the board to the demo
+      const d0 = v.delivered();
+      await v.poll();
+      expect(v.delivered() - d0, `demo batches on failed poll ${r.n + 1}, the tick after the first zero`).toBe(1);
+      expect(v.demoShowing(), `demo on failed poll ${r.n + 1}`).toBe(true);
+      const demoRow = await v.hud();
+      expect(demoRow, `HUD on failed poll ${r.n + 1}: the demo's own rate, with the demo cue`).toMatch(/^[1-9]\d* pkt\/s · demo\b/);
+      expect(v.pps(), "HUD rate on the demo").toBeGreaterThan(0);
     });
 
     it(`#199 hung fetch (never settles) from ${r.r0.toFixed(3)} pkt/s: each tick that finds it in flight is a quiet poll, no second fetch, and the HUD first reads 0 on quiet poll ${r.n}`, async () => {
@@ -226,12 +240,54 @@ describe("netpong: the packets-per-second reading drops back once packets stop",
       for (let i = 1; i <= r.n; i++) {
         await v.tick();
         expect(v.pps(), `after ${i} tick(s) with the fetch still in flight: r0 x 0.6^${i}`).toBeCloseTo(r.r0 * 0.6 ** i, 9);
+        expect(v.demoShowing(), `no demo on quiet tick ${i} (up to the first zero)`).toBe(false);
         seen.push(await reading(v));
       }
       expect(seen.slice(0, -1).every((x) => x >= 1), `HUD readings before quiet poll ${r.n}: ${seen.join(", ")}`).toBe(true);
       expect(seen[r.n - 1], `HUD reading on quiet poll ${r.n} (all: ${seen.join(", ")})`).toBe(0);
       expect(fetches, "fetches: the live ones + the one hung fetch").toBe(r.polls + 1);
       expect(v.demoShowing(), "no demo while the fetch hangs").toBe(false);
+      // #199 (UX Pro, an empty board is a Fail): the tick after the first zero hands the board to the demo
+      const d0 = v.delivered();
+      await v.tick();
+      expect(v.delivered() - d0, `demo batches on quiet tick ${r.n + 1}, the tick after the first zero`).toBe(1);
+      expect(v.demoShowing(), `demo on quiet tick ${r.n + 1}`).toBe(true);
+      const demoRow = await v.hud();
+      expect(demoRow, `HUD on quiet tick ${r.n + 1}: the demo's own rate, with the demo cue`).toMatch(/^[1-9]\d* pkt\/s · demo\b/);
+      expect(v.pps(), "HUD rate on the demo").toBeGreaterThan(0);
+      // the demo keeps playing locally on the next quiet tick, still with no second fetch
+      await v.tick();
+      expect(v.delivered() - d0, "demo batches over 2 quiet ticks after the first zero").toBe(2);
+      expect(fetches, "fetches after the demo took over: still the live ones + the one hung fetch").toBe(r.polls + 1);
+    });
+  }
+
+  // #199: live takes over again from a demo that a failed or a hung fetch brought in, within that poll
+  for (const path of ["away", "hold"] as const) {
+    it(`#199 ${path === "away" ? "server away" : "hung fetch"} → demo after the first zero → live answer: live takes over at once (no demo cue, live rate)`, async () => {
+      const r = FIRST_ZERO[0];
+      const v = await driveTo(r);
+      mode = path;
+      if (path === "hold") await v.poll(); // starts the fetch that hangs until the row answers it
+      for (let i = 1; i <= r.n + 1; i++) await (path === "hold" ? v.tick() : v.poll());
+      expect(v.demoShowing(), `demo on quiet tick ${r.n + 1}`).toBe(true);
+      expect(await v.hud(), "HUD on the demo").toMatch(/· demo\b/);
+      const f = fetches;
+      mode = "live";
+      if (path === "hold") {
+        expect(held.length, "the one hung fetch").toBe(1);
+        held.forEach((res) => res(json(liveBody("")))); held = [];
+        await vi.advanceTimersByTimeAsync(0);
+        expect(fetches, "the hung fetch's answer starts no fetch").toBe(f);
+      } else {
+        await v.poll();
+      }
+      expect(v.demoShowing(), "demo after the live answer").toBe(false);
+      const row = await v.hud();
+      expect(row, "HUD after the live answer: no demo cue").not.toMatch(/· demo\b/);
+      expect(v.pps(), `live rate: ${r.k} packets in one poll from a 0 start`).toBeCloseTo(r.k * 0.4, 9);
+      await v.poll(); // and polling carries on
+      expect(v.demoShowing(), "demo after the next live poll").toBe(false);
     });
   }
 });
