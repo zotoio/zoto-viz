@@ -30,10 +30,23 @@ export type PackInstallLintOptions = {
 /** Where an unbundled frontend loads code from outside the pack (and the SDK), as esbuild would refuse it. */
 export type PackInstallBoundaryHit = { file: string; import: string; reason: string };
 
+/**
+ * #194: the block reason when an unbundled frontend calls `import()` with anything but a plain string
+ * (a variable, a template with `${}`, a concatenation). Nothing bundles such a pack, so neither esbuild
+ * nor the resolver can see what that call loads.
+ */
+export const DYNAMIC_IMPORT_NONLITERAL = "dynamic_import_nonliteral";
+
+/** Where an unbundled frontend calls `import()` with a non-literal argument. */
+export type PackInstallNonLiteralImport = { file: string; line: number; import: string };
+
 export type PackInstallLintVerdict =
   | { kind: "pass"; warnings: string[] }
-  /** `message` is the plain sentence for "<Name> was blocked because <message> …"; `details` are for the log. */
-  | { kind: "block"; message: string; details: string[]; warnings: string[] }
+  /**
+   * `message` is the plain sentence for "<Name> was blocked because <message> …"; `details` are for the
+   * log. `reason` is set for install-only refusals that aren't a pack-lint rule (#194).
+   */
+  | { kind: "block"; message: string; details: string[]; warnings: string[]; reason?: typeof DYNAMIC_IMPORT_NONLITERAL }
   | ({ kind: "boundary"; warnings: string[] } & PackInstallBoundaryHit);
 
 /** Scripts a browser runs as is (so not `.ts` / `.tsx` / `.mts` / `.cts`, which only a bundle serves). */
@@ -70,7 +83,8 @@ function unbundledScripts(packDirAbs: string): string[] {
 /**
  * #186: esbuild's import-boundary check (`pack-bundle-resolve.mjs`, the resolver bundle-pack-entry.mjs
  * uses) over an unbundled frontend's scripts. First hit, in file order; null when every import stays
- * inside the pack or plugins/sdk. Non-literal `import()` is left alone, as esbuild leaves it.
+ * inside the pack or plugins/sdk. Non-literal `import()` can't be resolved here; #194's
+ * `unbundledNonLiteralImport` refuses it instead.
  */
 export function unbundledImportBoundary(packDirAbs: string, repoRoot: string): PackInstallBoundaryHit | null {
   const sdkRoot = path.join(repoRoot, "plugins/sdk");
@@ -81,6 +95,21 @@ export function unbundledImportBoundary(packDirAbs: string, repoRoot: string): P
       if (site.kind === "unverified") continue;
       const r = resolvePackBundleImport({ specifier: site.specifier, importerFile: abs, packHome: packDirAbs, sdkRoot, repoRoot });
       if (!r.ok) return { file: rel, import: site.specifier, reason: r.reason };
+    }
+  }
+  return null;
+}
+
+/**
+ * #194: the first `import()` in an unbundled frontend whose argument isn't a plain string literal, in
+ * file order; null when there is none. (`require()` doesn't exist in a browser, so only `import()`.)
+ */
+export function unbundledNonLiteralImport(packDirAbs: string): PackInstallNonLiteralImport | null {
+  for (const rel of unbundledScripts(packDirAbs)) {
+    const text = fs.readFileSync(path.join(packDirAbs, rel), "utf8");
+    for (const site of extractPackImports(text)) {
+      if (site.kind !== "unverified" || site.call !== "import") continue;
+      return { file: rel, line: text.slice(0, site.index).split("\n").length, import: site.raw };
     }
   }
   return null;
@@ -101,6 +130,17 @@ export function runPackInstallLint(
   if (opts.unbundled) {
     const hit = unbundledImportBoundary(packDirAbs, repoRoot);
     if (hit) return { kind: "boundary", ...hit, warnings };
+    const dyn = unbundledNonLiteralImport(packDirAbs);
+    if (dyn) {
+      return {
+        kind: "block",
+        reason: DYNAMIC_IMPORT_NONLITERAL,
+        // Copy: pack lint's plain sentence for a non-literal import (PACK_LINT_PLAIN_SUMMARY); UX Pro owns it.
+        message: plainBlockSummary([{ rule: "unverified-import-call" }]),
+        details: [`${dyn.file}:${dyn.line} ${DYNAMIC_IMPORT_NONLITERAL} — ${dyn.import}`],
+        warnings,
+      };
+    }
   }
   return { kind: "pass", warnings };
 }

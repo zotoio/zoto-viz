@@ -333,6 +333,11 @@ function readTemplateLiteral(source, start) {
   }
   return null;
 }
+function literalIsWholeArgument(source, end) {
+  let i = end;
+  while (i < source.length && /\s/.test(source[i])) i++;
+  return source[i] === ")" || source[i] === ",";
+}
 function parseRuntimeCall(source, index, call) {
   let i = index + call.length;
   while (i < source.length && /\s/.test(source[i])) i++;
@@ -344,7 +349,12 @@ function parseRuntimeCall(source, index, call) {
   const ch = source[i];
   if (ch === "'" || ch === '"') {
     const lit = readStringLiteral(source, i);
-    if (lit) return { kind: call === "import" ? "dynamic" : "require", specifier: lit.value, index };
+    if (lit && literalIsWholeArgument(source, lit.end)) {
+      return { kind: call === "import" ? "dynamic" : "require", specifier: lit.value, index };
+    }
+    if (lit) {
+      return { kind: "unverified", call, raw: rawCall(source, i, call), index, hostSpec: lit.value };
+    }
   }
   if (ch === "`") {
     const lit = readTemplateLiteral(source, i);
@@ -354,14 +364,20 @@ function parseRuntimeCall(source, index, call) {
       if (lit.hasExpr) {
         return { kind: "unverified", call, raw: `${call}(\`…\${…}\`)`, index, hostSpec };
       }
-      return { kind: call === "import" ? "dynamic" : "require", specifier: lit.value, index };
+      if (literalIsWholeArgument(source, lit.end)) {
+        return { kind: call === "import" ? "dynamic" : "require", specifier: lit.value, index };
+      }
+      return { kind: "unverified", call, raw: rawCall(source, i, call), index, hostSpec: lit.value };
     }
   }
   if (ch === ")") {
     return { kind: "unverified", call, raw: `${call}()`, index };
   }
-  const rest = source.slice(i, Math.min(source.length, i + 40)).replace(/\s+/g, " ");
-  return { kind: "unverified", call, raw: `${call}(${rest.split(")")[0] ?? "?"})`, index };
+  return { kind: "unverified", call, raw: rawCall(source, i, call), index };
+}
+function rawCall(source, argStart, call) {
+  const rest = source.slice(argStart, Math.min(source.length, argStart + 40)).replace(/\s+/g, " ");
+  return `${call}(${rest.split(")")[0] ?? "?"})`;
 }
 function extractPackImports(source) {
   const masked = maskComments(source);
@@ -995,6 +1011,7 @@ function scanPackDirectory(packDirAbs, repoRoot, opts = {}) {
 }
 
 // plugins/sdk/pack-install-lint.ts
+var DYNAMIC_IMPORT_NONLITERAL = "dynamic_import_nonliteral";
 var UNBUNDLED_SCRIPT_RE = /\.(?:js|mjs|cjs|jsx)$/;
 function logLine(v) {
   const loc = v.line != null ? `${v.file}:${v.line}` : v.file;
@@ -1034,6 +1051,16 @@ function unbundledImportBoundary(packDirAbs, repoRoot) {
   }
   return null;
 }
+function unbundledNonLiteralImport(packDirAbs) {
+  for (const rel of unbundledScripts(packDirAbs)) {
+    const text = fs4.readFileSync(path4.join(packDirAbs, rel), "utf8");
+    for (const site of extractPackImports(text)) {
+      if (site.kind !== "unverified" || site.call !== "import") continue;
+      return { file: rel, line: text.slice(0, site.index).split("\n").length, import: site.raw };
+    }
+  }
+  return null;
+}
 function runPackInstallLint(packDirAbs, repoRoot, opts = {}) {
   const { blocks, warnings: warn } = scanPackInstallLint(packDirAbs, repoRoot);
   const warnings = warn.map(logLine);
@@ -1043,12 +1070,25 @@ function runPackInstallLint(packDirAbs, repoRoot, opts = {}) {
   if (opts.unbundled) {
     const hit = unbundledImportBoundary(packDirAbs, repoRoot);
     if (hit) return { kind: "boundary", ...hit, warnings };
+    const dyn = unbundledNonLiteralImport(packDirAbs);
+    if (dyn) {
+      return {
+        kind: "block",
+        reason: DYNAMIC_IMPORT_NONLITERAL,
+        // Copy: pack lint's plain sentence for a non-literal import (PACK_LINT_PLAIN_SUMMARY); UX Pro owns it.
+        message: plainBlockSummary([{ rule: "unverified-import-call" }]),
+        details: [`${dyn.file}:${dyn.line} ${DYNAMIC_IMPORT_NONLITERAL} — ${dyn.import}`],
+        warnings
+      };
+    }
   }
   return { kind: "pass", warnings };
 }
 export {
+  DYNAMIC_IMPORT_NONLITERAL,
   runPackInstallLint,
-  unbundledImportBoundary
+  unbundledImportBoundary,
+  unbundledNonLiteralImport
 };
 export const PACK_INSTALL_LINT_BUILD = {
   "entry": "plugins/sdk/pack-install-lint.ts",
@@ -1064,5 +1104,5 @@ export const PACK_INSTALL_LINT_BUILD = {
     "plugins/sdk/pack-lint.ts",
     "plugins/sdk/viz-zoto.ts"
   ],
-  "sha256": "9c68603d71caee677c6ab32c82923c046fdae4ef8455414691bac8780599cc94"
+  "sha256": "6db7742c929c4eb33236bd2e71ae54790c02f39f244cc3f1e15e0f1f3e7c20a6"
 };
