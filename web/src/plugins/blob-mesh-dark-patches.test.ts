@@ -467,7 +467,7 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
    * #174 b (UX Pro): size is the only thing that shows rate, and the sky reads as background, so its
    * brightest pixel stays under the dimmest blob. Sky peak and dimmest blob come from the CPU mirror
    * (blobVsSky) with the uniforms the pack draws with at the audio peak (packLook: yml skyBright x
-   * the pack's uBright, the pack's uAudio / uAccent). Reverts: skyBright 1.06 (over the limit), the authored r^2/d^2 falloff -> red.
+   * the pack's uBright, the pack's uAudio / uAccent). Reverts: skyBright 1.04 (over the limit), the authored r^2/d^2 falloff -> red.
    */
   for (const [name, frame] of [["LAN7", LAN7], ["LAN11", LAN11]] as const) {
     it(`${name} sky under the blobs: at the audio peak the sky's brightest pixel is >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob at every 5 s step from 0 to 60 s`, () => {
@@ -586,8 +586,8 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
    * #193 target on the live placement (known gap, it.fails on the count assertion only): LAN7 and
    * LAN11 at every 5 s from 0 to 60 s with today's hashed homes. 0 of 7 stand apart at any step for
    * any BLOB_GAP > 0: the closest pairs sit 0.0325 uv apart against r1 + r2 >= 0.24, and the safe
-   * home ellipse (0.355 x 0.225 uv after drift + wobble) holds at most 4 sites 0.37 uv apart
-   * (floor pair + BLOB_GAP 0.1 + 2 x wobble). Reaching 5 needs Performance Pedant's lattice
+   * home ellipse (0.355 x 0.225 uv after drift + wobble) holds at most 4 sites 0.39 uv apart
+   * (floor pair + BLOB_GAP 0.12 + 2 x wobble). Reaching 5 needs Performance Pedant's lattice
    * placement spec (#193 comments) and a bigger field or smaller blobs. Turns red once it holds.
    */
   const SEPARATION_FAIL = /^(LAN7|LAN11) t=\d+: \d+ of 7 apart: expected (\d+) to be greater than or equal to 5$/;

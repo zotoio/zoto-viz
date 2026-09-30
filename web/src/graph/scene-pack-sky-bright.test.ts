@@ -38,8 +38,8 @@ const packs = path.resolve(here, "../../../plugins/src");
 /**
  * The pack's own look numbers, straight from its visualisation.yml (no parseLook / mergeLook), so
  * the row pins each pack's skyBright / skyOpacity without a copy here (#174 option 2 moved
- * blob-mesh to 0.88; #174's SINGLE/QUIET5 fix (compact falloff, sky floor) moved it to 1.04: the
- * limit 1.0466 in blob-mesh-dark-patches.test.ts).
+ * blob-mesh to 0.88; #174's SINGLE/QUIET5 fix (compact falloff, sky floor, BLOB_GAP 0.12) moved it
+ * to 1.03: the limit 1.0369 in blob-mesh-dark-patches.test.ts).
  */
 function ymlLook(id: string): { skyBright: unknown; skyOpacity: unknown } {
   const vis = parseYaml(readFileSync(path.join(packs, id, "visualisation.yml"), "utf8")) as { look?: { skyBright?: unknown; skyOpacity?: unknown } };
