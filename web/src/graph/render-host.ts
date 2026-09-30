@@ -130,7 +130,11 @@ export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
  */
 export const CONTEXT_RESTORE_RETRY_MS: readonly number[] = [1000, 3000, 5000];
 
-/** Where the shared context's loss recovery stands. */
+/**
+ * Where the shared context's loss recovery stands, as the wall shows it: "restoring" while the
+ * "Graphics were interrupted" notice is up, "gave-up" once it offers Reload, "ok" when it is gone.
+ * Internal / diagnostics only: visible wording follows the tiles' cant-draw `reload` flag (#179 c).
+ */
 export type ContextRecovery = "ok" | "restoring" | "gave-up";
 
 function copyViewBox(dst: SoftRect, out: CssRectLoose): CssRect {
@@ -200,7 +204,6 @@ export class RenderHost {
   private restoreTimer: ReturnType<typeof setTimeout> | null = null;
   private restoreDelays: readonly number[] = CONTEXT_RESTORE_RETRY_MS;
   private restoreAttempts = 0;
-  private _contextRecovery: ContextRecovery = "ok";
   /**
    * The context came back but no real frame has drawn since: the wall notice stays up (UX Pro, #179 row 4).
    * A restore that never draws is not a recovery, so only the first drawn frame clears it.
@@ -309,8 +312,17 @@ export class RenderHost {
   get pixelRatio(): number { return this.pr; }
   get viewCount(): number { return this.views.length; }
   get contextLost(): boolean { return this.tileShader.contextLost; }
-  /** "restoring" while the host is still trying to get a lost context back, "gave-up" once Reload is offered. */
-  get contextRecovery(): ContextRecovery { return this._contextRecovery; }
+  /**
+   * Read off the wall notice itself, so it can never disagree with the screen (UX Pro, #179): the
+   * notice's own 10 s window can offer Reload before (software host: without) the host's last
+   * restore attempt, and a restore that has not drawn yet still shows "Graphics were interrupted".
+   */
+  get contextRecovery(): ContextRecovery {
+    const shown = this.tileShader.gfxNotice.showing;
+    if (shown === "reload") return "gave-up";
+    if (shown === "interrupted") return "restoring";
+    return "ok";
+  }
   get canvasDeviceHeight(): CanvasDeviceHeight { return this._canvasDeviceHeight; }
   get gfxWallNotice(): GfxWallNotice { return this.tileShader.gfxNotice; }
 
@@ -438,7 +450,6 @@ export class RenderHost {
     // Every loss gets a fresh recovery, including one right after a restore (#179 row 4).
     this.restoreAttempts = 0;
     this.restoreDelays = selfLoss ? [0, ...CONTEXT_RESTORE_RETRY_MS] : CONTEXT_RESTORE_RETRY_MS;
-    this._contextRecovery = "restoring";
     // A software host (or a GL renderer without forceContextRestore) cannot ask for the context
     // back: no restore timer at all, so the wall notice's own 10 s window is the only timer the
     // loss adds (qe-hook-context-loss, #179 replay).
@@ -455,7 +466,6 @@ export class RenderHost {
   private onGlContextRestored(): void {
     this.clearContextRestoreTimer();
     this.restoreAttempts = 0;
-    this._contextRecovery = "ok";
     if (this.disposed) return;
     this.tileShader.onSharedContextRestored();
     // The notice clears on the first real frame drawn after this, not on the event (#179 row 4).
@@ -501,7 +511,6 @@ export class RenderHost {
     this.restoreTimer = setTimeout(() => {
       this.restoreTimer = null;
       if (this.disposed || !this.glContextLost) return;
-      this._contextRecovery = "gave-up";
       this.tileShader.gfxNotice.offerReload();
     }, CONTEXT_RESTORE_RETRY_MS[0] ?? 1000);
   }
