@@ -15,9 +15,9 @@
  *
  * Ant Colony floor (Pedant / PA): the idle frame writes uBright 0.72 (audio 0); the stage-only
  * sky must draw at >= 0.35 with the lean off and with the lean at its lowest (perf stress 1).
- * Revert: put the sky dim back into perfOverlay (skyBright -> 0.4, skyOpacity -> 0.45 at stress 1)
- * and all three lean rows go red. On Ant's stage-only view the exemption in skyLookFor still keeps
- * the drawn value, so there it is the overlay check that goes red.
+ * Revert: restore the easing in perfOverlay (skyBright -> 0.4, skyOpacity -> 0.45 at stress 1)
+ * and all three lean rows go red. Since #189 skyLookFor has no stage-only exemption (dead since
+ * #177), so on Ant's stage-only view the dim reaches the drawn value too, just like the graph views.
  *
  * Talker Storm (its own uBright, 0.8-1.2 since #184) and RF Constellation (uOpacity 0.65-0.9) are graph views with a
  * plugin sky: numbers only, for QE / UX Pro's headed re-shoot. No pass line. Set

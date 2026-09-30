@@ -315,7 +315,7 @@ describe("ant-colony on the app's production path (live LAN frame, host look uni
       tickPerf(t, true, 0.45);
     }
     const stress = perfStress();
-    const look = skyLookFor(ANT_LOOK_SLIDERS, perfOverlay(PERF_SRC, stress), true);
+    const look = skyLookFor(ANT_LOOK_SLIDERS, perfOverlay(PERF_SRC, stress));
     resetFps();
     resetPerf();
     return { ...look, stress };
