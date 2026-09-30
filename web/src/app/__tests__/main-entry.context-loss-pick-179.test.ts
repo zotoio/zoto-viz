@@ -251,8 +251,8 @@ describe("#179 app level: Backrooms saved as the boot mode, context lost, then a
 
   /**
    * Pending #171 (c): the per-tile `{ kind: "cant-draw", reason: "context-lost" }` view state does not exist yet --
-   * not on this branch (63bd71bc has no app/view-state.ts) and not on main @ 1bf18665 (view-state.ts there has
-   * starting | ready | needs-you | couldnt-start only). Enable this row once #171 (c) lands. It expects, from
+   * not on main @ 37adacad (merged here): app/view-state.ts from #171 (b) has
+   * starting | ready | needs-you | couldnt-start only. Enable this row once #171 (c) lands. It expects, from
    * web/src/app/view-state.ts:
    *   - `viewStateOf(tileId: string): ViewState | null`
    *   - a `ViewState` member `{ kind: "cant-draw"; reason: "context-lost" }` (the reason is part of the union)
