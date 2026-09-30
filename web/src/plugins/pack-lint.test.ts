@@ -23,6 +23,7 @@ import {
 } from "../../../plugins/sdk/pack-lint-test-support";
 import { PACK_BOUNDARY_FIX_HINT, packSymlinkEscapes } from "../../../plugins/sdk/pack-lint-import";
 import { extractModuleSpecifiers, HOST_PACK_SRC_IMPORT_ALLOWLIST_COUNT } from "../../../plugins/sdk/pack-lint-host";
+import { UNIFORM_BLOCKING_RULES } from "../../../plugins/sdk/pack-lint-types";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const fixtureRoot = path.join(repoRoot, "plugins/sdk/pack-lint-fixtures");
@@ -316,7 +317,7 @@ describe("pack lint guardrails", () => {
     const current = scanAllGuardrails(repoRoot);
     const out = path.join(repoRoot, "plugins/sdk/pack-lint-baseline.json");
     const baselineRows = current
-      .filter((v) => v.rule !== "host-imports-pack-src" && v.rule !== "glsl-uniform-undeclared")
+      .filter((v) => v.rule !== "host-imports-pack-src" && !UNIFORM_BLOCKING_RULES.has(v.rule))
       .map(({ file, rule, target }) => ({ file, rule, target }));
     writeFileSync(out, `${JSON.stringify({ violations: baselineRows }, null, 2)}\n`);
   });
@@ -330,14 +331,14 @@ describe("pack lint guardrails", () => {
       staleViolations,
       disallowedLegacyZoto,
       disallowedHostPackSrc,
-      disallowedUniformUndeclared,
+      disallowedUniformBlocking,
     } = assertBaselineGuard(current, baseline);
     if (!ok) {
       expect(newViolations).toEqual([]);
       expect(staleViolations).toEqual([]);
       expect(disallowedLegacyZoto).toEqual([]);
       expect(disallowedHostPackSrc).toEqual([]);
-      expect(disallowedUniformUndeclared).toEqual([]);
+      expect(disallowedUniformBlocking).toEqual([]);
     }
     expect(ok).toBe(true);
   });

@@ -3,11 +3,12 @@
  * and a revert proof (switch the rule off and its red fixture lints clean). The real-tree rows
  * pin what the lint sees, the #171 Graph Cloth regression, and the catalog findings.
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import * as THREE from "three";
 import { describe, expect, it } from "vitest";
+import yaml from "yaml";
 import { formatViolationMessage, type PackLintViolation } from "../../../plugins/sdk/pack-lint";
 import {
   CUSTOM_UNIFORM_RE,
@@ -16,6 +17,8 @@ import {
   hostSkyPreambleDecls,
   lintPackUniforms,
   lintUniformsTs,
+  manifestVizUniforms,
+  pluginSkyUniformNames,
   readPackSkyInput,
   scanUniformDeclarations,
   UNIFORM_LINT_RULES,
@@ -23,7 +26,10 @@ import {
   type UniformLintRule,
 } from "../../../plugins/sdk/pack-lint-uniforms";
 import { assertBaselineGuard, loadBaseline } from "../../../plugins/sdk/pack-lint-test-support";
+import { UNIFORM_BLOCKING_RULES } from "../../../plugins/sdk/pack-lint-types";
 import { wrapPluginSky } from "./plugin-sky-probe";
+import { PLUGIN_SKY_UNIFORMS } from "./plugin-sky-uniforms";
+import { parseVizContractResult } from "./viz-host";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const FIXTURES = "plugins/sdk/uniform-lint-fixtures";
@@ -112,6 +118,29 @@ const RED: Red[] = [
     hits: [{ file: "plugins/src/bad-unset-read/sky/fragment.glsl", rule: "glsl-uniform-unset", target: "fragment:uExtra" }],
     names: ["plugins/src/bad-unset-read/sky/fragment.glsl", "uExtra", "fragment"],
   },
+  {
+    label: "packs/bad-type-conflict (sky redeclares host float uTime / vec2 uResolution as vec3)",
+    run: (o) => lintPackFixture("bad-type-conflict", o),
+    hits: [
+      { file: "plugins/src/bad-type-conflict/sky/fragment.glsl", rule: "uniform-type-conflict", target: "fragment:uResolution" },
+      { file: "plugins/src/bad-type-conflict/sky/fragment.glsl", rule: "uniform-type-conflict", target: "fragment:uTime" },
+    ],
+    names: ["plugins/src/bad-type-conflict/sky/fragment.glsl", "fragment", "pack bad-type-conflict", "vec3", "host sky preamble"],
+  },
+  {
+    label: 'packs/bad-write-not-in-manifest (writeUniform("uAccent"), viz.uniforms [uTime, uBright])',
+    run: (o) => lintPackFixture("bad-write-not-in-manifest", o),
+    hits: [
+      { file: "plugins/src/bad-write-not-in-manifest/frontend/index.ts", rule: "write-uniform-not-in-manifest", target: "uAccent" },
+    ],
+    names: [
+      "plugins/src/bad-write-not-in-manifest/frontend/index.ts",
+      "uAccent",
+      "pack bad-write-not-in-manifest",
+      "plugins/src/bad-write-not-in-manifest/plugin.yml viz.uniforms",
+      "drops",
+    ],
+  },
 ];
 
 const GREEN: { label: string; run: () => PackLintViolation[] }[] = [
@@ -120,7 +149,8 @@ const GREEN: { label: string; run: () => PackLintViolation[] }[] = [
   { label: "good/clean-raw-gl.ts", run: () => lintTsFixture("good/clean-raw-gl.ts") },
   { label: "good/open-runtime-frag.ts (runtime fragment: no proof, no finding)", run: () => lintTsFixture("good/open-runtime-frag.ts") },
   { label: "good/shared-glsl.ts", run: () => lintTsFixture("good/shared-glsl.ts") },
-  { label: "packs/good", run: () => lintPackFixture("good") },
+  { label: "packs/good (viz.uniforms lists every uniform it writes)", run: () => lintPackFixture("good") },
+  { label: "packs/good-manifest-default (no viz.uniforms list: host default)", run: () => lintPackFixture("good-manifest-default") },
 ];
 
 describe("uniform declaration lint (#171 b): fixtures", () => {
@@ -135,6 +165,7 @@ describe("uniform declaration lint (#171 b): fixtures", () => {
         for (const n of red.names.filter((w) => h.rule !== "uniform-set-undeclared" || !/^(vertex|fragment)$/.test(w))) {
           expect(msg).toContain(n);
         }
+        expect(msg).toContain(h.target.split(":").pop()!);
       }
     });
 
@@ -154,6 +185,27 @@ describe("uniform declaration lint (#171 b): fixtures", () => {
     const covered = new Set(RED.flatMap((r) => r.hits.map((h) => h.rule)));
     expect([...covered].sort()).toEqual([...UNIFORM_LINT_RULES].sort());
   });
+
+  it("blocking policy: undeclared read, type conflict and writeUniform outside viz.uniforms block; the rest are baseline-able", () => {
+    expect([...UNIFORM_BLOCKING_RULES].sort()).toEqual(["glsl-uniform-undeclared", "uniform-type-conflict", "write-uniform-not-in-manifest"]);
+    expect(UNIFORM_LINT_RULES.filter((r) => !UNIFORM_BLOCKING_RULES.has(r)).sort()).toEqual(["glsl-uniform-unset", "uniform-set-undeclared"]);
+    expect(loadBaseline(repoRoot).violations.filter((v) => UNIFORM_BLOCKING_RULES.has(v.rule))).toEqual([]);
+  });
+
+  for (const [rule, fixture] of [
+    ["uniform-type-conflict", "bad-type-conflict"],
+    ["write-uniform-not-in-manifest", "bad-write-not-in-manifest"],
+  ] as const) {
+    it(`BLOCK ${rule}: fails the guard and still fails when copied into the baseline`, () => {
+      const hits = lintPackFixture(fixture);
+      expect(hits.length).toBeGreaterThan(0);
+      expect(hits.every((h) => h.rule === rule)).toBe(true);
+      const guard = assertBaselineGuard(hits, loadBaseline(repoRoot));
+      expect(guard.disallowedUniformBlocking).toEqual(hits);
+      expect(guard.newViolations).toEqual([]);
+      expect(assertBaselineGuard(hits, { violations: hits }).ok).toBe(false);
+    });
+  }
 });
 
 describe("uniform declaration lint (#171 b): assumptions pinned", () => {
@@ -193,6 +245,46 @@ describe("uniform declaration lint (#171 b): assumptions pinned", () => {
     ]);
     expect(seen("web/src/plugins/plugin-sky-smoke-render.ts")).toEqual(["getUniformLocation:vertex=0,fragment(open)=0"]);
   });
+
+  it("wrapPluginSky accepts the type-conflict fixture, so only a GPU compile (or this lint) catches it", () => {
+    const raw = readFileSync(path.join(repoRoot, FIXTURES, "packs/bad-type-conflict/sky/fragment.glsl"), "utf8");
+    const wrapped = wrapPluginSky(raw);
+    if ("error" in wrapped) throw new Error(`expected wrapPluginSky to accept the fixture, got ${wrapped.error}`);
+    const decls = glslUniformDecls(wrapped.frag).map(({ name, type }) => `${type} ${name}`);
+    // vec3 uTime was stripped (host float remains, body uses .x); vec3 uResolution was not (redeclared).
+    expect(decls.filter((d) => d.endsWith(" uTime"))).toEqual(["float uTime"]);
+    expect(decls.filter((d) => d.endsWith(" uResolution"))).toEqual(["vec2 uResolution", "vec3 uResolution"]);
+  });
+
+  it("the statically read PLUGIN_SKY_UNIFORMS matches the host whitelist", () => {
+    expect(pluginSkyUniformNames(repoRoot)).toEqual([...PLUGIN_SKY_UNIFORMS]);
+  });
+
+  it("manifestVizUniforms matches the host parser (parseVizContractResult) for every shipped pack and edge forms", () => {
+    const host = (text: string): string[] => {
+      const doc = yaml.parse(text) as { viz?: unknown } | null;
+      const r = parseVizContractResult(doc?.viz);
+      return r && r.state === "ready" ? [...r.contract.uniforms] : [];
+    };
+    const packsRoot = path.join(repoRoot, "plugins/src");
+    const packs = readdirSync(packsRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name);
+    const withYml = packs.filter((p) => existsSync(path.join(packsRoot, p, "plugin.yml")));
+    expect(withYml).toEqual(packs);
+    const texts = [
+      ...withYml.map((p) => readFileSync(path.join(packsRoot, p, "plugin.yml"), "utf8")),
+      ...["bad-write-not-in-manifest", "good", "good-manifest-default"].map((p) =>
+        readFileSync(path.join(repoRoot, FIXTURES, "packs", p, "plugin.yml"), "utf8"),
+      ),
+      "id: x\n",
+      "id: x\nviz:\n  graphWalk: true\n  idle:\n    fixture: host\n",
+      "id: x\nviz:\n  graphWalk: false\n  uniforms: [uTime, uResolution, 'uBg']\n  idle:\n    fixture: host\n",
+      "id: x\nviz:\n  graphWalk: false\n  uniforms: []\n  idle:\n    fixture: host\n",
+      "id: x\nviz:\n  graphWalk: false\n  uniforms:\n  - uBg\n  - uOpacity\n  idle:\n    fixture: host\n",
+      "id: x\nviz:\n  graphWalk: false\n  uniforms:\n  idle:\n    fixture: host\n",
+      "id: x\nviz:\n  graphWalk: false\n  uniforms:\n    - uAudio # comment\n    - \"uBright\"\n  idle:\n    fixture: host\nfrontend:\n  entry: a.ts\n",
+    ];
+    for (const text of texts) expect(manifestVizUniforms(text, repoRoot).uniforms, text).toEqual(host(text));
+  });
 });
 
 describe("uniform declaration lint (#171 b): real tree", () => {
@@ -206,7 +298,7 @@ describe("uniform declaration lint (#171 b): real tree", () => {
     const read = hits.find((h) => h.rule === "glsl-uniform-undeclared");
     expect(read).toMatchObject({ file: FABRIC, target: "vertex:uEdgeOpacity" });
     expect(formatViolationMessage(read!)).toMatch(/web\/src\/graph\/fabric\.ts:\d+.*vertex shader reads undeclared uniform uEdgeOpacity/);
-    expect(assertBaselineGuard(hits, loadBaseline(repoRoot)).disallowedUniformUndeclared).toHaveLength(1);
+    expect(assertBaselineGuard(hits, loadBaseline(repoRoot)).disallowedUniformBlocking).toHaveLength(1);
     // Blocks even when someone copies it into the baseline.
     expect(assertBaselineGuard(hits, { violations: hits }).ok).toBe(false);
   });
@@ -228,6 +320,26 @@ describe("uniform declaration lint (#171 b): real tree", () => {
       { file: "web/src/graph/scene.ts", rule: "uniform-set-undeclared", target: "uResolution" },
     ]);
     expect(found.filter((v) => v.rule === "glsl-uniform-undeclared")).toEqual([]);
+    expect(found.filter((v) => v.rule === "uniform-type-conflict")).toEqual([]);
+    expect(found.filter((v) => v.rule === "write-uniform-not-in-manifest")).toEqual([]);
     expect(found.filter((v) => v.file.startsWith("plugins/src/"))).toEqual([]);
+  });
+
+  it("catalog coverage: the pack rules had real input (preamble redeclarations type-checked, writeUniform calls checked against manifests)", () => {
+    const packsRoot = path.join(repoRoot, "plugins/src");
+    const preamble = new Set(hostSkyPreambleDecls(repoRoot).map((d) => d.name));
+    let redeclared = 0;
+    let writes = 0;
+    let manifests = 0;
+    for (const packId of readdirSync(packsRoot, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name)) {
+      const input = readPackSkyInput(path.join(packsRoot, packId), `plugins/src/${packId}`, packId);
+      if (input.manifest) manifests++;
+      for (const sky of input.skies) redeclared += glslUniformDecls(sky.glsl).filter((d) => preamble.has(d.name)).length;
+      for (const fe of input.frontend) writes += fe.text.match(/\bwriteUniform\s*\(\s*["']/g)?.length ?? 0;
+    }
+    expect(manifests).toBeGreaterThan(0);
+    expect(redeclared).toBeGreaterThan(0);
+    expect(writes).toBeGreaterThan(0);
+    console.info(`uniform lint coverage: ${manifests} manifests, ${redeclared} preamble redeclarations, ${writes} literal writeUniform calls`);
   });
 });

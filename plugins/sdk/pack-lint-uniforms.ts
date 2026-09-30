@@ -5,7 +5,12 @@
  *
  * Scope: `web/src/**` and `plugins/src/<pack>/frontend/**` TypeScript, plus
  * `plugins/src/<pack>/sky/*.glsl` (bound to the host plugin-sky preamble and the pack's
- * `writeUniform("…")` calls).
+ * `writeUniform("…")` calls). For packs it also checks that a sky never redeclares a host
+ * preamble uniform with a different type, and that every `writeUniform("X")` names a uniform
+ * in the pack's plugin.yml `viz.uniforms` (the host drops anything else).
+ *
+ * CI/pre-push only: imported by `pack-lint-test-support.ts` (the guardrail scan) and tests,
+ * never by the install path or any runtime module.
  *
  * "Custom uniform" = an identifier named `u[A-Z]…` or the host UBO `zotoVizSlots`. three.js
  * ShaderLib/ShaderChunk declare no names of that shape, so the three.js prefix and the stock
@@ -27,6 +32,10 @@ export const UNIFORM_LINT_RULES = [
   "glsl-uniform-undeclared",
   /** A shader stage declares and reads a custom uniform its binding never sets. */
   "glsl-uniform-unset",
+  /** A pack sky declares a uniform the host preamble also declares, with a different type. */
+  "uniform-type-conflict",
+  /** A pack's `writeUniform("X")` where X isn't in its plugin.yml `viz.uniforms` (the host drops the write). */
+  "write-uniform-not-in-manifest",
 ] as const;
 
 export type UniformLintRule = (typeof UNIFORM_LINT_RULES)[number];
@@ -45,6 +54,12 @@ const CUSTOM_UNIFORM_SCAN = /\b(u[A-Z]\w*|zotoVizSlots)\b/g;
 export const HOST_SKY_PREAMBLE_SOURCE = {
   file: "web/src/plugins/plugin-sky-probe.ts",
   constName: "preamble",
+} as const;
+
+/** Where the pack-writable sky uniform whitelist lives (`PLUGIN_SKY_UNIFORMS`); read statically. */
+export const PLUGIN_SKY_UNIFORMS_SOURCE = {
+  file: "web/src/plugins/plugin-sky-uniforms.ts",
+  constName: "PLUGIN_SKY_UNIFORMS",
 } as const;
 
 // ---------------------------------------------------------------------------
@@ -305,7 +320,12 @@ function stripGlslComments(src: string): string {
   return src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/\/\/[^\n]*/g, "");
 }
 
-export type UniformDecl = { name: string; type: string };
+export type UniformDecl = {
+  name: string;
+  type: string;
+  /** Offset of the `uniform` keyword in the source (comments blanked, so offsets match the source). */
+  offset?: number;
+};
 
 export function glslUniformDecls(src: string): UniformDecl[] {
   const code = stripGlslComments(src);
@@ -315,16 +335,16 @@ export function glslUniformDecls(src: string): UniformDecl[] {
   while ((m = plain.exec(code))) {
     for (const part of m[2]!.split(",")) {
       const name = part.trim().match(/^(\w+)/)?.[1];
-      if (name) out.push({ name, type: m[1]! });
+      if (name) out.push({ name, type: m[1]!, offset: m.index });
     }
   }
   const block = /\buniform\s+\w+\s*\{([^}]*)\}\s*(\w+)?\s*;/g;
   while ((m = block.exec(code))) {
     if (m[2]) {
-      out.push({ name: m[2], type: "block" });
+      out.push({ name: m[2], type: "block", offset: m.index });
       continue;
     }
-    for (const f of m[1]!.matchAll(/\b\w+\s+(\w+)\s*(?:\[[^\]]*\])?\s*;/g)) out.push({ name: f[1]!, type: "block-member" });
+    for (const f of m[1]!.matchAll(/\b\w+\s+(\w+)\s*(?:\[[^\]]*\])?\s*;/g)) out.push({ name: f[1]!, type: "block-member", offset: m.index });
   }
   return out;
 }
@@ -989,19 +1009,104 @@ export function hostSkyPreambleDecls(repoRoot: string): UniformDecl[] {
   return decls;
 }
 
+let skyUniformsCache: { root: string; names: string[] } | null = null;
+
+/** Sky uniforms a pack may write (`PLUGIN_SKY_UNIFORMS`, the default `viz.uniforms`), read from source. */
+export function pluginSkyUniformNames(repoRoot: string): string[] {
+  if (skyUniformsCache?.root === repoRoot) return skyUniformsCache.names;
+  const ctx = defaultCtx(repoRoot);
+  const f = loadTs(ctx, path.join(repoRoot, PLUGIN_SKY_UNIFORMS_SOURCE.file));
+  const span = f && constInit(f, PLUGIN_SKY_UNIFORMS_SOURCE.constName);
+  if (!f || !span) throw new Error(`uniform lint: ${PLUGIN_SKY_UNIFORMS_SOURCE.constName} not found at ${PLUGIN_SKY_UNIFORMS_SOURCE.file}`);
+  const names = f.lex.strings.filter((l) => l.start >= span[0] && l.end <= span[1] && l.kind === "quote").map((l) => l.text);
+  if (names.length === 0) throw new Error(`uniform lint: ${PLUGIN_SKY_UNIFORMS_SOURCE.constName} is empty or not a literal array`);
+  skyUniformsCache = { root: repoRoot, names };
+  return names;
+}
+
+export type PackManifestUniforms = {
+  /** Uniforms the host contract accepts from `writeUniform` (anything else returns ok:false and is dropped). */
+  uniforms: string[];
+  /** `list` = `viz.uniforms` given; `default` = viz contract without a list (all sky uniforms); `no-viz` = no usable viz contract. */
+  source: "list" | "default" | "no-viz";
+};
+
+/** Children of a YAML block mapping: `key → { inline value, child lines }` (minimal: enough for plugin.yml `viz`). */
+function yamlBlockChildren(lines: string[]): Map<string, { value: string; lines: string[] }> {
+  const out = new Map<string, { value: string; lines: string[] }>();
+  const indentOf = (l: string) => l.length - l.trimStart().length;
+  const meaningful = lines.filter((l) => l.trim() && !l.trim().startsWith("#"));
+  if (meaningful.length === 0) return out;
+  const indent = indentOf(meaningful[0]!);
+  let cur: { value: string; lines: string[] } | null = null;
+  for (const l of meaningful) {
+    const ind = indentOf(l);
+    if (ind === indent && /^\s*-(?:\s|$)/.test(l) && cur) {
+      // Compact sequence (`key:` then `- item` at the key's own indent).
+      cur.lines.push(l);
+    } else if (ind === indent) {
+      const kv = /^\s*([\w-]+)\s*:\s*(.*)$/.exec(l);
+      cur = kv ? { value: kv[2]!.replace(/\s+#.*$/, "").trim(), lines: [] } : null;
+      if (kv && cur) out.set(kv[1]!, cur);
+    } else if (ind > indent && cur) {
+      cur.lines.push(l);
+    } else if (ind < indent) break;
+  }
+  return out;
+}
+
+const unquote = (v: string) => v.trim().replace(/^(["'])(.*)\1$/, "$2");
+
+/**
+ * The host's effective `viz.uniforms` for a plugin.yml (mirrors `parseVizContractResult`: a viz contract
+ * needs `graphWalk: false` and an `idle` block; no list means every sky uniform; names outside
+ * `PLUGIN_SKY_UNIFORMS` are filtered out). A row pins this against the host parser for every shipped pack.
+ */
+export function manifestVizUniforms(pluginYml: string, repoRoot: string): PackManifestUniforms {
+  const sky = pluginSkyUniformNames(repoRoot);
+  const lines = pluginYml.split(/\r?\n/);
+  const at = lines.findIndex((l) => /^viz\s*:\s*(?:#.*)?$/.test(l));
+  if (at < 0) return { uniforms: [], source: "no-viz" };
+  const body: string[] = [];
+  for (const l of lines.slice(at + 1)) {
+    if (l.trim() && !/^\s/.test(l) && !l.trim().startsWith("#")) break;
+    body.push(l);
+  }
+  const viz = yamlBlockChildren(body);
+  if (viz.get("graphWalk")?.value !== "false" || !viz.has("idle")) return { uniforms: [], source: "no-viz" };
+  const u = viz.get("uniforms");
+  // Missing, `uniforms:` with nothing under it (null) or a scalar: not an array, so the host uses the default list.
+  if (!u || (!u.value && u.lines.length === 0)) return { uniforms: [...sky], source: "default" };
+  let listed: string[];
+  if (u.value.startsWith("[")) {
+    listed = u.value.replace(/^\[|\]$/g, "").split(",").map(unquote).filter(Boolean);
+  } else if (!u.value) {
+    listed = u.lines.map((l) => /^\s*-\s*(.+?)\s*(?:#.*)?$/.exec(l)?.[1]).filter((x): x is string => !!x).map(unquote);
+  } else {
+    return { uniforms: [...sky], source: "default" };
+  }
+  return { uniforms: listed.filter((n) => sky.includes(n)), source: "list" };
+}
+
 export type PackSkyInput = {
   packId: string;
   /** Repo-relative path → GLSL source for each `sky/*.glsl`. */
   skies: { repoRel: string; glsl: string }[];
   /** Repo-relative path → TS source for each non-test frontend file. */
   frontend: { repoRel: string; text: string }[];
+  /** The pack's plugin.yml (null/absent = not provided; the manifest rule is skipped). */
+  manifest?: { repoRel: string; text: string } | null;
 };
 
-/** Lint one pack: sky GLSL against the host preamble, and `writeUniform("X")` against the sky. */
+/**
+ * Lint one pack: sky GLSL against the host preamble (declarations, types), and `writeUniform("X")`
+ * against the sky and the pack's plugin.yml `viz.uniforms`.
+ */
 export function lintPackUniforms(input: PackSkyInput, repoRoot: string, opts: UniformLintOptions = {}): PackLintViolation[] {
   const off = opts.disabledRules ?? new Set();
   const preamble = hostSkyPreambleDecls(repoRoot);
   const hostSets = new Set(preamble.map((d) => d.name));
+  const hostType = new Map(preamble.map((d) => [d.name, d.type]));
   const out: PackLintViolation[] = [];
   const declared = new Set<string>(hostSets);
   for (const sky of input.skies) {
@@ -1009,6 +1114,16 @@ export function lintPackUniforms(input: PackSkyInput, repoRoot: string, opts: Un
     for (const d of own) declared.add(d.name);
     const stageDecl = new Set([...hostSets, ...own.map((d) => d.name)]);
     const code = stripGlslComments(sky.glsl);
+    if (!off.has("uniform-type-conflict")) {
+      for (const d of own) {
+        const host = hostType.get(d.name);
+        if (host === undefined || host === d.type) continue;
+        out.push({
+          file: sky.repoRel, line: lineColAt(code, d.offset ?? 0).line, rule: "uniform-type-conflict", target: `fragment:${d.name}`,
+          detail: `(pack ${input.packId}) declares uniform ${d.name} as ${d.type}, but the host sky preamble declares ${host} ${d.name}`,
+        });
+      }
+    }
     for (const read of glslCustomReads(sky.glsl)) {
       const line = lineColAt(code, read.offset).line;
       if (!stageDecl.has(read.name)) {
@@ -1025,20 +1140,30 @@ export function lintPackUniforms(input: PackSkyInput, repoRoot: string, opts: Un
       }
     }
   }
-  if (!off.has("uniform-set-undeclared")) {
-    for (const fe of input.frontend) {
-      const lex = lexTs(fe.text);
-      for (const hit of lex.masked.matchAll(/\bwriteUniform\s*\(\s*(?=["'])/g)) {
-        const lit = lex.strings.find((s) => s.start === hit.index! + hit[0].length);
-        if (!lit || lit.kind !== "quote") continue;
-        if (input.skies.length > 0 && declared.has(lit.text)) continue;
+  const manifest = input.manifest ? manifestVizUniforms(input.manifest.text, repoRoot) : null;
+  for (const fe of input.frontend) {
+    const lex = lexTs(fe.text);
+    for (const hit of lex.masked.matchAll(/\bwriteUniform\s*\(\s*(?=["'])/g)) {
+      const lit = lex.strings.find((s) => s.start === hit.index! + hit[0].length);
+      if (!lit || lit.kind !== "quote") continue;
+      const line = lineColAt(fe.text, lit.start).line;
+      if (manifest && !off.has("write-uniform-not-in-manifest") && !manifest.uniforms.includes(lit.text)) {
         out.push({
-          file: fe.repoRel, line: lineColAt(fe.text, lit.start).line, rule: "uniform-set-undeclared", target: lit.text,
-          detail: input.skies.length === 0
-            ? `writeUniform("${lit.text}") but the pack ships no sky/*.glsl to bind it to`
-            : `writeUniform("${lit.text}") but neither sky/*.glsl nor the host preamble declares it`,
+          file: fe.repoRel, line, rule: "write-uniform-not-in-manifest", target: lit.text,
+          detail: manifest.source === "no-viz"
+            ? `pack ${input.packId} calls writeUniform("${lit.text}"), but ${input.manifest!.repoRel} has no viz contract (graphWalk: false + idle), so the host drops it`
+            : `pack ${input.packId} calls writeUniform("${lit.text}"), but ${input.manifest!.repoRel} viz.uniforms `
+              + `${manifest.source === "list" ? `lists only [${manifest.uniforms.join(", ")}]` : "defaults exclude it"}, so the host drops the write`,
         });
       }
+      if (off.has("uniform-set-undeclared")) continue;
+      if (input.skies.length > 0 && declared.has(lit.text)) continue;
+      out.push({
+        file: fe.repoRel, line, rule: "uniform-set-undeclared", target: lit.text,
+        detail: input.skies.length === 0
+          ? `writeUniform("${lit.text}") but the pack ships no sky/*.glsl to bind it to`
+          : `writeUniform("${lit.text}") but neither sky/*.glsl nor the host preamble declares it`,
+      });
     }
   }
   return sortViolations(dedupe(out));
@@ -1077,7 +1202,9 @@ export function readPackSkyInput(packDirAbs: string, repoPrefix: string, packId:
     repoRel: `${repoPrefix}/frontend/${r}`,
     text: fs.readFileSync(path.join(packDirAbs, "frontend", r), "utf8"),
   }));
-  return { packId, skies, frontend };
+  const ymlAbs = path.join(packDirAbs, "plugin.yml");
+  const manifest = fs.existsSync(ymlAbs) ? { repoRel: `${repoPrefix}/plugin.yml`, text: fs.readFileSync(ymlAbs, "utf8") } : null;
+  return { packId, skies, frontend, manifest };
 }
 
 /** Uniform lint over `web/src` and every `plugins/src/<pack>`. */

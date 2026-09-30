@@ -12,7 +12,7 @@ import {
   packSymlinkEscapes,
 } from "./pack-lint-import";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
-import { violationKey } from "./pack-lint-types";
+import { UNIFORM_BLOCKING_RULES, violationKey } from "./pack-lint-types";
 import { legacyZotoViolationsOnDisallowedPacks } from "./legacy-zoto-pack-allowlist";
 import { INLINE_ZOTO_DECLARE_HINT, PACK_ZOTO_BINDING_HINT } from "./viz-zoto";
 
@@ -266,7 +266,6 @@ export function lintPackSource(
 }
 
 import { disallowedHostPackSrcImports, scanService, scanWebSrc } from "./pack-lint-host";
-import { scanUniformDeclarations } from "./pack-lint-uniforms";
 
 const SDK_SKIP_DIRS = new Set([
   "pack-lint-fixtures",
@@ -310,13 +309,17 @@ export function scanSdkGuardrails(repoRoot: string): PackLintViolation[] {
   return violations;
 }
 
+/**
+ * Import-boundary guardrails only. The CI guardrail scan used by pack-lint.test.ts (which adds the
+ * #171 (b) uniform lint) is `scanAllGuardrails` in `pack-lint-test-support.ts`; this module is loaded
+ * by the install lint, so it deliberately doesn't import `pack-lint-uniforms`.
+ */
 export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
   const merged = [
     ...scanPluginsSrc(repoRoot),
     ...scanSdkGuardrails(repoRoot),
     ...scanWebSrc(repoRoot),
     ...scanService(repoRoot),
-    ...scanUniformDeclarations(repoRoot),
   ];
   merged.sort((a, b) => {
     if (a.file !== b.file) return a.file.localeCompare(b.file);
@@ -334,7 +337,6 @@ export {
   scanWebSrc,
 } from "./pack-lint-host";
 export { extractModuleSpecifiers, packSymlinkEscapes } from "./pack-lint-import";
-export { lintPackUniforms, lintUniformsTs, scanUniformDeclarations } from "./pack-lint-uniforms";
 
 export function scanPluginsSrc(repoRoot: string): PackLintViolation[] {
   const packsRoot = path.join(repoRoot, PACKS_ROOT);
@@ -463,15 +465,15 @@ export function assertBaselineGuard(
   staleViolations: PackLintViolation[];
   disallowedLegacyZoto: PackLintViolation[];
   disallowedHostPackSrc: PackLintViolation[];
-  /** #171 (b): a stage reading an undeclared uniform fails to compile — blocks, never baselined. */
-  disallowedUniformUndeclared: PackLintViolation[];
+  /** #171 (b) blocking uniform rules ({@link UNIFORM_BLOCKING_RULES}). Never baselined. */
+  disallowedUniformBlocking: PackLintViolation[];
   ok: boolean;
 } {
   const disallowedLegacyZoto = legacyZotoViolationsOnDisallowedPacks(current);
   const disallowedHostPackSrc = disallowedHostPackSrcImports(current);
-  const disallowedUniformUndeclared = current.filter((v) => v.rule === "glsl-uniform-undeclared");
+  const disallowedUniformBlocking = current.filter((v) => UNIFORM_BLOCKING_RULES.has(v.rule));
   const baselineTracked = (v: PackLintViolation) =>
-    v.rule !== "host-imports-pack-src" && v.rule !== "glsl-uniform-undeclared";
+    v.rule !== "host-imports-pack-src" && !UNIFORM_BLOCKING_RULES.has(v.rule);
   const baseSet = new Set(baseline.violations.filter(baselineTracked).map(violationKey));
   const curSet = new Set(current.filter(baselineTracked).map(violationKey));
   const newViolations = current.filter((v) => baselineTracked(v) && !baseSet.has(violationKey(v)));
@@ -483,11 +485,11 @@ export function assertBaselineGuard(
     staleViolations,
     disallowedLegacyZoto,
     disallowedHostPackSrc,
-    disallowedUniformUndeclared,
+    disallowedUniformBlocking,
     ok:
       disallowedLegacyZoto.length === 0 &&
       disallowedHostPackSrc.length === 0 &&
-      disallowedUniformUndeclared.length === 0 &&
+      disallowedUniformBlocking.length === 0 &&
       newViolations.length === 0 &&
       staleViolations.length === 0,
   };

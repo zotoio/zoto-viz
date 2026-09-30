@@ -9,7 +9,7 @@ import { hostTransportViolations, lintPackSource, scanPluginsSrc } from "./pack-
 import { disallowedHostPackSrcImports, scanService, scanWebSrc } from "./pack-lint-host";
 import { scanUniformDeclarations } from "./pack-lint-uniforms";
 import type { PackLintBaseline, PackLintRule, PackLintViolation } from "./pack-lint-types";
-import { violationKey } from "./pack-lint-types";
+import { UNIFORM_BLOCKING_RULES, violationKey } from "./pack-lint-types";
 
 const SDK_ROOT = "plugins/sdk";
 
@@ -99,15 +99,18 @@ export function assertBaselineGuard(
   staleViolations: PackLintViolation[];
   disallowedLegacyZoto: PackLintViolation[];
   disallowedHostPackSrc: PackLintViolation[];
-  /** #171 (b): a stage reading an undeclared uniform fails to compile — blocks, never baselined. */
-  disallowedUniformUndeclared: PackLintViolation[];
+  /**
+   * #171 (b) blocking uniform rules ({@link UNIFORM_BLOCKING_RULES}: undeclared read, pack sky type
+   * conflict, writeUniform outside viz.uniforms). Never baselined.
+   */
+  disallowedUniformBlocking: PackLintViolation[];
   ok: boolean;
 } {
   const disallowedLegacyZoto = legacyZotoViolationsOnDisallowedPacks(current);
   const disallowedHostPackSrc = disallowedHostPackSrcImports(current);
-  const disallowedUniformUndeclared = current.filter((v) => v.rule === "glsl-uniform-undeclared");
+  const disallowedUniformBlocking = current.filter((v) => UNIFORM_BLOCKING_RULES.has(v.rule));
   const baselineTracked = (v: PackLintViolation) =>
-    v.rule !== "host-imports-pack-src" && v.rule !== "glsl-uniform-undeclared";
+    v.rule !== "host-imports-pack-src" && !UNIFORM_BLOCKING_RULES.has(v.rule);
   const baseSet = new Set(baseline.violations.filter(baselineTracked).map(violationKey));
   const curSet = new Set(current.filter(baselineTracked).map(violationKey));
   const newViolations = current.filter((v) => baselineTracked(v) && !baseSet.has(violationKey(v)));
@@ -119,11 +122,11 @@ export function assertBaselineGuard(
     staleViolations,
     disallowedLegacyZoto,
     disallowedHostPackSrc,
-    disallowedUniformUndeclared,
+    disallowedUniformBlocking,
     ok:
       disallowedLegacyZoto.length === 0 &&
       disallowedHostPackSrc.length === 0 &&
-      disallowedUniformUndeclared.length === 0 &&
+      disallowedUniformBlocking.length === 0 &&
       newViolations.length === 0 &&
       staleViolations.length === 0,
   };

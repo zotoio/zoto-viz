@@ -16,7 +16,22 @@ export type PackLintRule =
   /** #171 (b): a shader stage reads a custom uniform it never declares. */
   | "glsl-uniform-undeclared"
   /** #171 (b): a shader stage reads a declared custom uniform its binding never sets. */
-  | "glsl-uniform-unset";
+  | "glsl-uniform-unset"
+  /** #171 (b): a pack sky declares a host-preamble uniform with a different type. */
+  | "uniform-type-conflict"
+  /** #171 (b): a pack's `writeUniform("X")` names a uniform its plugin.yml `viz.uniforms` doesn't list. */
+  | "write-uniform-not-in-manifest";
+
+/**
+ * #171 (b) uniform rules that block and are never baseline-tracked (a copied baseline row
+ * doesn't silence them). The other uniform rules (`uniform-set-undeclared`,
+ * `glsl-uniform-unset`) are baseline-able.
+ */
+export const UNIFORM_BLOCKING_RULES: ReadonlySet<PackLintRule> = new Set<PackLintRule>([
+  "glsl-uniform-undeclared",
+  "uniform-type-conflict",
+  "write-uniform-not-in-manifest",
+]);
 
 export interface PackLintViolation {
   /** Repo-relative path (`plugins/src/...` or `web/src/...`). */

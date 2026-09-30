@@ -35,6 +35,11 @@ export function ruleHint(rule: PackLintRule, v: PackLintViolation): string {
       return "Declare the uniform in the shader it is bound to, or stop setting it (a pack can only set host sky uniforms).";
     case "glsl-uniform-unset":
       return "Set it in the material's uniforms / onBeforeCompile (or use a host sky uniform in a pack sky).";
+    case "uniform-type-conflict":
+      return "Use the host's type for that uniform (or drop the declaration: the host preamble already declares it). "
+        + "A mismatch fails the sky compile or runs it against the wrong type.";
+    case "write-uniform-not-in-manifest":
+      return "List the uniform under `viz.uniforms` in plugin.yml (it must be a pack sky uniform), or stop writing it.";
     default:
       return "";
   }
@@ -73,6 +78,12 @@ export function ruleMessage(rule: PackLintRule, v: PackLintViolation): string {
       const [stage, name] = v.target.split(":");
       return `${loc} ${stage} shader reads uniform ${name}, which nothing sets.`;
     }
+    case "uniform-type-conflict": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader ${v.detail ?? `redeclares host uniform ${name} with a different type`}.`;
+    }
+    case "write-uniform-not-in-manifest":
+      return `${loc} ${v.detail ?? `writeUniform("${v.target}") isn't in plugin.yml viz.uniforms; the host drops the write`}.`;
     default:
       return `${loc} ${rule} → ${v.target}`;
   }
