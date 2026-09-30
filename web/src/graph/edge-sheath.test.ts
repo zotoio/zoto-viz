@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type * as THREE from "three";
 import { EdgeSheath, edgeHalfWidth } from "./edge-sheath";
 
 describe("edge sheath", () => {
@@ -32,7 +33,7 @@ describe("edge sheath", () => {
     expect(pos[8]).toBeCloseTo(pos[14]!);
     const sheath = new EdgeSheath();
     sheath.commit(0, { time: 1, opacity: 0.5, speed: 1, amt: 1, mode: 0 });
-    const opacity = (sheath.mesh.material as { uniforms: { uOpacity: { value: number } } }).uniforms.uOpacity.value;
+    const opacity = (sheath.mesh.material as THREE.ShaderMaterial).uniforms.uOpacity.value;
     expect(opacity).toBe(0.5);
   });
 });

@@ -11,7 +11,7 @@ describe("mosaic viz tile guard", () => {
 
   it("dreamAnimBootFromStorage refuses nine saved tile ids", () => {
     const nine = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
-    const loaded = { ...DEFAULT_DREAM, mosaic: "8", mosaicTiles: [] };
+    const loaded = { ...DEFAULT_DREAM, mosaic: "8" as const, mosaicTiles: [] };
     const boot = dreamAnimBootFromStorage(loaded, nine);
     expect(boot.bootRefused).toBe(true);
     expect(boot.message).toBe(
