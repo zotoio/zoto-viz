@@ -55,7 +55,6 @@
     "../plugins/src/ant-colony/frontend/index.test.ts",
     "../plugins/src/aquarium/frontend/aquarium.test.ts",
     "../plugins/src/koi-pond/frontend/index.test.ts",
-    "../plugins/src/marble-run/frontend/marble-run.test.ts",
     "../plugins/src/metro-lines/frontend/index.test.ts",
     "../plugins/src/sandbox-fixture-multi/frontend/module.test.ts",
     "src/app/consent-pack-start.test.ts",
