@@ -404,9 +404,13 @@ describe("#179 render host context recovery (Backrooms boot)", () => {
     const calls = h.gl.restoreCalls;
     vi.advanceTimersByTime(9_999);
     expect(h.gl.restoreCalls - calls, "a full ladder: one attempt per CONTEXT_RESTORE_RETRY_MS step").toBe(3);
-    expect(h.host.contextRecovery).toBe("restoring");
+    // The notice's own window (from the first loss) already offers Reload, so contextRecovery says so
+    // too: it is read off the screen, never "restoring" under a Reload button (UX Pro, #179 part (c)).
+    expect(notices(h.wall).map((n) => n.textContent)).toEqual([`${GFX_NO_RESTORE_NOTICE}Reload`]);
+    expect(h.host.contextRecovery).toBe("gave-up");
     vi.advanceTimersByTime(1);
     expect(h.host.contextRecovery).toBe("gave-up");
+    expect(notices(h.wall).length, "still one notice after the host's own give-up").toBe(1);
   });
 
   it("replay c (dispose clears the restore timer): dispose while restoring leaves no host timer behind", () => {
