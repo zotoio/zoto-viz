@@ -41,11 +41,6 @@
       "target": "vitest"
     },
     {
-      "file": "plugins/src/koi-pond/frontend/index.test.ts",
-      "rule": "sandbox-escape",
-      "target": "parent."
-    },
-    {
       "file": "plugins/src/koi-pond/frontend/index.ts",
       "rule": "inline-zoto-declare",
       "target": "declare-const-zoto"
