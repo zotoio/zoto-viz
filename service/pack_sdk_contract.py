@@ -72,11 +72,10 @@ def write_pack_sdk_manifest_cache(runtime_parent: Path, pack_id: str, version: i
 
 
 def format_sdk_older_message(name: str) -> str:
-    label = name.strip() or "Plugin"
-    return (
-        f"{label} was blocked: Built for an older zoto-viz SDK — needs an update from its author. "
-        "Nothing else changed."
-    )
+    from .pack_block_copy import SENTENCE_SDK_OLDER, block_message
+
+    # pack lint can't fix this, so no "run pack lint" tail.
+    return block_message(name, SENTENCE_SDK_OLDER, tail="")
 
 
 def format_sdk_newer_message(name: str) -> str:

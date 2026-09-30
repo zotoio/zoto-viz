@@ -58,9 +58,11 @@ def test_every_shipped_ts_pack_is_in_the_catalog() -> None:
 def test_revert_missing_esbuild_fails_loudly(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setitem(globals(), "ESBUILD_PKG", tmp_path / "no-esbuild")
 
-    def no_esbuild(*_a: object, **_k: object) -> subprocess.CompletedProcess[str]:
-        return subprocess.CompletedProcess([], 1, "", "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'esbuild'")
+    def no_esbuild(argv: list[str], env: dict[str, str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.CompletedProcess(argv, 1, "", "Error [ERR_MODULE_NOT_FOUND]: Cannot find package 'esbuild'")
 
-    monkeypatch.setattr(plugins.subprocess, "run", no_esbuild)
+    # #185: compile_typescript runs bundle-pack-entry.mjs through plugins._run_pack_script (Popen), not
+    # subprocess.run, so the stub goes there.
+    monkeypatch.setattr(plugins, "_run_pack_script", no_esbuild)
     with pytest.raises(pytest.fail.Exception, match="esbuild unavailable, run pnpm install"):
         assert_ts_packs_listed()

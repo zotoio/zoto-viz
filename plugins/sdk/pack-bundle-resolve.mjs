@@ -128,14 +128,16 @@ export function resolvePackBundleImport(opts) {
   };
 }
 
+/**
+ * #185: same shape as service/pack_block_copy.py. The file, the import and the README link are
+ * diagnostics (payload fields / the log), never user text.
+ */
 export function formatBundleBoundaryError(payload) {
-  const { packName, packId, file, import: imp } = payload;
+  const { packName, packId } = payload;
   const name = packName || packId || "Plugin";
-  const loc = file ? ` (\`${file}\`)` : "";
-  const spec = imp ? ` (\`${imp}\`)` : "";
   return (
-    `${name} was blocked: it imports a file outside its own folder${loc}${spec}. `
-    + "Nothing was installed and the current wall is unchanged. "
-    + "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
+    `${name} was blocked because it loads code from outside its own folder. `
+    + "Nothing was installed, and your wall is unchanged. "
+    + "If you made this pack, run pack lint to see what to fix."
   );
 }

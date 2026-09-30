@@ -62,15 +62,18 @@ const zoto = {
   writeUniform: (name: string, value: number | [number, number, number]) => { written[name] = value; },
 };
 
+/**
+ * A pack's frontend, loaded for its side effect (it sets zoto.onFrame). The path is built from the id
+ * so web/tsconfig.test.json type-checks this file without compiling the pack sources, which build
+ * under their own pack config (plugins/sdk alias, pack-local types).
+ */
+const loadPackFrontend = (id: string): Promise<unknown> => import(`../../../plugins/src/${id}/frontend/index.ts`);
+
 beforeAll(async () => {
   (globalThis as { zoto?: unknown }).zoto = zoto;
-  for (const [id, load] of [
-    ["ant-colony", () => import("../../../plugins/src/ant-colony/frontend/index")],
-    ["talker-storm", () => import("../../../plugins/src/talker-storm/frontend/index")],
-    ["rf-constellation", () => import("../../../plugins/src/rf-constellation/frontend/index")],
-  ] as const) {
+  for (const id of ["ant-colony", "talker-storm", "rf-constellation"] as const) {
     zoto.onFrame = null;
-    await load();
+    await loadPackFrontend(id);
     expect(zoto.onFrame, `${id} registers zoto.onFrame`).toBeTypeOf("function");
     packs[id] = zoto.onFrame!;
   }
@@ -167,22 +170,31 @@ describe("#180 H1 × perf lean: Ant Colony's stage-only sky keeps its own bright
     return w;
   }
 
-  it("lean off: effective uBright = look 1.05 x pack 0.72 >= 0.35", () => {
-    const e = effective("ant-colony", antIdleWrites(), { stageOnly: true, look: ANT_LOOK, stress: null });
-    expect(e.bright, "effective uBright").toBeGreaterThanOrEqual(ANT_UBRIGHT_FLOOR);
-    expect(e.bright).toBeCloseTo(1.05 * e.thermal * 0.72, 9);
-    expect(e.afterWrite.bright, "same value right after the pack's write").toBeCloseTo(e.bright, 9);
+  /**
+   * What the sky actually shows: uBright x uOpacity (the fragment's colour is scaled by uBright and
+   * blended at uOpacity). The floor is on this effective value, so an opacity drop can't hide behind
+   * a brightness that still clears 0.35 (ANT_LOOK's opacity and the pack's are both 1 today).
+   */
+  const shown = (e: { bright: number; opacity: number }) => e.bright * e.opacity;
+
+  it("lean off: effective uBright x uOpacity = (look x pack) x (look x pack) >= 0.35", () => {
+    const w = antIdleWrites();
+    const e = effective("ant-colony", w, { stageOnly: true, look: ANT_LOOK, stress: null });
+    expect(shown(e), "effective uBright x uOpacity").toBeGreaterThanOrEqual(ANT_UBRIGHT_FLOOR);
+    expect(e.bright).toBeCloseTo(ANT_LOOK.skyBright * e.thermal * (w.uBright as number), 9);
+    expect(e.opacity).toBeCloseTo(ANT_LOOK.skyOpacity * ((w.uOpacity as number | undefined) ?? 1), 9);
+    expect(shown(e.afterWrite), "same value right after the pack's write").toBeCloseTo(shown(e), 9);
   });
 
   it("lean at its lowest (perf stress 1 -> skyBright 0.4, skyOpacity 0.45): the lean does not land on the pack's 0.72", () => {
-    const e = effective("ant-colony", antIdleWrites(), { stageOnly: true, look: ANT_LOOK, stress: 1 });
+    const w = antIdleWrites();
+    const off = effective("ant-colony", w, { stageOnly: true, look: ANT_LOOK, stress: null });
+    const e = effective("ant-colony", w, { stageOnly: true, look: ANT_LOOK, stress: 1 });
     expect(e.tune!.bright, "the overlay is fully leaned").toBeCloseTo(0.4, 9);
     expect(e.tune!.opacity, "the overlay is fully leaned").toBeCloseTo(0.45, 9);
-    expect(e.bright, `effective uBright with the lean on (lean x pack would be ${(0.4 * 0.72).toFixed(3)})`)
-      .toBeGreaterThanOrEqual(ANT_UBRIGHT_FLOOR);
-    expect(e.bright).toBeCloseTo(1.05 * e.thermal * 0.72, 9);
-    expect(e.opacity, "the look's own opacity x pack 1").toBeCloseTo(1, 9);
-    expect(e.afterWrite.bright).toBeCloseTo(e.bright, 9);
+    expect(shown(e), "effective uBright x uOpacity with the lean on").toBeGreaterThanOrEqual(ANT_UBRIGHT_FLOOR);
+    expect(shown(e), "leaned = un-leaned on the same view (uBright x uOpacity)").toBeCloseTo(shown(off), 9);
+    expect(shown(e.afterWrite)).toBeCloseTo(shown(e), 9);
   });
 
   it("host brightness at its lowest user setting (slider 0%): user x pack, never darker than the user's own choice", () => {
