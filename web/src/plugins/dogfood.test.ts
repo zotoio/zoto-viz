@@ -109,7 +109,9 @@ async function createHnTermPackSession(): Promise<HnTermPackSession> {
     writeUniform: () => {},
     writeParticles: () => {},
   };
-  await import("../../../plugins/src/hn-term/frontend/index.ts");
+  // Path built from the id so web/tsconfig.test.json checks this file without compiling the pack.
+  const hnTerm: string = "hn-term";
+  await import(`../../../plugins/src/${hnTerm}/frontend/index.ts`);
   const onFrame = (globalThis as unknown as { zoto: VizZoto }).zoto.onFrame;
   if (!onFrame) throw new Error("hn-term pack did not register onFrame");
   return { onFrame, lastBuffer: () => captured };
@@ -130,7 +132,7 @@ function tickHnTermPackFrames(
 ): void {
   const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
   for (let i = 0; i < frames; i++) {
-    const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+    const frame = buildVizFrameForPlugin(state, monoMs(0), FAT_LAN_SOAK_AUDIO, idle);
     frame.t = tAt(i);
     session.onFrame(frame);
   }
@@ -246,7 +248,7 @@ it("hn-term frame.t cap step: dt above one adds capped typed characters", async 
   hnTermDtGuardWarmOneThirtiethFrame(session, state);
   const frozen = Array.from(session.lastBuffer());
   const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
-  const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+  const frame = buildVizFrameForPlugin(state, monoMs(0), FAT_LAN_SOAK_AUDIO, idle);
   frame.t = HN_TERM_DT_GUARD_FRAME_STEP + 5;
   session.onFrame(frame);
   expect(hnTermPackBufferNewTypedCharCount(frozen, session.lastBuffer())).toBe(HN_TERM_DT_CAP_STEP_TYPED_CHARS);
@@ -258,7 +260,7 @@ it("hn-term frame.t infinity step: non-finite dt uses 1/60 fallback", async () =
   hnTermDtGuardWarmOneThirtiethFrame(session, state);
   const frozen = Array.from(session.lastBuffer());
   const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
-  const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+  const frame = buildVizFrameForPlugin(state, monoMs(0), FAT_LAN_SOAK_AUDIO, idle);
   frame.t = Infinity;
   session.onFrame(frame);
   expect(hnTermPackBufferNewTypedCharCount(frozen, session.lastBuffer())).toBe(HN_TERM_DT_INFINITY_STEP_TYPED_CHARS);
@@ -272,7 +274,7 @@ it("hn-term frame.t hold step: zero dt adds no typed characters", async () => {
   const holdT = (HN_TERM_DT_GUARD_SEGMENT_FRAMES - 1) * HN_TERM_DT_GUARD_FRAME_STEP;
   const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
   for (let i = 0; i < HN_TERM_DT_GUARD_HOLD_FRAMES; i++) {
-    const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+    const frame = buildVizFrameForPlugin(state, monoMs(0), FAT_LAN_SOAK_AUDIO, idle);
     frame.t = holdT;
     session.onFrame(frame);
     const cur = Array.from(session.lastBuffer());
@@ -322,7 +324,7 @@ it("fat-LAN live soak: termNow must not read wall clock", async () => {
     const state = fatLanFixture();
     const idle = DEMO_PACK_CONTRACTS["hn-term"].idle;
     for (let i = 0; i < FAT_LAN_SOAK_FRAMES; i++) {
-      const frame = buildVizFrameForPlugin(state, 0, FAT_LAN_SOAK_AUDIO, idle);
+      const frame = buildVizFrameForPlugin(state, monoMs(0), FAT_LAN_SOAK_AUDIO, idle);
       frame.t = FAT_LAN_SPY_ROW_FRAME_T0 + i * FAT_LAN_SPY_ROW_FRAME_STEP;
       session.onFrame(frame);
     }
@@ -469,13 +471,13 @@ describe("viz dogfood gates", () => {
     const budget = new VizFrameBudget(() => 0, "t-over");
     setVizBuildCostTicksInjector((i) => (i < 2 ? (i === 0 ? 1200 : 15000) : 1200));
 
-    const ok = dogfoodTick(packId, fatLan, 0, 0.1, budget, writer);
+    const ok = dogfoodTick(packId, fatLan, monoMs(0), 0.1, budget, writer);
     expect(ok.delivered).toBe(true);
     let prevClock = 0;
-    const heavy = dogfoodTick(packId, fatLan, prevClock, 0.1, budget, writer);
+    const heavy = dogfoodTick(packId, fatLan, monoMs(prevClock), 0.1, budget, writer);
     prevClock = 1000;
     expect(heavy.delivered).toBe(true);
-    const skipped = dogfoodTick(packId, fatLan, prevClock, 0.1, budget, writer);
+    const skipped = dogfoodTick(packId, fatLan, monoMs(prevClock), 0.1, budget, writer);
     expect(skipped.delivered).toBe(false);
     expect(skipped.lastBuilt).not.toBeNull();
     expect(budget.stats.skipped).toBe(1);
@@ -501,7 +503,7 @@ describe("viz dogfood gates", () => {
     expect(bright).toBeGreaterThan(0.4);
   });
 
-  it("talker-storm host idle yields particles on empty state", () => {
+  it("talker-storm host idle writes slot 0 (talker count) on empty state, and no particles (#184)", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["talker-storm"]);
     const frame = VIZ_FIXTURE_IDLE;
     expect(frame.talkers.length).toBeGreaterThan(0);
@@ -510,7 +512,7 @@ describe("viz dogfood gates", () => {
       writeUniform: (name, value) => { writer.writeUniform(name, value); },
       writeParticles: (data, stride) => { writer.writeParticles(data, stride); },
     });
-    expect(writer.particleSnapshot().length).toBeGreaterThan(0);
+    expect(writer.particleSnapshot().length, "the host mirror writes no particles").toBe(0);
     expect(writer.snapshot(0)[0]).toBeGreaterThan(0);
   });
 
@@ -546,7 +548,10 @@ describe("viz dogfood gates", () => {
       writeUniform: (name, value) => { writer.writeUniform(name, value); },
       writeParticles: (data, stride) => { writer.writeParticles(data, stride); },
     });
-    expect(writer.particleSnapshot().length).toBeLessThanOrEqual(512 * 4);
+    // #184: no host particles; slot 0's talker count keeps the same 512 cap on the fat LAN.
+    expect(writer.particleSnapshot().length).toBe(0);
+    expect(writer.snapshot(0)[0]).toBeGreaterThan(0);
+    expect(writer.snapshot(0)[0]).toBeLessThanOrEqual(512);
   });
 
   it("preserve-frame across mid-run pack swap keeps vizFrameTs, skips, and UBO mirror", () => {
@@ -594,7 +599,7 @@ describe("viz dogfood gates", () => {
     const buildSpy = vi.fn(buildVizFrame);
     const spy = { calls: 0 };
 
-    const tick = dogfoodTick(packId, fatLan, 0, 0.2, budget, writer, spy, buildSpy);
+    const tick = dogfoodTick(packId, fatLan, monoMs(0), 0.2, budget, writer, spy, buildSpy);
     expect(spy.calls).toBe(1);
     expect(buildSpy).toHaveBeenCalledTimes(1);
 
@@ -723,7 +728,7 @@ describe("viz dogfood over-budget honesty", () => {
   it("empty StateMsg dogfood tick still delivers idle-backed frames", () => {
     const writer = new VizBufferWriter(DEMO_PACK_CONTRACTS["packet-tunnel"]);
     const budget = new VizFrameBudget();
-    const tick = dogfoodTick("packet-tunnel", emptyState(), 0, 0, budget, writer);
+    const tick = dogfoodTick("packet-tunnel", emptyState(), monoMs(0), 0, budget, writer);
     expect(tick.delivered).toBe(true);
     expect(tick.frame?.packets.length).toBeGreaterThan(0);
     expect(writer.snapshot(0)[0]).toBeGreaterThan(0);
@@ -738,12 +743,12 @@ describe("viz dogfood over-budget honesty", () => {
     const budget = new VizFrameBudget(() => 0, "slow");
     setVizBuildCostTicksInjector((i) => (i < 2 ? (i === 0 ? 1200 : 15000) : 1200));
 
-    const first = dogfoodTick(packId, fatLan, 0, 0.1, budget, writer);
+    const first = dogfoodTick(packId, fatLan, monoMs(0), 0.1, budget, writer);
     expect(first.delivered).toBe(true);
 
-    const heavy = dogfoodTick(packId, fatLan, first.frame?.t ?? 0, 0.1, budget, writer);
+    const heavy = dogfoodTick(packId, fatLan, monoMs(first.frame?.t ?? 0), 0.1, budget, writer);
     expect(heavy.delivered).toBe(true);
-    const second = dogfoodTick(packId, fatLan, heavy.frame?.t ?? 0, 0.1, budget, writer);
+    const second = dogfoodTick(packId, fatLan, monoMs(heavy.frame?.t ?? 0), 0.1, budget, writer);
     expect(second.delivered).toBe(false);
     setVizBuildCostTicksInjector(undefined);
     expect(second.lastBuilt).not.toBeNull();

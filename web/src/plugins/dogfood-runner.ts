@@ -4,6 +4,7 @@ import { monoMs } from "../core/viz-time";
 import { syncVizTileScope, vizTileBudgetRegistry } from "./viz-tile-budget";
 import type { VizDemoPackId } from "../ui/viz-hud";
 import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
+import { unavailablePackForView } from "./plugin-unavailable";
 import { skipRatePerSec, vizHudMetric, type VizHudTick } from "../ui/viz-hud";
 import { fatLanFixture } from "./fixtures/fat-lan-state";
 import {
@@ -24,6 +25,11 @@ import { assertVizBuildWorkGates, assertVizFrameOutputCaps } from "./viz-gate-as
 import { runPackFrameHandler, type VizPackHandlers } from "./viz-pack-host";
 
 export { runPackFrameHandler };
+
+/** #169: the demo packs dogfood runs; a pack the catalog lists as unavailable is skipped silently. */
+export function dogfoodPackIds(): VizDemoPackId[] {
+  return VIZ_DEMO_PACKS.filter((id) => !unavailablePackForView(`plugin:${id}`));
+}
 export type DogfoodHostHandlers = VizPackHandlers;
 
 /** Shipped viz contracts — mirrors plugins/src pack plugin.yml viz blocks. */
@@ -338,7 +344,7 @@ export function runDogfoodCountGate(opts: DogfoodSoakOptions = {}): DogfoodCount
   const packs: DogfoodCountGatePackResult[] = [];
   let ok = true;
 
-  for (const packId of VIZ_DEMO_PACKS) {
+  for (const packId of dogfoodPackIds()) {
     vizTileBudgetRegistry.reset();
     syncVizTileScope(["dogfood"]);
     const contract = DEMO_PACK_CONTRACTS[packId];
@@ -439,7 +445,7 @@ export function runDogfoodSoak(opts: DogfoodSoakOptions = {}): DogfoodSoakResult
   try {
     const packs: DogfoodPackStats[] = [];
 
-    for (const packId of VIZ_DEMO_PACKS) {
+    for (const packId of dogfoodPackIds()) {
       vizTileBudgetRegistry.reset();
       syncVizTileScope(["dogfood"]);
       const contract = DEMO_PACK_CONTRACTS[packId];

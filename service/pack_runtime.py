@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from . import plugin_zip as pz
+from .pack_block_copy import SENTENCE_BOUNDARY
 from .pack_boundary import (
     PackBundleBoundary,
     PackBundleBoundaryError,
@@ -62,18 +63,19 @@ def catalog_boundary_error(
     *,
     upgrade: bool = False,
     version: str | int | None = None,
+    sentence: str | None = None,
 ) -> dict[str, str]:
+    """``version`` is the INSTALLED (old) version for upgrade copy; None: "the version you had"."""
     row = block.to_dict()
     row["file"] = zip_file
     row["error"] = "pack_boundary"
     row["zip"] = zip_file
     if upgrade:
         row["upgrade_blocked"] = "true"
-        detail = f"({block.file} imports {block.import_spec})"
         row["message"] = format_v2_blocked_message(
             block.pack_name or block.pack_id,
             version,
-            detail,
+            sentence or SENTENCE_BOUNDARY,
         )
     else:
         row.setdefault("message", format_blocked_message(block))

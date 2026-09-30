@@ -4,6 +4,8 @@ import { categorize, hashColor, orgOf } from "../core/modes";
 import { rName } from "../core/redact";
 import { fmtBytes, type Packet } from "../core/types";
 import { ArcadeView, DevicePicker, MISS_RED, ROW_TTL_S, clamp, css, fade, fitText, isKnown, sizeOf, sprite } from "./arcade";
+import { arcadeHudRate, type ArcadeIdleShaper } from "./arcade-idle-feed";
+import { shapeInvadersIdle } from "./arcade-idle-shapers";
 
 /**
  * Invaders: who is pulling data down, and what is going up.
@@ -107,6 +109,9 @@ export class InvadersView extends ArcadeView {
     if (!this.hover?.ip) return;
     if (this.hover.cannon) this.picker.set(this.picker.isGroup || e.shiftKey ? this.hover.ip : "lan");
   }
+
+  protected override idleShaper(): ArcadeIdleShaper<Packet> { return shapeInvadersIdle; }
+  protected override idleMe(): string { return this.picker.isGroup ? "" : this.picker.ip(); }
 
   protected query(): { ip: string } | null {
     const ip = this.picker.token();
@@ -321,7 +326,7 @@ export class InvadersView extends ArcadeView {
     const w2 = g.measureText(`↑ ${fmtBytes(this.stats.up)}`).width;
     g.fillStyle = u.muted; g.font = `11px ${this.font}`; g.fillText("fired", x2 + w2 + 6, top + 31);
     let hosts = 0; for (const r of this.rows.values()) hosts += r.aliens.size;
-    g.fillText(`${Math.round(this.pps)} pkt/s · ${this.rows.size} organisation${this.rows.size === 1 ? "" : "s"} · ${hosts} host${hosts === 1 ? "" : "s"} · ${this.cannons.size} cannon${this.cannons.size === 1 ? "" : "s"}`, 16, top + 48);
+    g.fillText(`${arcadeHudRate(this.pps, this.idleShowing)} · ${this.rows.size} organisation${this.rows.size === 1 ? "" : "s"} · ${hosts} host${hosts === 1 ? "" : "s"} · ${this.cannons.size} cannon${this.cannons.size === 1 ? "" : "s"}`, 16, top + 48);
     g.textAlign = "right";
     g.font = `600 14px ${this.font}`; g.fillStyle = this.picker.isGroup ? this.roleCss("lan") : this.cannonColor(this.picker.ip());
     g.fillText(this.picker.label((ip) => this.nameOf(ip)), this.W - 16, top + 30);
@@ -380,8 +385,9 @@ export class InvadersView extends ArcadeView {
       g.fillText(name, left - rw - 8, r.y + 1);
       g.globalAlpha = 1;
     }
-    if (!this.rows.size && this.lastT) this.drawIdle(now, `no internet traffic for ${this.picker.label((ip) => this.nameOf(ip))} in the last few seconds`, this.W / 2, (formTop + formBottom) / 2);
-    else if (!this.lastT) this.drawIdle(now, "waiting for packets…", this.W / 2, (formTop + formBottom) / 2);
+    const seen = this.lastT || this.idleShowing;
+    if (!this.rows.size && seen) this.drawIdle(now, `no internet traffic for ${this.picker.label((ip) => this.nameOf(ip))} in the last few seconds`, this.W / 2, (formTop + formBottom) / 2);
+    else if (!seen) this.drawIdle(now, "waiting for packets…", this.W / 2, (formTop + formBottom) / 2);
 
     // shots and bombs
     for (const s of this.shots) {

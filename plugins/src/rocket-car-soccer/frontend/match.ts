@@ -591,6 +591,15 @@ function dampScalar(cur: number, target: number, dt: number, tau: number): numbe
   return cur + (target - cur) * k;
 }
 
+/**
+ * Pitch that points the camera at the ball (#180). The preset pitch still sets the camera
+ * height; the look angle is then aimed so the ball sits at the centre of the frame instead
+ * of below it (the old fixed pitch put the centre ray 10-20 m past the ball).
+ */
+function aimPitch(camY: number, ballY: number, horizDist: number): number {
+  return -Math.atan2(Math.max(0.5, camY - ballY), Math.max(1, horizDist));
+}
+
 function cameraTargetFromState(
   st: SimState,
   snap: Snap | null,
@@ -614,7 +623,7 @@ function cameraTargetFromState(
     const cx = ball.x - Math.sin(yaw) * dist;
     const cz = ball.z - Math.cos(yaw) * dist;
     const cy = ball.y - Math.sin(pitch) * dist * 0.62 + 6.2;
-    return { x: cx, y: cy, z: cz, yaw, pitch, roll: 0, fov: 0.92 + Math.min(0.1, speed * 0.0025), dist };
+    return { x: cx, y: cy, z: cz, yaw, pitch: aimPitch(cy, ball.y, dist), roll: 0, fov: 0.92 + Math.min(0.1, speed * 0.0025), dist };
   };
 
   if (camMode === "broadcast" || (camMode === "director" && st.directorCam === 0)) {
@@ -638,7 +647,7 @@ function cameraTargetFromState(
   const cx = ball.x - Math.sin(yaw) * dist;
   const cz = ball.z - Math.cos(yaw) * dist;
   const cy = ball.y - Math.sin(pitch) * dist * 0.65 + 7;
-  return { x: cx, y: cy, z: cz, yaw, pitch, roll, fov, dist };
+  return { x: cx, y: cy, z: cz, yaw, pitch: aimPitch(cy, ball.y, dist), roll, fov, dist };
 }
 
 function cameraFromState(

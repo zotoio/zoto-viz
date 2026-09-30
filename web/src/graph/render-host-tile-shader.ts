@@ -70,6 +70,16 @@ export class RenderHostTileShader {
     return this.host.glContextLost;
   }
 
+  /** Lost now, even if the `webglcontextlost` event is still queued (a loss during a compile). */
+  private contextLostNow(): boolean {
+    if (this.host.glContextLost) return true;
+    try {
+      return this.host.renderer.getContext()?.isContextLost?.() === true;
+    } catch {
+      return false;
+    }
+  }
+
   tileSlot(tileId: string): TileShaderSlot {
     let slot = this.tileShaders.get(tileId);
     if (!slot) {
@@ -101,6 +111,9 @@ export class RenderHostTileShader {
     if (this.host.glContextLost) return null;
     const ok = this.compilePluginSky(tileId, scene, camera, log);
     if (!ok) {
+      // A context lost mid-compile is not a shader failure: the tile is re-probed after the
+      // restore instead of being marked dead behind the simple-view fallback (#179).
+      if (this.contextLostNow() && !this.tileSlot(tileId).latch.dead) return null;
       this.onTileShaderCompileFailed(tileId);
       return "shader failed";
     }
@@ -129,7 +142,13 @@ export class RenderHostTileShader {
     const prevCheck = rd.debug.checkShaderErrors;
     const prevOn = rd.debug.onShaderError;
     rd.debug.checkShaderErrors = true;
+    let lostDuringCompile = false;
     rd.debug.onShaderError = (gl, program, _vs, fs) => {
+      // Empty logs from a context that just died say nothing about the shader.
+      if (typeof gl.isContextLost === "function" && gl.isContextLost()) {
+        lostDuringCompile = true;
+        return;
+      }
       const msg = (
         gl.getShaderInfoLog(fs)
         || gl.getProgramInfoLog(program)
@@ -144,6 +163,7 @@ export class RenderHostTileShader {
       rd.debug.onShaderError = prevOn;
     }
     if (latch.dead) return false;
+    if (lostDuringCompile || this.contextLostNow()) return false;
     latch.markCompiled();
     return true;
   }
@@ -183,14 +203,20 @@ export class RenderHostTileShader {
 
   onSharedContextRestored(): void {
     this.host.glContextLost = false;
-    this.gfxNotice.onContextRestored();
     for (const slot of this.tileShaders.values()) {
       slot.latch.reset();
     }
   }
 
+  /** The first real frame has drawn since the restore: now the wall notice may clear (#179 row 4). */
+  onFirstFrameAfterRestore(): void {
+    this.gfxNotice.onContextRestored();
+  }
+
   dispose(): void {
     this.clearAllShaderFallbacks();
+    // A host torn down while lost must not leave its wall notice (or its timer) behind.
+    this.gfxNotice.dispose();
   }
 
   private mountShaderFallback(tileId: string): void {

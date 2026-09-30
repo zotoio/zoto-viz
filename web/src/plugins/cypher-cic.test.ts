@@ -1,10 +1,26 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
+import { scanPackInstallLint } from "../../../plugins/sdk/pack-lint";
 import { runPackOnFixtures } from "../../../plugins/sdk/viz-fixtures";
 import {
   CANVAS_DEFAULT, cicCanvasSize, clamp01, DEFAULT_LOOK, EMPTY_SYS, idHash,
   packPackets, packRf, packSysSlot, packTalkers, parseCicLook, peakRf, peakTalker,
   roleCode, sysAlert,
 } from "../../../plugins/src/cypher-cic/frontend/pack";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
+const CIC_PACK_DIR = path.join(repoRoot, "plugins/src/cypher-cic");
+
+function renderHostDoc(w: number, h: number): Document {
+  const doc = document.implementation.createHTMLDocument("cic");
+  const canvas = doc.createElement("canvas");
+  canvas.className = "render-host";
+  canvas.width = w;
+  canvas.height = h;
+  doc.body.appendChild(canvas);
+  return doc;
+}
 
 describe("cypher-cic pack", () => {
   it("packs shared host fixtures into non-empty slots", () => {
@@ -83,5 +99,30 @@ describe("cypher-cic pack", () => {
     expect(roleCode("self")).toBe(1);
     const fake = { querySelector: () => null } as unknown as Document;
     expect(cicCanvasSize(fake)).toEqual(CANVAS_DEFAULT);
+  });
+
+  it("pack install lint finds no sandbox-escape in cypher-cic (#187)", () => {
+    const { blocks } = scanPackInstallLint(CIC_PACK_DIR, repoRoot);
+    expect(blocks.filter((v) => v.rule === "sandbox-escape")).toEqual([]);
+  });
+
+  it("cicCanvasSize: default plate with no doc, real size from a doc's canvas.render-host (#187)", () => {
+    expect(document.querySelector("canvas.render-host")).toBeNull();
+    expect(cicCanvasSize()).toEqual(CANVAS_DEFAULT);
+    expect(cicCanvasSize(null)).toEqual(CANVAS_DEFAULT);
+    expect(cicCanvasSize(renderHostDoc(1353, 786))).toEqual({ w: 1353, h: 786 });
+  });
+
+  it("cicCanvasSize with no doc reads the pack's own document (#187)", () => {
+    const canvas = document.createElement("canvas");
+    canvas.className = "render-host";
+    canvas.width = 1111;
+    canvas.height = 666;
+    document.body.appendChild(canvas);
+    try {
+      expect(cicCanvasSize()).toEqual({ w: 1111, h: 666 });
+    } finally {
+      canvas.remove();
+    }
   });
 });

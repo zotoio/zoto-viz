@@ -1,6 +1,7 @@
 import { AUDIO_DRIVES, NetScene, escapeHtml, type DreamAnim, type Filters } from "../graph/scene";
 import { Panel } from "../ui/panel";
-import { allModes, arcadeSlotFor, defaultCatalogMode, defaultOpts, graphModes, modeById, type ViewMode } from "../core/modes";
+import { allModes, arcadeSlotFor, defaultCatalogMode, defaultOpts, hostEngine, modeById, type ViewMode } from "../core/modes";
+import { flagMissingLayoutViews } from "./layout-missing-views";
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";
 import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
@@ -33,7 +34,14 @@ import {
 } from "./present-drive-app";
 import { applyModeImpl, type ApplyModeFlags, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
 import type { ConsentReviewResult } from "./pack-consent";
-import { ensurePackReviewedOutcome } from "./pack-consent";
+import {
+  consentErrorOf,
+  consentGranted,
+  consentStateOf,
+  onConsentChange,
+  requestConsent,
+  seedConsent,
+} from "./consent-store";
 import {
   addModeSwitchAbortListener,
   beginModeSwitchAttempt,
@@ -123,9 +131,12 @@ import {
   attachPluginFrontend,
   fetchPluginSky,
   pluginHasFrontend,
+  pluginHasSky,
   pluginNeedsReview,
   pluginViewId,
   viewSelectOptions,
+  viewPickerBanner,
+  viewPickerOptions,
   writePluginConfig,
   configStoreId,
   pluginSpecForStoreId as lookupPluginSpecForStoreId,
@@ -159,8 +170,7 @@ import { applyMosaicLayoutFromAnim } from "./mosaic-layout-settings-wiring";
 import { wirePluginFrontendAttach } from "./wire-settings-host";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import { resolvePluginWall, type WallSnap } from "../plugins/plugin-wall";
-import { askPluginReview } from "../plugins/plugin-ui";
-import { vizContractFor } from "../plugins/plugin";
+import { dreamCycleModes, vizContractFor } from "../plugins/plugin";
 import {
   VizBufferWriter, VizFrameBudget, VIZ_FRAME_BUDGET_MS, bindVizWriterCore, defaultVizContract,
   type VizDataFrame,
@@ -218,6 +228,7 @@ import { SkyLoads, SkyWaits, landWhenDrawn, type SkyLoadCtl } from "./sky-wait";
 import { loadTilesSettlingEach } from "./sky-sync-tiles";
 import { createProductionTileHealthMonitor } from "./tile-health-boot";
 import { markPresent, presentInterval } from "../core/present-clock";
+import { perfPinFromSearch, setPerfPinnedOff } from "../core/perf";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
 import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
 import {
@@ -258,8 +269,10 @@ import {
 import { maybeReportPackHostPerf } from "./pack-perf-report";
 import { createHostMeshBridge, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
-import { showPluginSkyConsentNotice, warnPluginSkyConsent } from "./plugin-sky-consent-notice";
-import { shouldPromptPluginReview } from "./plugin-consent-mount";
+import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
+import { hasKeptTileAnswer, showNeedsYou, waitForTileReview, type TileReviewRunner } from "./needs-you";
+import { clearViewState, setViewState, setViewStateTileResolver, viewStateOf, viewStatePickerSuffix, viewStateViewId } from "./view-state";
+import { packNeedsConsent, shouldPromptPluginReview } from "./plugin-consent-mount";
 import { hasConsentPending } from "./consent-pending-panes";
 import { livePatchIsConsentOnly, mergePluginConsentLivePatch } from "./plugin-consent-live";
 import { initPluginConsentSync } from "./plugin-consent-sync";
@@ -337,6 +350,8 @@ const arcade: Record<string, { view: Standalone; el: HTMLElement }> = {
 };
 for (const a of Object.values(arcade)) a.view.setTheme(theme);
 let activeArcade: string | null = null;
+// #177: `?perf=off` pins the perf lean off (tune.k 0) for a deterministic session; read it with window.zotoviz.perfLean().
+setPerfPinnedOff(perfPinFromSearch(window.location.search));
 (window as unknown as { zotoviz: NetScene; znetviz: NetScene }).zotoviz = scene;
 (window as unknown as { znetviz: NetScene }).znetviz = scene; // one-release alias
 let mosaic: Mosaic | null = null;
@@ -744,10 +759,17 @@ const modeSel = new Select({
   caption: "view",
   title: "view mode (keys 1–9, 0 for the 10th). Your last 10 picks stay at the top. Type to filter.",
   filterable: true,
-  options: viewSelectOptions(),
+  options: viewPickerOptions(),
   onChange: (id) => applyMode(id, {}, { channel: "user" }),
 });
 $("modeBox").append(modeSel.el);
+modeSel.setBanner(viewPickerBanner());
+
+/** #169: header picker rows (unavailable packs greyed out, after the rest) plus the setup banner. */
+function setHeaderPickerOptions(): void {
+  modeSel.setOptions(pickerOptions());
+  modeSel.setBanner(viewPickerBanner());
+}
 const blockedInstallPanel = new BlockedInstallPanel({
   onCatalogRefresh: () => syncPluginCatalog(),
 });
@@ -849,8 +871,8 @@ function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
   }
   nestCams.setLook(opts);
   if (m.pluginId === "carousel") (arcade.carousel.view as CarouselView).setBind(opts);
-  if (mosaic?.on && !(m.pluginId && m.standalone)) mosaic.graphScene(m.id)?.setMode(m, opts);
-  else scene.setMode(m, opts);
+  if (mosaic?.on && !(m.pluginId && m.standalone)) setSceneMode(mosaic.graphScene(m.id), m, opts);
+  else setSceneMode(scene, m, opts);
   renderLegend(m, opts);
   const spec = pluginSpecForMode(m.id);
   if (!flags.skipSandboxPush && spec && pluginHasFrontend(spec)) {
@@ -867,7 +889,7 @@ function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
     for (const tileId of mosaic.tileIds) {
       if (configStoreIdForMode(tileId) !== store) continue;
       const pm = hostModeById(tileId);
-      mosaic.graphScene(tileId)?.setMode(pm, optsFor(pm));
+      setSceneMode(mosaic.graphScene(tileId), pm, optsFor(pm));
     }
   }
   syncPluginHudForMode(m, spec, pluginHudCaptions, vizHud, mosaicHudOn());
@@ -963,53 +985,67 @@ let tsWatchHash = "";
 const refreshPluginSignal = new AbortController();
 
 let ensureReviewedOverride: ((spec: PluginView | null, signal: AbortSignal) => Promise<ConsentReviewResult>) | null = null;
-let askPluginReviewOverride: typeof askPluginReview | null = null;
+let reviewOverride: TileReviewRunner | null = null;
 
-async function ensureReviewedImpl(spec: PluginView | null, signal: AbortSignal): Promise<ConsentReviewResult> {
+/** After any grant: the catalog row (not a copy) learns its sky may load, and tiles get a heal grace. */
+function afterConsentGranted(packId: string): void {
+  const raw = pluginSpecs.find((p) => p.id === packId);
+  if (raw) {
+    if (raw.hash) consentHash(raw.id, raw.hash);
+    if (raw.has_sky_shader || raw.shader_sha256) raw.sky_available = true;
+  }
+  noteTileHealthGrace("main");
+  mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
+}
+
+type EnsureReviewedOpts = {
+  /**
+   * false: do not wait on the tile's Review (mosaic pane picks paint Needs you on the pane and
+   * resume on the OK). An OK already given on a settled tile is still taken.
+   */
+  wait?: boolean;
+};
+
+/**
+ * No modal: the operator answers on the tile (Needs you → Review). The review wait also ends when
+ * the pack is granted elsewhere (Settings, live patch), so the view starts in place either way.
+ */
+/**
+ * Auto-consent grants this pack without asking: on, eligible origin, and (option (a)) never an
+ * incomplete record, which stays Needs you ("needs your OK again") until the operator reviews it.
+ */
+function willAutoConsent(spec: PluginView): boolean {
+  return autoconsentEnabled() && autoconsentEligible(spec) && consentStateOf(spec) !== "stale";
+}
+
+async function ensureReviewedImpl(
+  spec: PluginView | null,
+  signal: AbortSignal,
+  opts: EnsureReviewedOpts = {},
+): Promise<ConsentReviewResult> {
   if (!spec || !pluginNeedsReview(spec)) return "ok";
-  if (spec.consent) return "ok";
+  if (consentGranted(spec)) return "ok";
   if (!shouldPromptPluginReview(spec, catalogReady)) return "aborted";
-  return ensurePackReviewedOutcome(spec, async (reviewSignal) => {
-    if (reviewSignal.aborted) return "aborted";
-    if (autoconsentEnabled() && autoconsentEligible(spec)) {
-      const kind = autoconsentKind(spec);
-      try {
-        await grantPluginConsent(spec.id, kind);
-        if (reviewSignal.aborted) return "aborted";
-        spec.consent = kind;
-        if (spec.hash) consentHash(spec.id, spec.hash);
-        if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-        noteTileHealthGrace("main");
-        mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
-        return "ok";
-      } catch (e) {
-        console.warn("zoto-viz plugin autoconsent:", e);
-        return reviewSignal.aborted ? "aborted" : "failed";
-      }
-    }
-    try {
-      const kind = await (askPluginReviewOverride ?? askPluginReview)(spec, { signal: reviewSignal });
-      if (reviewSignal.aborted) return "aborted";
+  const packId = spec.id;
+  const auto = willAutoConsent(spec);
+  if (!auto && opts.wait === false && !reviewOverride && !hasKeptTileAnswer(packId)) return "declined";
+  const out = await requestConsent(spec, async (reviewSignal) => {
+    let kind: "reviewed" | "authored" | null;
+    if (auto) {
+      kind = autoconsentKind(spec);
+    } else {
+      kind = reviewOverride
+        ? await reviewOverride(spec, { signal: reviewSignal, state: consentStateOf(spec) })
+        : await waitForTileReview(spec, reviewSignal);
       if (!kind) return "declined";
-      try {
-        await grantPluginConsent(spec.id, kind);
-        if (reviewSignal.aborted) return "aborted";
-        spec.consent = kind;
-        if (spec.hash) consentHash(spec.id, spec.hash);
-        if (spec.has_sky_shader || spec.shader_sha256) spec.sky_available = true;
-        noteTileHealthGrace("main");
-        mosaic?.tileIds.forEach((id) => noteTileHealthGrace(id));
-        return "ok";
-      } catch (e) {
-        console.warn("zoto-viz plugin consent:", e);
-        return reviewSignal.aborted ? "aborted" : "failed";
-      }
-    } catch (e) {
-      if (reviewSignal.aborted) return "aborted";
-      console.warn("zoto-viz plugin review:", e);
-      return "failed";
     }
+    // Granted elsewhere while the tile waited: nothing to send again.
+    if (!consentGranted(spec)) await grantPluginConsent(packId, kind);
+    return kind;
   }, signal);
+  if (out === "ok") afterConsentGranted(packId);
+  else if (out === "failed") console.warn("zoto-viz plugin consent:", packId, consentErrorOf(packId));
+  return out;
 }
 
 function hostTileConfig(): Record<string, string> {
@@ -1022,9 +1058,13 @@ function hostTileConfig(): Record<string, string> {
   };
 }
 
-async function ensureReviewed(spec: PluginView | null, signal: AbortSignal): Promise<ConsentReviewResult> {
+async function ensureReviewed(
+  spec: PluginView | null,
+  signal: AbortSignal,
+  opts?: EnsureReviewedOpts,
+): Promise<ConsentReviewResult> {
   if (ensureReviewedOverride) return ensureReviewedOverride(spec, signal);
-  return ensureReviewedImpl(spec, signal);
+  return ensureReviewedImpl(spec, signal, opts);
 }
 
 async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promise<void> {
@@ -1047,7 +1087,7 @@ async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promi
     tsWatchStoreId = spec ? configStoreId(spec) : "";
     return;
   }
-  if (pluginNeedsReview(spec) && !spec.consent) {
+  if (packNeedsConsent(spec)) {
     console.warn("zoto-viz plugin frontend: needs review before module load", spec.id);
     markPluginNeedsReview(spec);
     sandbox.unload();
@@ -1056,7 +1096,7 @@ async function loadTsPlugin(spec: PluginView | null, signal: AbortSignal): Promi
     scene.clearPluginStyle();
     tsWatchId = "";
     tsWatchStoreId = "";
-    paintPluginNeedsReviewNotice(modeSel.value);
+    paintPluginNeedsReviewNotice(spec, mosaic?.on ? modeSel.value : undefined);
     return;
   }
   const tileId = "main";
@@ -1133,6 +1173,7 @@ async function refreshTsPlugin(): Promise<void> {
         spec.hash = next.hash;
         spec.capabilities = next.capabilities;
         spec.consent = next.consent ?? null;
+        seedConsent(next);
         const reviewed = await ensureReviewed(spec, refreshPluginSignal.signal);
         if (reviewed !== "ok") return;
         await loadTsPlugin(spec, refreshPluginSignal.signal);
@@ -1187,7 +1228,7 @@ function tileHealthModeId(tileId: string): string {
 function tileHealthAwaitingApproval(tileId: string): boolean {
   const m = modeById(tileHealthModeId(tileId));
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  if (spec && pluginNeedsReview(spec) && !spec.consent) return true;
+  if (packNeedsConsent(spec)) return true;
   return !!viewAuthBlock({
     id: m.id,
     pluginId: m.pluginId,
@@ -1219,15 +1260,63 @@ function skySpecForMode(modeId: string, fallback: PluginView | null): PluginView
 
 const PLUGIN_NEEDS_REVIEW_MSG = "needs review";
 
+/** Picker rows: a pack still waiting on the operator's OK ends in "needs OK". */
+function pickerOptions(): ReturnType<typeof viewPickerOptions> {
+  const needsOk = viewStatePickerSuffix({ kind: "needs-you", reason: "consent", packId: "" });
+  return viewPickerOptions((id) => {
+    const spec = parsePluginId(mosaicTileViewId(id)) ? pluginSpecForMode(id) : null;
+    return spec && packNeedsConsent(spec) ? needsOk : null;
+  });
+}
+
+/** A grant (here, in Settings, or from the monitor) drops "needs OK" from the picker at once. */
+let pickerRefreshQueued = false;
+onConsentChange(() => {
+  if (pickerRefreshQueued) return;
+  pickerRefreshQueued = true;
+  queueMicrotask(() => {
+    pickerRefreshQueued = false;
+    modeSel.setOptions(pickerOptions());
+  });
+});
+
+/** Solo tile "main" is the scene; a mosaic tile is its pane (same keys as the sky waits). */
+setViewStateTileResolver((tileId) => skyWaitHostEl(tileId));
+
 function markPluginNeedsReview(spec: PluginView): void {
   spec.sky_error = PLUGIN_NEEDS_REVIEW_MSG;
   spec.sky_available = false;
 }
 
-function paintPluginNeedsReviewNotice(paneId?: string): void {
-  if (!mosaic?.on) return;
-  const pane = paneId && mosaic.tileIds.includes(paneId) ? paneId : mosaicFocusSlot(mosaic);
-  if (pane) mosaic.setPaneNotice(pane, PLUGIN_NEEDS_REVIEW_MSG);
+/**
+ * Needs you on the tile that wanted this pack: the solo wall ("main"), or the mosaic pane. Review
+ * there starts the view in place once approved (no reload, never another view).
+ */
+function paintPluginNeedsReviewNotice(spec: PluginView, paneId?: string): void {
+  // Auto-consent resolves before any notice is written (UX Pro): while a switch is picking this
+  // pack, its own review path grants it and then loads it, so nothing may paint Needs you here.
+  if (willAutoConsent(spec) && getActiveModeSwitchSignal()) return;
+  if (mosaic?.on) {
+    // The wall view's own pack (Syscon, Cypher CIC): Needs you names the wall view on its wall's
+    // main tile, and Review re-applies the wall view (#172), never the tile's own view.
+    const wall = wallOwner && !mosaic.tileIds.includes(wallOwner) && pluginSpecForMode(wallOwner)?.id === spec.id ? wallOwner : null;
+    const wallTile = wall ? wallMainTile() : null;
+    if (wall && wallTile) {
+      showNeedsYou({ tileId: wallTile, viewId: wall, spec, restart: () => applyMode(wall) });
+      return;
+    }
+    const pane = paneId && mosaic.tileIds.includes(paneId) ? paneId : mosaicFocusSlot(mosaic);
+    if (!pane) return;
+    showNeedsYou({
+      tileId: pane,
+      viewId: mosaicTileViewId(pane),
+      spec,
+      restart: () => { void runMosaicPaneSwitch(pane, pane); },
+    });
+    return;
+  }
+  const viewId = modeSel.value;
+  showNeedsYou({ tileId: "main", viewId, spec, restart: () => applyMode(viewId) });
 }
 
 async function loadPluginSkyOnto(
@@ -1245,7 +1334,6 @@ async function loadPluginSkyOnto(
   if (target === scene && packKey && packKey === skyLoaded) return;
   if (!want || !spec) {
     cancelSkyWait(target, paneId);
-    if (target === scene) showPluginSkyConsentNotice($("scene"), false);
     if (target === scene && skyLoaded) {
       scene.setPluginShader(null);
       skyLoaded = "";
@@ -1254,17 +1342,15 @@ async function loadPluginSkyOnto(
     }
     return;
   }
-  if (pluginNeedsReview(spec) && !spec.consent) {
+  if (packNeedsConsent(spec)) {
     cancelSkyWait(target, paneId);
     warnPluginSkyConsent(spec.id);
-    showPluginSkyConsentNotice(target === scene ? $("scene") : null, true);
     markPluginNeedsReview(spec);
     target.setPluginShader(null);
     if (target === scene) skyLoaded = "";
-    paintPluginNeedsReviewNotice(paneId);
+    if (target === scene || (mosaic?.on && paneId)) paintPluginNeedsReviewNotice(spec, paneId);
     return;
   }
-  showPluginSkyConsentNotice(target === scene ? $("scene") : null, false);
   // Already on this tile: nothing to fetch or compile again.
   if (skyInstalled.get(target) === packKey && target.pluginSkyId === spec.id) return;
   // One request per tile per sky: concurrent syncs (mode apply, pane mount, refresh) share it.
@@ -1362,6 +1448,13 @@ const skyWaits = new SkyWaits({
     const w = skyWaitTiles.get(key);
     return w ? w.spec.name || w.spec.id : "";
   },
+  viewId: (key) => {
+    if (mosaic?.on) return mosaicTileViewId(key);
+    if (key === "main") return modeSel.value;
+    const w = skyWaitTiles.get(key);
+    return w ? pluginViewId(w.spec.id, w.spec.instanceId) : key;
+  },
+  packId: (key) => skyWaitTiles.get(key)?.spec.id ?? key,
   skyReady: (key) => {
     const w = skyWaitTiles.get(key);
     return !!w && w.target.pluginSkyDrawn === w.spec.id;
@@ -1404,16 +1497,69 @@ function tileSkyStarting(tileId: string): boolean {
   return skyWaits.exempt(key);
 }
 
+/**
+ * While a wall view's own wall is up (Syscon, Cypher CIC) and it ships a plugin sky: that sky and
+ * the tile it goes on, the wall's main tile (the pane skySpecForMode picks). Null otherwise.
+ */
+function wallViewSky(): { tile: string; spec: PluginView } | null {
+  if (!mosaic?.on || !wallOwner || mosaic.tileIds.includes(wallOwner)) return null;
+  const spec = pluginSpecForMode(wallOwner);
+  if (!spec || !pluginHasSky(spec)) return null;
+  const main = wallMainTile();
+  return main ? { tile: main, spec } : null;
+}
+
+/** The wall's main tile: where a wall view's own sky and Needs you land (#172). */
+function wallMainTile(): string | null {
+  if (!mosaic?.on) return null;
+  const main = mosaic.mainTileId || mosaic.focusedId;
+  return main && mosaic.tileIds.includes(main) ? main : null;
+}
+
+/**
+ * A wall view's consent, asked without waiting (#172). Still needed or declined: its wall's main
+ * tile shows Needs you for it and Review there re-applies it; the header stays on the wall view.
+ */
+async function reviewWallView(m: ViewMode, spec: PluginView | null, signal: AbortSignal): Promise<SwitchPaneViewResult> {
+  const result = await ensureReviewed(spec, signal, { wait: false });
+  const tile = wallMainTile();
+  if (result === "ok") {
+    if (tile && viewStateOf(tile)?.kind === "needs-you" && viewStateViewId(tile) === m.id) clearViewState(tile);
+    return { ok: true, paneId: tile ?? m.id, viewId: m.id };
+  }
+  if (signal.aborted || !spec || !tile) return { ok: false, reason: "Not reviewed." };
+  showNeedsYou({ tileId: tile, viewId: m.id, spec, restart: () => applyMode(m.id) });
+  return { ok: false, reason: "Needs you.", needsYou: true };
+}
+
+/** A saved layout naming a view that is gone gets a plain notice, never a stand-in view. */
+function flagMissingMosaicViews(): void {
+  if (!mosaic?.on || !catalogReady) return;
+  const m = mosaic;
+  flagMissingLayoutViews({
+    tileIds: m.tileIds,
+    isKnownView: (viewId) => allModes().some((row) => row.id === viewId)
+      || !!hostEngine(viewId) || !!hostEngine(viewId.replace(/^plugin:/, "")),
+    paneScene: (tileId) => m.graphScene(tileId),
+  });
+}
+
 async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Promise<void> {
   if (mosaic?.on) {
+    flagMissingMosaicViews();
     mosaic.markSkyPending();
+    // The wall row's sky wins over its main tile's own; the other tiles keep theirs (#172c).
+    const wall = wallViewSky();
+    const tileSpec = (id: string): PluginView | null => (id === wall?.tile ? wall.spec : pluginSpecForMode(id));
+    const wantSky = (m: Mosaic, id: string): boolean =>
+      id === wall?.tile || mosaicPluginSkyPaneView(id, m.paneSky(id), lookForMode).wantPlugin;
     try {
       for (const id of mosaic.tileIds) {
         const target = mosaic.graphScene(id);
-        const pane = pluginSpecForMode(id);
+        const pane = tileSpec(id);
         if (!target || !pane || target.pluginSkyDrawn === pane.id) continue;
-        if (!mosaicPluginSkyPaneView(id, mosaic.paneSky(id), lookForMode).wantPlugin) continue;
-        if (pluginNeedsReview(pane) && !pane.consent) continue;
+        if (!wantSky(mosaic, id)) continue;
+        if (packNeedsConsent(pane)) continue;
         if (!(pane.has_sky_shader === true || !!pane.shader_sha256)) continue;
         beginSkyWait(id, target, pane, id, signal);
       }
@@ -1423,9 +1569,8 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
       await loadTilesSettlingEach(m.tileIds, signal, async (id) => {
         const target = m.graphScene(id);
         if (!target) return;
-        const tileSky = m.paneSky(id);
-        const pane = pluginSpecForMode(id);
-        const wantPlugin = mosaicPluginSkyPaneView(id, tileSky, lookForMode).wantPlugin;
+        const pane = tileSpec(id);
+        const wantPlugin = wantSky(m, id);
         await loadPluginSkyOnto(target, pane, wantPlugin, signal, id);
       }, (id) => { if (m.on) m.settlePane(id); });
     } finally {
@@ -1452,8 +1597,7 @@ async function mountMosaicPanelView(viewId: string): Promise<void> {
   const o = optsFor(pm);
   const target = mosaic.graphScene(viewId);
   const skyStage = !pm.standalone && !!(pm.stageOnly || (lookForMode(viewId) ?? spec?.look)?.stageOnly);
-  target?.setMode(pm, o);
-  target?.setStageOnly(skyStage);
+  setSceneMode(target, pm, o, skyStage);
   const paneSpec = skySpecForMode(viewId, spec);
   if (pm.standalone || arcadeSlotFor(pm) !== "carousel") {
     void syncPluginSky(paneSpec, refreshPluginSignal.signal).catch(() => {});
@@ -1470,6 +1614,7 @@ async function runMosaicPaneSwitch(
   toViewId: string,
   fromViewId?: string,
   signal: AbortSignal = refreshPluginSignal.signal,
+  restart?: () => void,
 ): Promise<SwitchPaneViewResult> {
   if (!mosaic?.on) return { ok: false, reason: "Mosaic is off." };
   const pm = modeById(toViewId);
@@ -1477,9 +1622,17 @@ async function runMosaicPaneSwitch(
   const pluginId = pm.pluginId ? (parsePluginId(pm.id) ?? pm.pluginId) : null;
   const result = await switchPaneView(mosaic, toViewId, {
     fromViewId,
-    ensureReviewed: async () => (await ensureReviewed(spec, signal)) === "ok",
+    ensureReviewed: async () => (await ensureReviewed(spec, signal, { wait: false })) === "ok",
     spec,
     pluginId,
+    onNeedsYou: spec
+      ? (paneId) => showNeedsYou({
+        tileId: paneId,
+        viewId: mosaicTileViewId(toViewId),
+        spec,
+        restart: restart ?? (() => { void runMosaicPaneSwitch(toViewId, fromViewId ?? paneId); }),
+      })
+      : undefined,
     teardownView: teardownMosaicPanelView,
     mountView: mountMosaicPanelView,
     persistLayout: persistMosaicPickLayout,
@@ -1487,6 +1640,11 @@ async function runMosaicPaneSwitch(
   if (result.ok) {
     noteTileHealthGrace(toViewId);
     if (fromViewId) noteTileHealthGrace(fromViewId);
+    // The pane that showed Needs you now shows the view; its sky wait (if any) owns starting.
+    if (result.paneId !== result.viewId) clearViewState(result.paneId);
+    if (viewStateOf(result.viewId)?.kind !== "starting") {
+      setViewState(result.viewId, mosaicTileViewId(result.viewId), { kind: "ready" });
+    }
     syncMosaicPluginHudCaptions();
   }
   return result;
@@ -1495,7 +1653,7 @@ async function runMosaicPaneSwitch(
 function pluginIsConsented(pluginId: string): boolean {
   const spec = pluginSpecs.find((p) => p.id === pluginId);
   if (!spec) return false;
-  return !pluginNeedsReview(spec) || !!spec.consent;
+  return !packNeedsConsent(spec);
 }
 
 async function resumeMosaicConsentPending(): Promise<void> {
@@ -1507,7 +1665,7 @@ async function resumeMosaicConsentPending(): Promise<void> {
 
 async function refreshPluginCatalogAndResume(): Promise<void> {
   pluginSpecs = await installPlugins();
-  modeSel.setOptions(viewSelectOptions());
+  setHeaderPickerOptions();
   settings.refreshMosaicSlots();
   await resumeMosaicConsentPending();
 }
@@ -1519,6 +1677,29 @@ initPluginConsentSync({
 
 function computeSkyStage(m: ViewMode, spec: PluginView | null): boolean {
   return !m.standalone && !!(m.stageOnly || (lookForMode(m.id) ?? spec?.look)?.stageOnly);
+}
+
+/**
+ * The one stage-only rule (graph hidden, sky and floor stay): an arcade view on the solo wall, a
+ * solo pick still waiting on its OK, or the view's own stage look. #183: NetScene.setMode resets
+ * stage-only to the mode's own flag, so every setMode goes through {@link setSceneMode}.
+ */
+function stageOnlyRule(target: NetScene, m: ViewMode, spec: PluginView | null): boolean {
+  const solo = target === scene && !mosaic?.on;
+  if (solo && (arcadeSlotFor(m) !== null || packNeedsConsent(spec))) return true;
+  return computeSkyStage(m, spec);
+}
+
+/** setMode, then stage-only by {@link stageOnlyRule} (or the caller's already-computed value). */
+function setSceneMode(
+  target: NetScene | null | undefined,
+  m: ViewMode,
+  opts: Record<string, string>,
+  stage?: boolean,
+): void {
+  if (!target) return;
+  target.setMode(m, opts);
+  target.setStageOnly(stage ?? stageOnlyRule(target, m, pluginSpecForMode(m.id)));
 }
 
 function applyModeFeedExtras(m: ViewMode, opts: Record<string, string>): void {
@@ -1568,28 +1749,27 @@ function restoreMosaicAnimSnap(snap: MosaicAnimSnap, preferMode: string): void {
 }
 
 function applyMosaicModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
-  const focusId = mosaic!.tileIds.includes(m.id) ? m.id : mosaic!.tileIds[0] ?? m.id;
+  const onWall = mosaic!.tileIds.includes(m.id);
+  const focusId = onWall ? m.id : mosaic!.tileIds[0] ?? m.id;
   mosaic!.focus(focusId);
-  const target = mosaic!.graphScene(focusId);
-  if (target) {
-    target.setMode(m, opts);
-    target.setStageOnly(skyStage);
-  }
+  // A wall view (Syscon, Cypher CIC) is not a tile of its wall: the first tile keeps its own mode (#172).
+  const wallView = !onWall && !!pluginWall(lookForMode(m.id) ?? spec?.look);
+  const target = wallView ? undefined : mosaic!.graphScene(focusId);
+  setSceneMode(target, m, opts, skyStage);
   document.body.classList.remove("arcade");
   scene.setActive(true);
   morphViewChrome(m, opts, spec, skyStage, false);
 }
 
 function applySoloModeVisuals(m: ViewMode, opts: Record<string, string>, spec: PluginView | null, skyStage: boolean): void {
-  scene.setMode(m, opts);
   const next = arcadeSlotFor(m);
+  setSceneMode(scene, m, opts, next !== null || skyStage);
   document.body.classList.toggle("arcade", next !== null);
   unbindTetrisStandaloneHost(scene);
   if (next === "tetris") {
     bindTetrisStandaloneHost(scene, arcade.tetris.view as TetrisView);
   } else {
     scene.setActive(true);
-    scene.setStageOnly(next !== null || skyStage);
   }
   if (activeArcade && activeArcade !== next) { arcade[activeArcade].view.stop(); arcade[activeArcade].el.hidden = true; }
   if (next && activeArcade !== next) { arcade[next].el.hidden = false; arcade[next].view.start(selectedIp); }
@@ -1678,6 +1858,12 @@ function buildApplyModeHost(): ApplyModeHost {
       return flashModeLoadFailed(declined.label, keptLabel, () => applyMode(declined.id));
     },
     focusModePicker: () => { modeSel.focusWithRing(); },
+    tileSkyStarting,
+    willAutoConsent,
+    stopPackRuntime: (signal) => {
+      void loadTsPlugin(null, signal).catch(() => {});
+      void loadPluginSkyOnto(scene, null, false, signal).catch(() => {});
+    },
   };
 }
 
@@ -1686,9 +1872,21 @@ async function applyMosaicModeAsync(m: ViewMode, flags: ApplyModeFlags, signal: 
   const opts = optsFor(m);
   const prevMode = liveMode;
   const spec = m.pluginId ? pluginSpecForMode(m.id) : null;
-  const sw = await runMosaicPaneSwitch(m.id, undefined, signal);
+  // A wall view is the wall applyPluginWall lays out below, not a pane: a pane switch would put it
+  // over its own wall's first tile (the onAfterSetSize re-entry lands here mid-layout, #172).
+  const wallView = !!pluginWall(lookForMode(m.id) ?? spec?.look);
+  const sw = wallView
+    ? await reviewWallView(m, spec, signal)
+    : await runMosaicPaneSwitch(m.id, undefined, signal, () => applyMode(m.id));
   if (signal.aborted) {
     settleConsentAndDrainAuto("aborted");
+    return;
+  }
+  if (!sw.ok && sw.needsYou) {
+    // The pick is the view: the header keeps naming it while its pane shows Needs you; Review
+    // there re-applies it. Never snap the header back to the previous view.
+    modeSel.value = m.id;
+    settleConsentAndDrainAuto("declined", m.id);
     return;
   }
   if (!sw.ok) {
@@ -1774,13 +1972,17 @@ export function applyMode(
 registerAutoSwitchRunner(runAutoSwitch);
 registerDreamPulseReset(() => scene.resetDreamCyclePulse());
 registerApplyModeTestBindings({
+  scene: () => scene,
+  firePluginChange: (storeId, values) => { settings.onPluginChange?.(storeId, values); },
+  flagMissingMosaicViews: () => flagMissingMosaicViews(),
   setEnsureReviewedOverride: (fn) => { ensureReviewedOverride = fn; },
-  setAskPluginReviewOverride: (fn) => { askPluginReviewOverride = fn; },
+  setReviewOverride: (fn) => { reviewOverride = fn; },
+  refreshCatalog: () => refreshPluginCatalogAndResume(),
   setMosaic: (m) => { mosaic = m; },
   setPluginSpecs: (specs) => { pluginSpecs = specs; catalogReady = true; },
   setLiveMode: (id) => { liveMode = id; },
   setModeSelValue: (id) => { modeSel.value = id; },
-  refreshModeOptions: () => modeSel.setOptions(viewSelectOptions()),
+  refreshModeOptions: () => setHeaderPickerOptions(),
   reattachModeSelect: () => {
     const modeBox = $("modeBox");
     if (modeBox && !modeBox.contains(modeSel.el)) modeBox.appendChild(modeSel.el);
@@ -2086,7 +2288,7 @@ settings.onPluginChange = (storeId, values) => {
 settings.onInstancesChange = () => {
   void (async () => {
     pluginSpecs = await installPlugins();
-    modeSel.setOptions(viewSelectOptions());
+    setHeaderPickerOptions();
     settings.refreshMosaicSlots();
     applyMode(modeSel.value, {}, { channel: "user" });
   })();
@@ -2160,6 +2362,7 @@ mosaic = new Mosaic({
     },
   }),
   pickSuffix: (modeId) => (pluginHasFrontend(pluginSpecForMode(modeId)) ? " (full view only)" : ""),
+  wallSkyTile: () => wallViewSky()?.tile ?? null,
   paneDice: (id) => makePaneDiceButton({
     pane: id,
     onClick: () => { rollPaneDice(id); },
@@ -2184,7 +2387,7 @@ async function healTile(tileId: string, step: HealStep): Promise<void> {
     case "restart-pack": {
       const m = modeById(modeId);
       const sc = tileId === "main" ? scene : mosaic?.graphScene(tileId) ?? null;
-      if (sc) sc.setMode(m, optsFor(m));
+      if (sc) setSceneMode(sc, m, optsFor(m));
       if (spec && modeSel.value === m.id) await loadTsPlugin(spec, refreshPluginSignal.signal);
       else void syncPluginSky(spec, refreshPluginSignal.signal);
       sc?.refresh();
@@ -2318,7 +2521,7 @@ function syncHeaderViewChrome(): void {
 }
 
 function refreshViewMenus(): void {
-  modeSel.setOptions(viewSelectOptions());
+  setHeaderPickerOptions();
   mosaic?.refreshViewMenus();
   settings.refreshMosaicSlots();
 }
@@ -2576,7 +2779,7 @@ scene.onDreamPulse = () => {
   quiet(() => {
     const a = settings.animSettings;
     if (a.cycle && !mosaic?.on) {
-      const graphs = graphModes();
+      const graphs = dreamCycleModes();
       if (graphs.length) {
         const i = Math.max(0, graphs.findIndex((m) => m.id === modeSel.value));
         applyMode(graphs[(i + 1) % graphs.length].id, {}, { channel: "automatic", auto: "dream-cycle" });
@@ -2694,7 +2897,7 @@ async function bootCatalogFromSession(): Promise<void> {
     agent.setControlFromServer(session.aiControl);
     pluginSpecs = await installPlugins();
     catalogReady = true;
-    modeSel.setOptions(viewSelectOptions());
+    setHeaderPickerOptions();
     settings.refreshMosaicSlots();
     settings.refreshRemixPicker(pluginSpecs);
     await hydrateRemixFromStorage();
@@ -3075,7 +3278,7 @@ function diceModes(): ViewMode[] {
     if (!allowed.has(m.id)) return false;
     if (!m.pluginId) return true;
     const spec = pluginSpecForMode(m.id);
-    if (spec && pluginNeedsReview(spec) && !spec.consent) return false;
+    if (packNeedsConsent(spec)) return false;
     if (viewAuthBlock({
       id: m.id,
       pluginId: m.pluginId,

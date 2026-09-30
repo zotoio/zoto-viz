@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import {
   FIELD_EDITED_ARIA,
   FIELD_EDITED_LABEL,
-  askPluginReview,
+  renderPackReview,
   fillPluginFields,
 } from "./plugin-ui";
 import { configStoreId, fieldDefault, writePluginConfig } from "./plugin";
@@ -265,33 +265,34 @@ describe("fillPluginFields", () => {
     expect(host.querySelector("textarea")).toBeTruthy();
   });
 
-  it("asks the operator to examine plugin source", async () => {
-    const pending = askPluginReview({
+  it("asks the operator to examine plugin source (inline review, no modal)", () => {
+    const notice = document.createElement("div");
+    document.body.append(notice);
+    let got: string | null | undefined;
+    renderPackReview(notice, {
       id: "pulse", packName: "Pulse", version: 1, engine: "graph", runtime: "typescript",
       service: "service/__init__.py", file: "/tmp/pulse-ts/plugin.yml",
-    });
-    expect(document.body.classList.contains("modal-open")).toBe(true);
-    expect(document.body.textContent).toMatch(/AI IDE/);
-    expect(document.body.textContent).toMatch(/Cursor/);
-    expect(document.body.textContent).toMatch(/service\/\*\.py/);
-    expect(document.body.textContent).toMatch(/fragment\.glsl/);
-    const examined = [...document.querySelectorAll("button")].find((b) => b.textContent === "I examined the source");
-    examined!.click();
-    await expect(pending).resolves.toBe("reviewed");
+    }, { onChoice: (k) => { got = k; } });
     expect(document.body.classList.contains("modal-open")).toBe(false);
+    expect(notice.textContent).toMatch(/AI IDE/);
+    expect(notice.textContent).toMatch(/Cursor/);
+    expect(notice.textContent).toMatch(/service\/\*\.py/);
+    expect(notice.textContent).toMatch(/fragment\.glsl/);
+    const examined = [...notice.querySelectorAll("button")].find((b) => b.textContent === "I examined the source");
+    examined!.click();
+    expect(got).toBe("reviewed");
+    notice.remove();
   });
 
-  it("can cancel or claim authorship", async () => {
-    const first = askPluginReview({ id: "x", packName: "X", version: 1, engine: "graph", runtime: "typescript" });
-    [...document.querySelectorAll("button")].find((b) => b.textContent === "Not now")!.click();
-    await expect(first).resolves.toBeNull();
-
-    const second = askPluginReview({ id: "y", packName: "Y", version: 1, engine: "graph", service: "service.py" });
-    [...document.querySelectorAll("button")].find((b) => b.textContent === "I wrote this")!.click();
-    await expect(second).resolves.toBe("authored");
-
-    const third = askPluginReview({ id: "z", packName: "Z", version: 1, engine: "graph", runtime: "typescript" });
-    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
-    await expect(third).resolves.toBeNull();
+  it("can decline for now or claim authorship", () => {
+    const pick = (label: string, spec: Parameters<typeof renderPackReview>[1]) => {
+      const notice = document.createElement("div");
+      let got: string | null | undefined;
+      renderPackReview(notice, spec, { onChoice: (k) => { got = k; } });
+      [...notice.querySelectorAll("button")].find((b) => b.textContent === label)!.click();
+      return got;
+    };
+    expect(pick("Not now", { id: "x", packName: "X", version: 1, engine: "graph", runtime: "typescript" })).toBeNull();
+    expect(pick("I wrote this", { id: "y", packName: "Y", version: 1, engine: "graph", service: "service.py" })).toBe("authored");
   });
 });

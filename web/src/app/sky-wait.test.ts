@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SKY_WAIT_DEADLINE_MS, SkyWaits } from "./sky-wait";
+import { resetViewStatesForTests, viewStateOf } from "./view-state";
 
 function setup() {
   const pane = document.createElement("div");
@@ -24,12 +25,15 @@ function setup() {
 
 describe("SkyWaits: Starting card with a deadline", () => {
   beforeEach(() => { vi.useFakeTimers(); vi.spyOn(console, "info").mockImplementation(() => {}); });
-  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); });
+  afterEach(() => { vi.useRealTimers(); vi.restoreAllMocks(); resetViewStatesForTests(); });
 
   it("shows the card and stays exempt until the deadline, then lands with a fade", () => {
     const { pane, waits, setReady } = setup();
     waits.begin("plugin:backrooms");
     expect(pane.querySelector(".sky-starting-card")?.textContent).toBe("Backrooms · Starting…");
+    expect(viewStateOf("plugin:backrooms")).toEqual({ kind: "starting" });
+    expect(pane.dataset.viewState).toBe("starting");
+    expect(pane.querySelector<HTMLElement>(".sky-starting-card")?.dataset.viewState).toBe("starting");
     vi.advanceTimersByTime(SKY_WAIT_DEADLINE_MS - 1);
     expect(waits.state("plugin:backrooms")).toBe("starting");
     expect(waits.exempt("plugin:backrooms")).toBe(true);
@@ -39,9 +43,10 @@ describe("SkyWaits: Starting card with a deadline", () => {
     vi.advanceTimersByTime(1000);
     expect(pane.querySelector(".sky-starting-card")).toBeNull();
     expect(pane.querySelector(".mosaic-pane-notice")).toBeNull();
+    expect(pane.dataset.viewState).toBe("ready");
   });
 
-  it("at the deadline with no sky: failed:timeout with Retry, still exempt, no card", () => {
+  it("at the deadline with no sky: failed:timeout (Couldn't start) with Retry, still exempt, no card", () => {
     const { pane, waits } = setup();
     waits.begin("plugin:backrooms");
     vi.advanceTimersByTime(SKY_WAIT_DEADLINE_MS);
@@ -49,7 +54,9 @@ describe("SkyWaits: Starting card with a deadline", () => {
     expect(waits.exempt("plugin:backrooms")).toBe(true);
     expect(pane.querySelector(".sky-starting-card")).toBeNull();
     const notice = pane.querySelector<HTMLElement>(".mosaic-pane-notice")!;
-    expect(notice.dataset.viewState).toBe("failed:timeout");
+    expect(notice.dataset.viewState).toBe("couldnt-start");
+    expect(pane.dataset.viewState).toBe("couldnt-start");
+    expect(viewStateOf("plugin:backrooms")).toEqual({ kind: "couldnt-start", reason: "timeout", packId: "plugin:backrooms" });
     expect(notice.textContent).toContain("Backrooms couldn't start.");
     expect(notice.querySelector(".mosaic-pane-notice-retry")?.textContent).toBe("Retry");
   });

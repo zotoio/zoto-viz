@@ -3,6 +3,7 @@ import {
   ARCADE_ENGINES,
   categorize,
   GRAPH_BASES,
+  graphModes,
   heat,
   hashColor,
   hostEngine,
@@ -27,6 +28,7 @@ import {
   blockedCatalogEntries,
   blockedViewSelectRow,
   catalogErrorLooksBlocked,
+  PACK_INSTALL_CHECK_UNAVAILABLE,
   consumePackInstallNotices,
   queuePackInstallBlockedNotice,
   syncBlockedCatalogFromErrors,
@@ -50,6 +52,13 @@ import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
 import type { ManifestBlockedPlugin } from "./plugin-manifest-blocked";
+import {
+  isUnavailableRow,
+  setUnavailableCatalog,
+  unavailableBanner,
+  unavailablePackForView,
+  unavailablePickerRows,
+} from "./plugin-unavailable";
 import {
   manifestBlockedViewSelectRow,
   setManifestBlockedCatalog,
@@ -205,6 +214,8 @@ export interface PluginView {
   name: string;
   version: number;
   hint?: string;
+  /** plugin.yml `picker: hidden`: test / fixture pack, never offered in a picker or random pick. */
+  picker?: "hidden";
   /** Catalog row when this spec was expanded from plugin.yml instances. */
   instanceId?: string;
   /** Short label for mosaic tiles when distinct from {@link name}. */
@@ -240,6 +251,8 @@ export interface PluginView {
   sha256?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;
+  /** Why consent is or isn't in place (catalog). Read it through `app/consent-store`, never directly. */
+  consent_state?: "none" | "granted" | "changed" | "stale";
   /** Catalog provenance: src (shipped), zip (contrib), or local (~/.zoto-viz/plugins/local). */
   origin?: "src" | "zip" | "local";
   has_frontend?: boolean;
@@ -271,6 +284,18 @@ const LOOK_ANIM_KEYS = [
 ] as const satisfies readonly (keyof PluginLook)[];
 
 let looks = new Map<string, PluginLook>();
+/** View ids of `picker: hidden` packs: still creatable by id, never offered. */
+let pickerHidden = new Set<string>();
+
+/** True for a `picker: hidden` view: no picker row, no dice / dream-cycle / new-wall pick. */
+export function isPickerHidden(viewId: string): boolean {
+  return pickerHidden.has(viewId);
+}
+
+/** Graph views the dream cycle steps through (never a `picker: hidden` test pack). */
+export function dreamCycleModes(): ViewMode[] {
+  return graphModes().filter((m) => !isPickerHidden(m.id));
+}
 
 /** Host wrap-target ids (graph bases + arcade engines), not live menu ids. */
 export const shippedModeIds = (): Set<string> =>
@@ -296,6 +321,8 @@ export interface PluginList {
   plugins: PluginView[];
   errors: { file: string; error: string; message?: string; id?: string; name?: string; import?: string }[];
   blocked?: ManifestBlockedPlugin[];
+  /** #169: packs kept in the catalog that can't load (esbuild missing, or one pack's bundle failed). */
+  unavailable?: { id: string; name: string; reason: string; available?: false }[];
   installNotices?: { error: string; message: string }[];
   pythonService?: boolean;
 }
@@ -740,7 +767,7 @@ export function fillViewSelect(
   suffix?: (value: string) => string,
 ): void {
   sel.replaceChildren();
-  const modes = viewSelectOptions();
+  const modes: { value: string; label: string; group: string; disabled?: boolean }[] = viewPickerOptions();
   let groupEl: HTMLOptGroupElement | null = null;
   let lastGroup = "";
   for (const m of modes) {
@@ -753,21 +780,32 @@ export function fillViewSelect(
     const o = document.createElement("option");
     o.value = m.value;
     // The suffix is for choices in the open list only, never the view this select is running.
-    o.textContent = m.label + (m.value === current ? "" : (suffix?.(m.value) ?? ""));
+    o.textContent = m.label + (m.value === current || m.disabled ? "" : (suffix?.(m.value) ?? ""));
+    if (m.disabled) o.disabled = true;
     if (m.value === current) o.selected = true;
     (groupEl ?? sel).appendChild(o);
   }
   if (current && !modes.some((m) => m.value === current)) {
+    // A view opened by id (hidden test pack, saved layout): name it, it is not offered.
+    const known = allModes().find((m) => m.id === current);
     const o = document.createElement("option");
     o.value = current;
-    o.textContent = current;
+    // #169: a tile on an unavailable pack shows the pack's name here, never its raw view id.
+    o.textContent = known ? viewCaption(known) : (unavailablePackForView(current)?.name ?? current);
     o.selected = true;
     sel.appendChild(o);
+    sel.value = current;
   }
 }
 
-export function viewSelectOptions(): { value: string; label: string; hint: string; group: string }[] {
-  const rows = allModes().map((m) => ({
+/**
+ * `suffixFor` marks a row with a short trailing word ("needs OK") when the view needs attention;
+ * rows that just work carry their plain name.
+ */
+export function viewSelectOptions(
+  suffixFor?: (viewId: string) => string | null,
+): { value: string; label: string; hint: string; group: string }[] {
+  const rows = allModes().filter((m) => !isPickerHidden(m.id)).map((m) => ({
     value: m.id,
     label: viewCaption(m),
     group: m.kind === "arcade" ? "arcade" : m.kind === "demo" ? "demo" : "graph",
@@ -790,8 +828,32 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
     ...row,
     hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : row.group,
   }));
+  const marked = suffixFor
+    ? numbered.map((row) => {
+      const suffix = suffixFor(row.value);
+      return suffix ? { ...row, label: `${row.label} · ${suffix}` } : row;
+    })
+    : numbered;
   const blocked = blockedViewSelectRow(blockedCatalogEntries());
-  return blocked ? [...numbered, blocked] : numbered;
+  return blocked ? [...marked, blocked] : marked;
+}
+
+/**
+ * #169: what the view picker shows: every loadable row (viewSelectOptions), then each unavailable
+ * pack greyed out and unpickable. Automatic picks (wall fill, digit keys, default slots) read
+ * viewSelectOptions(), which never holds an unavailable pack.
+ */
+export function viewPickerOptions(
+  suffixFor?: (viewId: string) => string | null,
+): {
+  value: string; label: string; hint: string; group: string; disabled?: boolean;
+}[] {
+  return [...viewSelectOptions(suffixFor), ...unavailablePickerRows()];
+}
+
+/** #169: one banner per catalog when setup isn't finished, else null. */
+export function viewPickerBanner(): string | null {
+  return unavailableBanner();
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
@@ -813,6 +875,7 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
   const { rows, overlays } = partitionCatalog(specs);
   const nextLooks = new Map<string, PluginLook>();
   const modes: ViewMode[] = [];
+  const nextHidden = new Set<string>();
   for (const spec of rows) {
     const extra = overlays.get(spec.id);
     const merged = extra ? mergeOverlayPins(spec, extra) : spec;
@@ -820,13 +883,16 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
       if (view.look) nextLooks.set(pluginViewId(view.id, view.instanceId), view.look);
       if (!view.engine) continue;
       try {
-        modes.push(compilePlugin(view));
+        const mode = compilePlugin(view);
+        modes.push(mode);
+        if (merged.picker === "hidden") nextHidden.add(mode.id);
       } catch (e) {
         console.warn("zoto-viz plugin:", view.file || view.id, e);
       }
     }
   }
   looks = nextLooks;
+  pickerHidden = nextHidden;
   setPluginModes(modes);
   return modes;
 }
@@ -840,6 +906,10 @@ export async function installPlugins(): Promise<PluginView[]> {
     clearPluginSettingsUiState();
     const data = await fetchPlugins();
     setManifestBlockedCatalog((data.blocked ?? []) as ManifestBlockedPlugin[]);
+    // #169: unavailable packs are listed, never loaded. The service keeps them out of `plugins`;
+    // a row marked `available: false` there is treated the same way.
+    const plugins = data.plugins ?? [];
+    setUnavailableCatalog([...(data.unavailable ?? []), ...plugins.filter(isUnavailableRow)]);
     consumePackInstallNotices(data.installNotices);
     syncBlockedCatalogFromErrors(data.errors as Record<string, unknown>[]);
     for (const e of data.errors) {
@@ -851,6 +921,7 @@ export async function installPlugins(): Promise<PluginView[]> {
         || e.error === "pack_install_blocked"
         || e.error === "pack_install_start_failed"
         || e.error === "pack_install_interrupted"
+        || e.error === PACK_INSTALL_CHECK_UNAVAILABLE
         || catalogErrorLooksBlocked(msg)
         || catalogErrorLooksBlocked(err)
       ) {
@@ -864,7 +935,8 @@ export async function installPlugins(): Promise<PluginView[]> {
       console.warn("zoto-viz plugin:", e.file, err || msg);
     }
     const specs: PluginView[] = [];
-    for (const raw of data.plugins) {
+    for (const raw of plugins) {
+      if (isUnavailableRow(raw)) continue;
       try {
         specs.push(toPluginView(raw));
       } catch (e) {
@@ -872,10 +944,13 @@ export async function installPlugins(): Promise<PluginView[]> {
       }
     }
     applyPluginCatalog(specs);
+    const { seedConsentFromCatalog } = await import("../app/consent-store");
+    seedConsentFromCatalog(specs);
     return specs;
   } catch (e) {
     console.warn("zoto-viz plugins:", e);
     setManifestBlockedCatalog([]);
+    setUnavailableCatalog([]);
     looks = new Map();
     setPluginModes([]);
     syncBlockedCatalogFromErrors([]);

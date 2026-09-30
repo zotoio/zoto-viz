@@ -1,5 +1,7 @@
 /** Consent-pending state kept free of plugin imports so media and camera modules can read it. */
 
+import { isConsentRequestPending, resetConsentStoreForTests } from "./consent-store";
+
 export type ConsentReviewResult = "ok" | "declined" | "failed" | "aborted";
 
 export type PendingEntry = {
@@ -11,10 +13,11 @@ export type PendingEntry = {
 export const pendingByPackId = new Map<string, PendingEntry>();
 
 export function isPackConsentPending(packId?: string | null): boolean {
-  if (packId) return pendingByPackId.has(packId);
-  return pendingByPackId.size > 0;
+  if (packId) return pendingByPackId.has(packId) || isConsentRequestPending(packId);
+  return pendingByPackId.size > 0 || isConsentRequestPending();
 }
 
 export function resetPackConsentForTests(): void {
   pendingByPackId.clear();
+  resetConsentStoreForTests();
 }

@@ -1,7 +1,8 @@
 id: sandbox-fixture-multi
 name: Sandbox Fixture Multi
 version: 1
-hint: QE smoke pack — module.js imports helper.js and fixture.json via pack-assets paths.
+picker: hidden
+hint: QE smoke pack — module.js imports helper.js and fixture.js via pack-assets paths. The sky is lit only by uBright, which the pack writes from fixture.js.
 capabilities:
   - viz.read
   - viz.write

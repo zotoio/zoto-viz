@@ -16,6 +16,7 @@ import {
 import { FZ_SLOT, packFractalDrive, resetFractalDrive } from "./drive";
 import { IDLE_POINTER } from "./interaction";
 import { fractalPresetConfig } from "./config-mutation";
+import { fractalTypeIndex, parseFractalOptions } from "./options";
 
 describe("fractal cruise", () => {
   it("finds the period-2 nucleus and renormalizes a window that contains it", () => {
@@ -112,5 +113,23 @@ describe("fractal cruise", () => {
     const fast = packFractalDrive(0, 1 / 60, 0, 1.6, { ...cfg, paletteCycle: "3.5" }, IDLE_POINTER);
     expect(fast.slot0[FZ_SLOT.paletteCycle]).toBeCloseTo(3.5, 5);
     expect(fast.slot0[FZ_SLOT.mandelCx]).not.toBe(0);
+  });
+
+  it("#180: after resetFractalDrive the canyon camera is outside the surface on frames 1..10", () => {
+    // Red at d276d5df: the Mandelbulb start (CANYON_HOME) puts the camera at de(cam) -0.0157 on frame 1.
+    const presets = ["", "bulb-classic", "box-abyss", "menger-tunnel", "sierpinski-crystal", "julia-quaternion", "kaleido-ifs"];
+    for (const preset of presets) {
+      resetFractalDrive();
+      const cfg = preset ? fractalPresetConfig(preset) : {};
+      const o = parseFractalOptions(cfg);
+      const kind = fractalTypeIndex(o.type);
+      const p = { power: o.power, scale: o.scale, fold: o.fold, sym: o.kaleidoSym, jx: o.juliaCr, jy: o.juliaCi, jz: o.quatC2, jw: o.quatC3 };
+      for (let f = 1; f <= 10; f++) {
+        const s = packFractalDrive(f / 60, 1 / 60, 0, 1.6, cfg, IDLE_POINTER).slot0;
+        const dCam = de3(kind, s[FZ_SLOT.camX]!, s[FZ_SLOT.camY]!, s[FZ_SLOT.camZ]!, p);
+        expect(dCam, `${preset || "(default)"} frame ${f} de3(cam)`).toBeGreaterThan(0);
+        expect(dCam, `${preset || "(default)"} frame ${f} de3(cam) vs half the canyon clearance`).toBeGreaterThan(0.02);
+      }
+    }
   });
 });

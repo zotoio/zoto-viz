@@ -147,9 +147,10 @@ void main() {
     pitch = -0.32;
   }
   vec3 fwd = vec3(sin(yaw) * cos(pitch), sin(pitch), cos(yaw) * cos(pitch));
-  vec3 right = normalize(cross(vec3(0.0, 1.0, 0.0), fwd));
-  vec3 up = cross(fwd, right);
-  vec3 rd = normalize(dir.x * right + dir.y * up + dir.z * fwd);
+  // vDir is camera-local with -z forward, +x right, +y up (#180).
+  vec3 right = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+  vec3 up = cross(right, fwd);
+  vec3 rd = normalize(dir.x * right + dir.y * up - dir.z * fwd);
 
   float t = 0.2;
   for (int i = 0; i < 64; i++) {

@@ -119,11 +119,17 @@ export interface VizPackHandlers {
   setInfoNotice?: (text: string | null) => void;
 }
 
-function roleHue(role: string): number {
-  if (role === "gateway") return 0.9;
-  if (role === "internet") return 0.75;
-  if (role === "lan") return 0.45;
-  return 0.2;
+/**
+ * talker-storm slot 0 `.x`: the storm's talker weight, the count the old host particle loop produced
+ * (up to 8 per talker by rate / 40, capped at 512). The HUD's estimateTalkerParticles uses the same rule.
+ */
+export function talkerStormSlot0Count(talkers: readonly { rate: number }[]): number {
+  let count = 0;
+  for (const t of talkers) {
+    count += Math.max(0, Math.min(8, Math.ceil(t.rate / 40)));
+    if (count >= 512) return 512;
+  }
+  return count;
 }
 
 /** ASCII 32–126 packed as (code-32)/95 so the sky can draw a 5×7 font. */
@@ -178,24 +184,10 @@ export function runPackFrameHandler(
       break;
     }
     case "talker-storm": {
-      const particles: number[] = [];
-      let count = 0;
-      for (const talker of frame.talkers) {
-        const n = Math.min(8, Math.ceil(talker.rate / 40));
-        for (let i = 0; i < n && count < 512; i++, count++) {
-          const hash = (talker.id.charCodeAt(0) + i * 17) % 97;
-          particles.push(
-            (hash / 97) * 2 - 1,
-            roleHue(talker.role),
-            (frame.t % 1) + i * 0.01,
-            Math.min(1, talker.rate / 200),
-          );
-        }
-      }
-      handlers.writeParticles(particles, 4);
-      handlers.writeBuffer(0, [count, frame.audio, frame.t % 1]);
-      handlers.writeUniform("uBright", 0.4 + frame.audio * 0.5);
-      handlers.writeUniform("uAudio", frame.audio);
+      // #184: slot 0 only ([count, audio, t mod 1]; the sky reads its audio). The pack owns uBright and
+      // uAudio (its writes survive syncPluginLook since H1) and draws the storm from slot 1. The old
+      // host copy of those uniforms raced the pack's own values, and its writeParticles had no renderer.
+      handlers.writeBuffer(0, [talkerStormSlot0Count(frame.talkers), frame.audio, frame.t % 1]);
       break;
     }
     case "kefrens-bars": {

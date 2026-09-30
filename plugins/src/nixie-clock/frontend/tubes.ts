@@ -100,11 +100,9 @@ export function digitsOf(date: Date, hour12: boolean): [number, number, number, 
   ];
 }
 
+/** Canvas size from the given (or own) document only; the sandbox never reads the host page. */
 export function nixieCanvasSize(doc?: Document | null): { w: number; h: number } {
-  let root = doc ?? (typeof document !== "undefined" ? document : null);
-  try {
-    if (!doc && typeof parent !== "undefined" && parent.document) root = parent.document;
-  } catch { /* sandbox */ }
+  const root = doc ?? (typeof document !== "undefined" ? document : null);
   const canvas = (root?.querySelector?.("canvas.render-host")
     ?? root?.querySelector?.("#wall > canvas")
     ?? root?.querySelector?.("#scene canvas")) as { width?: number; height?: number } | null;

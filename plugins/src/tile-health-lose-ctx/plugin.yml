@@ -1,6 +1,7 @@
 id: tile-health-lose-ctx
 name: Tile health — lose context
 version: 1
+picker: hidden
 hint: Host dogfood pack — calls loseHostContext after 40 frames.
 capabilities:
   - viz.read
