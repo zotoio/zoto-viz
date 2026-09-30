@@ -86,21 +86,44 @@ const writers = [
   ["pack frontend", packSlot0Of],
 ] as const;
 
-/** Independent count: most busiest-first devices whose minimum shape (1.4x top, 25% half-rate share, floor) fits B. */
-function minimumShapeFit(rates: readonly number[]): number {
+/** Independent count-first rule: most busiest-first devices at the floor plus the 1.4x reserve (only when rates differ) that fit B. */
+function countFirst(rates: readonly number[]): number {
   const sorted = [...rates].sort((a, b) => b - a);
   for (let n = Math.min(BLOB_MESH_MAX_BLOBS, sorted.length); n > 1; n--) {
     const top = sorted.slice(0, n);
     const hi = top[0]!;
     const lo = top[n - 1]!;
     const g = hi > lo ? 0.4 * Math.min(1, Math.log2(hi / lo)) : 0;
-    // quietest itself >= half: q = floor + 0.25 (big - floor) and big = (1 + g) q
-    const q = hi > lo && 2 * lo >= hi ? (0.75 * BLOB_MESH_FLOOR) / (1 - 0.25 * (1 + g)) : BLOB_MESH_FLOOR;
-    const big = q * (1 + g);
-    const need = top.reduce((s, r) => s + (r === hi ? big : 2 * r >= hi ? BLOB_MESH_FLOOR + 0.25 * (big - BLOB_MESH_FLOOR) : BLOB_MESH_FLOOR) ** 2, 0);
-    if (need <= BLOB_MESH_SLOT_BUDGET + 1e-12) return n;
+    const k = top.filter((r) => r === hi).length;
+    if ((n - k) * BLOB_MESH_FLOOR ** 2 + k * (BLOB_MESH_FLOOR * (1 + g)) ** 2 <= BLOB_MESH_SLOT_BUDGET + 1e-12) return n;
   }
   return Math.min(1, sorted.length);
+}
+
+/** Independent: does the 25% half-rate share fit the leftover budget for these drawn rates? */
+function shareFits(drawn: readonly number[]): boolean {
+  const hi = Math.max(...drawn);
+  const lo = Math.min(...drawn);
+  const g = hi > lo ? 0.4 * Math.min(1, Math.log2(hi / lo)) : 0;
+  // quietest itself >= half: q = floor + 0.25 (big - floor) and big = (1 + g) q
+  const q = hi > lo && 2 * lo >= hi ? (0.75 * BLOB_MESH_FLOOR) / (1 - 0.25 * (1 + g)) : BLOB_MESH_FLOOR;
+  const big = q * (1 + g);
+  const need = drawn.reduce((s, r) => s + (r === hi ? big : 2 * r >= hi ? BLOB_MESH_FLOOR + 0.25 * (big - BLOB_MESH_FLOOR) : BLOB_MESH_FLOOR) ** 2, 0);
+  return need <= BLOB_MESH_SLOT_BUDGET + 1e-12;
+}
+
+/** Rate-order fallback: monotonic, ties equal, 1.4x when >= 2x apart, sum r^2 <= B, floor kept. Failure text or null. */
+function rateOrderRow(rates: readonly number[], radii: readonly number[]): string | null {
+  for (let i = 0; i < rates.length; i++) {
+    for (let j = 0; j < rates.length; j++) {
+      if (rates[i] === rates[j] && Math.abs(radii[i]! - radii[j]!) > 1e-12) return `tie ${rates[i]} unequal`;
+      if (rates[i]! > rates[j]! && !(radii[i]! > radii[j]!)) return `rate ${rates[i]} > ${rates[j]} but r ${radii[i]} <= ${radii[j]}`;
+    }
+  }
+  if (Math.max(...rates) >= 2 * Math.min(...rates) && Math.max(...radii) / Math.min(...radii) < 1.4 - 1e-9) return "1.4x lost";
+  if (radii.reduce((s, r) => s + r * r, 0) > BLOB_MESH_SLOT_BUDGET + 1e-9) return "over budget";
+  if (Math.min(...radii) < BLOB_MESH_FLOOR - 1e-9) return "under the floor";
+  return null;
 }
 
 /**
@@ -206,7 +229,10 @@ describe("blob-mesh coverage budget (#174)", () => {
     expect(need).toBeCloseTo(0.117648, 12);
     expect(BLOB_MESH_SLOT_BUDGET).toBeGreaterThanOrEqual(need + 1e-7);
     expect(BLOB_MESH_SLOT_BUDGET - need, "no more than the rounding up").toBeLessThan(1e-5);
-    expect(planBlobMesh(LAN7.talkers.map((t) => t.rate), need - 1e-7).shownIdx, "a hair under the minimum draws 6").toHaveLength(6);
+    const under = planBlobMesh(LAN7.talkers.map((t) => t.rate), need - 1e-7);
+    expect(under.shownIdx, "a hair under the minimum still draws 7 (count first)").toHaveLength(7);
+    expect(under.halfRateShare, "... but the gateway loses its 25% share (rate-order fallback)").toBe(false);
+    expect(planBlobMesh(LAN7.talkers.map((t) => t.rate)).halfRateShare).toBe(true);
   });
 
   it("growth reserve only when rates differ: 8 equal devices all fit at the floor; 8 that differ fit fewer", () => {
@@ -217,27 +243,31 @@ describe("blob-mesh coverage budget (#174)", () => {
     for (const r of equal.radii) expect(r).toBeCloseTo(Math.sqrt(BLOB_MESH_SLOT_BUDGET / 8), 12);
     expect(8 * BLOB_MESH_FLOOR ** 2).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET);
     expect(7 * 0.12 ** 2 + (1.4 * 0.12) ** 2).toBeGreaterThan(BLOB_MESH_SLOT_BUDGET);
-    // 120 + six at 60 + 30: with 30 dropped every drawn device is >= half the busiest (25% share each,
-    // and 1.4x over a quietest that is itself lifted), so 5 fit
-    expect(planBlobMesh([120, 60, 60, 60, 60, 60, 60, 30]).shownIdx).toHaveLength(5);
+    // 120 + six at 60 + 30: 8 would need 0.1296 with the reserve, so 7 fit (the half-rate share never lowers this)
+    expect(planBlobMesh([120, 60, 60, 60, 60, 60, 60, 30]).shownIdx).toHaveLength(7);
     expect(planBlobMesh(LAN7.talkers.map((t) => t.rate)).shownIdx).toHaveLength(7);
   });
 
-  it("where every device is >= half the busiest (200, 185, ... 110), each needs its 25% share: 6 of 7 fit", () => {
-    const rates = Array.from({ length: 7 }, (_, i) => 200 - i * 15);
-    const plan = planBlobMesh(rates);
-    process.stdout.write(`[half-heavy] rates=${rates.join(",")} shown=${plan.shownIdx.length} radii=${plan.radii.map((r) => r.toFixed(4)).join(",")}\n`);
-    expect(plan.shownIdx).toHaveLength(6);
-    expect(plan.hidden).toBe(1);
+  it("count first: the 25% share never lowers the count (200, 185, ... 110 draws 7 of 7; FULL8 7 of 8, as before the share)", () => {
+    const heavy = Array.from({ length: 7 }, (_, i) => 200 - i * 15);
+    const full8 = Array.from({ length: 8 }, (_, i) => 120 - i * 12);
+    for (const [name, rates, shown] of [["HALF_HEAVY7", heavy, 7], ["FULL8", full8, 7]] as const) {
+      const plan = planBlobMesh(rates);
+      process.stdout.write(`[count-first] ${name} rates=${rates.join(",")} shown=${plan.shownIdx.length} share=${plan.halfRateShare} radii=${plan.radii.map((r) => r.toFixed(4)).join(",")}\n`);
+      expect(plan.shownIdx, name).toHaveLength(shown);
+      expect(plan.hidden, name).toBe(rates.length - shown);
+    }
   });
 
   for (const [who, slotsOf] of writers) {
-    it(`${who}: 25% half-rate row: every drawn device at >= half the busiest rate sits >= floor + 25% of floor-to-top (LAN7, LAN11, all fixtures)`, () => {
+    it(`${who}: 25% half-rate row when the leftover budget has room (always on LAN7 and LAN11), rate-order fallback otherwise`, () => {
       expect(BLOB_MESH_HALF_RATE_SHARE).toBe(0.25);
       const cases: [string, VizDataFrame, number][] = [
         ["LAN7", LAN7_HOST, 7], ["LAN11", LAN11_HOST, 7],
         ...Object.entries(FRAMES).map(([n, f]) => [n, f, DRAWN[n as keyof typeof FRAMES]] as [string, VizDataFrame, number]),
-        ["FULL8", frameOf(Array.from({ length: 8 }, (_, i) => talker(`172.30.0.${10 + i}`, 120 - i * 12))), 5],
+        ["FULL8", frameOf(Array.from({ length: 8 }, (_, i) => talker(`172.30.0.${10 + i}`, 120 - i * 12))), 7],
+        ["HALF_HEAVY7", frameOf(Array.from({ length: 7 }, (_, i) => talker(`172.30.0.${10 + i}`, 200 - i * 15))), 7],
+        ["TIED_TOP", frameOf([100, 25, 40, 100, 30, 40].map((r, i) => talker(`10.2.0.${i + 2}`, r))), 6],
         ["PAIR2X", frameOf([talker("172.30.0.10", 90), talker("172.30.0.11", 45)]), 2],
       ];
       for (const [name, frame, drawn] of cases) {
@@ -246,10 +276,14 @@ describe("blob-mesh coverage budget (#174)", () => {
         const rates = plan.shownIdx.map((i) => frame.talkers[i]!.rate);
         const top = Math.max(...radii);
         const shares = radii.map((r) => (top > BLOB_MESH_FLOOR ? (100 * (r - BLOB_MESH_FLOOR)) / (top - BLOB_MESH_FLOOR) : 0));
-        const text = `${name} rates=${rates.map((r) => +r.toFixed(1)).join(",")} radii=${radii.map((r) => r.toFixed(4)).join(",")} share%=${shares.map((s) => s.toFixed(1)).join(",")} sumR2=${radii.reduce((s, r) => s + r * r, 0).toFixed(6)}`;
+        const mode = plan.halfRateShare ? "share" : "fallback";
+        const text = `${name} ${mode} shown=${radii.length}/${frame.talkers.length} rates=${rates.map((r) => +r.toFixed(1)).join(",")} radii=${radii.map((r) => r.toFixed(4)).join(",")} share%=${shares.map((s) => s.toFixed(1)).join(",")} sumR2=${radii.reduce((s, r) => s + r * r, 0).toFixed(6)}`;
         if (who === "host mirror") process.stdout.write(`[half-rate] ${text}\n`);
         expect(radii, text).toHaveLength(drawn);
-        expect(halfRateRow(rates, radii), text).toBeNull();
+        expect(plan.halfRateShare, `${text}: share decided independently`).toBe(shareFits(rates));
+        if (name === "LAN7" || name === "LAN11") expect(plan.halfRateShare, text).toBe(true);
+        if (plan.halfRateShare) expect(halfRateRow(rates, radii), text).toBeNull();
+        expect(rateOrderRow(rates, radii), text).toBeNull();
       }
     });
 
@@ -271,7 +305,7 @@ describe("blob-mesh coverage budget (#174)", () => {
     });
   }
 
-  it("contrast and the 25% half-rate row hold across a sweep of 2..11 devices with busiest >= 2x quietest drawn, floor and budget kept", () => {
+  it("count first, contrast, and the 25% half-rate row (when it has room) hold across a sweep of 2..11 devices with busiest >= 2x quietest drawn, floor and budget kept", () => {
     let checked = 0;
     for (let n = 2; n <= 11; n++) {
       for (const spread of [2, 2.5, 5, 40]) {
@@ -286,8 +320,10 @@ describe("blob-mesh coverage budget (#174)", () => {
           expect(Math.max(...plan.radii) / Math.min(...plan.radii), text).toBeGreaterThanOrEqual(1.4 - EPS);
           expect(plan.radii.reduce((s, r) => s + r * r, 0), text).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + EPS);
           expect(Math.min(...plan.radii), text).toBeGreaterThanOrEqual(BLOB_MESH_FLOOR - EPS);
-          expect(plan.shownIdx.length, text).toBe(minimumShapeFit(rates));
-          expect(halfRateRow(drawn, plan.radii), text).toBeNull();
+          expect(plan.shownIdx.length, text).toBe(countFirst(rates));
+          expect(plan.halfRateShare, text).toBe(shareFits(drawn));
+          if (plan.halfRateShare) expect(halfRateRow(drawn, plan.radii), text).toBeNull();
+          expect(rateOrderRow(drawn, plan.radii), text).toBeNull();
         }
       }
     }
