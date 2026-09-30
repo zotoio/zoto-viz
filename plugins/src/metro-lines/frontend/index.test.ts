@@ -41,7 +41,7 @@ const PRESETS = ["classic_map", "night_network", "disruptions_only", "minimal"] 
 
 function extractOnFrameHandlerBody(source: string): string {
   const code = source.replace(/\/\*[\s\S]*?\*\//g, " ").replace(/(^|[^:])\/\/.*$/gm, "$1 ");
-  const assign = code.match(/zoto\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{/);
+  const assign = code.match(/host\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{/);
   if (!assign || assign.index === undefined) return "";
   const open = assign.index + assign[0].length - 1;
   let depth = 0;

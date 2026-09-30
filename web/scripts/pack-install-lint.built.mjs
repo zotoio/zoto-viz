@@ -578,14 +578,7 @@ function violationKey(v) {
 }
 
 // plugins/sdk/legacy-zoto-pack-allowlist.ts
-var LEGACY_DECLARE_ZOTO_PACK_IDS = [
-  "ant-colony",
-  "aquarium",
-  "koi-pond",
-  "metro-lines",
-  "rocket-car-soccer",
-  "voxel-world"
-];
+var LEGACY_DECLARE_ZOTO_PACK_IDS = [];
 var LEGACY_ZOTO_ALLOWLIST_RULES = /* @__PURE__ */ new Set(["inline-zoto-declare"]);
 function packIdFromPluginsSrcPath(file) {
   const m = file.match(/^plugins\/src\/([^/]+)\//);
@@ -1108,5 +1101,5 @@ export const PACK_INSTALL_LINT_BUILD = {
     "plugins/sdk/pack-lint.ts",
     "plugins/sdk/viz-zoto.ts"
   ],
-  "sha256": "d2a799867d01ba14119db58e8cd162fb6934ff18696923d1e8bc700fb43db3c9"
+  "sha256": "f4a8f1faad39ecea93509376b4b5c949c25b4d9194d224b77587a6e07eff3343"
 };

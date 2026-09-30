@@ -48,9 +48,9 @@ const talkers = [
 ];
 
 function extractOnFrameArrowBody(src: string): string {
-  const re = /zoto\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{/g;
+  const re = /host\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{/g;
   const m = re.exec(src);
-  if (!m) throw new Error("missing zoto.onFrame handler");
+  if (!m) throw new Error("missing host.onFrame handler");
   let i = m.index + m[0].length;
   let depth = 1;
   const start = i;
