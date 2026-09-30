@@ -86,8 +86,6 @@
     "src/app/viz-frame-scope.test.ts",
     "src/app/viz-frame-tick.test.ts",
     "src/app/viz-voxel-present-camera.test.ts",
-    "src/graph/render-host-layout-dpr-getter.test.ts",
-    "src/graph/render-host-layout-dpr-surfaces.test.ts",
     "src/plugins/consent.test.ts",
     "src/plugins/instances.test.ts",
     "src/plugins/nixie-clock-sky.test.ts",

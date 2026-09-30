@@ -246,21 +246,28 @@ export class LiveFeed {
     if (added) this.pinLatest(false);
   }
 
-  setConfig(c: FeedConfig): void {
+  /**
+   * #198: a partial config is merged over DEFAULT_FEED (a missing `on` means on). The `off` class, the
+   * overlay and start/stop all follow the merged, stored `on`, never the raw argument.
+   */
+  setConfig(c: Partial<FeedConfig>): void {
     this.cfg = { ...DEFAULT_FEED, ...c, source: "traffic" };
     const size = Math.min(20, Math.max(10, this.cfg.textSize || DEFAULT_FEED.textSize));
     this.cfg.textSize = size;
     this.el.style.setProperty("--feed-size", `${size}px`);
     document.documentElement.style.setProperty("--feed-size", `${size}px`);
-    this.el.classList.toggle("off", !c.on);
+    this.el.classList.toggle("off", !this.cfg.on);
     this.syncOverlay();
-    if (c.on) this.start();
+    if (this.cfg.on) this.start();
     else this.stop();
     this.trim();
     this.pinLatest();
   }
 
   showsTraffic(): boolean { return true; }
+
+  /** #198: the stored on flag (after the DEFAULT_FEED merge) that the off class, overlay and loop follow. */
+  get on(): boolean { return this.cfg.on; }
 
   private syncOverlay(): void {
     const on = this.cfg.on;
