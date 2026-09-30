@@ -357,7 +357,7 @@ def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
         encoding="utf-8",
     )
     monkeypatch.setattr(plugins, "_PACK_BUNDLE_SCRIPT", hang)
-    monkeypatch.setattr(plugins, "PACK_BUNDLE_TIMEOUT_S", 1.5)
+    monkeypatch.setattr(plugins, "PACK_BUNDLE_TIMEOUT_S", 4)
     doc = _pulse_doc()
     plugins.reset_bundles()
     with pytest.raises(PackInstallLintSetupError) as e:
