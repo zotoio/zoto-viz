@@ -56,6 +56,7 @@ import {
   isUnavailableRow,
   setUnavailableCatalog,
   unavailableBanner,
+  unavailableCatalog,
   unavailablePackForView,
   unavailablePickerRows,
 } from "./plugin-unavailable";
@@ -848,12 +849,17 @@ export function viewPickerOptions(
 ): {
   value: string; label: string; hint: string; group: string; disabled?: boolean;
 }[] {
-  return [...viewSelectOptions(suffixFor), ...unavailablePickerRows()];
+  return [...viewSelectOptions(suffixFor), ...unavailablePickerRows(pickerUnavailable())];
+}
+
+/** Unavailable packs the picker may show: `picker: hidden` ones are dropped, as for loaded specs. */
+function pickerUnavailable() {
+  return unavailableCatalog().filter((p) => !p.pickerHidden);
 }
 
 /** #169: one banner per catalog when setup isn't finished, else null. */
 export function viewPickerBanner(): string | null {
-  return unavailableBanner();
+  return unavailableBanner(pickerUnavailable());
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
