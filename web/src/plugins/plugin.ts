@@ -3,6 +3,7 @@ import {
   ARCADE_ENGINES,
   categorize,
   GRAPH_BASES,
+  graphModes,
   heat,
   hashColor,
   hostEngine,
@@ -205,6 +206,8 @@ export interface PluginView {
   name: string;
   version: number;
   hint?: string;
+  /** plugin.yml `picker: hidden`: test / fixture pack, never offered in a picker or random pick. */
+  picker?: "hidden";
   /** Catalog row when this spec was expanded from plugin.yml instances. */
   instanceId?: string;
   /** Short label for mosaic tiles when distinct from {@link name}. */
@@ -240,6 +243,8 @@ export interface PluginView {
   sha256?: string;
   service?: string;
   consent?: "reviewed" | "authored" | null;
+  /** Why consent is or isn't in place (catalog). Read it through `app/consent-store`, never directly. */
+  consent_state?: "none" | "granted" | "changed" | "stale";
   /** Catalog provenance: src (shipped), zip (contrib), or local (~/.zoto-viz/plugins/local). */
   origin?: "src" | "zip" | "local";
   has_frontend?: boolean;
@@ -271,6 +276,18 @@ const LOOK_ANIM_KEYS = [
 ] as const satisfies readonly (keyof PluginLook)[];
 
 let looks = new Map<string, PluginLook>();
+/** View ids of `picker: hidden` packs: still creatable by id, never offered. */
+let pickerHidden = new Set<string>();
+
+/** True for a `picker: hidden` view: no picker row, no dice / dream-cycle / new-wall pick. */
+export function isPickerHidden(viewId: string): boolean {
+  return pickerHidden.has(viewId);
+}
+
+/** Graph views the dream cycle steps through (never a `picker: hidden` test pack). */
+export function dreamCycleModes(): ViewMode[] {
+  return graphModes().filter((m) => !isPickerHidden(m.id));
+}
 
 /** Host wrap-target ids (graph bases + arcade engines), not live menu ids. */
 export const shippedModeIds = (): Set<string> =>
@@ -758,16 +775,25 @@ export function fillViewSelect(
     (groupEl ?? sel).appendChild(o);
   }
   if (current && !modes.some((m) => m.value === current)) {
+    // A view opened by id (hidden test pack, saved layout): name it, it is not offered.
+    const known = allModes().find((m) => m.id === current);
     const o = document.createElement("option");
     o.value = current;
-    o.textContent = current;
+    o.textContent = known ? viewCaption(known) : current;
     o.selected = true;
     sel.appendChild(o);
+    sel.value = current;
   }
 }
 
-export function viewSelectOptions(): { value: string; label: string; hint: string; group: string }[] {
-  const rows = allModes().map((m) => ({
+/**
+ * `suffixFor` marks a row with a short trailing word ("needs OK") when the view needs attention;
+ * rows that just work carry their plain name.
+ */
+export function viewSelectOptions(
+  suffixFor?: (viewId: string) => string | null,
+): { value: string; label: string; hint: string; group: string }[] {
+  const rows = allModes().filter((m) => !isPickerHidden(m.id)).map((m) => ({
     value: m.id,
     label: viewCaption(m),
     group: m.kind === "arcade" ? "arcade" : m.kind === "demo" ? "demo" : "graph",
@@ -790,8 +816,14 @@ export function viewSelectOptions(): { value: string; label: string; hint: strin
     ...row,
     hint: i < 9 ? `${i + 1}` : i === 9 ? "0" : row.group,
   }));
+  const marked = suffixFor
+    ? numbered.map((row) => {
+      const suffix = suffixFor(row.value);
+      return suffix ? { ...row, label: `${row.label} · ${suffix}` } : row;
+    })
+    : numbered;
   const blocked = blockedViewSelectRow(blockedCatalogEntries());
-  return blocked ? [...numbered, blocked] : numbered;
+  return blocked ? [...marked, blocked] : marked;
 }
 
 export async function fetchPlugins(): Promise<PluginList> {
@@ -813,6 +845,7 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
   const { rows, overlays } = partitionCatalog(specs);
   const nextLooks = new Map<string, PluginLook>();
   const modes: ViewMode[] = [];
+  const nextHidden = new Set<string>();
   for (const spec of rows) {
     const extra = overlays.get(spec.id);
     const merged = extra ? mergeOverlayPins(spec, extra) : spec;
@@ -820,13 +853,16 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
       if (view.look) nextLooks.set(pluginViewId(view.id, view.instanceId), view.look);
       if (!view.engine) continue;
       try {
-        modes.push(compilePlugin(view));
+        const mode = compilePlugin(view);
+        modes.push(mode);
+        if (merged.picker === "hidden") nextHidden.add(mode.id);
       } catch (e) {
         console.warn("zoto-viz plugin:", view.file || view.id, e);
       }
     }
   }
   looks = nextLooks;
+  pickerHidden = nextHidden;
   setPluginModes(modes);
   return modes;
 }
@@ -872,6 +908,8 @@ export async function installPlugins(): Promise<PluginView[]> {
       }
     }
     applyPluginCatalog(specs);
+    const { seedConsentFromCatalog } = await import("../app/consent-store");
+    seedConsentFromCatalog(specs);
     return specs;
   } catch (e) {
     console.warn("zoto-viz plugins:", e);

@@ -1,6 +1,7 @@
 id: sandbox-fixture-multi
 name: Sandbox Fixture Multi
 version: 1
+picker: hidden
 hint: QE smoke pack — module.js imports helper.js and fixture.json via pack-assets paths.
 capabilities:
   - viz.read

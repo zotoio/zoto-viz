@@ -2,6 +2,9 @@
  * "<View> · Starting…" while a view's own sky is fetched and compiled. Without it a pack-sky
  * tile is plain theme background for as long as the compile takes (60s on a software renderer),
  * which reads as a blank tile. The card fades out once the sky is on screen.
+ *
+ * The card never writes `data-view-state` itself: the tile's ViewState (`app/view-state`) stamps
+ * the tile, this card and any notice with one value.
  */
 export const SKY_STARTING_CLASS = "sky-starting-card";
 const FADE_MS = 400;
@@ -22,7 +25,6 @@ export function showSkyStartingCard(host: HTMLElement | null, name: string): voi
     host.appendChild(card);
   }
   card.classList.remove("fading");
-  card.dataset.viewState = "starting";
   card.querySelector(".sky-starting-name")!.textContent = skyStartingText(name);
 }
 
@@ -35,7 +37,6 @@ export function hideSkyStartingCard(host: HTMLElement | null, fade = true): void
     return;
   }
   card.classList.add("fading");
-  delete card.dataset.viewState;
   setTimeout(() => {
     if (card.classList.contains("fading")) card.remove();
   }, FADE_MS);

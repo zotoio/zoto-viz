@@ -259,17 +259,25 @@ def test_autoconsent_flag(tmp_path: Path, monkeypatch) -> None:
     assert plugins.consented(zip_ts) is False
 
     live.set_autoconsent(True)
+    # consented() is a pure read: auto-consent grants only through the explicit grant path.
+    assert plugins.consented(src_ts) is False
+    assert plugins.maybe_autoconsent(src_ts) is True
     assert plugins.consented(src_ts) is True
     assert plugins.consent_kind(src_ts) == "authored"
+    assert plugins.maybe_autoconsent(zip_ts) is False
     assert plugins.consented(zip_ts) is False
+    assert plugins.maybe_autoconsent(local_ts) is True
     assert plugins.consented(local_ts) is True
     assert plugins.consent_kind(local_ts) == "reviewed"
 
     live.set_autoconsent(False)
     stale = {**src_ts, "hash": "def"}
+    assert plugins.maybe_autoconsent(stale) is False
     assert plugins.consented(stale) is False
 
     live.set_autoconsent(True)
+    assert plugins.consented(stale) is False
+    assert plugins.maybe_autoconsent(stale) is True
     assert plugins.consented(stale) is True
     assert plugins.consent_kind(stale) == "authored"
 

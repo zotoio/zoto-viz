@@ -2,7 +2,7 @@ import type { ViewMode } from "../core/modes";
 import type { DreamAnim } from "../graph/scene";
 import type { ConsentReviewResult } from "./pack-consent";
 import type { PluginView } from "../plugins/plugin";
-import { pluginNeedsReview } from "../plugins/plugin";
+import { packNeedsConsent } from "./plugin-consent-mount";
 import type { Select } from "../ui/ui";
 import type { Mosaic } from "../graph/mosaic";
 import {
@@ -12,6 +12,8 @@ import {
 import { settleConsentAndDrainAuto } from "./mode-switch-coordinator";
 import { commitModeSwitchAttempt, throwIfAborted } from "./mode-switch-attempt";
 import { dropMediaAskGatedByPackConsent } from "../ui/media-ask";
+import { showNeedsYou } from "./needs-you";
+import { setViewState, showViewState, viewStateOf, type CouldntStartReason } from "./view-state";
 import {
   capturePresentDriveBeforeLiveModeCommit,
   restorePresentDriveAfterModeRollback,
@@ -83,22 +85,24 @@ export type ApplyModeHost = {
   showRollbackMessage: (kind: "declined" | "failed", declined: ViewMode, keptModeId: string) => string | null;
   retryDeclinedMode?: (modeId: string) => void;
   focusModePicker: () => void;
+  /** The tile's own sky wait is running (it owns "starting" until the sky lands or times out). */
+  tileSkyStarting?: (tileId: string) => boolean;
+  /** Take the previous view's pack runtime and sky off the solo wall (Needs you shows the theme background). */
+  stopPackRuntime?: (signal: AbortSignal) => void;
+  /**
+   * Auto-consent will grant this pick on its own (on, eligible, not an incomplete record): the
+   * tile shows starting while it does, and no Needs you or consent text is ever written.
+   */
+  willAutoConsent?: (spec: PluginView) => boolean;
 };
+
+/** Solo wall tile id in the per-tile ViewState map. */
+const SOLO_TILE = "main";
 
 export type ApplyModeFlags = { keepLayout?: boolean };
 
-function resolveKeptModeId(
-  host: ApplyModeHost,
-  prevPresent: ReturnType<typeof capturePresentDriveBeforeLiveModeCommit>,
-): string {
-  const last = host.getLastConsentedModeId();
-  if (last) return last;
-  if (prevPresent.prevPresentMode) return prevPresent.prevPresentMode;
-  return host.getFallbackKeptModeId();
-}
-
 function needsConsentBeforeShow(spec: PluginView | null): boolean {
-  return !!spec && pluginNeedsReview(spec) && !spec.consent;
+  return packNeedsConsent(spec);
 }
 
 function commitTargetPublicSurfaces(
@@ -151,18 +155,56 @@ function rollbackSwitch(
   return host.showRollbackMessage(kind, declined, keptModeId);
 }
 
+function tileFor(host: ApplyModeHost, m: ViewMode): string {
+  return host.mosaic?.on && !(m.pluginId && m.standalone) ? m.id : SOLO_TILE;
+}
+
+/** Needs you on the pick's own tile; Review there starts it in place (restart re-applies it). */
+function showPickNeedsYou(host: ApplyModeHost, m: ViewMode, spec: PluginView): void {
+  showNeedsYou({
+    tileId: tileFor(host, m),
+    viewId: m.id,
+    spec,
+    restart: () => host.retryDeclinedMode?.(m.id),
+  });
+}
+
+/** Couldn't start on the pick's own tile, with Retry. Never the previous view in its place. */
+function showPickCouldntStart(
+  host: ApplyModeHost,
+  m: ViewMode,
+  spec: PluginView | null,
+  reason: CouldntStartReason,
+  err?: unknown,
+): void {
+  const log = err instanceof Error ? err.message : err != null ? String(err) : undefined;
+  showViewState(
+    tileFor(host, m),
+    m.id,
+    spec?.name || host.modeLabel(m),
+    { kind: "couldnt-start", reason, packId: spec?.id ?? m.pluginId ?? m.id, ...(log ? { log } : {}) },
+    { onRetry: () => host.retryDeclinedMode?.(m.id) },
+  );
+}
+
+/** Loads done: ready, unless the tile's sky wait still owns starting or something failed. */
+function settleTileReady(host: ApplyModeHost, m: ViewMode): void {
+  const tile = tileFor(host, m);
+  const cur = viewStateOf(tile);
+  if (cur && cur.kind !== "starting" && cur.kind !== "needs-you") return;
+  if (cur?.kind === "starting" && host.tileSkyStarting?.(tile)) return;
+  setViewState(tile, m.id, { kind: "ready" });
+}
+
 function scheduleConsentFinalize(
   host: ApplyModeHost,
   m: ViewMode,
   spec: PluginView | null,
   paneSpec: PluginView | null,
-  prevPresent: ReturnType<typeof capturePresentDriveBeforeLiveModeCommit>,
-  mosaicSnap: MosaicAnimSnap | null,
-  paneRevert: MosaicPaneRevert | null,
+  prevLive: string,
   signal: AbortSignal,
 ): void {
   const targetId = m.id;
-  const keptOnFailure = resolveKeptModeId(host, prevPresent);
   const commitScene = (): void => {
     const skyStage = host.computeSkyStage(m, spec, host.optsFor(m));
     host.applyStageOnly(skyStage);
@@ -190,14 +232,16 @@ function scheduleConsentFinalize(
       settleConsentAndDrainAuto("aborted");
       return;
     }
-    if (host.modeSel.value !== targetId && host.modeSel.value !== keptOnFailure) return;
+    if (host.modeSel.value !== targetId) return;
     if (result === "ok") {
-      commitTargetPublicSurfaces(host, m, keptOnFailure);
+      commitTargetPublicSurfaces(host, m, prevLive);
       host.setLiveMode(targetId);
       host.refreshPluginDrive(spec, targetId);
       commitScene();
       host.markModeConsented(targetId);
       host.syncModeHud(m, spec);
+      // Approved (or never needed it): the tile leaves Needs you at once and starts in place.
+      setViewState(tileFor(host, m), targetId, { kind: "starting" });
       try {
         throwIfAborted(signal);
         if (host.shouldLoadPluginRuntime(m)) {
@@ -211,25 +255,26 @@ function scheduleConsentFinalize(
           settleConsentAndDrainAuto("aborted");
           return;
         }
-        rollbackSwitch(host, keptOnFailure, m, prevPresent, mosaicSnap, paneRevert, "failed", signal);
+        commitModeSwitchAttempt(signal);
+        showPickCouldntStart(host, m, spec, "load-failed", e);
+        host.focusModePicker();
         settleConsentAndDrainAuto("failed", m.id);
         return;
       }
+      settleTileReady(host, m);
       commitModeSwitchAttempt(signal);
       settleConsentAndDrainAuto(result);
       host.focusModePicker();
       return;
     }
-    rollbackSwitch(
-      host,
-      keptOnFailure,
-      m,
-      prevPresent,
-      mosaicSnap,
-      paneRevert,
-      result === "declined" ? "declined" : "failed",
-      signal,
-    );
+    // Not now / no answer: the pick stays the view, on Needs you. Could not save the OK: Couldn't
+    // start with Retry. Neither ever puts the previous view back.
+    commitModeSwitchAttempt(signal);
+    dropMediaAskGatedByPackConsent();
+    host.onConsentDeclined();
+    if (result === "declined" && spec) showPickNeedsYou(host, m, spec);
+    else showPickCouldntStart(host, m, spec, "grant-failed");
+    host.focusModePicker();
     settleConsentAndDrainAuto(result, m.id);
   })();
 }
@@ -247,36 +292,27 @@ export function applyModeImpl(
   const spec = m.pluginId ? host.pluginSpecForMode(m.id) : null;
   const paneSpec = host.skySpecForMode(m.id, spec);
   const skyStage = host.computeSkyStage(m, spec, opts);
+  // Needs you or not, the pick is the view: picker, header, sky prompt and tile all name it. A
+  // pack waiting on its OK runs no code: theme background (stage only, no pack sky) and Needs you.
   const gateScene = needsConsentBeforeShow(spec);
-  const heldId = gateScene ? resolveKeptModeId(host, prevPresent) : m.id;
-  const heldMode = host.modeById(heldId);
-  const heldOpts = host.optsFor(heldMode);
+  const tileStage = gateScene || skyStage;
 
-  if (gateScene) {
-    host.modeSel.value = heldId;
-  } else {
-    host.modeSel.value = m.id;
-    localStorage.setItem("zoto-viz.mode", m.id);
-  }
-  host.applySkyPrompt(gateScene ? heldMode : m, gateScene ? heldOpts : opts);
+  host.modeSel.value = m.id;
+  localStorage.setItem("zoto-viz.mode", m.id);
+  host.applySkyPrompt(m, opts);
   host.touch();
-  host.applyPluginWall(heldId, { ...flags, prevMode: prevLive });
-  if (!gateScene) {
-    host.setLiveMode(m.id);
-    host.refreshPluginDrive(spec, m.id);
-    host.applyStageOnly(skyStage);
-    host.applyModeFeedExtras(m, opts);
-    host.bindThisView(m.id);
-  } else {
-    host.bindThisView(heldId);
-  }
+  host.applyPluginWall(m.id, { ...flags, prevMode: prevLive });
+  host.setLiveMode(m.id);
+  host.refreshPluginDrive(gateScene ? null : spec, m.id);
+  host.applyStageOnly(tileStage);
+  host.applyModeFeedExtras(m, opts);
+  host.bindThisView(m.id);
   host.clearModeOpts();
 
   let mosaicSnap: MosaicAnimSnap | null = null;
-  let paneRevert: MosaicPaneRevert | null = null;
 
-  host.feedSetGraphBase((gateScene ? heldMode : m).graphBase ?? "topology");
-  host.syncWifiIfNeeded(gateScene ? heldMode : m);
+  host.feedSetGraphBase(m.graphBase ?? "topology");
+  host.syncWifiIfNeeded(m);
 
   if (host.mosaic?.on && !(m.pluginId && m.standalone)) {
     if (host.mosaicShouldResize(m.id, !!flags.keepLayout)) {
@@ -291,19 +327,28 @@ export function applyModeImpl(
         rollbackSwitch(host, kept, m, prevPresent, mosaicSnap, null, "failed", signal);
         return;
       }
-      paneRevert = { slot, modeId: m.id };
     }
-    if (!gateScene) {
-      host.applyMosaicModeVisuals(m, opts, spec, skyStage);
-      host.applyViewLook();
-    }
-    scheduleConsentFinalize(host, m, spec, paneSpec, prevPresent, mosaicSnap, paneRevert, signal);
+    host.applyMosaicModeVisuals(m, opts, spec, tileStage);
+    host.applyViewLook();
+    if (gateScene && spec) gateUntilOk(host, m, spec, signal);
+    scheduleConsentFinalize(host, m, spec, paneSpec, prevLive, signal);
     return;
   }
 
-  if (!gateScene) {
-    host.applySoloModeVisuals(m, opts, spec, skyStage);
-    host.applyViewLook();
-  }
-  scheduleConsentFinalize(host, m, spec, paneSpec, prevPresent, mosaicSnap, paneRevert, signal);
+  host.applySoloModeVisuals(m, opts, spec, tileStage);
+  host.applyViewLook();
+  if (gateScene && spec) gateUntilOk(host, m, spec, signal);
+  scheduleConsentFinalize(host, m, spec, paneSpec, prevLive, signal);
+}
+
+/**
+ * Before the OK: the previous view's pack and sky come off (theme background), the HUD names the
+ * pick, and the tile shows Needs you. Nothing of the picked pack loads.
+ */
+function gateUntilOk(host: ApplyModeHost, m: ViewMode, spec: PluginView, signal: AbortSignal): void {
+  host.syncModeHud(m, spec);
+  if (!host.mosaic?.on || (m.pluginId && m.standalone)) host.stopPackRuntime?.(signal);
+  // Auto-consent resolves before any notice is written: starting now, the view once it grants.
+  if (host.willAutoConsent?.(spec)) setViewState(tileFor(host, m), m.id, { kind: "starting" });
+  else showPickNeedsYou(host, m, spec);
 }

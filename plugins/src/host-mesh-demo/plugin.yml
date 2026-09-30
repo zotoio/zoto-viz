@@ -1,6 +1,7 @@
 id: host-mesh-demo
 name: Host mesh demo
 version: 1
+picker: hidden
 hint: Host-owned GLB instancing driven from sandbox slot 2 (fixture triangle mesh).
 description: Demonstrates the host mesh lane — one instanced demo model, no live capture required.
 capabilities:

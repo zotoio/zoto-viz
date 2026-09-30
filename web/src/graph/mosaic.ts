@@ -16,7 +16,7 @@ import {
   assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, nextPaneTilesForPicker, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
 } from "./mosaic-layout";
-import { fillViewSelect, lookForMode, mergeLook, tileDisplayName } from "../plugins/plugin";
+import { fillViewSelect, isPickerHidden, lookForMode, mergeLook, tileDisplayName } from "../plugins/plugin";
 import { releasePanelView } from "./panel-view-lifecycle";
 import { bindVizDriveElement, clearVizDrive } from "../plugins/viz-drive";
 import { dropMosaicTileWriter } from "./mosaic-viz-feed";
@@ -198,7 +198,7 @@ export function assignParsedMosaicTree(
 
 /** Graphs first so a dice / new wall is not mostly empty stills or arcade stages. */
 export function mosaicPanePool(): string[] {
-  const modes = allModes();
+  const modes = allModes().filter((m) => !isPickerHidden(m.id));
   return [
     ...modes.filter((m) => !m.standalone).map((m) => m.id),
     ...modes.filter((m) => m.standalone).map((m) => m.id),

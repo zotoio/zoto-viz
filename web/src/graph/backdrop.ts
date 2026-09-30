@@ -1333,6 +1333,8 @@ export class Backdrop {
       this.pluginId = id;
       this.pluginFrag = frag;
       this.mesh.material = this.pluginMat;
+      // #180 H2: it may have been off the sphere through a resize; uResolution is the buffer now.
+      this.syncPluginHostUniforms();
       return;
     }
     if (this.kind === "plugin" && this.pluginMat) this.beginSkyMorph();
@@ -1353,6 +1355,8 @@ export class Backdrop {
     });
     pluginSkyMaterialsCreated += 1;
     this.mesh.material = this.pluginMat;
+    // #180 H2: never leave the (16, 9) placeholder; the pack draws at the real buffer size.
+    this.syncPluginHostUniforms();
   }
 
   /** Plugin id currently bound to the sphere, or null when the shipped program is showing. */
