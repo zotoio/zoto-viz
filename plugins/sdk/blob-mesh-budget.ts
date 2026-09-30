@@ -33,8 +33,19 @@
  *      target is scaled by one lambda in [0, 1] so the sum fits (the reserve guarantees lambda >= 0
  *      fits). Radius order matches rate order, and equal rates get equal radii.
  *   3. everything is then scaled up by one s >= 1 until the drawn devices use the whole budget
- *      (sum r^2 = B). No absolute-traffic cap: one device alone is one big blob (sqrt(B) = 0.343),
- *      and a quiet LAN's devices share the budget evenly.
+ *      (sum r^2 = B), or (#193) until the two biggest radii sum to BLOB_MESH_PAIR_REACH (site
+ *      spacing 0.4410 minus BLOB_MESH_GAP 0.12 = 0.3210), whichever comes first. Any two site
+ *      holders then stay apart at the shader's merge distance, so fewer devices never makes blobs
+ *      harder to tell apart. A uniform scale keeps every ratio (1.4x, the 25% share). With 7 or 8
+ *      drawn the budget already keeps the pair under the reach (0.302); 2 to 6 drawn now stop
+ *      short of the whole budget. One device alone has no pair and still grows to sqrt(B) = 0.343.
+ *      No absolute-traffic cap. The half-rate share also needs its pair to fit the reach.
+ *   4. #193 pair cap: with a single busiest, step 2's lambda also stops the others' growth where
+ *      the biggest of them plus the busiest reaches the reach (the busiest keeps its target, so
+ *      1.4x holds). Only two or more devices tied for busiest at 1.4x a quietest at the floor
+ *      (2 x 0.168 = 0.336) can still be over it: then every radius's extra above the floor
+ *      shrinks by one factor so the pair sums to exactly the reach. The floor, rate order and ties
+ *      hold; the contrast there drops to 0.1605 / 0.12 = 1.34x.
  */
 
 /** Slots the sky draws (sky/fragment.glsl loops over 8 zotoVizSlots). */
@@ -71,10 +82,12 @@ export type BlobMeshPlan = {
   hidden: number;
   /** A hidden device is exactly as busy as the quietest shown one (a tie at the cut). */
   tieAtCut: boolean;
-  /** Scale on the non-busiest growth toward their targets, in [0, 1]. */
+  /** Scale on the non-busiest growth toward their targets, in [0, 1] (budget- and #193 pair-capped). */
   lambda: number;
-  /** Uniform scale applied last, >= 1. */
+  /** Uniform scale toward the budget, >= 1. */
   scale: number;
+  /** #193 pair cap on the extra above the floor, in (0, 1]; 1 when the two biggest already fit. */
+  pairCap: number;
   /** The 25% half-rate share fit in the leftover budget (false: plain rate-order fallback). */
   halfRateShare: boolean;
 };
@@ -122,7 +135,7 @@ export function planBlobMesh(
   const hidden = rates.length - shownIdx.length;
   const tieAtCut = hidden > 0 && clean(order[fit]!) === clean(order[fit - 1]!);
   const n = shownIdx.length;
-  if (n === 0) return { shownIdx, radii: [], hidden, tieAtCut, lambda: 1, scale: 1, halfRateShare: false };
+  if (n === 0) return { shownIdx, radii: [], hidden, tieAtCut, lambda: 1, scale: 1, halfRateShare: false, pairCap: 1 };
   const drawn = shownIdx.map((i) => Math.max(0, rates[i]!));
   const hi = Math.max(...drawn);
   const lo = Math.min(...drawn);
@@ -141,7 +154,9 @@ export function planBlobMesh(
   const isHalf = drawn.map((r, j) => !isTop[j] && hi > lo && 2 * r >= hi);
   const share = blobMeshMinimumShape(drawn, floor);
   const shareNeed = drawn.reduce((s, _, j) => s + (isTop[j] ? share.busiest : isHalf[j] ? share.half : floor) ** 2, 0);
-  const halfRateShare = shareNeed <= budget + 1e-12; // share only with room
+  const shareTop = drawn.map((_, j) => (isTop[j] ? share.busiest : isHalf[j] ? share.half : floor)).sort((x, y) => y - x);
+  const shareReach = n < 2 || shareTop[0]! + shareTop[1]! <= BLOB_MESH_PAIR_REACH + 1e-12; // #193: the pair still fits the lattice
+  const halfRateShare = shareNeed <= budget + 1e-12 && shareReach; // share only with room
   const quietest = halfRateShare ? share.quietest : floor;
   const target = drawn.map((r) => quietest * (1 + gain * pos(r)));
   const busiest = quietest * (1 + gain);
@@ -162,11 +177,25 @@ export function planBlobMesh(
     lambda = (-b + Math.sqrt(Math.max(0, b * b - 4 * a * c))) / (2 * a);
     lambda = Math.min(1, Math.max(0, lambda));
   }
+  // #193: with one busiest, the others' growth also stops where the biggest of them plus the busiest
+  // reaches BLOB_MESH_PAIR_REACH (the busiest keeps its target, so the 1.4x contrast holds)
+  if (n >= 2 && isTop.filter(Boolean).length === 1) {
+    for (let j = 0; j < n; j++) {
+      const d = isTop[j] ? 0 : Math.max(target[j]!, base[j]!) - base[j]!;
+      if (d > 0) lambda = Math.min(lambda, Math.max(0, (BLOB_MESH_PAIR_REACH - busiest - base[j]!) / d));
+    }
+  }
   const radii = target.map((t, j) => (isTop[j] ? t : base[j]! + lambda * (Math.max(t, base[j]!) - base[j]!)));
-  // 3. grow into the whole budget (no absolute-traffic cap)
+  // 3. grow into the whole budget, but no further than the two biggest fitting the lattice (#193)
   const sumR2 = radii.reduce((s, r) => s + r * r, 0);
-  const scale = Math.max(1, Math.sqrt(budget / sumR2)); // grow into budget
-  return { shownIdx, radii: radii.map((r) => r * scale), hidden, tieAtCut, lambda, scale, halfRateShare };
+  const big = [...radii].sort((x, y) => y - x);
+  const pair = n >= 2 ? big[0]! + big[1]! : 0;
+  const scale = Math.max(1, Math.min(Math.sqrt(budget / sumR2), n >= 2 ? BLOB_MESH_PAIR_REACH / pair : Infinity)); // grow into budget
+  // 4. #193 pair cap, only when the pair is over the reach before any growth: the extra above the
+  //    floor shrinks by one factor so the two biggest sum to exactly the reach
+  const pairCap = n >= 2 && pair > BLOB_MESH_PAIR_REACH ? (BLOB_MESH_PAIR_REACH - 2 * floor) / (pair - 2 * floor) : 1;
+  const out = pairCap < 1 ? radii.map((r) => floor + pairCap * (r - floor)) : radii.map((r) => r * scale);
+  return { shownIdx, radii: out, hidden, tieAtCut, lambda, scale, halfRateShare, pairCap };
 }
 
 export function blobMeshRoleHue(role: string): number {
@@ -273,8 +302,8 @@ export const BLOB_MESH_DRIFT_SPEED = 0.15;
  * left-right. The drift is shared, so centre distances are site distances at every t: two site
  * holders stay apart at the shader's merge distance while r1 + r2 + BLOB_GAP <= 0.4410. With 7 or
  * 8 drawn (six or more at the 0.12 floor inside the budget) any two radii sum to at most
- * sqrt(2 (B - 5 x 0.12^2)) = 0.302, so at BLOB_GAP 0.12 that always holds; sparser frames' bigger
- * blobs can touch.
+ * sqrt(2 (B - 5 x 0.12^2)) = 0.302, so at BLOB_GAP 0.12 that always holds; with 6 or fewer
+ * drawn, planBlobMesh caps growth at BLOB_MESH_PAIR_REACH so it holds there too.
  */
 export const BLOB_MESH_SITES: readonly (readonly [number, number])[] = (() => {
   const { cx, cy, ax, ay } = BLOB_MESH_SPREAD;
@@ -282,6 +311,20 @@ export const BLOB_MESH_SITES: readonly (readonly [number, number])[] = (() => {
   const sy = ay - BLOB_MESH_DRIFT;
   return [[cx + sx, cy], [cx, cy + sy], [cx - sx, cy], [cx, cy - sy]];
 })();
+
+/** Must match `const float BLOB_GAP` in sky/fragment.glsl (the placement rows read both). */
+export const BLOB_MESH_GAP = 0.12;
+/** Smallest distance between two lattice sites, uv: the rhombus side, 0.4410. */
+export const BLOB_MESH_SITE_SPACING = Math.min(
+  ...BLOB_MESH_SITES.flatMap(([ax, ay], i) => BLOB_MESH_SITES.slice(i + 1).map(([bx, by]) => Math.hypot(ax - bx, ay - by))),
+);
+/**
+ * Largest r1 + r2 two site holders may have and still stay apart at the merge distance
+ * (r1 + r2 + BLOB_MESH_GAP <= BLOB_MESH_SITE_SPACING): 0.3210, less a 1e-6 float margin (a pair
+ * capped at exactly the spacing lands 1e-16 inside it once the drift's rounding is in).
+ * planBlobMesh caps its growth to it.
+ */
+export const BLOB_MESH_PAIR_REACH = BLOB_MESH_SITE_SPACING - BLOB_MESH_GAP - 1e-6;
 
 /** Which site each of the busiest (up to BLOB_MESH_SITES.length) drawn devices holds: id -> site index. */
 export type BlobMeshSiteMap = Map<string, number>;

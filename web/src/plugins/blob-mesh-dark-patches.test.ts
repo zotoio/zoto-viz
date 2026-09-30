@@ -482,7 +482,11 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
     expect(r.five.dark, r.text).toBeLessThanOrEqual(UXPRO_MAX_DARK);
   });
 
-  /** Over time (spread placement drifts): sparse 1, 2 and 3 devices plus every other case, every 5 s from 0 to 60 s, <= 2 dark at every step. */
+  /**
+   * Over time (the lattice drifts): sparse 1, 2 and 3 devices plus every other case, every 5 s from
+   * 0 to 60 s, <= 2 dark at every step. Revert: SKY_FLOOR 0.15 (fragment.glsl) -> red (EMPTY, EQUAL7,
+   * EQUAL8; red from 0.17 down).
+   */
   const PAIR: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 400), talker("172.30.0.31", 1)] };
   const TRIPLE: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 120), talker("172.30.0.11", 60), talker("172.30.0.12", 2)] };
   const SWEPT: [string, VizDataFrame][] = [
@@ -541,57 +545,37 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
   }
 
   /**
-   * Uniform row (#195 pattern): drive the pack's onFrame at the audio peak on LAN7 and LAN11, read
-   * the effective sky uBright from the uniforms (yml skyBright x pack uBright), and find by a 0.01 walk plus bisection
-   * on the same mirror the brightest uBright up to which the sky stays >= 5 luma under the dimmest blob at
-   * every 5 s step from 0 to 60 s (no copy of either number lives in the test). The yml skyBright
-   * must clear it, and be the tightest two-decimal value that does (skyBright + 0.01 must not).
-   * The gap is not monotonic in uBright: once the dimmest blob's centre clamps at 255 the sky
-   * catches up, then clamps too and the gap reopens. So walk up from the floor in 0.01 steps to the
-   * first uBright that doesn't clear, then bisect that step.
+   * Uniform row (#195 pattern; UX Pro ruling after #193): the contrast rule unchanged at the yml
+   * skyBright (1.03). Drive the pack's onFrame at the audio peak on LAN7 and LAN11 at every 5 s step
+   * from 0 to 60 s, then re-shade each frame at every uBright on a 0.01 grid up to 3: the sky's
+   * brightest pixel stays >= 5 luma under the dimmest blob. The grid starts at UB_LO = 0.05, not 0:
+   * uBright scales the whole picture, so at 0 the frame is black and the gap is 0 (2.6 at 0.02), and
+   * no rule on a luma gap can hold there. The pack's own effective uBright (audio 0 to 1) must sit
+   * inside the grid. Replaces the "tightest skyBright" row: on the lattice no uBright up to 3 loses
+   * the gap, so there is no tightest value to pin. Revert: today's hashed placement -> red.
    */
-  const uniformRow = () => {
-    const frames = [LAN7, LAN11].flatMap((f) => Array.from({ length: 13 }, (_, i) => ({ ...f, t: i * 5, audio: AUDIO_PEAK })));
-    const looks = frames.map((f) => packLook(f));
-    const clears = (uBright: number) => frames.every((f, i) => {
-      const r = blobVsSky(f, { ...looks[i]!.u, uBright });
-      return r.dimmestBlob - r.skyPeak >= SKY_UNDER_BLOB_MARGIN;
-    });
-    // The gap is not monotonic in uBright: once the dimmest blob's centre clamps at 255 the sky
-    // catches up, then clamps too and the gap reopens (it clears again at uBright 2). So walk up
-    // from the floor in 0.01 steps to the first uBright that doesn't clear, then bisect that step:
-    // the limit is the brightest uBright up to which every value clears.
-    let lo = 0.5;
-    expect(clears(lo), "search floor must clear").toBe(true);
-    while (lo < 3 && clears(lo + 0.01)) lo += 0.01;
-    let hi = lo + 0.01;
-    expect(clears(hi), "some uBright under 3 must not clear").toBe(false);
-    while (hi - lo > 0.0005) { const mid = (lo + hi) / 2; if (clears(mid)) lo = mid; else hi = mid; }
-    expect(new Set(looks.map((l) => l.u.uBright)).size, "uBright does not move with t or with LAN7 vs LAN11").toBe(1);
-    const sky = lookNumber("skyBright");
-    const pack = looks[0]!.packBright;
-    const eff = looks[0]!.u.uBright;
-    const limit = lo / pack; // largest skyBright that clears, in yml units
-    const text = `effective uBright ${eff.toFixed(4)} (skyBright ${sky} x pack uBright ${pack.toFixed(3)} at audio ${AUDIO_PEAK}) vs brightest clearing ${lo.toFixed(4)} (skyBright limit ${limit.toFixed(4)})`;
-    process.stdout.write(`[sky-uniform] LAN7+LAN11: ${text}\n`);
-    expect(eff, text).toBeLessThanOrEqual(lo);
-    expect(Math.round((sky + 0.01) * 100) / 100, `tightest two-decimal skyBright: ${text}`).toBeGreaterThan(limit);
-  };
-  /**
-   * Known gap since #193's lattice placement (it.fails on the no-limit assertion only): with the
-   * busiest 4 on separate sites the sky stays >= 5 luma under the dimmest blob at every uBright up
-   * to 3 (worst gap 7.7 at uBright 1.3; 33.3 at 1.03), so no tightest skyBright exists under this
-   * rule and 1.03 (UX Pro's value, the tightest on the old hashed placement) can't be pinned by it.
-   * Any other failure, or a limit showing up again, makes this row red.
-   */
-  const NO_LIMIT = /^some uBright under 3 must not clear: expected true to be false/;
-  it.fails(`uniform (known gap, it.fails on the no-limit assertion): the pack's effective sky uBright at the audio peak (LAN7, LAN11) is at most the brightest that keeps the sky >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob, and skyBright is the tightest two-decimal value`, () => {
-    let msg = "(no failure)";
-    let err: unknown = null;
-    try { uniformRow(); } catch (e) { err = e; msg = e instanceof Error ? e.message : String(e); }
-    const hit = NO_LIMIT.test(msg);
-    process.stdout.write(`[sky-uniform] ${hit ? "no-limit assertion (known gap)" : "NOT the no-limit assertion"}: ${msg}\n`);
-    if (hit) throw err;
+  const UB_LO = 0.05;
+  it(`uniform: at skyBright ${lookNumber("skyBright")} the sky stays >= ${SKY_UNDER_BLOB_MARGIN} luma under the dimmest blob on LAN7 and LAN11 at every 5 s step from 0 to 60 s, for every uBright from ${UB_LO} to 3 (0.01 grid), and the pack's own uBright is inside that range`, () => {
+    const live: [string, VizDataFrame][] = [["LAN7", LAN7], ["LAN11", LAN11]];
+    const frames = live.flatMap(([name, f]) => Array.from({ length: 13 }, (_, i) => ({ name, f: { ...f, t: i * 5, audio: AUDIO_PEAK } })));
+    const looks = frames.map(({ f }) => packLook(f));
+    const packRange = [0, AUDIO_PEAK].map((audio) => packLook({ ...LAN7, audio }).u.uBright);
+    let worst = { gap: Infinity, at: "" };
+    let fails = 0;
+    for (let k = Math.round(UB_LO * 100); k <= 300; k++) {
+      const uBright = k / 100;
+      frames.forEach(({ name, f }, i) => {
+        const r = blobVsSky(f, { ...looks[i]!.u, uBright });
+        const gap = r.dimmestBlob - r.skyPeak;
+        if (gap < SKY_UNDER_BLOB_MARGIN) fails++;
+        if (gap < worst.gap) worst = { gap, at: `${name} t=${f.t} uBright=${uBright.toFixed(2)} skyPeak=${r.skyPeak.toFixed(1)} dimmestBlob=${r.dimmestBlob.toFixed(1)}` };
+      });
+    }
+    const text = `skyBright ${lookNumber("skyBright")}; pack uBright ${packRange.map((u) => u.toFixed(3)).join(" to ")} (audio 0 to ${AUDIO_PEAK}); worst gap ${worst.gap.toFixed(1)} at ${worst.at}; ${fails} (uBright, frame) pairs under ${SKY_UNDER_BLOB_MARGIN}`;
+    process.stdout.write(`[sky-uniform] ${text}\n`);
+    expect(lookNumber("skyBright"), text).toBe(1.03);
+    for (const u of packRange) expect(u >= UB_LO && u <= 3, `pack uBright inside the grid: ${text}`).toBe(true);
+    expect(worst.gap, text).toBeGreaterThanOrEqual(SKY_UNDER_BLOB_MARGIN);
   }, 600_000);
 
   /**
@@ -681,5 +665,52 @@ describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_
       }
     }
     process.stdout.write(`[separation] acceptance:\n  ${lines.join("\n  ")}\n`);
+  });
+  /**
+   * #193 small counts (UX Pro: fewer devices must never make blobs harder to tell apart), on the
+   * REAL sizing and placement: frames of 1 to 6 devices (LAN7's busiest n, n equal devices, and two
+   * tied for busiest over quieter ones), every 5 s from 0 to 60 s with the site map carried and the
+   * host slots cross-checked. With 3 or fewer drawn every pair is at least its merge distance apart
+   * (n lumps); with 4 to 6 the busiest 4 are pairwise apart (the others may join a site's lump).
+   * Merge distance r1 + r2 + BLOB_GAP from fragment.glsl, radii from planBlobMesh.
+   * Revert: planBlobMesh growing small counts into the whole budget uncapped -> red.
+   */
+  it("#193 small counts: 1 to 6 devices keep every blob (<= 3 drawn) or the busiest 4 (4 to 6 drawn) pairwise apart at the shader's merge distance, inside the safe ellipse, every 5 s from 0 to 60 s", () => {
+    const shape = mirrorShape(SKY);
+    expect(shape.falloff.kind, "merge distance needs the compact falloff (fragment.glsl)").toBe("compact");
+    const t = (id: string, rate: number) => ({ id, rate, role: "lan" });
+    const families: [string, (n: number) => VizDataFrame | null][] = [
+      ["LAN7 top", (n) => ({ ...LAN7, talkers: [...LAN7.talkers].sort((a, b) => b.rate - a.rate).slice(0, n) })],
+      ["equal", (n) => ({ ...LAN7, talkers: Array.from({ length: n }, (_, i) => t(`10.9.0.${10 + i}`, 60)) })],
+      ["tied top", (n) => (n < 2 ? null : { ...LAN7, talkers: Array.from({ length: n }, (_, i) => t(`10.8.0.${10 + i}`, i < 2 ? 100 : 40 - i)) })],
+    ];
+    const lines: string[] = [];
+    for (let n = 1; n <= 6; n++) {
+      for (const [fam, make] of families) {
+        const frame = make(n);
+        if (!frame) continue;
+        const sites: BlobMeshSiteMap = new Map();
+        const tile = `small-${fam}-${n}-${hostTiles++}`;
+        let closest = { margin: Infinity, text: "no pair" };
+        for (let step = 0; step <= 60; step += 5) {
+          const blobs = placedStep(frame, step, shape, sites, tile);
+          expect(blobs, `${fam} n=${n} t=${step}: drawn`).toHaveLength(n);
+          for (const b of blobs) expect(inSafeEllipse(b.x, b.y), `${fam} n=${n} t=${step}: ${b.id} inside the safe ellipse`).toBe(true);
+          const judged = n <= 3 ? blobs : blobs.filter((b) => b.site !== undefined);
+          if (n > 3) expect(judged, `${fam} n=${n} t=${step}: 4 site holders`).toHaveLength(4);
+          for (let i = 0; i < judged.length; i++) for (let j = i + 1; j < judged.length; j++) {
+            const A = judged[i]!, B = judged[j]!;
+            const d = Math.hypot(A.x - B.x, A.y - B.y);
+            const md = mergeDistance(A.r, B.r, shape.falloff);
+            const why = `${fam} n=${n} t=${step}: ${A.id} r=${A.r.toFixed(4)} / ${B.id} r=${B.r.toFixed(4)} ${d.toFixed(4)} uv vs merge ${md.toFixed(4)}`;
+            if (d - md < closest.margin) closest = { margin: d - md, text: why };
+            expect(d, `pairwise apart: ${why}`).toBeGreaterThanOrEqual(md);
+          }
+          if (n <= 3) expect(blobLumps(blobs, shape.falloff), `${fam} n=${n} t=${step}: every blob its own lump`).toBe(n);
+        }
+        lines.push(`${fam} n=${n}: radii ${planBlobMesh(frame.talkers.map((d) => d.rate)).radii.map((r) => r.toFixed(4)).join(",")}; closest ${closest.text}`);
+      }
+    }
+    process.stdout.write(`[small-counts]\n  ${lines.join("\n  ")}\n`);
   });
 });

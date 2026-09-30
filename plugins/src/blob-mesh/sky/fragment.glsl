@@ -4,7 +4,8 @@
 // below is unchanged. 0.12 is UX Pro's pick, still provisional (must stay > 0: 0 divides by zero).
 const float BLOB_GAP = 0.12;
 // #174: the empty sky between and around blobs is a dim share of the accent (not black), so a
-// sparse or quiet tile keeps a brightness step at every blob edge without dark patches.
+// sparse or quiet tile keeps a brightness step at every blob edge without dark patches. Revert
+// check: 0.15 turns the dark-patch rows red (they go red from 0.17 down; 0.18 still passes).
 const float SKY_FLOOR = 0.3;
 
 void main() {
