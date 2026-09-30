@@ -94,16 +94,22 @@ describe.skipIf(!pythonDepsReady())("pack bundle install gate (local zip path)",
   ] as const;
 
   for (const { dir, id } of fixtures) {
+    // 60 s: a load accommodation, not a behaviour change (the synchronous python install takes 14-19 s on a loaded box).
     it(`blocks ${dir} through install_local_zip`, () => {
       const pluginLocalDir = mkdtempSync(path.join(os.tmpdir(), "zoto-pack-boundary-"));
       try {
         const packDir = path.join(repoRoot, "plugins/sdk/pack-bundle-fixtures", dir);
         const zipPath = packTreeToZip(packDir);
-        const { info, ids } = tryInstallLocalZip(zipPath, pluginLocalDir);
+        const { info, ids } = tryInstallLocalZip(zipPath, pluginLocalDir) as {
+          info: Record<string, unknown>;
+          ids: string[];
+        };
         expect(info.ok).toBe(false);
         expect(isPackInstallBlockedPayload(info)).toBe(true);
+        if (!isPackInstallBlockedPayload(info)) throw new Error("expected a pack-install blocked payload");
         const message = formatPackInstallBlocked(info);
-        expect(message).toMatch(/was blocked|v1 is still running/);
+        expect(message).toMatch(/ was blocked because /);
+        expect(message).not.toMatch(/plugins\/|README|\.ts\b|\.mjs\b|`/);
         expect(message).not.toMatch(/plugins\/src\/[0-9a-f]{8}\//);
         expect(ids).not.toContain(id);
         const runtime = path.join(pluginLocalDir, ".runtime", id);
@@ -111,6 +117,6 @@ describe.skipIf(!pythonDepsReady())("pack bundle install gate (local zip path)",
       } finally {
         rmSync(pluginLocalDir, { recursive: true, force: true });
       }
-    });
+    }, 60_000);
   }
 });

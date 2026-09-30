@@ -23,7 +23,9 @@ from . import plugin_zip as pz
 from . import plugins
 from .pack_boundary import PackBundleBoundaryError, format_upgrade_blocked_message
 from .pack_id import refuse_case_insensitive_id_collision
+from .pack_zip_install_ux import installed_runtime_version
 from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
+from .pack_install_lint import REASON_INSTALL_CHECK_UNAVAILABLE, PackInstallLintSetupError
 from . import pack_safe_zip as psz
 from .pack_install_copy import (
     REASON_ALREADY_EXISTS,
@@ -490,7 +492,7 @@ def install_local_zip(
                     {
                         "ok": False,
                         "error": "pack_install_blocked",
-                        "message": format_upgrade_blocked_message(e.block, doc.get("version")),
+                        "message": format_upgrade_blocked_message(e.block, installed_runtime_version(runtime)),
                         "upgrade_blocked": "true",
                         **{k: v for k, v in e.block.to_dict().items() if k != "message"},
                     },
@@ -505,6 +507,8 @@ def install_local_zip(
             )
         except ValueError as e:
             text = str(e)
+            if isinstance(e, PackInstallLintSetupError):
+                return _finish({"ok": False, "error": REASON_INSTALL_CHECK_UNAVAILABLE, "message": text}, activate=False)
             if "was blocked" in text:
                 return _finish({"ok": False, "error": "pack_boundary", "message": text}, activate=False)
             return _finish({"ok": False, "error": text, "message": text}, activate=False)
@@ -637,6 +641,8 @@ def publish_local(body: dict[str, Any] | None) -> dict[str, Any]:
         return {"ok": False, "error": REASON_PACK_INSTALL_FAULT, "message": fault_message(str(e))}
     except ValueError as e:
         text = str(e)
+        if isinstance(e, PackInstallLintSetupError):
+            return {"ok": False, "error": REASON_INSTALL_CHECK_UNAVAILABLE, "message": text}
         if "was blocked" in text:
             return {"ok": False, "error": "pack_boundary", "message": text}
         return {"ok": False, "error": text}
@@ -905,6 +911,8 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
                 return {"ok": False, **e.block.to_dict()}
             except ValueError as e:
                 text = str(e)
+                if isinstance(e, PackInstallLintSetupError):
+                    return {"ok": False, "error": REASON_INSTALL_CHECK_UNAVAILABLE, "message": text, "id": pid}
                 if "was blocked" in text:
                     return {"ok": False, "error": "pack_boundary", "message": text}
                 return {"ok": False, "error": text, "id": pid}

@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+from .pack_block_copy import BLOCK_FIX_TAIL, BLOCK_INSTALL, block_message
+
 REASON_PACK_INSTALL_BLOCKED = "pack_install_blocked"
 REASON_PACK_INSTALL_FAULT = "pack_install_fault"
 REASON_SCHEMA_INVALID = "pack_schema_invalid"
@@ -20,9 +22,8 @@ ZIP_UX_OVERSIZE_TAIL = "It unpacks to more than packs are allowed."
 ZIP_UX_INSTALL_FAILED = "Couldn't install {stem}.zip. {tail}"
 ZIP_UX_DROP_SCHEMA_TAIL = "The plugin id in this pack isn't valid."
 ZIP_UX_DROP_ALREADY_EXISTS_TAIL = "This pack is already in the drop zone."
-BLOCKED_MESSAGE = (
-    "{label} was blocked. {body} Nothing was installed and the current wall is unchanged."
-)
+# #185: every block message has one shape (service/pack_block_copy.py).
+BLOCKED_MESSAGE = BLOCK_INSTALL + " " + BLOCK_FIX_TAIL
 FAULT_MESSAGE = (
     "Packs can't be installed right now because the list of installed packs couldn't be read. {detail}"
 )
@@ -38,9 +39,8 @@ _DISPLAY_STEM_MAX = 80
 _LOG_ZIP_REJECTED = "pack zip install rejected: %s"
 
 def blocked_message(plugin_name: str, detail: str) -> str:
-    label = (plugin_name or "Plugin").strip()
-    body = (detail or "Pack checks failed.").strip()
-    return BLOCKED_MESSAGE.format(label=label, body=body)
+    """``detail`` is the plain sentence ("it loads code from outside its own folder.")."""
+    return block_message(plugin_name, detail)
 
 def fault_message(detail: str) -> str:
     return FAULT_MESSAGE.format(detail=detail.strip())
