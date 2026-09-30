@@ -511,6 +511,34 @@ describe("#179 render host context recovery (Backrooms boot)", () => {
     wall.remove();
   });
 
+  it("software host (UX Pro): after a loss the notice's own 10 s window still offers Reload -- never stuck on Restoring with nothing to press", () => {
+    const wall = document.createElement("div");
+    document.body.appendChild(wall);
+    const host = new RenderHost(wall, { software: true });
+    expect(host.software).toBe(true);
+    const restoreTimer = () => (host as unknown as { restoreTimer: ReturnType<typeof setTimeout> | null }).restoreTimer;
+    const before = vi.getTimerCount();
+    host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+    // No restore timer on a software host: the notice's window is the only way out.
+    expect(restoreTimer(), "host restore timer on a software host").toBeNull();
+    expect(vi.getTimerCount(), "timers the loss added (the notice window only)").toBe(before + 1);
+    expect(notices(wall).map((n) => n.textContent)).toEqual([GFX_INTERRUPTED_NOTICE]);
+    vi.advanceTimersByTime(9_999);
+    expect(notices(wall).map((n) => n.textContent), "at 9.999 s: still Restoring").toEqual([GFX_INTERRUPTED_NOTICE]);
+    expect(wall.querySelectorAll(".gfx-wall-reload").length, "no Reload before 10 s").toBe(0);
+    vi.advanceTimersByTime(1);
+    const n = notices(wall);
+    expect(n.length, "one notice at 10 s").toBe(1);
+    expect(n[0]!.textContent, "at 10 s: the cant-draw copy with Reload").toBe(`${GFX_NO_RESTORE_NOTICE}Reload`);
+    expect(n[0]!.querySelectorAll(".gfx-wall-reload").length, "one Reload button to press").toBe(1);
+    expect(restoreTimer(), "still no host restore timer").toBeNull();
+    expect(vi.getTimerCount(), "nothing left pending after the window (no restore retries)").toBe(before);
+    vi.advanceTimersByTime(20_000);
+    expect(notices(wall).map((x) => x.textContent), "Reload stays up").toEqual([`${GFX_NO_RESTORE_NOTICE}Reload`]);
+    host.dispose();
+    wall.remove();
+  });
+
   it("GL host whose renderer has no forceContextRestore: a context loss never schedules a restore either", () => {
     const wall = document.createElement("div");
     document.body.appendChild(wall);
