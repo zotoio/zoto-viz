@@ -35,7 +35,9 @@ function meshCountIn(root: THREE.Object3D): number {
   return n;
 }
 
-type LanePrivate = HostMeshLane & {
+// #192: HostMeshLane's own `load`/`templates`/`skinnedLive` are private, so intersecting the class with
+// them collapsed to `never`. The test reaches them through this private-member view alone.
+type LanePrivate = {
   load: (
     packId: string,
     decl: { id: string; path: string },
@@ -104,15 +106,19 @@ describe("host mesh lane", () => {
     vi.stubGlobal("createImageBitmap", create);
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const bytes = new Uint8Array([0xff, 0xd8, 0xff, 0xd9]).buffer;
+    const images: NonNullable<Parameters<typeof embeddedImageTexturePlugin>[0]["json"]["images"]> = [
+      { name: "body_basecolor", mimeType: "image/jpeg", bufferView: 3 },
+    ];
     const parser = {
       json: {
         textures: [{ source: 0, sampler: 0, name: "body" }],
-        images: [{ name: "body_basecolor", mimeType: "image/jpeg", bufferView: 3 }],
+        images,
         samplers: [{ magFilter: 9729, minFilter: 9987, wrapS: 10497, wrapT: 10497 }],
       },
       getDependency: vi.fn(async () => bytes),
     };
     const plugin = embeddedImageTexturePlugin(parser);
+    if (!plugin.loadTexture) throw new Error("embeddedImageTexturePlugin must provide loadTexture");
     const tex = await plugin.loadTexture(0);
     expect(parser.getDependency).toHaveBeenCalledWith("bufferView", 3);
     expect(create).toHaveBeenCalledOnce();

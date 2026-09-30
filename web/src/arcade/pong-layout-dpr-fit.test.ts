@@ -1,14 +1,15 @@
 /** @vitest-environment happy-dom */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { NetScene } from "../graph/scene";
+import { mockPartial } from "../../test-support/mock-partial";
 import { RenderHost } from "../graph/render-host";
 import { PongView } from "./pong";
 
 function sceneStub(): NetScene {
-  return {
-    pulseNow: { level: 0 },
+  return mockPartial<NetScene>({
+    pulseNow: mockPartial<NetScene["pulseNow"]>({ level: 0 }),
     selectIp: () => {},
-  } as NetScene;
+  });
 }
 
 describe("pong layout DPR fit", () => {

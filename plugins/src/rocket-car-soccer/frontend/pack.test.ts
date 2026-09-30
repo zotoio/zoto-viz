@@ -207,7 +207,8 @@ describe("rocket-car-soccer pack", () => {
       const baseParsed = parseRcsOptions({ preset: "neon_night" });
       if (JSON.stringify(parsed) === JSON.stringify(baseParsed)) {
         const allAlts = [...chunk.matchAll(/-\s+\[(\w+),/g)].map((m) => m[1]!);
-        const second = allAlts.find((v) => v !== (baseParsed as Record<string, unknown>)[key] && v !== flip);
+        const baseByKey: Record<string, unknown> = { ...baseParsed };
+        const second = allAlts.find((v) => v !== baseByKey[key] && v !== flip);
         if (second && FORM_DEFAULTS[key] !== second) {
           expect(JSON.stringify(parseRcsOptions({ preset: "neon_night", [key]: second })), key).not.toBe(
             JSON.stringify(baseParsed),

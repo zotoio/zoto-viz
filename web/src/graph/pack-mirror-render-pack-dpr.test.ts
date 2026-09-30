@@ -35,7 +35,7 @@ describe("PackMirrorSession renderPack DPR", () => {
       canvasCssHeight: 120,
       canvasDeviceHeight: asCanvasDeviceHeight(240),
     };
-    reg.renderPrimary("plugin:dpr", renderer as never, scene, camera, { w: 50, h: 40 }, 0x0a1020, false, hostGl);
+    reg.renderPrimary("plugin:dpr", renderer as never, scene, camera, { x: 0, y: 0, w: 50, h: 40 }, 0x0a1020, false, hostGl);
     expect(viewports.some((v) => v.w === 100 && v.h === 80)).toBe(true);
     reg.dispose();
   });

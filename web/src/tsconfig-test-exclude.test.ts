@@ -6,9 +6,14 @@
  *   least one tsc error, so a fixed file has to leave the list.
  * - HELD: scripts/revert-proof* is a held path (ask ZotoBoss). Those paths must exist and stay under
  *   scripts/revert-proof*, and are exempt from the shrink-only rule.
+ *
+ * The test-cast row: test code (web, plugins/src, plugins/sdk) gets no new double casts through
+ * `unknown`, casts to `any`, or ts-ignore / ts-expect-error comments. Partial fakes go through
+ * mockPartial() in web/test-support/mock-partial.ts, the only file exempt. Casts already on main
+ * (d158d708) are listed per file in tsconfig-test-casts.baseline.json, which may only shrink.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
@@ -133,6 +138,42 @@ function testFilesWithTscErrors(): Set<string> {
   }
 }
 
+const repoRoot = path.resolve(webRoot, "..");
+/** Where test code lives; under web/test and web/test-support every .ts file counts, elsewhere test files and __tests__. */
+const CAST_ROOTS = ["web/src", "web/scripts", "web/test", "web/test-support", "plugins/src", "plugins/sdk"];
+const CAST_HELPER = "web/test-support/mock-partial.ts";
+const CAST_BASELINE = path.join(webRoot, "src/tsconfig-test-casts.baseline.json");
+const CAST = /\bas\s+(?:unknown\s+as|any)\b|@ts-(?:ignore|expect-error)\b/g;
+const SKIP_DIRS = new Set(["node_modules", "dist", ".git"]);
+
+function isTestCode(rel: string): boolean {
+  if (!/\.(ts|tsx|mts)$/.test(rel)) return false;
+  return TEST_FILE.test(rel) || /(^|\/)__tests__\//.test(rel) || /^web\/test(-support)?\//.test(rel);
+}
+
+function testCodeFiles(dir: string, acc: string[] = []): string[] {
+  for (const entry of readdirSync(path.join(repoRoot, dir), { withFileTypes: true })) {
+    if (SKIP_DIRS.has(entry.name)) continue;
+    const rel = `${dir}/${entry.name}`;
+    if (entry.isDirectory()) testCodeFiles(rel, acc);
+    else if (entry.isFile() && isTestCode(rel)) acc.push(rel);
+  }
+  return acc;
+}
+
+/** Repo-relative test-code file -> number of cast / ts-comment occurrences (files with none left out). */
+function testCastCounts(): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const root of CAST_ROOTS) {
+    for (const rel of testCodeFiles(root)) {
+      if (rel === CAST_HELPER) continue;
+      const n = readFileSync(path.join(repoRoot, rel), "utf8").match(CAST)?.length ?? 0;
+      if (n > 0) counts.set(rel, n);
+    }
+  }
+  return counts;
+}
+
 describe("tsconfig.test.json exclude list (#192)", () => {
   it("each block lists sorted, unique test files", () => {
     const { shrinkOnly, held } = excludeBlocks();
@@ -158,5 +199,14 @@ describe("tsconfig.test.json exclude list (#192)", () => {
     const { shrinkOnly } = excludeBlocks();
     const withErrors = testFilesWithTscErrors();
     expect(shrinkOnly.filter((p) => !withErrors.has(p))).toEqual([]);
+  });
+
+  it("test code adds no casts outside mockPartial() and the shrink-only cast baseline", () => {
+    const baseline = new Map(Object.entries(JSON.parse(readFileSync(CAST_BASELINE, "utf8")) as Record<string, number>));
+    const counts = testCastCounts();
+    const added = [...counts].filter(([rel, n]) => n > (baseline.get(rel) ?? 0)).map(([rel, n]) => `${rel}: ${n} (baseline ${baseline.get(rel) ?? 0}); use mockPartial() or a small fake`);
+    expect(added).toEqual([]);
+    const lower = [...baseline].filter(([rel, n]) => (counts.get(rel) ?? 0) < n).map(([rel, n]) => `${rel}: ${counts.get(rel) ?? 0} (baseline ${n}); lower its count in tsconfig-test-casts.baseline.json`);
+    expect(lower).toEqual([]);
   });
 });

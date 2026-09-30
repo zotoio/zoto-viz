@@ -4,6 +4,7 @@ import * as THREE from "three";
 import * as packMirrorRect from "../graph/pack-mirror-rect";
 import { PaneChangeProbe } from "../graph/pane-change";
 import type { NetScene } from "../graph/scene";
+import { mockPartial } from "../../test-support/mock-partial";
 import { probeWebGL } from "../graph/webgl";
 import { Stage3D } from "./stage3d";
 
@@ -51,7 +52,10 @@ class TestStage3D extends Stage3D {
 }
 
 function sceneStub(): NetScene {
-  return { pulseNow: { level: 0, bass: 0 }, selectIp: () => {} } as NetScene;
+  return mockPartial<NetScene>({
+    pulseNow: mockPartial<NetScene["pulseNow"]>({ level: 0, bass: 0 }),
+    selectIp: () => {},
+  });
 }
 
 describe("Stage3D pane GlRect viewport", () => {

@@ -33,7 +33,7 @@ function wall(ids: readonly string[], skies: Record<string, string>) {
       nodeFilter: () => true, lastMsg: null, aliasMap: new Map(),
     }),
   });
-  mosaic.setSize(String(ids.length) as "2", ids[0], "off", { tiles: [...ids] });
+  mosaic.setSize("4", ids[0], "off", { tiles: [...ids] });
   return { mosaic, host };
 }
 

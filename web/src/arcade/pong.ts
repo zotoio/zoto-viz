@@ -636,7 +636,8 @@ export class PongView {
       if (this.idle.pollLive()) this.reset();
       this.ingest(m);
     } catch {
-      // server away; the next tick retries
+      // server away; the next tick retries. No packets this poll either: the rate falls back (#197)
+      if (gen === this.gen) this.stats.pps *= 0.6;
     } finally {
       if (gen === this.gen) this.inflight = false;
     }
@@ -650,7 +651,10 @@ export class PongView {
   }
 
   private idleStep(): void {
+    const delivered = this.idle.delivered;
     this.idle.pollEmpty(this.srcIsGroup ? "" : this.srcIp, this.srcIsGroup ? this.srcChoice : "");
+    // #197: a quiet poll is a 0-packet sample (x0.6, as in ArcadeView), unless a demo batch went through ingest
+    if (this.idle.delivered === delivered) this.stats.pps *= 0.6;
   }
 
   /** One idle batch through the real {@link ingest}, on the demo's own cursor. */

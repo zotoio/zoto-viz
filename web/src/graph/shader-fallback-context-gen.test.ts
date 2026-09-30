@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost } from "./render-host";
+import { mockPartial } from "../../test-support/mock-partial";
 import type { VizDataFrame } from "../plugins/viz-host";
 
 const EMPTY: VizDataFrame = {
@@ -63,11 +64,11 @@ describe("shader fallback context gen", () => {
       }) as DOMRect;
     vi.spyOn(host, "compilePluginSky").mockReturnValue(true);
     Object.defineProperty(host, "software", { value: false });
-    const gl = {
+    const gl = mockPartial<WebGL2RenderingContext>({
       fenceSync: () => null,
       getExtension: () => null,
-    };
-    vi.spyOn(host, "gl", "get").mockReturnValue(gl as WebGL2RenderingContext);
+    });
+    vi.spyOn(host, "gl", "get").mockReturnValue(gl);
     const render = vi.fn();
     vi.spyOn(host.renderer as THREE.WebGLRenderer, "render").mockImplementation(render);
     return { host, wall, panes, render };

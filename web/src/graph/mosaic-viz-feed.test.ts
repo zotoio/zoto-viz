@@ -25,14 +25,15 @@ describe("deliverMosaicDemoPacks", () => {
         setPluginUniform: () => true,
       }),
     };
-    const frame = {
+    const frame: VizDataFrame = {
       t: 1,
+      dt: 0,
       audio: 0.2,
-      packets: [{ id: "a", rate: 10, role: "lan" }],
+      packets: [{ proto: "TCP", size: 0, field: 0 }],
       talkers: [{ id: "b", rate: 20, role: "lan" }],
       rf: [],
       headlines: [],
-    } as VizDataFrame;
+    };
     deliverMosaicDemoPacks(
       mosaic as never,
       frame,
@@ -111,7 +112,7 @@ describe("mosaic onPanePick wiring", () => {
         aliasMap: new Map(),
       }),
     });
-    mosaic.setSize("2", "plugin:topology", "off", { tiles: ["plugin:topology", "plugin:wifi"] });
+    mosaic.setSize("4", "plugin:topology", "off", { tiles: ["plugin:topology", "plugin:wifi"] });
     const pane = wall.querySelector<HTMLSelectElement>(".mosaic-pick");
     expect(pane).toBeTruthy();
     pane!.value = "plugin:wifi";
