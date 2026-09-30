@@ -766,6 +766,26 @@ let lastCustomFrag: string | null = null;
 /** Last accepted plugin fragment, so LookStage's separate Backdrop can share the solo sky. Mosaic tiles do not. */
 let lastPlugin: { id: string; frag: string } | null = null;
 
+/** #180 H1: sky uniforms a pack wrote itself (null / 1: never written). */
+type PackUniformWrites = {
+  uTime: number | null;
+  uAudio: number | null;
+  uAccent: THREE.Color | null;
+  uBg: THREE.Color | null;
+  /** Factor on the host's value. */
+  uOpacity: number;
+  /** Factor on the host's value. */
+  uBright: number;
+};
+
+function freshPackWrites(): PackUniformWrites {
+  return { uTime: null, uAudio: null, uAccent: null, uBg: null, uOpacity: 1, uBright: 1 };
+}
+
+function resetPackWrites(w: PackUniformWrites): void {
+  Object.assign(w, freshPackWrites());
+}
+
 export { PLUGIN_SKY_UNIFORMS } from "../plugins/plugin-sky-uniforms";
 export {
   PLUGIN_SKY_MAX,
@@ -849,6 +869,12 @@ export class Backdrop {
   private recipeT = 1;
   private morphT = 1;
   private lookOpacity = 1;
+  /**
+   * #180 H1: what the bound pack wrote through writeUniform. A written uTime / uAudio / uAccent /
+   * uBg wins over the host's; uOpacity and uBright are factors on the host's (default 1), so a
+   * crossfade and the host look still apply. Reset when another pack's material is bound.
+   */
+  private readonly packWrote: PackUniformWrites = freshPackWrites();
   private outgoingMat: THREE.ShaderMaterial | null = null;
 
   constructor(private readonly shareLastPlugin = false) {
@@ -1306,6 +1332,19 @@ export class Backdrop {
     };
   }
 
+  /**
+   * Tile-health confirm render into a w×h target: the pack sky's uResolution matches that target
+   * until the returned restore runs, so a gl_FragCoord / uResolution sky covers the whole tile.
+   */
+  probeResolution(w: number, h: number): () => void {
+    const res = this.pluginMat?.uniforms.uResolution?.value as THREE.Vector2 | undefined;
+    if (!res) return () => {};
+    const x = res.x;
+    const y = res.y;
+    res.set(w, h);
+    return () => res.set(x, y);
+  }
+
   /** Host adaptive render scale (1 when governor inactive). */
   setPluginRenderScale(scale: number): void {
     const s = Number.isFinite(scale) && scale > 0 ? Math.min(1, scale) : 1;
@@ -1330,6 +1369,7 @@ export class Backdrop {
 
   private ensurePluginMat(id: string, frag: string): void {
     if (this.pluginMat && this.pluginMat.fragmentShader === frag) {
+      if (this.pluginId !== id) resetPackWrites(this.packWrote);
       this.pluginId = id;
       this.pluginFrag = frag;
       this.mesh.material = this.pluginMat;
@@ -1339,6 +1379,7 @@ export class Backdrop {
     }
     if (this.kind === "plugin" && this.pluginMat) this.beginSkyMorph();
     this.dropPluginMat(false);
+    resetPackWrites(this.packWrote);
     this.pluginId = id;
     this.pluginFrag = frag;
     this.pluginMat = new THREE.ShaderMaterial({
@@ -1391,12 +1432,26 @@ export class Backdrop {
     if (!this.pluginMat || this.mesh.material !== this.pluginMat) return false;
     const u = this.pluginMat.uniforms[name];
     if (!u) return false;
+    const w = this.packWrote;
     if (name === "uAccent" || name === "uBg") {
       if (!Array.isArray(value) || value.length !== 3) return false;
       (u.value as THREE.Color).setRGB(value[0], value[1], value[2]);
+      (w[name] ??= new THREE.Color()).setRGB(value[0], value[1], value[2]);
       return true;
     }
     if (typeof value !== "number" || !Number.isFinite(value)) return false;
+    const host = this.mat.uniforms;
+    if (name === "uOpacity") {
+      w.uOpacity = value;
+      u.value = (host.uOpacity.value as number) * value;
+      return true;
+    }
+    if (name === "uBright") {
+      w.uBright = value;
+      u.value = (host.uBright.value as number) * value;
+      return true;
+    }
+    if (name === "uTime" || name === "uAudio") w[name] = value;
     u.value = value;
     return true;
   }
@@ -1414,6 +1469,7 @@ export class Backdrop {
       this.pluginMat.dispose();
       pluginSkyMaterialsDisposed += 1;
       this.pluginMat = null;
+      resetPackWrites(this.packWrote);
     }
     if (clear) {
       this.pluginId = null;
@@ -1421,16 +1477,18 @@ export class Backdrop {
     }
   }
 
+  /** Host look onto the pack material; values the pack wrote win (#180 H1, see {@link packWrote}). */
   private syncPluginLook(): void {
     if (!this.pluginMat) return;
     const src = this.mat.uniforms;
     const dst = this.pluginMat.uniforms;
-    dst.uTime.value = src.uTime.value;
-    dst.uOpacity.value = src.uOpacity.value;
-    dst.uBright.value = src.uBright.value;
-    dst.uAudio.value = src.uAudio.value;
-    (dst.uAccent.value as THREE.Color).copy(src.uAccent.value as THREE.Color);
-    (dst.uBg.value as THREE.Color).copy(src.uBg.value as THREE.Color);
+    const w = this.packWrote;
+    dst.uTime.value = w.uTime ?? src.uTime.value;
+    dst.uOpacity.value = (src.uOpacity.value as number) * w.uOpacity;
+    dst.uBright.value = (src.uBright.value as number) * w.uBright;
+    dst.uAudio.value = w.uAudio ?? src.uAudio.value;
+    (dst.uAccent.value as THREE.Color).copy(w.uAccent ?? (src.uAccent.value as THREE.Color));
+    (dst.uBg.value as THREE.Color).copy(w.uBg ?? (src.uBg.value as THREE.Color));
   }
 
   /** Colours currently on the AI Dynamic sky, for label-ink luminance. */
@@ -1539,7 +1597,7 @@ export class Backdrop {
     this.mat.uniforms.uOpacity.value = incoming;
     this.liveMat.uniforms.uOpacity.value = incoming;
     this.photoMat.uniforms.uOpacity.value = incoming;
-    if (this.pluginMat) this.pluginMat.uniforms.uOpacity.value = incoming;
+    if (this.pluginMat) this.pluginMat.uniforms.uOpacity.value = incoming * this.packWrote.uOpacity;
     if (this.outgoingMat) {
       this.outgoingMat.uniforms.uOpacity.value = outgoing;
       if (this.outgoingMat.uniforms.uTime) this.outgoingMat.uniforms.uTime.value = this.clock;
