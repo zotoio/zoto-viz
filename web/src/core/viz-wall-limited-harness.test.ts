@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { applyDevVizWallFlagsOnBuild, resetDevVizWallFlagsStateForTests } from "./viz-dev-wall-flags";
 import { resetVizClockInjectors, setVizClockInjector, vizBuildCostTicks } from "./viz-clock";
-import { VizFrameBudget } from "../plugins/viz-host";
+import { VizFrameBudget, type VizDataFrame } from "../plugins/viz-host";
 import { fatLanFixture } from "../plugins/fixtures/fat-lan-state";
 import { monoMs } from "./viz-time";
 import { tileIdsForLayout } from "../plugins/dogfood-tile-hud";
@@ -22,15 +22,15 @@ import { vizWallCadenceFrames } from "../plugins/viz-tile-budget";
 const TILES_2X2 = tileIdsForLayout(2, 2);
 const IN_RANGE_TICKS = VIZ_COST_TICKS_10MS;
 
-function emptyBuild() {
+function emptyBuild(): VizDataFrame {
   return {
     t: 1,
     dt: 0,
     audio: 0,
-    packets: [] as const,
-    rf: [] as const,
-    talkers: [] as const,
-    headlines: [] as const,
+    packets: [],
+    rf: [],
+    talkers: [],
+    headlines: [],
   };
 }
 
