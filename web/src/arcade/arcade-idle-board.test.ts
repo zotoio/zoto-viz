@@ -452,6 +452,36 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       });
     }
 
+    // #202 (#199 follow-up): the same top-of-tick demo step on the HTTP-error answer. A `!r.ok` reply must skip the
+    // poll's own empty step while the demo is playing (it already stepped), or each tick plays two demo batches.
+    it(`${engine}: demo already playing, then the server answers with an HTTP error (404) — exactly 1 demo batch on each of 12 ticks, board never empty, "· demo" and "Demo data" stay (#202)`, async () => {
+      const { view, poll, hud, labelShown, badge, demoCalls } = mount(engine, cleanHomeState());
+      // reach the demo the natural way: the poll at start and 2 quiet (empty) polls
+      await vi.advanceTimersByTimeAsync(0);
+      await poll();
+      await poll();
+      expect(labelShown(), "demo playing before the server starts answering with an error").toBe(true);
+      const f0 = fetches;
+      mode = "error";
+      const perTick: number[] = [], board: number[] = [], shown: boolean[] = [];
+      for (let i = 1; i <= 12; i++) {
+        const d = demoCalls();
+        await poll(); // one tick: one fetch, answered 404
+        perTick.push(demoCalls() - d);
+        board.push(entities(engine, view));
+        shown.push(labelShown());
+      }
+      expect(fetches - f0, "fetches over the 12 ticks (each answered 404)").toBe(12);
+      expect(perTick, `demo batches per tick with the server answering 404 (per tick: ${perTick.join(", ")})`).toEqual(Array(12).fill(1));
+      expect(board.filter((n) => n === 0).length, `ticks with an empty board (entities per tick: ${board.join(", ")})`).toBe(0);
+      expect(shown.every(Boolean), `demo label on every tick (${shown.join(", ")})`).toBe(true);
+      const h = await hud();
+      expect(h.demo, `HUD "· demo" cue after 12 ticks ("${h.row}")`).toBe(true);
+      expect(h.pps, `HUD rate after 12 ticks ("${h.row}")`).toBeGreaterThan(0);
+      expect(labelShown(), "demo label after 12 ticks").toBe(true);
+      expect(badge(), "demo label text after 12 ticks").toBe(DEMO_DATA_LABEL);
+    });
+
     it(`${engine}: view stop — the feed panel drops the demo status with the view (#182)`, async () => {
       const { view, poll, feedStatus, badge, labelShown } = mount(engine, cleanHomeState());
       await poll();
