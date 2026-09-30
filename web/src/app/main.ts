@@ -3470,4 +3470,8 @@ window.addEventListener("keydown", (e) => {
   const modes = viewSelectOptions();
   if (idx >= 0 && idx < modes.length && !e.ctrlKey && !e.metaKey && !e.altKey) selectHeaderView(modes[idx]!.value);
 });
-window.addEventListener("pagehide", () => persistLive(true));
+window.addEventListener("pagehide", (e) => {
+  persistLive(true);
+  // #206: a page going away (not into the bfcache) stops the live feed's poll.
+  if (!e.persisted) liveFeed.dispose();
+});
