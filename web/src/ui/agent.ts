@@ -1203,10 +1203,12 @@ export class AgentPanel {
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ files, activate: true }),
           }).then((x) => x.json()) as {
-            ok?: boolean; error?: string; id?: string; activated?: boolean; consentRequired?: boolean;
+            ok?: boolean; error?: string; message?: string; id?: string; activated?: boolean; consentRequired?: boolean;
           };
           if (d.activated) this.append("agent", `plugin ${d.id} built and activated (${names})`);
           else if (d.consentRequired) this.append("agent", `plugin ${d.id} installed (${names}) — source review required`);
+          // #185: the install lint couldn't run; show the service's own wording, not "plugin invalid".
+          else if (d.error === "pack_install_check_unavailable" && d.message) this.append("agent", d.message);
           else this.append("agent", d.ok ? `plugin ${d.id} built (${names})` : `plugin invalid: ${d.error}`);
         }
       }

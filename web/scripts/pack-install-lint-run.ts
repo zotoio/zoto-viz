@@ -34,4 +34,6 @@ for (const v of warnings) {
   const loc = v.line != null ? `${v.file}:${v.line}` : v.file;
   console.warn(`${loc} ${v.rule} — ${formatViolationMessage(v)}`);
 }
+// #185: bundle-pack-entry.mjs installs only on this explicit verdict (exit 0 alone is not a pass).
+process.stdout.write(`${JSON.stringify({ type: "pack-install-lint-pass" })}\n`);
 process.exit(0);

@@ -27,6 +27,7 @@ import {
   blockedCatalogEntries,
   blockedViewSelectRow,
   catalogErrorLooksBlocked,
+  PACK_INSTALL_CHECK_UNAVAILABLE,
   consumePackInstallNotices,
   queuePackInstallBlockedNotice,
   syncBlockedCatalogFromErrors,
@@ -851,6 +852,7 @@ export async function installPlugins(): Promise<PluginView[]> {
         || e.error === "pack_install_blocked"
         || e.error === "pack_install_start_failed"
         || e.error === "pack_install_interrupted"
+        || e.error === PACK_INSTALL_CHECK_UNAVAILABLE
         || catalogErrorLooksBlocked(msg)
         || catalogErrorLooksBlocked(err)
       ) {

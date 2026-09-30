@@ -16,7 +16,12 @@ from . import pack_safe_zip as psz
 from . import paths
 from . import plugin_zip as pz
 from .pack_boundary import PackBundleBoundary, PackBundleBoundaryError, format_blocked_message
-from .pack_install_lint import merge_lint_warnings, run_install_pack_lint
+from .pack_install_lint import (
+    REASON_INSTALL_CHECK_UNAVAILABLE,
+    PackInstallLintSetupError,
+    merge_lint_warnings,
+    run_install_pack_lint,
+)
 from .pack_zip_blocks import record_zip_block, row_for_start_failure, zip_block_for_sha
 from .pack_install_blocked_store import record_blocked_zip
 from .pack_install_copy import REASON_PACK_INSTALL_BLOCKED, upgrade_rollback_user_message
@@ -527,6 +532,14 @@ def _install_staged_to_runtime_locked(
         except InstallCheckUnavailableError as e:
             if upgrade:
                 raise InstallV2BlockedError(str(e), payload={"upgrade_blocked": "true", "zip": rel}) from e
+            raise
+        except PackInstallLintSetupError as e:
+            # #185: the install lint couldn't run. Same wording as a fresh install, never "was blocked".
+            if upgrade:
+                raise InstallV2BlockedError(
+                    str(e),
+                    payload={"error": REASON_INSTALL_CHECK_UNAVAILABLE, "upgrade_blocked": "true", "zip": rel},
+                ) from e
             raise
         except ValueError as e:
             if upgrade:

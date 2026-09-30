@@ -23,6 +23,12 @@ export type BlockedCatalogEntry = PackInstallBlockedPayload & {
 
 export const PACK_BLOCKED_SELECT_VALUE = "__pack_blocked_catalog__";
 
+/**
+ * #185: the service refused an install because the pack install lint couldn't run. Its message is
+ * "Couldn't safety-check <Name>, so it wasn't installed. Run `pnpm install` in `web/` and try again."
+ */
+export const PACK_INSTALL_CHECK_UNAVAILABLE = "pack_install_check_unavailable";
+
 let pendingNotice: string | null = null;
 const toastedKeys = new Set<string>();
 let blockedCatalog: BlockedCatalogEntry[] = [];
@@ -63,7 +69,9 @@ export function isPackInstallBlockedPayload(v: unknown): v is PackInstallBlocked
     || o.error === "pack_install_blocked"
     || o.error === "pack_install_start_failed"
     || o.error === "pack_install_interrupted"
+    || o.error === PACK_INSTALL_CHECK_UNAVAILABLE
     || text.includes("was blocked")
+    || text.includes("Couldn't safety-check")
     || text.includes("v1 is still running")
     || text.includes("v1 was restored")
     || text.includes("was interrupted")
@@ -169,6 +177,7 @@ export function consumePackInstallNotices(notices: readonly PackInstallNotice[] 
 export function catalogErrorLooksBlocked(error: string): boolean {
   return (
     error.includes("was blocked")
+    || error.includes("Couldn't safety-check")
     || error.includes("pack-bundle-boundary")
     || error.includes("Built for an older zoto-viz SDK")
     || error.includes("v1 is still running")

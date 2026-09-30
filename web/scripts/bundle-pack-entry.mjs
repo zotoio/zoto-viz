@@ -6,6 +6,7 @@
 import * as esbuild from "esbuild";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import process from "node:process";
 import {
@@ -23,19 +24,86 @@ if (!entry || !sdkRoot || !packHome) {
   process.exit(2);
 }
 
-if (repoRoot && process.env.ZOTO_PACK_INSTALL_LINT === "1") {
-  const tsxCli = path.join(repoRoot, "web/node_modules/tsx/dist/cli.mjs");
-  const lintRun = path.join(repoRoot, "web/scripts/pack-install-lint-run.ts");
-  if (fs.existsSync(tsxCli) && fs.existsSync(lintRun)) {
-    const lint = spawnSync(process.execPath, [tsxCli, lintRun, packHome, repoRoot], {
-      cwd: repoRoot,
-      encoding: "utf8",
-    });
-    if (lint.stderr) process.stderr.write(lint.stderr);
-    if (lint.status !== 0) {
-      process.exit(lint.status === null ? 1 : lint.status);
+/**
+ * Install lint (#185): fails closed. The install goes ahead only on the runner's explicit pass
+ * verdict (a `pack-install-lint-pass` JSON line on stdout, exit 0). A real lint block (exit 1 with
+ * the `pack-install-lint-block` JSON line) keeps its message and exit 1. Anything else (tsx or the
+ * runner can't be resolved or started, a crash, a signal, exit 0 without a verdict) refuses the
+ * install with EXIT_LINT_SETUP and a `pack-install-lint-setup-error` JSON line.
+ */
+const EXIT_LINT_BLOCK = 1;
+const EXIT_LINT_SETUP = 3;
+const LINT_PASS = "pack-install-lint-pass";
+const LINT_BLOCK = "pack-install-lint-block";
+const LINT_SETUP = "pack-install-lint-setup-error";
+
+function jsonLines(text, type) {
+  const out = [];
+  for (const line of String(text || "").split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t.startsWith("{")) continue;
+    try {
+      const raw = JSON.parse(t);
+      if (raw && typeof raw === "object" && raw.type === type) out.push(raw);
+    } catch {
+      /* not a verdict line */
     }
   }
+  return out;
+}
+
+/** plugin.yml display name (top-level `name:`), else `id:`, else the pack folder name. */
+function packDisplayName(home) {
+  let text = "";
+  try {
+    text = fs.readFileSync(path.join(home, "plugin.yml"), "utf8");
+  } catch {
+    try {
+      text = fs.readFileSync(path.join(home, "plugin.yaml"), "utf8");
+    } catch {
+      text = "";
+    }
+  }
+  const field = (key) => {
+    const m = text.match(new RegExp(`^${key}:[ \\t]*(.+?)[ \\t]*$`, "m"));
+    if (!m) return "";
+    return m[1].replace(/^(["'])(.*)\1$/, "$2").trim();
+  };
+  return field("name") || field("id") || path.basename(home);
+}
+
+function refuseLintSetup(detail) {
+  const message = `Couldn't safety-check ${packDisplayName(packHome)}, so it wasn't installed. Run \`pnpm install\` in \`web/\` and try again.`;
+  console.error(message);
+  console.error(JSON.stringify({ type: LINT_SETUP, message, detail }));
+  process.exit(EXIT_LINT_SETUP);
+}
+
+if (process.env.ZOTO_PACK_INSTALL_LINT === "1") {
+  if (!repoRoot) refuseLintSetup("no repo root passed to bundle-pack-entry.mjs");
+  const lintRun = path.join(repoRoot, "web/scripts/pack-install-lint-run.ts");
+  let tsxCli;
+  try {
+    tsxCli = createRequire(path.join(repoRoot, "web/package.json")).resolve("tsx/cli");
+  } catch (err) {
+    refuseLintSetup(`tsx not resolvable from web/: ${String(err?.code || err?.message || err)}`);
+  }
+  if (!fs.existsSync(lintRun)) refuseLintSetup(`lint runner missing: ${lintRun}`);
+  const lint = spawnSync(process.execPath, [tsxCli, lintRun, packHome, repoRoot], {
+    cwd: repoRoot,
+    encoding: "utf8",
+  });
+  if (lint.stderr) process.stderr.write(lint.stderr);
+  if (lint.error) refuseLintSetup(`lint runner did not start: ${String(lint.error.code || lint.error.message)}`);
+  if (lint.signal) refuseLintSetup(`lint runner killed by ${lint.signal}`);
+  if (lint.status === EXIT_LINT_BLOCK && jsonLines(lint.stderr, LINT_BLOCK).length > 0) {
+    process.exit(EXIT_LINT_BLOCK);
+  }
+  if (lint.status !== 0 || jsonLines(lint.stdout, LINT_PASS).length === 0) {
+    refuseLintSetup(`lint runner gave no verdict (exit ${lint.status})`);
+  }
+  // Passed: tell the service the lint really ran (it refuses an install-lint bundle without this).
+  console.error(JSON.stringify({ type: LINT_PASS }));
 }
 
 function boundaryError(importer, specifier, reason) {

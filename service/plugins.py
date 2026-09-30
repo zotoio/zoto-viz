@@ -35,6 +35,7 @@ from . import plugin_zip as pz
 from . import plugin_manifest_block as pmb
 from .plugin_schema import PLUGIN_SCHEMA_PATH, deref_schema, load_plugin_schema
 from .pack_boundary import PackBundleBoundaryError, boundary_from_compile
+from . import pack_install_lint as pil
 from .pack_sdk_contract import (
     assert_pack_sdk_compatible,
     runtime_parent_for_sdk_cache,
@@ -400,19 +401,24 @@ def compile_typescript(
         env=bundle_env,
     )
     _bundle_invocations += 1
+    label = str(doc.get("name") or doc.get("id") or "Plugin")
+    if install_lint and pil.install_lint_setup_failed(proc.returncode, proc.stderr):
+        raise pil.PackInstallLintSetupError(pil.format_install_lint_setup_message(label))
     if proc.returncode != 0:
         block = boundary_from_compile(doc, proc.stderr)
         if block:
             raise PackBundleBoundaryError(block)
         lint_msg = _install_lint_block_from_compile(proc.stderr)
         if lint_msg:
-            label = str(doc.get("name") or doc.get("id") or "Plugin")
             raise ValueError(
                 f"{label} was blocked: {lint_msg} "
                 "Nothing was installed and the current wall is unchanged. "
                 "Ask the pack author to run pack lint — see plugins/sdk/starter/README.md#2-pack-lint."
             )
         raise ValueError(proc.stderr.strip() or "esbuild failed")
+    if install_lint and not pil.install_lint_passed(proc.stderr):
+        # #185: fail closed. A bundle that went through the install lint must carry its pass verdict.
+        raise pil.PackInstallLintSetupError(pil.format_install_lint_setup_message(label))
     js = proc.stdout.encode("utf-8")
     if len(js) > MAX_BUNDLE:
         raise ValueError(f"compiled plugin exceeds {MAX_BUNDLE} bytes")
@@ -1663,7 +1669,10 @@ def _materialize_zip_plugin(
     except ValueError as e:
         text = str(e)
         row: dict[str, str] = {"file": rel, "error": text, "zip": rel}
-        if "was blocked" in text:
+        if isinstance(e, pil.PackInstallLintSetupError):
+            row["error"] = pil.REASON_INSTALL_CHECK_UNAVAILABLE
+            row["message"] = text
+        elif "was blocked" in text:
             row["error"] = "pack_boundary"
             row["message"] = text
         elif "v1 is still running" in text or "v1 was restored" in text:
