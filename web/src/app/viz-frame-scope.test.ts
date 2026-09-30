@@ -5,6 +5,8 @@ import { VizFrameScopeCache } from "./viz-frame-scope";
 const mode: ViewMode = {
   id: "plugin:talker-storm",
   label: "Talker Storm",
+  hint: "",
+  legend: () => [],
   graphBase: "topology",
   pluginId: "talker-storm",
 };

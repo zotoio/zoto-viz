@@ -109,14 +109,14 @@ describe("viz contract version negotiation", () => {
 
   it("delivers v1 talker lifetime counts for v1 packs even when flow rates exist", () => {
     const state = minimalState();
-    const frame = buildVizFrameForPlugin(state, 0, 0, { fixture: "host" }, 1);
+    const frame = buildVizFrameForPlugin(state, monoMs(0), 0, { fixture: "host" }, 1);
     expect(frame.contract).toBe(1);
     expect(frame.links).toBeUndefined();
     expect(frame.talkers[0]?.rate).toBe(50);
   });
 
   it("delivers v2 enrichment for v2 packs", () => {
-    const frame = buildVizFrameForPlugin(minimalState(), 0, 0, { fixture: "host" }, 2);
+    const frame = buildVizFrameForPlugin(minimalState(), monoMs(0), 0, { fixture: "host" }, 2);
     expect(frame.contract).toBe(VIZ_CONTRACT_VERSION);
     expect(frame.talkers[0]?.failed).toBeUndefined();
   });
@@ -219,8 +219,8 @@ describe("bindVizWriterCore (demo pack-swap preserve path)", () => {
     let frameTs = 42.5;
     const budget = new VizFrameBudget(() => 0, "bind");
     setVizBuildCostTicksInjector((i) => (i === 0 ? 15000 : 1200));
-    budget.deliver(minimalState(), frameTs, 0, () => {});
-    budget.deliver(minimalState(), frameTs, 0, () => {});
+    budget.deliver(minimalState(), monoMs(frameTs), 0, () => {});
+    budget.deliver(minimalState(), monoMs(frameTs), 0, () => {});
     setVizBuildCostTicksInjector(undefined);
     expect(budget.stats.skipped).toBe(1);
 
@@ -347,7 +347,7 @@ describe("buildVizFrame", () => {
       packets: i % 50, bytes_in: 1, bytes_out: 1,
     }));
     const state = minimalState({ devices });
-    const frame = buildVizFrame(state, 99, 0.2);
+    const frame = buildVizFrame(state, monoMs(99), 0.2);
     expect(frame.talkers.length).toBeLessThanOrEqual(VIZ_MAX_TALKER_SAMPLES);
     expect(maxSorted).toBeLessThanOrEqual(VIZ_MAX_TALKER_SAMPLES);
   });
@@ -356,7 +356,7 @@ describe("buildVizFrame", () => {
     let clock = 90_000;
     setVizClockInjector(() => clock);
     const state = minimalState();
-    const frame = buildVizFrame(state, 89_000, 0.2);
+    const frame = buildVizFrame(state, monoMs(89_000), 0.2);
     expect(frame.t).toBe(100);
     expect(frame.dt).toBe(1);
     expect(frame.audio).toBe(0.2);
@@ -407,7 +407,7 @@ describe("buildVizFrame", () => {
           flows: [],
         },
       },
-    }), 99, 0);
+    }), monoMs(99), 0);
     expect(frame.sys?.cpu).toBeCloseTo(0.4);
     expect(frame.sys?.mem).toBeCloseTo(0.6);
     expect(frame.sys?.temp).toBeCloseTo(0.8);
@@ -427,7 +427,7 @@ describe("buildVizFrame", () => {
           ],
         },
       },
-    }), 99, 0, { source: "hn" });
+    }), monoMs(99), 0, { source: "hn" });
     expect(frame.headlines.map((h) => h.text)).toEqual(["Jemalloc", "Waymo"]);
     expect(frame.headlines[0]?.summary).toBe("alloc news");
     expect(frame.headlines[0]?.image).toBe("https://www.nasa.gov/iotd.jpg");

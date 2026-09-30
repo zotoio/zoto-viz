@@ -12,6 +12,7 @@ import {
   healMessage,
 } from "./tile-health";
 import { readTileHealErrors, writeTileHealErrors } from "./tile-health-monitor";
+import { viewMutAsDeviceRect } from "../graph/pack-mirror-rect";
 
 function rgbaFill(r: number, g: number, b: number, n = 16 * 16): Uint8Array {
   const out = new Uint8Array(n * 4);
@@ -119,7 +120,7 @@ describe("stepTileHealth ladder", () => {
   });
 
   it("clamps patch origin in framebuffer space for offset viewports", () => {
-    const { x, y } = patchOrigin({ x: 40, y: 20, w: 100, h: 80 }, 16);
+    const { x, y } = patchOrigin(viewMutAsDeviceRect({ x: 40, y: 20, w: 100, h: 80 }), 16);
     expect(x).toBe(82);
     expect(y).toBe(52);
   });
