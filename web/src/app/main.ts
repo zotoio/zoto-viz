@@ -225,6 +225,7 @@ import { SkyLoads, SkyWaits, landWhenDrawn, type SkyLoadCtl } from "./sky-wait";
 import { loadTilesSettlingEach } from "./sky-sync-tiles";
 import { createProductionTileHealthMonitor } from "./tile-health-boot";
 import { markPresent, presentInterval } from "../core/present-clock";
+import { perfPinFromSearch, setPerfPinnedOff } from "../core/perf";
 import { applyDevVizWallFlagsOnBuild, devVizWallTileCostBadInputMessage } from "../core/viz-dev-wall-flags";
 import { bootNixieRealWallClock } from "../plugins/nixie-wall-parts";
 import {
@@ -346,6 +347,8 @@ const arcade: Record<string, { view: Standalone; el: HTMLElement }> = {
 };
 for (const a of Object.values(arcade)) a.view.setTheme(theme);
 let activeArcade: string | null = null;
+// #177: `?perf=off` pins the perf lean off (tune.k 0) for a deterministic session; read it with window.zotoviz.perfLean().
+setPerfPinnedOff(perfPinFromSearch(window.location.search));
 (window as unknown as { zotoviz: NetScene; znetviz: NetScene }).zotoviz = scene;
 (window as unknown as { znetviz: NetScene }).znetviz = scene; // one-release alias
 let mosaic: Mosaic | null = null;

@@ -14,7 +14,11 @@
     "src/graph/pack-mirror-rect-converters.test.ts",
     "src/graph/pack-mirror-readback.test.ts",
     "test/node/pack-mirror-readback-chrome.ts",
-    "test/node/pack-mirror-readback-vite.ts"
+    "test/node/pack-mirror-readback-vite.ts",
+    "src/core/perf.test.ts",
+    "src/graph/scene-perf-pin.test.ts",
+    "src/graph/scene-stage-sky-lean.test.ts",
+    "src/app/__tests__/main-entry.perf-pin.test.ts"
   ],
   "exclude": []
 }
