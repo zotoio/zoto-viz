@@ -1,5 +1,6 @@
 import type { VizDataFrame, VizPresentTick } from "../../../sdk/viz-contract";
 import { getVizZoto } from "plugins/sdk/viz-zoto";
+import { encodeHostMeshSlotPacket } from "../../../sdk/host-mesh-frame";
 
 const host = getVizZoto();
 
@@ -33,7 +34,9 @@ host.onFrame = (frame: VizDataFrame) => {
 
 host.onPresent = (tick: VizPresentTick) => {
   const clock = typeof tick.pluginClock === "number" ? tick.pluginClock : t + tick.frameMs * 0.001;
-  host.writeBuffer(2, matrixSlot(clock));
+  // v2 packet (header 2, asset 0, one instance). A bare 16-float matrix is ambiguous: its first
+  // value s·cos can round to 2 and read as a v2 header, and the host then refuses the write.
+  host.writeBuffer(2, encodeHostMeshSlotPacket(0, [{ matrix: matrixSlot(clock) }]));
   host.writeUniform("uBright", 0.95);
   host.writeUniform("uOpacity", 1);
 };
