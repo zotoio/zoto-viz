@@ -7,20 +7,19 @@
  * of its own.
  */
 import { execFileSync } from "node:child_process";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { repoPython } from "./starter-pack-pipeline";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const ZIP = "/home/op/.zoto-viz/plugins/local/upgrade-probe.zip";
 /**
- * The repo's interpreter, as starter-pack-pipeline.ts does: `<repo>/.venv/bin/python` (where CI's web job
- * installs the service requirements, PyYAML included, without putting it on PATH), else `python3`.
- * These rows always run; there is no skip.
+ * The repo's interpreter from starter-pack-pipeline.ts repoPython (#221): `ZOTO_VIZ_PYTHON`, else
+ * `<repo>/.venv/bin/python` (where CI's web job installs the service requirements, PyYAML included,
+ * without putting it on PATH), else `python3`. These rows always run; there is no skip.
  */
-const venvPython = path.join(repoRoot, ".venv/bin/python");
-const python = existsSync(venvPython) ? venvPython : "python3";
+const python = repoPython(repoRoot);
 
 // The first python spawn imports the service (2-4 s on a loaded box).
 vi.setConfig({ testTimeout: 30_000 });

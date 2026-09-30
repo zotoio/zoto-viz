@@ -47,8 +47,49 @@ export function classifyStarterPipelineFailure(message: string): StarterPipeline
   return "pack-on-frame";
 }
 
+export type RepoPythonSeams = {
+  env?: NodeJS.ProcessEnv;
+  exists?: (file: string) => boolean;
+};
+
+/**
+ * #221: the interpreter that runs the service for these rows. `ZOTO_VIZ_PYTHON` if set, else
+ * `<repo>/.venv/bin/python` (where CI's web job installs requirements.txt without putting it on PATH),
+ * else bare `python3` (a system python3 that has the deps is fine).
+ */
+export function repoPython(repoRoot: string, seams: RepoPythonSeams = {}): string {
+  const env = seams.env ?? process.env;
+  const exists = seams.exists ?? existsSync;
+  const pinned = env.ZOTO_VIZ_PYTHON?.trim();
+  if (pinned) return pinned;
+  const venvPython = path.join(repoRoot, ".venv/bin/python");
+  return exists(venvPython) ? venvPython : "python3";
+}
+
+/** Run a service script on `python`; a missing service dependency names the interpreter and the fix. */
+function runServicePython(python: string, script: string, cwd: string, env: NodeJS.ProcessEnv): string {
+  try {
+    return execFileSync(python, ["-c", script], { cwd, encoding: "utf8", env });
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err);
+    const missing = /(?:ModuleNotFoundError|ImportError): [^\n]*/.exec(detail);
+    if (!missing) throw err;
+    throw new Error(
+      `${python} cannot import the zoto-viz service deps (${missing[0]}). `
+        + "Create <repo>/.venv (python3 -m venv .venv && .venv/bin/pip install -r requirements.txt) "
+        + "or set ZOTO_VIZ_PYTHON to an interpreter that has them.\n"
+        + detail,
+    );
+  }
+}
+
 /** Run service.plugins.scan() on a staged plugins/src/<id> tree. */
-export function scanStarterPackCatalog(repoRoot: string, stageRoot: string, packId: string): {
+export function scanStarterPackCatalog(
+  repoRoot: string,
+  stageRoot: string,
+  packId: string,
+  seams: RepoPythonSeams = {},
+): {
   errors: string[];
   pluginIds: string[];
 } {
@@ -69,13 +110,8 @@ errors = [e.get("error") or e.get("message") or str(e) for e in scan.get("errors
 ids = [p.get("id") for p in scan.get("plugins") or []]
 print(json.dumps({"errors": errors, "pluginIds": ids, "packId": ${JSON.stringify(packId)}}))
 `;
-  const venvPython = path.join(repoRoot, ".venv/bin/python");
-  const python = existsSync(venvPython) ? venvPython : "python3";
-  const raw = execFileSync(python, ["-c", script], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: { ...process.env, PYTHONPATH: repoRoot },
-  }).trim();
+  const python = repoPython(repoRoot, seams);
+  const raw = runServicePython(python, script, repoRoot, { ...(seams.env ?? process.env), PYTHONPATH: repoRoot }).trim();
   const parsed = JSON.parse(raw) as { errors: string[]; pluginIds: string[] };
   return parsed;
 }
@@ -166,15 +202,11 @@ bundle_path = runtime / "module.js"
 bundle_path.write_bytes(got[1])
 print(str(runtime))
 `;
-  const runtimeDir = execFileSync("python3", ["-c", script], {
-    cwd: repoRoot,
-    encoding: "utf8",
-    env: {
-      ...process.env,
-      ZOTO_VIZ_HOME: zotoHome,
-      ZOTO_VIZ_PLUGIN_LOCAL: path.join(zotoHome, "plugins", "local"),
-      PYTHONPATH: repoRoot,
-    },
+  const runtimeDir = runServicePython(repoPython(repoRoot), script, repoRoot, {
+    ...process.env,
+    ZOTO_VIZ_HOME: zotoHome,
+    ZOTO_VIZ_PLUGIN_LOCAL: path.join(zotoHome, "plugins", "local"),
+    PYTHONPATH: repoRoot,
   }).trim();
   const bundleJs = readFileSync(path.join(runtimeDir, "module.js"), "utf8");
   return { runtimeDir, bundleJs };
