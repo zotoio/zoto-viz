@@ -25,11 +25,13 @@ describe("buildIdleVizFrame", () => {
 describe("IDLE_VIZ_DEMO_HOSTS (#181 arcade idle feed)", () => {
   it("is the idle frame's talkers, with their link peers, read-only", () => {
     const frame = buildIdleVizFrame(1, 0);
+    const links = frame.links;
+    if (!links) throw new Error("idle frame has no links");
     expect(IDLE_VIZ_DEMO_HOSTS.map((h) => [h.ip, h.role])).toEqual(frame.talkers.map((t) => [t.id, t.role]));
     for (const h of IDLE_VIZ_DEMO_HOSTS) {
-      const peers = new Set(frame.links.flatMap((l) => (l.src === h.ip ? [l.dst] : l.dst === h.ip ? [l.src] : [])));
+      const peers = new Set(links.flatMap((l) => (l.src === h.ip ? [l.dst] : l.dst === h.ip ? [l.src] : [])));
       expect(new Set(h.peers), h.ip).toEqual(peers);
-      expect(h.opens, h.ip).toEqual(frame.links.filter((l) => l.src === h.ip).map((l) => l.dst));
+      expect(h.opens, h.ip).toEqual(links.filter((l) => l.src === h.ip).map((l) => l.dst));
     }
     expect(Object.isFrozen(IDLE_VIZ_DEMO_HOSTS) && IDLE_VIZ_DEMO_HOSTS.every((h) => Object.isFrozen(h))).toBe(true);
   });
@@ -129,7 +131,7 @@ describe("buildVizFrameForPlugin", () => {
       devices: [],
       flows: [],
     };
-    const frame = buildVizFrameForPlugin(empty, 0, 0, { fixture: "host" });
+    const frame = buildVizFrameForPlugin(empty, monoMs(0), 0, { fixture: "host" });
     expect(frame.packets.length).toBeGreaterThan(0);
     expect(frame.talkers.length).toBeGreaterThan(0);
   });

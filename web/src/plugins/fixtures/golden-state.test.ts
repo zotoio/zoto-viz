@@ -50,7 +50,7 @@ describe("withGoldenIfIdle", () => {
 
   it("parses plugin idle refs from viz or visualisation blocks", () => {
     expect(parsePluginIdle({ fixture: "host" })).toEqual({ fixture: "host" });
-    expect(pluginIdleOf({ viz: { idle: { fixture: "host" }, graphWalk: false, maxBuffers: 1, maxBufferFloats: 8, maxParticles: 0, uniforms: [], ubo: {} as never } })).toEqual({ fixture: "host" });
+    expect(pluginIdleOf({ viz: { contract: 1, idle: { fixture: "host" }, graphWalk: false, maxBuffers: 1, maxBufferFloats: 8, maxParticles: 0, uniforms: [], ubo: {} as never } })).toEqual({ fixture: "host" });
     expect(pluginIdleOf({ idle: { fixture: "host" } })).toEqual({ fixture: "host" });
     expect(stateNeedsGolden(emptyState())).toBe(true);
     expect(stateNeedsGolden(goldenLanFixture())).toBe(false);
