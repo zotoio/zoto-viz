@@ -34,6 +34,8 @@ const t = vi.hoisted(() => {
   return {
     FakeGl,
     host: null as null | { canvas: HTMLCanvasElement; glContextLost: boolean; advanceFrame(ts: number): void; renderer: unknown },
+    /** The wall host's tiles (`RenderHost.drawTileIds()`), set with `host`. */
+    tileIds: (): readonly string[] => [],
     gl: null as null | InstanceType<typeof FakeGl>,
     settled: [] as string[],
   };
@@ -67,6 +69,7 @@ vi.mock("../../graph/render-host", async (orig) => {
         compile: () => {},
       });
       t.host = this;
+      t.tileIds = () => this.drawTileIds();
       t.gl = gl;
     }
   }
@@ -250,42 +253,54 @@ describe("#179 app level: Backrooms saved as the boot mode, context lost, then a
   });
 
   /**
-   * #171 (c) landed on tse/issue-171c: app/view-state.ts has the per-tile `{ kind: "cant-draw", reason: "context-lost" }`
-   * view state, written from the host's draw events by app/cant-draw-state.ts. This row uses, from
-   * web/src/app/view-state.ts:
-   *   - `viewStateOf(tileId: string): ViewState | null`
-   *   - a `ViewState` member `{ kind: "cant-draw"; reason: "context-lost" }` (the reason is part of the union)
-   * and tile ids from each drawn view's `Scene.tileId` on the shared host.
+   * #179 part (c) (with #171 (c)): the per-tile `{ kind: "cant-draw", reason: "context-lost" }` view state.
+   * Written by app/cant-draw-state.ts from the host's draw events (TSE, tse/issue-171c). From
+   * web/src/app/view-state.ts: `viewStateOf(tileId)`; tile ids from the shared host's `drawTileIds()`
+   * (each drawn view's `tileId`: "main" on the solo wall).
    */
-  it("pending #171 (c): every tile enters cant-draw / context-lost on a loss and leaves it on restore plus a drawn frame", { timeout: 30_000 }, async () => {
+  it("#179 part (c): every tile enters cant-draw / context-lost on a loss and leaves it only on restore plus a drawn frame", { timeout: 30_000 }, async () => {
     await bootOnBackrooms();
-    // Imported after the boot: bootMainEntry resets modules, so only now is this the view-state main.ts writes to.
-    const viewStateModule = `../${"view-state"}.ts`;
-    const vs = (await import(/* @vite-ignore */ viewStateModule)) as {
-      viewStateOf(tileId: string): { kind: string; reason?: string } | null;
-    };
+    // After the boot's module reset: the same view-state registry main.ts writes to.
+    const vs = await import("../view-state");
     frame();
-    const tileIds = (t.host as unknown as { views: { tileId: string }[] }).views.map((v) => v.tileId);
-    expect(tileIds.length, "tiles on the shared host").toBeGreaterThan(0);
+    const tileIds = t.tileIds();
+    expect(tileIds, "tiles on the shared host").toContain("main");
     for (const id of tileIds) expect(vs.viewStateOf(id)?.kind, `tile ${id} before the loss`).not.toBe("cant-draw");
 
     loseContext();
     for (const id of tileIds) {
       expect(vs.viewStateOf(id), `tile ${id} while lost`).toEqual({ kind: "cant-draw", reason: "context-lost" });
     }
+    expect(document.getElementById("scene")?.dataset.viewState, "the solo tile element says so too").toBe("cant-draw");
     // Still lost after a frame: the state holds.
     frame();
     for (const id of tileIds) {
       expect(vs.viewStateOf(id), `tile ${id} still lost`).toEqual({ kind: "cant-draw", reason: "context-lost" });
     }
 
-    // Restore, then one drawn frame: the tile leaves cant-draw.
+    // The restored event alone is not a recovery: nothing has drawn yet.
     restoreContext();
+    for (const id of tileIds) {
+      expect(vs.viewStateOf(id), `tile ${id} restored, nothing drawn yet`).toEqual({ kind: "cant-draw", reason: "context-lost" });
+    }
+    // One drawn frame: the tile leaves cant-draw.
     frame();
     for (const id of tileIds) {
-      expect(vs.viewStateOf(id)?.kind, `tile ${id} after restore + drawn frame`).not.toBe("cant-draw");
       expect(vs.viewStateOf(id)?.kind, `tile ${id} after restore + drawn frame`).toBe("ready");
     }
+    expect(document.getElementById("scene")?.dataset.viewState).toBe("ready");
     expect(notices(), "the notice clears with the state").toBe(0);
+  });
+
+  it("#179 part (c): a pick while lost keeps the tile cant-draw until the recovery, then it shows the picked view ready", { timeout: 30_000 }, async () => {
+    await bootOnBackrooms();
+    const vs = await import("../view-state");
+    loseContext();
+    expectLanded(await pick(FLUID), FLUID, "Fluid Dynamics");
+    expect(vs.viewStateOf("main"), "the pick landed, but nothing can draw").toEqual({ kind: "cant-draw", reason: "context-lost" });
+    restoreContext();
+    frame();
+    expect(vs.viewStateOf("main")?.kind).toBe("ready");
+    expect(vs.viewStateViewId("main"), "back on the picked view").toBe(FLUID);
   });
 });

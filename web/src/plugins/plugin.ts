@@ -29,6 +29,7 @@ import {
   blockedViewSelectRow,
   catalogErrorLooksBlocked,
   PACK_INSTALL_CHECK_UNAVAILABLE,
+  PACK_UPDATE_REFUSED,
   consumePackInstallNotices,
   queuePackInstallBlockedNotice,
   syncBlockedCatalogFromErrors,
@@ -320,7 +321,7 @@ export interface PluginList {
   dir: string;
   schema: string;
   plugins: PluginView[];
-  errors: { file: string; error: string; message?: string; id?: string; name?: string; import?: string }[];
+  errors: { file: string; error: string; message?: string; id?: string; name?: string; import?: string; reasonCode?: string }[];
   blocked?: ManifestBlockedPlugin[];
   /** #169: packs kept in the catalog that can't load (esbuild missing, or one pack's bundle failed). */
   unavailable?: { id: string; name: string; reason: string; available?: false }[];
@@ -928,6 +929,7 @@ export async function installPlugins(): Promise<PluginView[]> {
         || e.error === "pack_install_start_failed"
         || e.error === "pack_install_interrupted"
         || e.error === PACK_INSTALL_CHECK_UNAVAILABLE
+        || e.reasonCode === PACK_UPDATE_REFUSED
         || catalogErrorLooksBlocked(msg)
         || catalogErrorLooksBlocked(err)
       ) {

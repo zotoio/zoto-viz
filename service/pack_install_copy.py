@@ -12,6 +12,15 @@ REASON_SCHEMA_INVALID = "pack_schema_invalid"
 REASON_ALREADY_EXISTS = "pack_already_exists"
 REASON_ZIP_UNSAFE = "pack_zip_unsafe"
 REASON_BOUNDARY_BLOCKED = "pack_boundary"
+#: #111: an update the service refused, with the version you had still installed (the new version
+#: couldn't be checked, or it couldn't start and the old one was put back). Carried as ``reasonCode``
+#: next to the row's ``error`` category (the reasonCode convention of plugin_manifest_block rows).
+#: Service and web branch on this code, never on the message, so the wording can change freely.
+REASON_UPDATE_REFUSED = "update_refused"
+#: #200: a fresh install whose safety check couldn't run, for a cause that isn't a setup one.
+#: Carried as ``reasonCode`` next to ``error: pack_install_check_unavailable``; the message is the shared
+#: copy table's ``install_unchecked``.
+REASON_INSTALL_UNCHECKED = "install_unchecked"
 
 # UX Pro — zip install rejection copy (literal pins in tests; revert rows blank these).
 ZIP_UX_CORRUPT_TAIL = "The file isn't a valid pack or is damaged."

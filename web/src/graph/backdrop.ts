@@ -569,6 +569,9 @@ void main() {
 }
 `;
 
+/** The built-in sky fragment shader as shipped; #195's lan-pong contrast row pins its CPU mirror to it. */
+export const BACKDROP_SKY_FRAG = FRAG;
+
 const MODE_NUM: Record<BackdropKind, number> = {
   none: 0, fractal: 1, space: 2, matrix: 3, live: 4,
   aurora: 5, rain: 6, ocean: 7, fire: 8, warp: 9, clouds: 10, circuit: 11, plasma: 12, lattice: 13,
