@@ -213,7 +213,7 @@ describe("dev viz wall flags", () => {
     mono = 30_000;
     applyDevVizWallFlagsOnBuild("?vizWallClock=01:05", TILES_2X2);
     mono = 31_000;
-    fillDevWallFlagPartsScratch(mono);
+    fillDevWallFlagPartsScratch(monoMs(mono));
     expect({ h: nixieWallPartsScratch.h, m: nixieWallPartsScratch.m, s: nixieWallPartsScratch.s }).toEqual({
       h: 1,
       m: 5,

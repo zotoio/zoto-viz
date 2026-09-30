@@ -55,7 +55,8 @@ import {
   type DevicePxRatio,
 } from "./render-host-device-px-ratio";
 import { asCanvasDeviceHeight, type CanvasDeviceHeight } from "./pack-mirror-rect";
-import { RenderHostTileShader } from "./render-host-tile-shader";
+import { RenderHostTileShader, type TileDrawEvent } from "./render-host-tile-shader";
+export type { TileDrawEvent } from "./render-host-tile-shader";
 import type { GfxWallNotice } from "./gfx-wall-notice";
 
 type PackMirrorViewMeta = HostedView & {
@@ -74,6 +75,8 @@ import type { FrameTs } from "../core/time-ms";
 export interface HostedView {
   /** element whose box on the page is this view's viewport */
   readonly viewEl: HTMLElement;
+  /** The tile this view draws ("main", or the mosaic pane id): the key of its view state. */
+  readonly tileId?: string;
   /** update and draw one frame; call `host.present(...)` from inside */
   hostFrame(ts: FrameTs): void;
   hostContextLost(): void;
@@ -310,6 +313,18 @@ export class RenderHost {
   get contextRecovery(): ContextRecovery { return this._contextRecovery; }
   get canvasDeviceHeight(): CanvasDeviceHeight { return this._canvasDeviceHeight; }
   get gfxWallNotice(): GfxWallNotice { return this.tileShader.gfxNotice; }
+
+  /** Tile ids of the views on this host, once each (every tile a lost context stops). */
+  drawTileIds(): readonly string[] {
+    const ids: string[] = [];
+    for (const v of this.views) if (v.tileId && !ids.includes(v.tileId)) ids.push(v.tileId);
+    return ids;
+  }
+
+  /** Tile draw events: context lost / Reload offered / drawn again, and per-tile shader failures (#171 c). */
+  onDrawEvent(fn: (e: TileDrawEvent) => void): () => void {
+    return this.tileShader.onDrawEvent(fn);
+  }
 
   beginTilePack(
     tileId: string,

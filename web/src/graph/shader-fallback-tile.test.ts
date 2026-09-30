@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
 import { GfxWallNotice } from "./gfx-wall-notice";
 import { RenderHost } from "./render-host";
+import { mockPartial } from "../../test-support/mock-partial";
 import { TileShaderFallback } from "./tile-shader-fallback";
 import { genericShaderFallbackMessage } from "./shader-fallback-copy";
 import { packetTunnelFallbackText } from "../../../plugins/src/packet-tunnel/frontend/tunnel";
@@ -72,13 +73,14 @@ describe("shader fallback tile overlay", () => {
     const host = new RenderHost(wall);
     Object.defineProperty(host, "software", { value: false });
     const rd = host.renderer as THREE.WebGLRenderer;
-    const gl = {
+    const gl = mockPartial<WebGL2RenderingContext>({
       getShaderInfoLog: () => "err",
       getProgramInfoLog: () => "",
-    } as unknown as WebGL2RenderingContext;
-    rd.compile = vi.fn(() => {
+    });
+    rd.compile = vi.fn((): Set<THREE.Material> => {
       rd.debug!.onShaderError!(gl, {} as never, {} as never, {} as never);
-    }) as typeof rd.compile;
+      return new Set();
+    });
     host.beginTilePack("t", "a:1", "bad", pane, "A", true);
     expect(host.compilePluginSky("t", {} as never, {} as never)).toBe(false);
     rd.compile = vi.fn() as typeof rd.compile;

@@ -121,7 +121,7 @@ describe("plugin sky contract", () => {
       getExtension: (name: string) => (name === "WEBGL_lose_context" ? { loseContext: lose } : null),
     };
     const orig = HTMLCanvasElement.prototype.getContext;
-    HTMLCanvasElement.prototype.getContext = function (type: string) {
+    HTMLCanvasElement.prototype.getContext = function (this: HTMLCanvasElement, type: string) {
       if (type === "webgl2") return gl as never;
       return orig.call(this, type as never);
     } as typeof orig;
@@ -244,7 +244,7 @@ describe("photo sky cache", () => {
     const makeSlot = (url: string) => {
       const el = document.createElement("video");
       el.src = url;
-      return { el, tex: new THREE.Texture() };
+      return { el, tex: new THREE.VideoTexture(el) };
     };
     const oldPack: PhotoVideoLoop = {
       url: "/skies/old.webm",

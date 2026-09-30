@@ -6,6 +6,8 @@ import {
 export type GfxWallNoticeOpts = {
   /** After the no-restore reload offer was showing and the context came back. */
   onDismissLateReload?: () => void;
+  /** The Reload copy and button are now on screen (the host gave up, or the 10 s window ran out). */
+  onReloadOffered?: () => void;
 };
 
 /** Single wall-level status when the shared WebGL context is lost. */
@@ -98,5 +100,6 @@ export class GfxWallNotice {
     btn.addEventListener("click", () => location.reload());
     this.el.appendChild(msg);
     this.el.appendChild(btn);
+    this.opts.onReloadOffered?.();
   }
 }
