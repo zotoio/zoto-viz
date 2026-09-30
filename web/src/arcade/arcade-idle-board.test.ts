@@ -505,21 +505,30 @@ describe("#181 arcade views show a board with no LAN traffic (clean HOME)", () =
       expect(demoCalls(), `feed ingest calls over ${frames} frames and ${polls} polls`).toBeLessThanOrEqual(polls);
     });
 
-    it(`${engine}: (a) stillness — zero feed calls and zero extra renders while the demo state holds still`, async () => {
+    it(`${engine}: (a) stillness — over one full poll interval (tick included) exactly one feed call, the top-of-tick demo step, and zero extra renders while the demo state holds still`, async () => {
       const step = vi.spyOn(protoOf(engine), "step");
       const render = vi.spyOn(protoOf(engine), engine === "netpong" ? "drawHud" : "draw");
       const { view, demoCalls } = mount(engine, cleanHomeState());
       await vi.advanceTimersByTimeAsync(1000);
       expect(entities(engine, view), "demo board up").toBeGreaterThan(0);
       mode = "hold"; // no poll result lands: the demo state holds still
-      await vi.advanceTimersByTimeAsync(1000);
-      const d0 = demoCalls(), s0 = step.mock.calls.length, r0 = render.mock.calls.length;
-      // 55 frames stay inside one poll interval: from #199 a tick that finds the held poll still in flight while the
-      // demo is on plays the next demo step (an empty board is a Fail), so the still stretch ends at the next tick
-      for (let i = 0; i < 55; i++) await vi.advanceTimersByTimeAsync(17);
+      const d0 = demoCalls(), s0 = step.mock.calls.length, r0 = render.mock.calls.length, f0 = fetches;
+      // one full poll interval, from just after a tick up to and including the next tick (1000 ms, the boundary in):
+      // frame by frame, 17 ms at a time, the last advance landing exactly on the tick. #199: a playing demo makes its
+      // own batch at the top of every tick, before (and whatever) the fetch does, so exactly that one step lands in the
+      // window, on the tick that starts the fetch that then hangs. Nothing in between.
+      const perAdvance: number[] = [];
+      for (let t = 0; t < 1000; t += 17) {
+        const d = demoCalls();
+        await vi.advanceTimersByTimeAsync(Math.min(17, 1000 - t));
+        perAdvance.push(demoCalls() - d);
+      }
       const frames = step.mock.calls.length - s0, renders = render.mock.calls.length - r0;
+      const at = perAdvance.flatMap((n, i) => (n ? [`${n} by ${Math.min(1000, (i + 1) * 17)} ms`] : []));
+      expect(fetches - f0, "fetches in the window (the tick at its end starts the one that hangs)").toBe(1);
       expect(frames, "frames in the still stretch").toBeGreaterThanOrEqual(55);
-      expect(demoCalls() - d0, "feed calls while still").toBe(0);
+      expect(demoCalls() - d0, `feed calls in one full interval, tick included (${at.join(", ") || "none"})`).toBe(1);
+      expect(perAdvance[perAdvance.length - 1], "the one feed call is the tick's top-of-tick demo step").toBe(1);
       expect(renders, "renders while still (one per frame, no extra)").toBe(frames);
     });
 
