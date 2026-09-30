@@ -370,7 +370,6 @@ describe("uniform declaration lint (#171 b): real tree", () => {
     const found = tree.violations;
     expect(keyed(found)).toEqual([
       { file: "web/src/graph/backdrop.ts", rule: "uniform-set-undeclared", target: "uPhoto" },
-      { file: "web/src/graph/scene.ts", rule: "uniform-set-undeclared", target: "uResolution" },
     ]);
     expect(found.filter((v) => v.rule === "glsl-uniform-undeclared")).toEqual([]);
     expect(found.filter((v) => v.rule === "uniform-type-conflict")).toEqual([]);
