@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import shutil
+import signal
 import subprocess
 import time
 import zipfile
@@ -317,9 +318,27 @@ def _gone(pid: int) -> bool:
     return False
 
 
+def _kill_groups_after(request: pytest.FixtureRequest, pids: Path) -> None:
+    """Teardown: SIGKILL every process group recorded in ``pids`` (each line's first pid leads one,
+    start_new_session), so a red run never leaves an orphan behind."""
+
+    def kill() -> None:
+        for line in pids.read_text().splitlines() if pids.is_file() else []:
+            for i, pid in enumerate(int(p) for p in line.split()):
+                try:
+                    if i == 0:
+                        os.killpg(pid, signal.SIGKILL)
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+
+    request.addfinalizer(kill)
+
+
 def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
     _isolate_plugin_local: Path,
 ) -> None:
     """The service's own timeout (a bundle-pack-entry.mjs that hangs) is the setup refusal, not a raw
@@ -327,6 +346,7 @@ def test_service_timeout_maps_to_setup_refusal_and_kills_the_group(
     bundle_timeout, with lint_timeout's "in time" sentence."""
     _needs_node_tree()
     pids = tmp_path / "pids"
+    _kill_groups_after(request, pids)
     hang = tmp_path / "hang-bundle.mjs"
     hang.write_text(
         "import { spawn } from 'node:child_process';\n"

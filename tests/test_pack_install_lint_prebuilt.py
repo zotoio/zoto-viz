@@ -31,6 +31,7 @@ from tests.test_pack_install_lint_fail_closed import (
     _bad_probe,
     _blocked,
     _gone,
+    _kill_groups_after,
     _needs_node_tree,
     _probe,
     _pulse_doc,
@@ -142,12 +143,14 @@ def test_zip_install_setup_refusal_names_its_own_cause(
 def test_a_lint_that_hangs_in_process_is_refused_at_the_service_timeout_and_leaves_no_process(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
+    request: pytest.FixtureRequest,
 ) -> None:
     """The built lint blocks bundle-pack-entry.mjs's event loop (and has started a child of its own):
     the service's timeout (the one bound now) refuses with the setup sentence, and neither the script
-    nor any descendant is left running."""
+    nor any descendant is left running. #186: reason bundle_timeout, lint_timeout's sentence."""
     _needs_node_tree()
     pids = tmp_path / "pids"
+    _kill_groups_after(request, pids)
     hang = (
         "import { spawn } from 'node:child_process';\n"
         "import { appendFileSync } from 'node:fs';\n"
