@@ -9,6 +9,7 @@
  * pack, so the host never began the tile's pack or probed it, and the failure never reached ViewState.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { WebGLProgram as ThreeWebGLProgram } from "three";
 import type { RenderHost } from "../../graph/render-host";
 import { bootMainEntry, setHarnessFetchOverride } from "./main-entry-harness";
 
@@ -37,6 +38,7 @@ const t = vi.hoisted(() => {
 
 vi.mock("../../graph/render-host", async (orig) => {
   const real = await orig<typeof import("../../graph/render-host")>();
+  const { mockPartial } = await import("../../../test-support/mock-partial");
   class WallGlHost extends real.RenderHost {
     constructor(...args: ConstructorParameters<typeof real.RenderHost>) {
       super(...args);
@@ -57,9 +59,10 @@ vi.mock("../../graph/render-host", async (orig) => {
           const onShaderError = rd.debug.onShaderError;
           if (!onShaderError) return;
           t.box.probedCompiles += 1;
-          // Only the context is read by the probe; three's program / shader objects are opaque to it,
-          // so they are stand-ins here (Reflect.apply: a fake GL has no real ones to pass).
-          Reflect.apply(onShaderError, undefined, [rd.getContext(), {}, {}, {}]);
+          // three's signature: (gl: WebGLRenderingContext, program: three's WebGLProgram, vertex and
+          // fragment WebGLShader). The probe reads the context's info logs; the program is a partial
+          // fake (the fake GL has no real three program), and a DOM WebGLShader has no members, so {} is one.
+          onShaderError(rd.getContext(), mockPartial<ThreeWebGLProgram>({}), {}, {});
         },
       });
       t.box.host = this;

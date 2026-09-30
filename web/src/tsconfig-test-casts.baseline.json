@@ -7,7 +7,6 @@
   "web/src/app/host-mesh-bridge-guard.test.ts": 11,
   "web/src/app/stage2-main.test.ts": 1,
   "web/src/app/tile-health-production.test.ts": 1,
-  "web/src/app/view-state.test.ts": 1,
   "web/src/arcade/arcade-idle-board.test.ts": 6,
   "web/src/arcade/arcade-idle-feed.test.ts": 1,
   "web/src/arcade/arcade-layout-dpr-fit.test.ts": 1,
