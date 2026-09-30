@@ -316,7 +316,7 @@ describe("pack lint guardrails", () => {
     const current = scanAllGuardrails(repoRoot);
     const out = path.join(repoRoot, "plugins/sdk/pack-lint-baseline.json");
     const baselineRows = current
-      .filter((v) => v.rule !== "host-imports-pack-src")
+      .filter((v) => v.rule !== "host-imports-pack-src" && v.rule !== "glsl-uniform-undeclared")
       .map(({ file, rule, target }) => ({ file, rule, target }));
     writeFileSync(out, `${JSON.stringify({ violations: baselineRows }, null, 2)}\n`);
   });
@@ -324,13 +324,20 @@ describe("pack lint guardrails", () => {
   it("plugins/src and web/src violations do not exceed the checked-in baseline", () => {
     const current = scanAllGuardrails(repoRoot);
     const baseline = loadBaseline(repoRoot);
-    const { ok, newViolations, staleViolations, disallowedLegacyZoto, disallowedHostPackSrc } =
-      assertBaselineGuard(current, baseline);
+    const {
+      ok,
+      newViolations,
+      staleViolations,
+      disallowedLegacyZoto,
+      disallowedHostPackSrc,
+      disallowedUniformUndeclared,
+    } = assertBaselineGuard(current, baseline);
     if (!ok) {
       expect(newViolations).toEqual([]);
       expect(staleViolations).toEqual([]);
       expect(disallowedLegacyZoto).toEqual([]);
       expect(disallowedHostPackSrc).toEqual([]);
+      expect(disallowedUniformUndeclared).toEqual([]);
     }
     expect(ok).toBe(true);
   });

@@ -28,6 +28,13 @@ export function ruleHint(rule: PackLintRule, v: PackLintViolation): string {
       return "Read config in onConfig or once at init with getConfig(); do not call getConfig() from onFrame.";
     case "host-imports-pack-src":
       return "Load shipped packs only via /api/plugins/<id>/module.js (no direct plugins/src imports).";
+    case "glsl-uniform-undeclared":
+      return "Declare `uniform <type> NAME;` in that stage (or the GLSL const it interpolates). "
+        + "A missing declaration fails the shader compile and leaves the tile bare (#171).";
+    case "uniform-set-undeclared":
+      return "Declare the uniform in the shader it is bound to, or stop setting it (a pack can only set host sky uniforms).";
+    case "glsl-uniform-unset":
+      return "Set it in the material's uniforms / onBeforeCompile (or use a host sky uniform in a pack sky).";
     default:
       return "";
   }
@@ -56,6 +63,16 @@ export function ruleMessage(rule: PackLintRule, v: PackLintViolation): string {
       return `${loc} calls getConfig() inside onFrame.`;
     case "host-imports-pack-src":
       return `${loc} reaches pack source (\`${v.target}\`).`;
+    case "glsl-uniform-undeclared": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader reads undeclared uniform ${name}.`;
+    }
+    case "uniform-set-undeclared":
+      return `${loc} binds uniform ${v.target}, which its GLSL never declares.`;
+    case "glsl-uniform-unset": {
+      const [stage, name] = v.target.split(":");
+      return `${loc} ${stage} shader reads uniform ${name}, which nothing sets.`;
+    }
     default:
       return `${loc} ${rule} → ${v.target}`;
   }

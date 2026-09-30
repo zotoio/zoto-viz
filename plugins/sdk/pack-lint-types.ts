@@ -10,7 +10,13 @@ export type PackLintRule =
   /** `import()` / `require()` argument is not a verifiable string literal. */
   | "unverified-import-call"
   /** `web/src/**` statically reaches `plugins/src/**` (reverse pack boundary). */
-  | "host-imports-pack-src";
+  | "host-imports-pack-src"
+  /** #171 (b): JS binds a uniform its GLSL never declares. */
+  | "uniform-set-undeclared"
+  /** #171 (b): a shader stage reads a custom uniform it never declares. */
+  | "glsl-uniform-undeclared"
+  /** #171 (b): a shader stage reads a declared custom uniform its binding never sets. */
+  | "glsl-uniform-unset";
 
 export interface PackLintViolation {
   /** Repo-relative path (`plugins/src/...` or `web/src/...`). */
