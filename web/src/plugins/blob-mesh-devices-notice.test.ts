@@ -2,8 +2,9 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { BLOB_MESH_MAX_BLOBS, BLOB_MESH_SLOT_BUDGET } from "../../../plugins/sdk/blob-mesh-budget";
+import { BLOB_MESH_SLOT_BUDGET } from "../../../plugins/sdk/blob-mesh-budget";
 import { paintPackInfoCaption, resetBlobMeshNoticeLatches } from "./blob-mesh-devices-notice";
+import { LAN11_35S_PPS, lanFrames35s } from "./pack-sky-lan-frame-test-helper";
 import { runPackFrameHandler, type VizPackHandlers } from "./viz-pack-host";
 import type { VizDataFrame } from "./viz-host";
 import type { VizDemoPackId } from "../ui/viz-hud";
@@ -16,8 +17,9 @@ import type { VizDemoPackId } from "../ui/viz-hud";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const CSS = readFileSync(path.resolve(here, "../style.css"), "utf8");
 
-const PLURAL = "Showing the 8 busiest devices. 3 quieter ones don't fit.";
-const SINGULAR = "Showing the 8 busiest devices. 1 quieter one doesn't fit.";
+/** 7 drawn: the plan holds back room for the busiest blob to reach 1.4x before counting what fits. */
+const PLURAL = "Showing the 7 busiest devices. 4 quieter ones don't fit.";
+const SINGULAR = "Showing the 7 busiest devices. 1 quieter one doesn't fit.";
 const FRAME_MS = 100;
 
 function lan(n: number): VizDataFrame {
@@ -68,16 +70,32 @@ afterEach(() => {
 });
 
 describe("blob-mesh over-budget devices notice (#173)", () => {
-  it("11 devices: draws the 8 busiest inside the budget and says 3 quieter ones don't fit (exact plural copy)", () => {
+  it("11-device live LAN: draws 7 blobs, busiest >= 1.4x the quietest, sum r^2 within budget, and the exact plural copy", () => {
+    const [frame] = lanFrames35s({ fixture: "host" }, 2, 1, 6, 11);
+    expect(frame!.talkers).toHaveLength(11);
+    expect(frame!.talkers.reduce((s, t) => s + t.rate, 0)).toBe(LAN11_35S_PPS);
+    drive(frame!, 3000);
+    const radii = slot0.filter((_, i) => i % 4 === 2);
+    const ratio = Math.max(...radii) / Math.min(...radii);
+    const sumR2 = radii.reduce((s, r) => s + r * r, 0);
+    const text = `radii=${radii.map((r) => r.toFixed(4)).join(",")} ratio=${ratio.toFixed(4)} sumR2=${sumR2.toFixed(6)}`;
+    process.stdout.write(`[LAN11] ${text} notice=${JSON.stringify(caption()?.textContent ?? null)}\n`);
+    expect(radii, text).toHaveLength(7);
+    expect(ratio, text).toBeGreaterThanOrEqual(1.4 - 1e-9);
+    expect(sumR2, `never a silent overlap past the budget: ${text}`).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + 1e-9);
+    expect(caption()?.textContent).toBe(PLURAL);
+  });
+
+  it("11 devices: draws the 7 busiest inside the budget and says 4 quieter ones don't fit (exact plural copy)", () => {
     drive(lan(11), 3000);
     expect(caption()?.textContent).toBe(PLURAL);
     const radii = slot0.filter((_, i) => i % 4 === 2);
-    expect(radii).toHaveLength(BLOB_MESH_MAX_BLOBS);
+    expect(radii).toHaveLength(7);
     expect(radii.reduce((s, r) => s + r * r, 0), "never a silent overlap past the budget").toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + 1e-9);
   });
 
-  it("9 devices: exact singular copy", () => {
-    drive(lan(9), 3000);
+  it("8 devices: exact singular copy", () => {
+    drive(lan(8), 3000);
     expect(caption()?.textContent).toBe(SINGULAR);
   });
 

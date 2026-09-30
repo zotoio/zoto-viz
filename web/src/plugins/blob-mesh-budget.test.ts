@@ -7,6 +7,8 @@ import {
   BLOB_MESH_GROWTH,
   BLOB_MESH_MAX_BLOBS,
   BLOB_MESH_SLOT_BUDGET,
+  blobMeshFitCount,
+  planBlobMesh,
 } from "../../../plugins/sdk/blob-mesh-budget";
 import { runPackFrameHandler } from "./viz-pack-host";
 import type { VizDataFrame } from "./viz-host";
@@ -95,7 +97,7 @@ describe("blob-mesh coverage budget (#174)", () => {
     for (const [name, frame] of Object.entries(FRAMES)) {
       it(`${who}: ${name} keeps sum r^2 over drawn blobs within the slot budget`, () => {
         const radii = radiiOf(slotsOf(frame));
-        expect(radii.length).toBe(Math.min(BLOB_MESH_MAX_BLOBS, frame.talkers.length));
+        expect(radii.length).toBe(Math.min(blobMeshFitCount(), frame.talkers.length));
         const sumR2 = radii.reduce((s, r) => s + r * r, 0);
         expect(sumR2, `${name} radii=${radii.map((r) => r.toFixed(3)).join(",")}`).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + EPS);
       });
@@ -120,6 +122,55 @@ describe("blob-mesh coverage budget (#174)", () => {
       expect(r).toBeCloseTo(BLOB_MESH_FLOOR + BLOB_MESH_GROWTH, 9);
     });
   }
+
+  it("growth reserve: at budget 0.1152 and floor 0.12 the plan fits 7 blobs, since 8 with the busiest at 1.4x would need 0.1296", () => {
+    expect(BLOB_MESH_SLOT_BUDGET).toBeCloseTo(0.1152, 12);
+    expect(6 * 0.12 ** 2 + (1.4 * 0.12) ** 2).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET);
+    expect(7 * 0.12 ** 2 + (1.4 * 0.12) ** 2).toBeGreaterThan(BLOB_MESH_SLOT_BUDGET);
+    expect(blobMeshFitCount()).toBe(7);
+    expect(BLOB_MESH_MAX_BLOBS).toBe(8);
+  });
+
+  for (const [who, slotsOf] of writers) {
+    it(`${who}: busiest >= 2x the quietest drawn rate gives a radius >= 1.4x, inside the budget (LAN7, BUSY1_IDLE6, two devices at exactly 2x)`, () => {
+      for (const [name, frame] of [["LAN7", LAN7], ["BUSY1_IDLE6", BUSY1_IDLE6], ["PAIR2X", frameOf([talker("172.30.0.10", 90), talker("172.30.0.11", 45)])]] as const) {
+        const radii = radiiOf(slotsOf(frame));
+        const ratio = Math.max(...radii) / Math.min(...radii);
+        const sumR2 = radii.reduce((s, r) => s + r * r, 0);
+        const text = `${name} radii=${radii.map((r) => r.toFixed(4)).join(",")} ratio=${ratio.toFixed(4)} sumR2=${sumR2.toFixed(6)}`;
+        process.stdout.write(`[contrast] ${who}: ${text}\n`);
+        expect(ratio, text).toBeGreaterThanOrEqual(1.4 - EPS);
+        expect(sumR2, text).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + EPS);
+      }
+    });
+
+    it(`${who}: equal rates stay equal size (EQUAL7)`, () => {
+      const radii = radiiOf(slotsOf(EQUAL7));
+      for (const r of radii) expect(r).toBeCloseTo(radii[0]!, 12);
+    });
+  }
+
+  it("contrast holds across a sweep of 2..11 devices with busiest >= 2x quietest drawn, floor and budget kept", () => {
+    let checked = 0;
+    for (let n = 2; n <= 11; n++) {
+      for (const spread of [2, 2.5, 5, 40]) {
+        for (const shape of [0.3, 1, 3]) {
+          // busiest = spread x quietest drawn; the rest follow a power curve between them
+          const rates = Array.from({ length: n }, (_, i) => 10 * (1 + (spread - 1) * (1 - i / (n - 1)) ** shape));
+          const plan = planBlobMesh(rates);
+          const drawn = plan.shownIdx.map((i) => rates[i]!);
+          if (Math.max(...drawn) < 2 * Math.min(...drawn)) continue;
+          checked++;
+          const text = `n=${n} spread=${spread} shape=${shape} radii=${plan.radii.map((r) => r.toFixed(4)).join(",")}`;
+          expect(Math.max(...plan.radii) / Math.min(...plan.radii), text).toBeGreaterThanOrEqual(1.4 - EPS);
+          expect(plan.radii.reduce((s, r) => s + r * r, 0), text).toBeLessThanOrEqual(BLOB_MESH_SLOT_BUDGET + EPS);
+          expect(Math.min(...plan.radii), text).toBeGreaterThanOrEqual(BLOB_MESH_FLOOR - EPS);
+          expect(plan.shownIdx.length, text).toBe(Math.min(7, n));
+        }
+      }
+    }
+    expect(checked).toBeGreaterThan(60);
+  });
 
   it("host mirror and pack frontend write identical slot 0 on every frame", () => {
     for (const [name, frame] of Object.entries(FRAMES)) {

@@ -190,14 +190,19 @@ const BUSY1_IDLE6: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 40
 const SINGLE: VizDataFrame = { ...EMPTY, talkers: [talker("172.30.0.10", 300)] };
 const FULL8: VizDataFrame = { ...EMPTY, talkers: Array.from({ length: 8 }, (_, i) => talker(`172.30.0.${10 + i}`, 120 - i * 12, i === 1 ? "gateway" : "lan")) };
 
-export const DARK_PATCH_CASES = { LAN7, EQUAL7, BUSY1_IDLE6, SINGLE, FULL8, EMPTY } as const;
+const LAN11 = lanFrames35s({ fixture: "host" }, 2, 1, 6, 11)[0]!;
+
+export const DARK_PATCH_CASES = { LAN7, LAN11, EQUAL7, BUSY1_IDLE6, SINGLE, FULL8, EMPTY } as const;
 
 describe(`blob-mesh dark patches on a CPU mirror of the sky (budget ${BLOB_MESH_SLOT_BUDGET.toFixed(4)}, floor ${BLOB_MESH_FLOOR})`, () => {
   it("mirror inputs: the live LAN frame is 7 devices at 420 pkt/s and the shader floor is the writers' floor", () => {
     expect(LAN7.talkers).toHaveLength(7);
     expect(LAN7.talkers.reduce((s, t) => s + t.rate, 0)).toBe(LAN_35S_PPS);
     expect(mirrorShape(SKY)).toEqual({ floor: BLOB_MESH_FLOOR, gate: "live-gated" });
-    expect(planBlobMesh(FULL8.talkers.map((t) => t.rate)).hidden).toBe(0);
+    // 8 devices draw 7 since the growth reserve (the 8th is dropped and the notice says so)
+    expect(planBlobMesh(FULL8.talkers.map((t) => t.rate)).hidden).toBe(1);
+    expect(LAN11.talkers).toHaveLength(11);
+    expect(planBlobMesh(LAN11.talkers.map((t) => t.rate)).shownIdx).toHaveLength(7);
   });
 
   /**
