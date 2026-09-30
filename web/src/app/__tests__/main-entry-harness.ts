@@ -129,9 +129,20 @@ function apiPath(input: RequestInfo | URL): string {
   }
 }
 
+/** A test's own answers for some API paths; `null` falls through to the harness defaults. */
+export type HarnessFetchOverride = (pathOnly: string, method: string, input: RequestInfo | URL) => Promise<Response> | null;
+let fetchOverride: HarnessFetchOverride | null = null;
+
+/** Answer some API paths from the test (e.g. its own plugin catalog or saved profile); `null` clears it. */
+export function setHarnessFetchOverride(fn: HarnessFetchOverride | null): void {
+  fetchOverride = fn;
+}
+
 function harnessFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
   const pathOnly = apiPath(input);
   const method = (init?.method || "GET").toUpperCase();
+  const own = fetchOverride?.(pathOnly, method, input);
+  if (own) return own;
   if (pathOnly.includes("style.css")) {
     return Promise.resolve(new Response("", { status: 200, headers: { "Content-Type": "text/css" } }));
   }
