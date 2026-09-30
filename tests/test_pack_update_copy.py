@@ -23,7 +23,6 @@ from service import plugin_local
 from service import plugin_zip as pz
 from service import plugins
 from service.plugin_install import (
-    InstallCheckUnavailableError,
     InstallStartFailedError,
     install_zip_to_runtime,
     recover_interrupted_swaps,
@@ -178,10 +177,12 @@ def test_fresh_install_unchecked_is_the_185_sentence_without_a_fix(
         raise OSError("staged entry unreadable")
 
     monkeypatch.setattr(plugins, "verify_pack_bundle_home", unreadable)
-    with pytest.raises(InstallCheckUnavailableError) as exc:
-        plugin_local.install_local_zip(_pack(tmp_path, 1), overwrite=True)
+    # #200: the install answers the sentence (no longer raises); tests/test_pack_install_unchecked.py
+    # pins the rest of that answer.
+    info = plugin_local.install_local_zip(_pack(tmp_path, 1), overwrite=True)
     want = f"Couldn't safety-check {NAME}, so it wasn't installed."
-    assert str(exc.value) == want
+    assert info.get("ok") is False and info.get("reasonCode") == "install_unchecked", info
+    assert info.get("message") == want, info
     table = json.loads(TABLE.read_text(encoding="utf-8"))
     first = table["install"].replace("{name}", NAME).split(" {fix}")[0]
     assert want == first, "word for word the #185 install sentence, without its fix"
