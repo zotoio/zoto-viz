@@ -24,6 +24,7 @@ const PINNED_SHIPPED_PACK_SKY_IDS = [
   "packet-tunnel",
   "rf-constellation",
   "rocket-car-soccer",
+  "sandbox-fixture-multi",
   "roto-proto",
   "star-sines",
   "stereo-gram",
