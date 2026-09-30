@@ -184,12 +184,13 @@ describe("#179 part (c) UX Pro: a solo wall whose pack shader fails (production 
     await waitCouldntDraw("Fluid Dynamics couldn't draw.");
     expect(visibilityNow(label), "while the line shows").toBe("hidden");
     // Back to the pack whose sky compiled: the tile leaves cant-draw / shader, and its labels come back.
-    // (main.ts does not reinstall that sky -- its failed install left skyLoaded on it -- so the host's fallback
-    // element stays mounted; reported to TSE. This row is about the labels.)
+    // The re-pick reinstalls Calm Sky (#203), so the tile shows its starting card until a frame is drawn
+    // (this harness draws none). This row is about the labels.
     const vs = await import("../view-state");
     t.failLog = null;
     await pickModeFromUi("plugin:calm-sky");
-    await vi.waitFor(() => expect(vs.viewStateOf("main")?.kind).toBe("ready"), { timeout: 8000 });
+    await vi.waitFor(() => expect(vs.viewStateOf("main")?.kind).toBe("starting"), { timeout: 8000 });
+    expect({ line: tile().querySelector(".tile-cant-draw"), surface: tile().closest("[data-cant-draw-surface]") }, "surface gone").toEqual({ line: null, surface: null });
     expect(visibilityNow(label), "after it clears").not.toBe("hidden");
   });
 

@@ -1429,6 +1429,14 @@ async function installPluginSky(
     const owner = ctl.signal();
     if (waitKey && ctl.current()) skyWaits.cancelOwned(waitKey, owner);
     if (owner.aborted) return;
+    // A failed install (#203) has already dropped the tile's previous sky (the backdrop clears it
+    // on a compile error) and may have left the host's fallback up: nothing on the tile is known to
+    // be installed any more. The next pick of any sky, the one that was up before included, must
+    // install it, and a pick with no sky must still clear this one, so skyLoaded names the failure.
+    if (ctl.current()) {
+      skyInstalled.delete(target);
+      if (target === scene) skyLoaded = `${packKey}#failed`;
+    }
     console.warn("zoto-viz plugin sky:", e);
     removeModeSwitchAbortListener(signal, disposeSky);
     throw e;
