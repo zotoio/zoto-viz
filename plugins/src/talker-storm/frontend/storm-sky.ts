@@ -27,16 +27,19 @@ const smoothstep = (a: number, b: number, x: number) => {
   return t * t * (3 - 2 * t);
 };
 
-/** Linear RGB for one camera-relative ray (unit, -z forward). */
+/**
+ * Linear RGB for one camera-relative ray (unit, -z forward). `hostSlot0` is what the host pack
+ * mirror writes to slot 0 ([count, audio, t mod 1]; the sky reads only .y); `slot1` is the pack's.
+ */
 export function talkerStormSky(
   dir: readonly [number, number, number],
-  slots: { slot0: readonly number[]; slot1: readonly number[] },
+  slots: { hostSlot0: readonly number[]; slot1: readonly number[] },
   time: number,
   bright: number,
 ): [number, number, number] {
   const fwd = Math.max(-dir[2], 0.05);
   const p = [dir[0] / fwd, dir[1] / fwd];
-  const audio = clamp(slots.slot0[1] ?? 0, 0, 1);
+  const audio = clamp(slots.hostSlot0[1] ?? 0, 0, 1);
   const g = clamp(0.5 + p[1]!, 0, 1);
   const col = [0.02 + 0.05 * g, 0.025 + 0.035 * g, 0.05 + 0.07 * g];
   for (let i = 0; i < 16; i++) {

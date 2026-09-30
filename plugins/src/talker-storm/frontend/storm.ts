@@ -20,14 +20,12 @@ function fnv1a(s: string): number {
 }
 
 /**
- * Slot 0 = [particle count, audio, t mod 1]: the layout the host pack mirror
- * (web/src/plugins/viz-pack-host.ts) also writes every frame, so it must not change.
  * Slot 1 = per talker [cx, cy, hue, rate 0..1]: storm cell centre on the camera-relative
  * screen plane (dir.xy / -dir.z, about +-0.83 x +-0.52 on a 16:10 stage), role hue, rate / 200.
+ * Slot 0 is not the pack's: the host pack mirror (web/src/plugins/viz-pack-host.ts) writes
+ * [particle count, audio, t mod 1] there every frame, and the sky reads audio from it.
  */
-export function stormSlots(frame: Pick<VizDataFrame, "t" | "audio" | "talkers">): { slot0: number[]; slot1: number[] } {
-  let count = 0;
-  for (const talker of frame.talkers) count = Math.min(512, count + Math.min(8, Math.ceil(talker.rate / 40)));
+export function stormSlots(frame: Pick<VizDataFrame, "talkers">): { slot1: number[] } {
   const slot1: number[] = [];
   for (let i = 0; i < Math.min(TS_MAX_TALKERS, frame.talkers.length); i++) {
     const t = frame.talkers[i]!;
@@ -36,5 +34,5 @@ export function stormSlots(frame: Pick<VizDataFrame, "t" | "audio" | "talkers">)
     const cy = ((Math.floor(h / 1009) % 1013) / 1012) * 0.76 - 0.38;
     slot1.push(cx, cy, roleHue(t.role), Math.min(1, Math.max(0, t.rate / 200)));
   }
-  return { slot0: [count, frame.audio, frame.t % 1], slot1 };
+  return { slot1 };
 }

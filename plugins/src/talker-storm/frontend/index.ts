@@ -1,16 +1,15 @@
-/** Talker storm: one storm cell per top talker, sent to the sky in UBO slots 0-1 (#180). */
+/** Talker storm: one storm cell per top talker, sent to the sky in UBO slot 1 (#180). */
 
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 import { getVizZoto } from "plugins/sdk/viz-zoto";
 import { stormSlots } from "./storm";
 const host = getVizZoto();
 
-// The storm travels in slots the sky reads (frontend/storm.ts), not writeParticles: the host has no
-// renderer for pack particle records.
+// The storm travels in slot 1, which the sky reads (frontend/storm.ts), not writeParticles: the host
+// has no renderer for pack particle records. Slot 0 belongs to the host pack mirror, which writes
+// [count, audio, t mod 1] every frame, so the pack never writes it.
 host.onFrame = (frame: VizDataFrame) => {
-  const s = stormSlots(frame);
-  host.writeBuffer(0, s.slot0);
-  host.writeBuffer(1, s.slot1);
+  host.writeBuffer(1, stormSlots(frame).slot1);
   host.writeUniform("uBright", 0.8 + frame.audio * 0.4);
   host.writeUniform("uAudio", frame.audio);
 };

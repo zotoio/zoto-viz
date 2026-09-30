@@ -1,7 +1,7 @@
 id: talker-storm
 name: Talker Storm
 version: 1
-hint: Talker storm. Each top talker is a storm cell in the sky, sent in UBO slots (slot 0 counts, slot 1 cells). maxParticles stays for the host pack mirror's particle writes.
+hint: Talker storm. Each top talker is a storm cell in the sky; the pack sends the cells in UBO slot 1. Slot 0 (count, audio) and the particles come from the host pack mirror, so maxParticles stays.
 capabilities:
   - viz.read
   - viz.write

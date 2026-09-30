@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
-import { VIZ_FIXTURE_IDLE } from "../../../sdk/viz-fixtures";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { VIZ_FIXTURE_IDLE, VIZ_FIXTURES } from "../../../sdk/viz-fixtures";
 import yml from "../plugin.yml?raw";
 import sky from "../sky/fragment.glsl?raw";
 import * as stormSky from "./storm-sky";
@@ -19,19 +20,34 @@ function ray(u: number, v: number): [number, number, number] {
   return [x / l, y / l, -1 / l];
 }
 
-function mirror(): typeof stormSky {
-  return stormSky;
+/** What the host pack mirror writes to slot 0 for this frame; the sky reads only .y (audio). */
+function hostSlot0(frame: Pick<VizDataFrame, "audio" | "t">): number[] {
+  return [0, frame.audio, frame.t % 1];
 }
+
+/** Five frames: 4, 10, 24 (above the 16 cap) and 4 talkers, then none. */
+const FRAMES: VizDataFrame[] = [
+  VIZ_FIXTURES.idle,
+  VIZ_FIXTURES["golden-live"],
+  VIZ_FIXTURES["fat-live"],
+  VIZ_FIXTURES["vm-live"],
+  { ...VIZ_FIXTURE_IDLE, talkers: [] },
+];
+
+type Write =
+  | { kind: "buffer"; slot: number; data: number[] }
+  | { kind: "uniform"; name: string }
+  | { kind: "particles"; len: number };
 
 describe("talker-storm sky (#180)", () => {
   it("reads the storm from zotoVizSlots", () => {
     expect(sky).toMatch(/\bzotoVizSlots\s*\[/);
   });
 
-  it("CPU mirror: the idle demo talkers light storm regions with structure (five-patch not uniform)", async () => {
-    const { talkerStormSky, stormSlots, TS_SKY_GLSL_LINES } = await mirror();
+  it("CPU mirror: the idle demo talkers light storm regions with structure (five-patch not uniform)", () => {
+    const { talkerStormSky, stormSlots, TS_SKY_GLSL_LINES } = stormSky;
     for (const line of TS_SKY_GLSL_LINES) expect(sky, `mirror line missing from the sky: ${line}`).toContain(line);
-    const slots = stormSlots(VIZ_FIXTURE_IDLE);
+    const slots = { hostSlot0: hostSlot0(VIZ_FIXTURE_IDLE), slot1: stormSlots(VIZ_FIXTURE_IDLE).slot1 };
     // 8 x 5 regions; a region is lit when its mean luma >= 40/255.
     let litRegions = 0;
     for (let rj = 0; rj < 5; rj++) {
@@ -49,21 +65,76 @@ describe("talker-storm sky (#180)", () => {
       .map(([u, v]) => lum(talkerStormSky(ray(u!, v!), slots, 10, 1)) * 255);
     expect(Math.max(...five) - Math.min(...five)).toBeGreaterThan(6);
     // No talkers -> no storm cell reaches lit.
-    const empty = stormSlots({ ...VIZ_FIXTURE_IDLE, talkers: [] });
+    const empty = { hostSlot0: hostSlot0(VIZ_FIXTURE_IDLE), slot1: stormSlots({ talkers: [] }).slot1 };
     let emptyLit = 0;
     for (let k = 0; k < 400; k++) if (lum(talkerStormSky(ray((k % 20 + 0.5) / 20, (Math.floor(k / 20) + 0.5) / 20), empty, 10, 1)) * 255 >= 40) emptyLit++;
     expect(emptyLit).toBe(0);
   });
 
-  it("slot 0 keeps the host pack-mirror layout and the storm fits the manifest caps", async () => {
-    const { stormSlots, TS_MAX_TALKERS } = await mirror();
-    const s = stormSlots(VIZ_FIXTURE_IDLE);
-    const count = VIZ_FIXTURE_IDLE.talkers.reduce((n, t) => n + Math.min(8, Math.ceil(t.rate / 40)), 0);
-    expect(s.slot0).toEqual([count, VIZ_FIXTURE_IDLE.audio, VIZ_FIXTURE_IDLE.t % 1]);
-    expect(s.slot1.length).toBe(Math.min(TS_MAX_TALKERS, VIZ_FIXTURE_IDLE.talkers.length) * 4);
-    const maxBuffers = Number(yml.match(/^\s*maxBuffers:\s*(\d+)/m)?.[1]);
-    const maxFloats = Number(yml.match(/^\s*maxBufferFloats:\s*(\d+)/m)?.[1]);
-    expect(maxBuffers).toBeGreaterThanOrEqual(2);
-    expect(maxFloats).toBeGreaterThanOrEqual(TS_MAX_TALKERS * 4);
+  describe("frontend/index.ts onFrame (real handler, stubbed host)", () => {
+    const g = globalThis as { zoto?: unknown };
+    const writes: Write[] = [];
+    const z: {
+      onFrame: ((frame: VizDataFrame) => void) | null;
+      writeBuffer: (slot: number, data: ArrayLike<number>) => void;
+      writeUniform: (name: string) => void;
+      writeParticles: (data: ArrayLike<number>) => void;
+    } = {
+      onFrame: null,
+      writeBuffer: (slot, data) => writes.push({ kind: "buffer", slot, data: Array.from(data) }),
+      writeUniform: (name) => writes.push({ kind: "uniform", name }),
+      writeParticles: (data) => writes.push({ kind: "particles", len: data.length }),
+    };
+
+    beforeAll(async () => {
+      g.zoto = z;
+      await import("./index");
+    });
+    afterAll(() => {
+      delete g.zoto;
+    });
+
+    function runFrame(frame: VizDataFrame): Write[] {
+      writes.length = 0;
+      expect(typeof z.onFrame, "index.ts must set zoto.onFrame").toBe("function");
+      z.onFrame!(frame);
+      return [...writes];
+    }
+
+    it("never writes host-owned slot 0 (5 frames), and the manifest caps are exact for what it does write", () => {
+      // Slot 0 belongs to the host pack mirror (viz-frame-tick -> viz-pack-host), which writes
+      // [count, audio, t mod 1] there every frame; a pack write would race it.
+      let slot0Writes = 0;
+      let maxSlot = -1;
+      let maxLen = 0;
+      for (const frame of FRAMES) {
+        for (const w of runFrame(frame)) {
+          if (w.kind !== "buffer") continue;
+          if (w.slot === 0) slot0Writes++;
+          maxSlot = Math.max(maxSlot, w.slot);
+          maxLen = Math.max(maxLen, w.data.length);
+        }
+      }
+      expect(slot0Writes, "pack writes to slot 0 over 5 frames").toBe(0);
+      const maxBuffers = Number(yml.match(/^\s*maxBuffers:\s*(\d+)/m)?.[1]);
+      const maxFloats = Number(yml.match(/^\s*maxBufferFloats:\s*(\d+)/m)?.[1]);
+      expect(maxBuffers).toBe(2);
+      expect(maxFloats).toBe(stormSky.TS_MAX_TALKERS * 4);
+      // The caps are used, not padded: slot 1 is the top slot and fat-live (24 talkers) fills it.
+      expect(maxSlot).toBe(maxBuffers - 1);
+      expect(maxLen).toBe(maxFloats);
+    });
+
+    it("writes stormSlots(frame).slot1 to slot 1 on every frame, with no particle or slot 0 writes", () => {
+      for (const frame of FRAMES) {
+        const w = runFrame(frame);
+        const buffers = w.filter((x) => x.kind === "buffer");
+        expect(buffers, `${frame.talkers.length} talkers`).toEqual([
+          { kind: "buffer", slot: 1, data: stormSky.stormSlots(frame).slot1 },
+        ]);
+        expect(w.filter((x) => x.kind === "particles").length, "particle writes").toBe(0);
+        expect(buffers.filter((x) => x.slot === 0).length, "slot 0 writes").toBe(0);
+      }
+    });
   });
 });
