@@ -410,12 +410,11 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
         w.host.beginTilePack("main", "plugin:flaky", "flaky", main, "Flaky", true);
         w.host.onTileShaderCompileFailed("main");
         const sentence = "flaky couldn't draw. Pick another view, or reload to try again.";
-        expect(main.querySelector(":scope > .tile-cant-draw")?.textContent).toBe(sentence);
+        expect(shownLines(main), "before the tick").toEqual([sentence]);
         packLine = "Simple view 12:00";
         vi.advanceTimersByTime(5001);
         expect(main.querySelector(".tile-shader-fallback__text")?.textContent, "the tick ran and rewrote the latch's line").toBe("Simple view 12:00");
-        expect(main.querySelector(":scope > .tile-cant-draw")?.textContent, "still the couldn't-draw line").toBe(sentence);
-        expect(visibilityNow(main.querySelector(".tile-shader-fallback")!), "the latch's line stays hidden under it").toBe("hidden");
+        expect(shownLines(main), "5 s after the pack's line changed: still the one couldn't-draw line").toEqual([sentence]);
       });
     } finally {
       vi.restoreAllMocks();
@@ -454,6 +453,16 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
     expect(genericShaderFallbackMessage("Fluid")).toBe("Fluid can't run its graphics on this device. Other tiles aren't affected.");
   });
 });
+
+/**
+ * The lines a tile shows now: its own couldn't-draw line and the host latch's fallback line, each when it is
+ * mounted and not hidden by the page's CSS.
+ */
+function shownLines(tile: HTMLElement): string[] {
+  return [...tile.querySelectorAll(":scope > .tile-cant-draw, .tile-shader-fallback")]
+    .filter((el) => visibilityNow(el) !== "hidden")
+    .map((el) => el.textContent ?? "");
+}
 
 /** Run `fn` with the page's own stylesheet loaded (the rows read computed visibility from it). */
 function withPageCss(fn: () => void): void {
