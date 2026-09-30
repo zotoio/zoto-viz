@@ -1,0 +1,19 @@
+id: bad-write-not-in-manifest
+name: Bad write not in manifest (uniform lint fixture)
+version: 1
+capabilities:
+  - viz.read
+  - viz.write
+viz:
+  graphWalk: false
+  contract: 2
+  maxBuffers: 1
+  maxBufferFloats: 16
+  maxParticles: 0
+  uniforms:
+    - uTime
+    - uBright
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts

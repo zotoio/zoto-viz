@@ -1,0 +1,16 @@
+// Raw WebGL2: getUniformLocation("uGhost") on a program whose GLSL never declares uGhost.
+const VERT = `#version 300 es
+in vec2 aPos;
+void main() { gl_Position = vec4(aPos, 0.0, 1.0); }`;
+
+const FRAG = `#version 300 es
+precision highp float;
+uniform float uTime;
+out vec4 fragColor;
+void main() { fragColor = vec4(vec3(fract(uTime)), 1.0); }`;
+
+export function draw(gl: WebGL2RenderingContext, prog: WebGLProgram, t: number): string[] {
+  gl.uniform1f(gl.getUniformLocation(prog, "uTime"), t);
+  gl.uniform1f(gl.getUniformLocation(prog, "uGhost"), t);
+  return [VERT, FRAG];
+}

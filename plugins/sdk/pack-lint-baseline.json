@@ -214,6 +214,16 @@
       "file": "plugins/src/fractal-zoom/frontend/pack.test.ts",
       "rule": "host-import",
       "target": "vitest"
+    },
+    {
+      "file": "web/src/graph/backdrop.ts",
+      "rule": "uniform-set-undeclared",
+      "target": "uPhoto"
+    },
+    {
+      "file": "web/src/graph/scene.ts",
+      "rule": "uniform-set-undeclared",
+      "target": "uResolution"
     }
   ]
 }
