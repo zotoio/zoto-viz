@@ -52,7 +52,6 @@
   "exclude": [
     // SHRINK-ONLY: test files that still have tsc errors. Fix a file, then delete its line; never add
     // a path here (a new test file must type-check). Each path here must still have >= 1 tsc error.
-    "../plugins/src/ant-colony/frontend/index.test.ts",
     "../plugins/src/aquarium/frontend/aquarium.test.ts",
     "../plugins/src/koi-pond/frontend/index.test.ts",
     "../plugins/src/sandbox-fixture-multi/frontend/module.test.ts",
