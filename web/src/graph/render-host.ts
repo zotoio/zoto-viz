@@ -124,11 +124,16 @@ export type HostGpu = THREE.WebGLRenderer | SoftwareGpu;
 /** three's `renderer.debug.onShaderError`: it calls this instead of logging when a program fails. */
 type ShaderErrorHook = NonNullable<THREE.WebGLRenderer["debug"]["onShaderError"]>;
 
-/** The stage of a program three reported as failed: a shader that didn't compile, else the link. */
-function failedShaderStage(gl: WebGLRenderingContext, vs: WebGLShader, fs: WebGLShader): "vertex" | "fragment" | "link" {
+/** The stage of a program three reported as failed: a shader that didn't compile, else the program's link. */
+function failedShaderStage(gl: WebGLRenderingContext, vs: WebGLShader, fs: WebGLShader): "vertex" | "fragment" | "program" {
   if (!gl.getShaderParameter(vs, gl.COMPILE_STATUS)) return "vertex";
   if (!gl.getShaderParameter(fs, gl.COMPILE_STATUS)) return "fragment";
-  return "link";
+  return "program";
+}
+
+/** The console id of a tile with no pack: `view:<viewId>`, a leading `plugin:` dropped so it never reads as a pack id. */
+function tileViewLogId(viewId: string): string {
+  return `view:${viewId.replace(/^plugin:/, "")}`;
 }
 
 /**
@@ -866,10 +871,10 @@ export class RenderHost {
       slot.failLog = msg || "shader failed";
       // One console line per latch trip (the tile's move to cant-draw): its pack id, else `view:<viewId>`.
       slot.latch.fail(slot.failLog, () => {
-        const id = slot.packId || `view:${this.gpuTimedView?.viewId || tileId}`;
+        const id = slot.packId || tileViewLogId(this.gpuTimedView?.viewId || tileId);
         const stage = failedShaderStage(gl, vs, fs);
-        const infoLog = (stage === "link" ? gl.getProgramInfoLog(program) : gl.getShaderInfoLog(stage === "vertex" ? vs : fs)) ?? "";
-        console.warn("zoto-viz tile shader:", id, "failed to compile", stage, infoLog);
+        const infoLog = (stage === "program" ? gl.getProgramInfoLog(program) : gl.getShaderInfoLog(stage === "vertex" ? vs : fs)) ?? "";
+        console.warn("zoto-viz tile shader:", id, stage === "program" ? "failed to link" : "failed to compile", stage, infoLog);
       });
       this.lazyCompileFailedTile = tileId;
     };

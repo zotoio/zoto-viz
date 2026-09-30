@@ -1,8 +1,9 @@
 /**
  * #171 (c) item 3: when a tile's shader-error latch trips (the tile goes cant-draw), the host logs one
- * console line, `console.warn("zoto-viz tile shader:", <id>, "failed to compile", stage, infoLog)`.
- * <id> is the tile's pack id, or `view:<viewId>` when the tile has no pack (a built-in sky, like Graph
- * Cloth); infoLog is the failed stage's raw info log, last. Once per latch trip, however many frames fail.
+ * console line, `console.warn("zoto-viz tile shader:", <id>, "failed to compile", stage, infoLog)`, or
+ * `"failed to link", "program"` when both stages compiled and the link failed. <id> is the tile's pack id, or
+ * `view:<viewId>` (leading `plugin:` dropped) when the tile has no pack (Graph Cloth prints `view:graph-fabric`);
+ * infoLog is the failed stage's raw info log, last. Once per latch trip, however many frames fail.
  *
  * three's WebGLRenderer is module-mocked as in render-host.lazy-compile-latch-171c.test.ts: `render()` calls
  * `debug.onShaderError` on every render of a scene holding a broken material (worse than three's once per
@@ -13,6 +14,7 @@ import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { RenderHost, type HostedView, type TileDrawEvent } from "./render-host";
 import { GraphFabric } from "./fabric";
+import { pluginViewId } from "../plugins/instances";
 
 type Stage = "vertex" | "fragment" | "link";
 type Hook = ((gl: object, program: object, vs: object, fs: object) => void) | null;
@@ -141,7 +143,7 @@ describe("#171 (c) item 3: one console line per tile shader-latch trip", () => {
     document.body.replaceChildren();
   });
 
-  it("broken Graph Cloth tile (no pack): exactly one line over several frames, id view:graph-cloth, raw info log last; healthy tile logs none", () => {
+  it("broken Graph Cloth tile (no pack): exactly one line over several frames, id view:graph-fabric, raw info log last; healthy tile logs none", () => {
     const { host, tiles: [tileA, tileB] } = wallOf(2);
     if (!tileA || !tileB) throw new Error("wall has no tiles");
     const events: TileDrawEvent[] = [];
@@ -154,7 +156,7 @@ describe("#171 (c) item 3: one console line per tile shader-latch trip", () => {
     sceneA.add(fabric.mesh);
     const sceneB = sceneWith(null);
     const camera = new THREE.PerspectiveCamera();
-    const vA = view("pane-a", tileA, "graph-cloth");
+    const vA = view("pane-a", tileA, pluginViewId("graph-fabric"));
     const vB = view("pane-b", tileB, "topology");
 
     for (let i = 0; i < FRAMES; i++) {
@@ -164,7 +166,7 @@ describe("#171 (c) item 3: one console line per tile shader-latch trip", () => {
 
     expect(events.filter((e) => e.type === "shader-failed" && e.tileId === "pane-a").length, "pane-a went cant-draw (shader-failed)").toBe(1);
     expect(lines().length, `"${PREFIX}" lines over ${FRAMES} frames`).toBe(1);
-    expect(lines()[0]).toEqual([PREFIX, "view:graph-cloth", "failed to compile", "vertex", t.LOGS.vertex]);
+    expect(lines()[0]).toEqual([PREFIX, "view:graph-fabric", "failed to compile", "vertex", t.LOGS.vertex]);
     expect(lines().filter((args) => args[1] === "view:topology").length, "lines for the healthy tile").toBe(0);
     host.dispose();
   });
@@ -184,12 +186,26 @@ describe("#171 (c) item 3: one console line per tile shader-latch trip", () => {
     host.dispose();
   });
 
+  it("a link failure (both stages compiled): one line, failed to link program, the program log last", () => {
+    const { host, tiles: [tileL] } = wallOf(1);
+    if (!tileL) throw new Error("wall has no tiles");
+    const scene = sceneWith("link");
+    const camera = new THREE.PerspectiveCamera();
+    const vL = view("pane-l", tileL, pluginViewId("graph-fabric"));
+
+    for (let i = 0; i < FRAMES; i++) host.present(vL, 0, scene, camera);
+
+    expect(lines().length, `"${PREFIX}" lines over ${FRAMES} frames`).toBe(1);
+    expect(lines()[0]).toEqual([PREFIX, "view:graph-fabric", "failed to link", "program", t.LOGS.link]);
+    host.dispose();
+  });
+
   it("a healthy tile logs no line", () => {
     const { host, tiles: [tileH] } = wallOf(1);
     if (!tileH) throw new Error("wall has no tiles");
     const scene = sceneWith(null);
     const camera = new THREE.PerspectiveCamera();
-    const vH = view("pane-h", tileH, "graph-cloth");
+    const vH = view("pane-h", tileH, pluginViewId("graph-fabric"));
 
     for (let i = 0; i < FRAMES; i++) host.present(vH, 0, scene, camera);
 
