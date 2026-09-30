@@ -8,6 +8,7 @@
  */
 
 import { skyStartingText } from "../graph/sky-starting-card";
+import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
 import { paintPackAssetPaneNotice } from "../plugins/pack-asset-pane-notice";
 import { packSkyTimedOut } from "../plugins/plugin-copy";
 import type { ConsentState } from "./consent-store";
@@ -65,16 +66,31 @@ function needsYouText(name: string, reason: NeedsYouReason): string {
   }
 }
 
-function cantDrawText(name: string, reason: CantDrawReason): string {
-  switch (reason) {
+function cantDrawText(name: string, state: Extract<ViewState, { kind: "cant-draw" }>, solo: boolean): string {
+  switch (state.reason) {
     case "shader":
-      return `${name} couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.`;
+      // A solo tile has no other tiles to reassure about (UX Pro, 36ec34ae review).
+      return solo
+        ? `${name} couldn't draw. Pick another view, or reload to try again.`
+        : `${name} couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.`;
     case "context-lost":
-      // Every tile is affected: never "Other tiles aren't affected" here (UX Pro, #171 c).
-      return "Graphics stopped responding. Reload to get it back.";
+      // Word for word what the wall notice shows at this moment (its own constants, so they can't
+      // drift): "Restoring…" until Reload is offered, then the Reload sentence. Never "Other tiles
+      // aren't affected": every tile is.
+      return state.reload ? GFX_NO_RESTORE_NOTICE : GFX_INTERRUPTED_NOTICE;
     default:
-      return assertNever(reason);
+      return assertNever(state);
   }
+}
+
+/**
+ * Where the copy lands: the tile id ("main" is the solo wall) and, when the caller knows it, how
+ * many tiles are on the wall. Solo (tile "main" or the only tile) drops "Other tiles aren't affected".
+ */
+export type ViewStateCopyTile = { tileId?: string; tileCount?: number };
+
+function isSoloTile(tile: ViewStateCopyTile): boolean {
+  return tile.tileId === "main" || tile.tileCount === 1;
 }
 
 function couldntStartText(name: string, reason: CouldntStartReason): string {
@@ -92,7 +108,7 @@ function couldntStartText(name: string, reason: CouldntStartReason): string {
 }
 
 /** Plain copy for a state: one sentence and at most one button. */
-export function viewStateCopy(state: ViewState, viewName: string): ViewStateCopy {
+export function viewStateCopy(state: ViewState, viewName: string, tile: ViewStateCopyTile = {}): ViewStateCopy {
   const name = viewName.trim() || "This view";
   switch (state.kind) {
     case "starting":
@@ -107,7 +123,7 @@ export function viewStateCopy(state: ViewState, viewName: string): ViewStateCopy
       return { text: couldntStartText(name, state.reason), action: "retry", button: "Retry" };
     case "cant-draw":
       // Copy only: which surface paints it (tile fallback, wall notice) and its button are #179 (c).
-      return { text: cantDrawText(name, state.reason), action: null, button: null };
+      return { text: cantDrawText(name, state, isSoloTile(tile)), action: null, button: null };
     default:
       return assertNever(state);
   }
@@ -348,7 +364,7 @@ export function showViewState(
 ): void {
   const el = tileEl(tileId) ?? hostEl ?? null;
   if (el && (state.kind === "needs-you" || state.kind === "couldnt-start")) {
-    const copy = viewStateCopy(state, viewName);
+    const copy = viewStateCopy(state, viewName, { tileId });
     const onAction = copy.action === "review" ? actions.onReview : copy.action === "retry" ? actions.onRetry : undefined;
     paintPackAssetPaneNotice(el, copy.text, "fail", onAction
       ? { showRetry: true, onRetry: onAction, retryLabel: copy.button ?? undefined, retryAction: copy.action ?? undefined, onRetryFocused: actions.onActionFocused }

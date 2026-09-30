@@ -12,9 +12,9 @@ import * as THREE from "three";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RenderHost, type HostedView } from "../graph/render-host";
 import { RenderHostTileShader, type RenderHostShaderGpu } from "../graph/render-host-tile-shader";
-import { GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
+import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
 import { bindCantDrawViewState } from "./cant-draw-state";
-import { clearViewState, resetViewStatesForTests, setViewState, viewStateCopy, viewStateOf } from "./view-state";
+import { clearViewState, onViewStateChange, resetViewStatesForTests, setViewState, viewStateCopy, viewStateOf, type ViewState } from "./view-state";
 
 type FakeGl = { isContextLost(): boolean; getShaderInfoLog(s: object): string; getProgramInfoLog(p: object): string };
 type FakeRenderer = {
@@ -187,12 +187,20 @@ describe("#171 (c) per-tile cant-draw view state", () => {
     expect(viewStateOf("pane-b"), "torn down while lost").toBeNull();
   });
 
-  it("copy: one sentence per reason; only a shader failure says other tiles aren't affected (#171 c)", () => {
-    expect(viewStateCopy({ kind: "cant-draw", reason: "shader", packId: "graph-cloth" }, "Graph cloth").text)
-      .toBe("Graph cloth couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.");
-    const lost = viewStateCopy({ kind: "cant-draw", reason: "context-lost" }, "Graph cloth").text ?? "";
-    expect(lost).toBe("Graphics stopped responding. Reload to get it back.");
-    expect(lost).not.toContain("Other tiles");
+  it("copy: context-lost is word for word the wall notice: GFX_INTERRUPTED_NOTICE until Reload, then GFX_NO_RESTORE_NOTICE (#171 c)", () => {
+    for (const tile of [{ tileId: "main" }, { tileId: "pane-b", tileCount: 3 }]) {
+      expect(viewStateCopy({ kind: "cant-draw", reason: "context-lost" }, "Graph cloth", tile).text).toBe(GFX_INTERRUPTED_NOTICE);
+      expect(viewStateCopy({ kind: "cant-draw", reason: "context-lost", reload: true }, "Graph cloth", tile).text).toBe(GFX_NO_RESTORE_NOTICE);
+    }
+  });
+
+  it("copy: a solo tile's shader failure drops \"Other tiles aren't affected\"; a mosaic tile keeps it (#171 c)", () => {
+    const shader: ViewState = { kind: "cant-draw", reason: "shader", packId: "graph-cloth" };
+    const solo = "Graph cloth couldn't draw. Pick another view, or reload to try again.";
+    const mosaic = "Graph cloth couldn't draw. Other tiles aren't affected. Pick another view, or reload to try again.";
+    expect(viewStateCopy(shader, "Graph cloth", { tileId: "main" }).text, "solo wall (tile main)").toBe(solo);
+    expect(viewStateCopy(shader, "Graph cloth", { tileId: "pane-b", tileCount: 1 }).text, "the only tile").toBe(solo);
+    expect(viewStateCopy(shader, "Graph cloth", { tileId: "pane-b", tileCount: 3 }).text, "mosaic tile").toBe(mosaic);
   });
 });
 
@@ -223,6 +231,95 @@ describe("#171 (c) real RenderHost: the canvas's lost / restored events drive ea
     } finally {
       off();
       rh.dispose();
+    }
+  });
+});
+
+/** A GL context that is never lost unless the row says so; every call the host makes that the row ignores is a no-op. */
+class ProxyGl {
+  lost = false;
+  constructor() {
+    return new Proxy(this, { get: (target, key, recv) => (key in target ? Reflect.get(target, key, recv) : () => null) });
+  }
+  isContextLost(): boolean { return this.lost; }
+  fenceSync(): null { return null; }
+  getContextAttributes(): { antialias: boolean } { return { antialias: false }; }
+  getExtension(): null { return null; }
+}
+
+describe("#171 (c) context-drawn fires once per restore, not once per frame (Pedant)", () => {
+  it("lose, restore, 120 drawn frames: exactly 1 context-drawn event and 1 view-state change; 120 frames with no loss: 0 and 0 (#171 c)", () => {
+    expect.hasAssertions();
+    resetViewStatesForTests();
+    document.body.innerHTML = "";
+    vi.stubGlobal("requestAnimationFrame", () => 0);
+    vi.stubGlobal("cancelAnimationFrame", () => {});
+    const w = document.createElement("div");
+    const p = document.createElement("div");
+    for (const el of [w, p]) {
+      Object.defineProperty(el, "clientWidth", { value: 640 });
+      Object.defineProperty(el, "clientHeight", { value: 480 });
+      el.getBoundingClientRect = () => new DOMRect(0, 0, 640, 480);
+    }
+    w.appendChild(p);
+    document.body.appendChild(w);
+    const rh = new RenderHost(w);
+    Object.defineProperty(rh, "software", { value: false });
+    delete rh.canvas.dataset.softgl;
+    const gl = new ProxyGl();
+    let draws = 0;
+    Object.assign(rh.renderer, {
+      getContext: () => gl,
+      forceContextLoss: () => {},
+      forceContextRestore: () => {},
+      render: () => { draws += 1; },
+      compile: () => {},
+    });
+    rh.canvas.getBoundingClientRect = () => new DOMRect(0, 0, 640, 480);
+    const probe: HostedView = {
+      viewEl: p,
+      tileId: "main",
+      hostFrame: () => { rh.present(probe, 0x000000, scene3, camera); },
+      hostContextLost: () => {},
+      hostContextRestored: () => {},
+    };
+    rh.add(probe);
+    const off = bindCantDrawViewState(rh);
+    let ts = 0;
+    const frames = (n: number) => { for (let i = 0; i < n; i++) { ts += 16; rh.advanceFrame(ts); } };
+    let drawnEvents = 0;
+    let changes = 0;
+    const offEvents = rh.onDrawEvent((e) => { if (e.type === "context-drawn") drawnEvents += 1; });
+    try {
+      setViewState("main", "plugin:backrooms", { kind: "ready" });
+      frames(1);
+      expect(draws, "the probe draws through the GL path").toBeGreaterThan(0);
+
+      gl.lost = true;
+      rh.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
+      expect(viewStateOf("main")).toEqual(CONTEXT_LOST);
+      gl.lost = false;
+      rh.canvas.dispatchEvent(new Event("webglcontextrestored"));
+      const offChanges = onViewStateChange(() => { changes += 1; });
+      drawnEvents = 0;
+      draws = 0;
+      frames(120);
+      expect(draws, "120 frames drew").toBeGreaterThanOrEqual(120);
+      expect(drawnEvents, "context-drawn events over 120 frames after one restore").toBe(1);
+      expect(changes, "view-state changes over 120 frames after one restore").toBe(1);
+      expect(viewStateOf("main")).toEqual({ kind: "ready" });
+
+      drawnEvents = 0;
+      changes = 0;
+      frames(120);
+      expect(drawnEvents, "context-drawn events over 120 frames with no loss").toBe(0);
+      expect(changes, "view-state changes over 120 frames with no loss").toBe(0);
+      offChanges();
+    } finally {
+      offEvents();
+      off();
+      rh.dispose();
+      vi.unstubAllGlobals();
     }
   });
 });
