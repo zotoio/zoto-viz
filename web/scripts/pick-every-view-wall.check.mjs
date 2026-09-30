@@ -25,6 +25,9 @@
  *   Ant, Roto and Cypher (open-full) ok. Regions from the shot json, masks from <stem>-mask.json.
  *   Revert proof: --util <util with the washed-out line removed, or the util at cc2d4254> turns
  *   exactly the Blob rows red.
+ *   Carousel exemption: A13 (a smooth sky photo in a loaded carousel) and Part F (the fd97fbdb
+ *   v5-fresh 52-carousel_apod shot, --apod-sky FILE) stay ok; with the exemption line removed from
+ *   the util both go red as washed-out.
  * Part D (--rescore DIR, repeatable): every view shot of a saved sweep (pickall.json + shots/). The
  *   region is the one that reproduces the five-patch values recorded in pickall.json; no overlay rects
  *   were recorded, so the content area is unmasked. The row flow is simulated: first shot, then the
@@ -48,11 +51,11 @@ const args = {
   util: path.join(here, "pick-every-view-util.mjs"), baselineUtil: null,
   apodBlank: "/workspace/zv-clips/batchD/down-site-apod-blank.png", eoBlank: "/tmp/uxpro-pickall/out-679dbf17-downsite/shots/03-carousel_earth-iotd-35s.png",
   litCarousel: "/workspace/qe-logs/pickall-20fa18a7-fresh/shots/62-carousel_met.png", topology: "/workspace/qe-logs/pickall-20fa18a7-fresh/shots/23-topology.png",
-  batchC: "/workspace/zv-clips/batchC", batchCbbf8: "/workspace/zv-clips/batchC/bbf8b77d", rescore: [], requireEvidence: false, json: null,
+  batchC: "/workspace/zv-clips/batchC", batchCbbf8: "/workspace/zv-clips/batchC/bbf8b77d", apodSky: "/workspace/zv-clips/batchC/fd97fbdb/v5-fresh/shots/52-carousel_apod.png", rescore: [], requireEvidence: false, json: null,
 };
 for (let i = 2; i < process.argv.length; i++) {
   const a = process.argv[i];
-  const key = { "--util": "util", "--baseline-util": "baselineUtil", "--apod-blank": "apodBlank", "--eo-blank": "eoBlank", "--lit-carousel": "litCarousel", "--topology": "topology", "--batch-c": "batchC", "--batch-c-bbf8": "batchCbbf8", "--json": "json" }[a];
+  const key = { "--util": "util", "--baseline-util": "baselineUtil", "--apod-blank": "apodBlank", "--eo-blank": "eoBlank", "--lit-carousel": "litCarousel", "--topology": "topology", "--batch-c": "batchC", "--batch-c-bbf8": "batchCbbf8", "--apod-sky": "apodSky", "--json": "json" }[a];
   if (key) args[key] = process.argv[++i];
   else if (a === "--rescore") args.rescore.push(process.argv[++i]);
   else if (a === "--require-evidence") args.requireEvidence = true;
@@ -140,6 +143,14 @@ function synthetic() {
   }
   // A12: flat black frame (Backrooms at bbf8b77d, a flat 17): black, never washed-out.
   const black = canvas([15, 15, 15]); header(black); rect(black, feed, [30, 28, 26]);
+  // A13: carousel-like smooth sky photo (the APOD Analemma still): a blue twilight gradient with a
+  // few small sun dots, caption band masked, image loaded. As edge-free and lit as the Blob wall.
+  const sky = canvas([7, 9, 15]); header(sky); rect(sky, feed, [30, 28, 26]);
+  for (let y = BAR; y < H; y++) for (let x = 0; x < 962; x++) {
+    const t = (y - BAR) / (H - BAR); const u = x / 962;
+    put(sky, x, y, [Math.round(40 + 55 * t + 10 * u), Math.round(78 + 55 * t + 8 * u), Math.round(150 + 45 * t)]);
+  }
+  for (let k = 0; k < 18; k++) disc(sky, 480 + Math.round(60 * Math.sin(k / 3)), 130 + k * 20, 2, [255, 250, 235]);
   const imgBroken = { src: "/api/sources/image?url=https%3A%2F%2Fapod.nasa.gov%2Fx.jpg", complete: true, naturalWidth: 0, errored: "error event" };
   const imgOk = { src: "/api/sources/image?url=https%3A%2F%2Fimages.metmuseum.org%2Fx.jpg", complete: true, naturalWidth: 1600, errored: null };
   const band = (keep) => [...maskAllBut(tile, keep), fps];
@@ -156,6 +167,7 @@ function synthetic() {
     { part: "A", name: "A10 Blob-like bright edge-free wall (#178: washed-out)", png: wall, region: tile, masks: [fps], carousel: null, mode: { lean: true, k: 0.9988 }, expect: { old: "ok", score: false, what: "washed-out", decidedBy: "area", washedOut: true } },
     { part: "A", name: "A11 Roto-like drawn floor, median ~113 (#178: ok)", png: roto, region: tile, masks: [fps], carousel: null, mode: { lean: true, k: 0.9999 }, expect: { old: "ok", score: true, washedOut: false } },
     { part: "A", name: "A12 flat black frame (#178: stays black)", png: black, region: tile, masks: [fps], carousel: null, expect: { old: "black", score: false, what: "black" } },
+    { part: "A", name: "A13 carousel sky photo, loaded (#178: carousel exempt, ok)", png: sky, region, masks: [cap, feed, fps], carousel: { image: imgOk, rect: region }, expect: { old: "ok", score: true, exempt: "carousel" } },
   ];
 }
 
@@ -266,17 +278,30 @@ function batchCbbf8() {
   return out;
 }
 
+/** fd97fbdb v5-fresh row 52 (carousel APOD, Ready): a real smooth sky photo; region and the 7 overlay rects as the sweep recorded them. */
+function apodSky() {
+  const f = args.apodSky;
+  if (!f || !existsSync(f)) return [{ part: "F", name: "52-carousel_apod (fd97fbdb v5-fresh)", file: f, skipped: true }];
+  let region = { x: 0, y: BAR, w: 968, h: 689 }; let masks = []; let id = "plugin:carousel:apod";
+  const jf = path.join(path.dirname(path.dirname(f)), "pickall.json");
+  if (existsSync(jf)) {
+    const v = JSON.parse(readFileSync(jf, "utf8")).views.find((x) => x.screenshot && path.basename(x.screenshot) === path.basename(f));
+    if (v) { region = v.region ?? region; masks = v.overlayRects?.rects ?? []; id = v.id ?? id; }
+  }
+  return [{ part: "F", name: `52-carousel_apod (fd97fbdb v5-fresh, Ready, ${masks.length} rects masked; carousel exempt)`, file: f, png: PNG.sync.read(readFileSync(f)), region, masks, carousel: null, viewId: id, expect: { score: true, exempt: "carousel" }, why: "APOD Analemma still: smooth twilight sky photo that reads correctly" }];
+}
+
 function score(c, S) {
   const five = c.five ?? fivePatchSample(c.png, c.region);
   const content = c.content ?? maskedWallSample(c.png, c.region, c.masks);
   const carousel = c.carousel ? { image: c.carousel.image, rect: c.carousel.rect, imgSample: maskedWallSample(c.png, c.carousel.rect, c.masks) } : null;
-  return { five, content, carousel, sc: S.scoreWall({ five, content, carousel, mode: c.mode ?? null }) };
+  return { five, content, carousel, sc: S.scoreWall({ five, content, carousel, mode: c.mode ?? null, viewId: c.viewId ?? null }) };
 }
 const verdictOf = (sc) => (sc.ok ? "ok" : `${sc.what} (${sc.by})`);
 
 const rows = [];
 let failed = 0;
-for (const c of [...synthetic(), ...evidence(), ...batchC(), ...batchCbbf8()]) {
+for (const c of [...synthetic(), ...evidence(), ...batchC(), ...batchCbbf8(), ...apodSky()]) {
   if (c.skipped) {
     rows.push({ part: c.part, name: c.name, skipped: true, file: c.file });
     if (args.requireEvidence) failed++;
@@ -291,6 +316,7 @@ for (const c of [...synthetic(), ...evidence(), ...batchC(), ...batchCbbf8()]) {
   if (c.expect.decidedBy && isV5 && sc.decidedBy !== c.expect.decidedBy) bad.push(`decided by ${sc.decidedBy}, expected ${c.expect.decidedBy}`);
   if (c.expect.what !== undefined && !sc.ok && (sc.what ?? null) !== c.expect.what) bad.push(`verdict ${sc.what}, expected ${c.expect.what}`);
   if (c.expect.what !== undefined && sc.ok && c.expect.score === false) bad.push(`expected ${c.expect.what}${sc.washedOut?.why ? ` (${sc.washedOut.why})` : sc.washedOut === undefined ? " (this util has no washed-out verdict)" : ""}`);
+  if (c.expect.exempt && sc.washedOut?.exempt !== c.expect.exempt) bad.push(`washed-out exemption ${sc.washedOut?.exempt ?? "none"}, expected ${c.expect.exempt}${sc.washedOut?.why ? ` (${sc.washedOut.why})` : ""}`);
   if (c.expect.washedOut !== undefined && (sc.washedOut?.flag ?? null) !== c.expect.washedOut) bad.push(`washed-out reading ${sc.washedOut?.flag ?? "absent"}, expected ${c.expect.washedOut}`);
   if (c.expect.warn && !sc.warnings.some((w) => c.expect.warn.test(w))) bad.push(`no harness warning matching ${c.expect.warn}`);
   if (bad.length) failed++;

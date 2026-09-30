@@ -347,7 +347,7 @@ function wallSamples(buf, stt, ov, v) {
     carousel = { image: c?.image ?? null, rect: imgRegion, imgSample: imgRegion && imgRegion.w > 20 && imgRegion.h > 20 ? maskedWallSample(png, imgRegion, rects) : null };
   }
   // Perf-lean mode of the shot (#177/#178): the private tune read until the app has a supported one.
-  return { five, content, carousel, score: scoreWall({ five, content, carousel, mode: stt.lean ?? null }) };
+  return { five, content, carousel, score: scoreWall({ five, content, carousel, mode: stt.lean ?? null, viewId: v.id }) };
 }
 
 async function main() {

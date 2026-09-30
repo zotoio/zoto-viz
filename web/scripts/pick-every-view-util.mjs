@@ -200,6 +200,14 @@ export const MIN_JUDGED = 0.05;
  * 10-73 (fresh 35s is 62) while Roto, which reads correctly, is 15-22 with litVsBg 0.91-0.95, so any
  * spread cut that flags every Blob shot flags every Roto shot too.
  */
+/**
+ * Carousel views never get the washed-out verdict: they show photographs, and a smooth photo (the
+ * fd97fbdb APOD still "Analemma over the Callanish Stones": twilight sky, edge16 0.0045, litVsBg
+ * 0.873, median 95) is as edge-free as the Blob wall (edge16 <= 0.0041), so no edge cut separates
+ * them. The carousel image rule (carouselContentVerdict: loaded and lit) judges those views instead.
+ */
+export const isCarouselView = (id) => /^plugin:carousel(:|$)/.test(String(id ?? ""));
+
 export const WASHED_OUT = Object.freeze({ LIT_VS_BG_MIN: 0.85, BG_STEP: 10, EDGE_T: 16, EDGE16_MAX: 0.008, MEDIAN_MIN: 40 });
 
 function clipRect(r, region) {
@@ -419,13 +427,15 @@ export function leanMode(mode) {
  *                 stands; harness warning.
  * Washed-out (#178): when the content area is judged (area or patch+area) and nothing else failed the
  * tile, a bright edge-free area (washedOutCheck) fails it as what "washed-out", by "content-texture".
- * `washedOut: false` switches the verdict off (the revert proof). `mode` is the perf-lean state the
+ * Carousel views (a `carousel` sample, or a `viewId` of plugin:carousel[:inst]) are exempt: their
+ * washedOut reading is kept with flag null and exempt "carousel". `washedOut: false` switches the
+ * verdict off (the revert proof). `mode` is the perf-lean state the
  * shot was taken in ({ lean, tuneK } or UX Pro's shot.lean); every result records it (#177).
  * The carousel image rule (carouselContentVerdict) applies on top, unchanged.
  * Returns { ok, what, by, decidedBy, patchVerdict, areaVerdict, disagree, overruled, legacyOk,
  * contentOk, contentVerdict, remaining, carousel, washedOut, mode, warnings, note }.
  */
-export function scoreWall({ five = null, content = null, carousel = null, mode = null, washedOut = true } = {}) {
+export function scoreWall({ five = null, content = null, carousel = null, mode = null, washedOut = true, viewId = null } = {}) {
   const legacyOk = five ? five.ok : null;
   const patchVerdict = sampleVerdict(five);
   const areaVerdict = sampleVerdict(content);
@@ -445,7 +455,8 @@ export function scoreWall({ five = null, content = null, carousel = null, mode =
     if (judged && content.ok === false) { ok = false; what ??= areaVerdict; by.push("content"); }
   }
   const lm = leanMode(mode);
-  const wo = washedOut && judged ? washedOutCheck(content) : null;
+  let wo = washedOut && judged ? washedOutCheck(content) : null;
+  if (wo && (carousel || isCarouselView(viewId))) wo = { ...wo, flag: null, exempt: "carousel", why: `carousel view, its image rule decides; washed-out not applied (${wo.why})` };
   if (ok && wo?.flag) { ok = false; what = "washed-out"; by.push("content-texture"); }
   const car = carousel ? carouselContentVerdict(carousel.image, carousel.imgSample) : null;
   if (car?.blank) { ok = false; what ??= "blank"; by.push("carousel-image"); }
