@@ -25,7 +25,7 @@ from .pack_install_lint import (
 )
 from .pack_zip_blocks import record_zip_block, row_for_start_failure, zip_block_for_sha
 from .pack_install_blocked_store import record_blocked_zip
-from .pack_install_copy import REASON_PACK_INSTALL_BLOCKED, upgrade_rollback_user_message
+from .pack_install_copy import REASON_PACK_INSTALL_BLOCKED, REASON_UPDATE_REFUSED, upgrade_rollback_user_message
 from .pack_sdk_contract import assert_pack_sdk_compatible, read_cached_sdk_manifest
 from .pack_zip_install_ux import installed_runtime_version
 from .pack_block_copy import (
@@ -111,6 +111,21 @@ class InstallUpgradeRollbackError(Exception):
 
 class InstallCheckUnavailableError(Exception):
     """Labelled failure when a required check cannot run."""
+
+
+class InstallUpdateRefusedError(ValueError):
+    """#111: an update didn't go through and the version you had is still installed.
+
+    A ValueError, so callers that catch ValueError keep working; they branch on ``reason_code``
+    (:data:`REASON_UPDATE_REFUSED`), never on the message text.
+    """
+
+    reason_code = REASON_UPDATE_REFUSED
+
+
+def update_refused_payload(zip_rel: str) -> dict[str, str]:
+    """#111: the payload fields of a refused update. ``reasonCode`` is the stable code callers branch on."""
+    return {"upgrade_blocked": "true", "zip": zip_rel, "reasonCode": REASON_UPDATE_REFUSED}
 
 
 def register_install_check(check: InstallCheck) -> None:
@@ -549,7 +564,7 @@ def _install_staged_to_runtime_locked(
             raise
         except InstallCheckUnavailableError as e:
             if upgrade:
-                raise InstallV2BlockedError(str(e), payload={"upgrade_blocked": "true", "zip": rel}) from e
+                raise InstallV2BlockedError(str(e), payload=update_refused_payload(rel)) from e
             raise
         except PackInstallLintSetupError as e:
             # #185: the install lint couldn't run (or gave no valid verdict). Never "was blocked";

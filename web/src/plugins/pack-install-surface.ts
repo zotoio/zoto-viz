@@ -14,6 +14,8 @@ export type PackInstallBlockedPayload = {
   blockReason?: string;
   retryable?: string;
   upgrade_blocked?: string;
+  /** #111: stable code next to `error` (e.g. PACK_UPDATE_REFUSED); branch on this, never on `message`. */
+  reasonCode?: string;
 };
 
 export type BlockedCatalogEntry = PackInstallBlockedPayload & {
@@ -34,6 +36,14 @@ export const PACK_BLOCKED_SELECT_VALUE = "__pack_blocked_catalog__";
  * from web/scripts/pack-install-lint-setup-copy.json; nothing here depends on it.
  */
 export const PACK_INSTALL_CHECK_UNAVAILABLE = "pack_install_check_unavailable";
+
+/**
+ * #111: the service refused an update and the version you had is still installed (the new version
+ * couldn't be checked, or couldn't start and the old one was put back). service/pack_install_copy.py's
+ * REASON_UPDATE_REFUSED, carried as `reasonCode`. The surface picks the refused branch from this code
+ * alone; the service's message is shown as is and its wording can change without breaking this.
+ */
+export const PACK_UPDATE_REFUSED = "update_refused";
 
 const CHAT_SERVICE_WORDED_ERRORS = new Set<string>([
   PACK_INSTALL_CHECK_UNAVAILABLE,
@@ -97,10 +107,9 @@ export function isPackInstallBlockedPayload(v: unknown): v is PackInstallBlocked
     || o.error === PACK_INSTALL_CHECK_UNAVAILABLE
     || text.includes("was blocked")
     || text.includes("Couldn't safety-check")
-    || text.includes("v1 is still running")
-    || text.includes("v1 was restored")
     || text.includes("was interrupted")
     || text.includes("couldn't start")
+    || o.reasonCode === PACK_UPDATE_REFUSED
     || o.blockReason === "couldnt_start"
     || o.blockReason === "block_record_unreadable"
   );
@@ -204,8 +213,6 @@ export function catalogErrorLooksBlocked(error: string): boolean {
     || error.includes("Couldn't safety-check")
     || error.includes("pack-bundle-boundary")
     || error.includes("Built for an older zoto-viz SDK")
-    || error.includes("v1 is still running")
-    || error.includes("v1 was restored")
     || error.includes("was interrupted")
   );
 }
