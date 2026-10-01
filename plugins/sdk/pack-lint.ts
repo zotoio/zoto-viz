@@ -332,8 +332,9 @@ export function scanSdkGuardrails(repoRoot: string): PackLintViolation[] {
 
 /**
  * Import-boundary guardrails only. The CI guardrail scan used by pack-lint.test.ts (which adds the
- * #171 (b) uniform lint) is `scanAllGuardrails` in `pack-lint-test-support.ts`; this module is loaded
- * by the install lint, so it deliberately doesn't import `pack-lint-uniforms`.
+ * #171 (b) uniform lint) is `scanAllGuardrails` in `pack-lint-test-support.ts`. This module doesn't
+ * import `pack-lint-uniforms` (that imports `listPackIds` from here); the install lint passes the
+ * uniform pass in (`scanPackInstallLint`'s `uniforms` option, from pack-install-lint.ts).
  */
 export function scanAllGuardrails(repoRoot: string): PackLintViolation[] {
   const merged = [
@@ -442,9 +443,29 @@ export function manifestFrontendEntries(packDirAbs: string): string[] {
   return out.map((p) => path.posix.normalize(p.replace(/\\/g, "/")).replace(/^\.\//, ""));
 }
 
-const INSTALL_BLOCK_RULES = new Set<PackLintRule>(["sandbox-escape", "host-transport-escape"]);
+/**
+ * Rules that refuse an install. #171 (b): the three blocking uniform rules (UNIFORM_BLOCKING_RULES:
+ * graphics code that would stop the pack drawing) block too; their findings come from the
+ * `uniforms` pass of {@link scanPackInstallLint}.
+ */
+const INSTALL_BLOCK_RULES = new Set<PackLintRule>([
+  "sandbox-escape",
+  "host-transport-escape",
+  "glsl-uniform-undeclared",
+  "uniform-type-conflict",
+  "write-uniform-not-in-manifest",
+]);
 
-const INSTALL_WARN_RULES = new Set<PackLintRule>(["inline-zoto-declare", "pack-zoto-binding"]);
+/**
+ * Rules that only warn (file:line rule lines for the service log; the user sees nothing). #171 (b):
+ * the baseline-able uniform rules (a sky reads a uniform nothing sets, a write nothing declares).
+ */
+const INSTALL_WARN_RULES = new Set<PackLintRule>([
+  "inline-zoto-declare",
+  "pack-zoto-binding",
+  "glsl-uniform-unset",
+  "uniform-set-undeclared",
+]);
 
 export type PackInstallLintResult = {
   blocks: PackLintViolation[];
@@ -461,14 +482,29 @@ function packIdFromPluginYml(packDirAbs: string): string | null {
   }
 }
 
+export type ScanPackInstallLintOptions = {
+  /**
+   * #171 (b): the uniform pass over the pack home (`lintInstalledPackUniforms` from
+   * pack-lint-uniforms.ts; pack-install-lint.ts passes it). Its findings are filtered like the rest.
+   */
+  uniforms?: (packDirAbs: string, repoRoot: string, packId: string) => PackLintViolation[];
+};
+
 /** Install-time lint for an unpacked pack home. */
-export function scanPackInstallLint(packDirAbs: string, repoRoot: string): PackInstallLintResult {
+export function scanPackInstallLint(
+  packDirAbs: string,
+  repoRoot: string,
+  opts: ScanPackInstallLintOptions = {},
+): PackInstallLintResult {
   const packId = packIdFromPluginYml(packDirAbs) ?? path.basename(packDirAbs);
-  const violations = scanPackDirectory(packDirAbs, repoRoot, {
-    packId,
-    repoPathPrefix: `plugins/src/${packId}`,
-    frontendScripts: true,
-  });
+  const violations = [
+    ...scanPackDirectory(packDirAbs, repoRoot, {
+      packId,
+      repoPathPrefix: `plugins/src/${packId}`,
+      frontendScripts: true,
+    }),
+    ...(opts.uniforms?.(packDirAbs, repoRoot, packId) ?? []),
+  ];
   const legacyBlocks = legacyZotoViolationsOnDisallowedPacks(violations);
   const legacyBlockKeys = new Set(legacyBlocks.map(violationKey));
   const blocks = [

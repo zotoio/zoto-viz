@@ -18,6 +18,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import { PACK_LINT_PLAIN_SUMMARY } from "../../../plugins/sdk/pack-lint-hints";
+import { HOST_UNIFORM_CONTRACT } from "../../../plugins/sdk/pack-lint-host-uniforms";
+import { hostSkyPreambleDecls, pluginSkyUniformNames } from "../../../plugins/sdk/pack-lint-uniforms";
 import type { PackLintViolation } from "../../../plugins/sdk/pack-lint-types";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -269,29 +271,26 @@ describe("#171 (b) scan scope: the install uniform pass reads the pack, never th
     return { tree, home, packFiles };
   }
 
-  it("reads == the pack's shader, frontend and manifest files; nothing outside the pack but the host's uniform contract", async () => {
+  it("reads == the pack's shader, frontend and manifest files, each once; nothing outside the pack (cold or warm)", async () => {
     const pass = await installUniformPass();
     expect(pass, "pack-lint-uniforms has no install pass (lintInstalledPackUniforms)").not.toBeNull();
     if (!pass) return;
-    const { tree, home, packFiles } = scopeTree();
+    const { home, packFiles } = scopeTree();
     const inPack = (p: string) => p === home || p.startsWith(home + path.sep);
-
-    // Cold (fresh module): the only reads outside the pack are the host's uniform contract sources
-    // (the sky preamble and PLUGIN_SKY_UNIFORMS), read once and cached; never plugins/src or the tree.
-    const cold = countReads(() => expect(pass(home, repoRoot, "scope-probe")).toEqual([]));
-    const outside = [...new Set(cold.reads.filter((p) => !inPack(p)))];
-    for (const p of outside) {
-      expect(p.startsWith(path.join(repoRoot, "web/src/plugins") + path.sep), p).toBe(true);
+    // First call in a fresh module (nothing cached) and a second one: the same reads, only the pack's.
+    for (const call of ["cold", "warm"]) {
+      const seen = countReads(() => expect(pass(home, repoRoot, "scope-probe"), call).toEqual([]));
+      expect(seen.reads.length, call).toBe(packFiles.length);
+      expect([...seen.reads].sort(), call).toEqual([...packFiles].sort());
+      expect(seen.dirs.filter((p) => !inPack(p)), call).toEqual([]);
     }
-    expect(outside.length).toBeLessThanOrEqual(3);
-    expect(cold.reads.filter((p) => p.startsWith(tree + path.sep) && !inPack(p))).toEqual([]);
-    expect(cold.reads.filter((p) => p.startsWith(path.join(repoRoot, "plugins/src")))).toEqual([]);
-    expect(cold.dirs.filter((p) => !inPack(p))).toEqual([]);
+  });
 
-    // Warm: the read count EQUALS the pack's linted files, each read once.
-    const warm = countReads(() => expect(pass(home, repoRoot, "scope-probe")).toEqual([]));
-    expect(warm.reads.length).toBe(packFiles.length);
-    expect([...warm.reads].sort()).toEqual([...packFiles].sort());
-    expect(warm.dirs.filter((p) => !inPack(p))).toEqual([]);
+  it("the install lint's host uniform contract matches the host sources it stands in for", () => {
+    // The built install lint has no web/src (#186), so it lints against this snapshot; CI pins it here.
+    expect(HOST_UNIFORM_CONTRACT).toEqual({
+      preamble: hostSkyPreambleDecls(repoRoot).map(({ name, type }) => ({ name, type })),
+      skyUniforms: pluginSkyUniformNames(repoRoot),
+    });
   });
 });

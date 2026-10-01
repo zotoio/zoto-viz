@@ -138,6 +138,11 @@ def _still(old_version: str | int | None) -> str:
     return _fill(str(SETUP_COPY["still"]), {"old": old}) if old else str(SETUP_COPY["still_unknown"])
 
 
+def still_sentence(old_version: str | int | None) -> str:
+    """:func:`_still` for other copy modules (#171 (b): the graphics-code block names the version too)."""
+    return _still(old_version)
+
+
 def format_install_lint_setup_upgrade_message(name: str, old_version: str | int | None, reason: str = "") -> str:
     label = (name or "").strip() or "Plugin"
     return _fill(setup_template("upgrade", reason), {"name": label, "still": _still(old_version), "fix": setup_fix(reason)})

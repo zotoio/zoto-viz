@@ -9,8 +9,10 @@
  * preamble uniform with a different type, and that every `writeUniform("X")` names a uniform
  * in the pack's plugin.yml `viz.uniforms` (the host drops anything else).
  *
- * CI/pre-push only: imported by `pack-lint-test-support.ts` (the guardrail scan) and tests,
- * never by the install path or any runtime module.
+ * CI/pre-push: imported by `pack-lint-test-support.ts` (the guardrail scan) and tests. Install
+ * (#171 (b)): `pack-install-lint.ts` runs {@link lintInstalledPackUniforms} on the unpacked pack
+ * home only, against the host contract snapshot in `pack-lint-host-uniforms.ts` (it reads nothing
+ * outside the pack). No runtime module imports this file.
  *
  * "Custom uniform" = an identifier named `u[A-Z]…` or the host UBO `zotoVizSlots`. three.js
  * ShaderLib/ShaderChunk declare no names of that shape, so the three.js prefix and the stock
@@ -23,6 +25,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { listPackIds } from "./pack-lint";
+import { HOST_UNIFORM_CONTRACT, type HostUniformContract } from "./pack-lint-host-uniforms";
 import { lineColAt } from "./pack-lint-import";
 import type { PackLintViolation } from "./pack-lint-types";
 
@@ -44,6 +47,11 @@ export type UniformLintRule = (typeof UNIFORM_LINT_RULES)[number];
 export type UniformLintOptions = {
   /** Rules to switch off (revert proofs). */
   disabledRules?: ReadonlySet<UniformLintRule>;
+  /**
+   * #171 (b): lint packs against this host contract instead of reading the host sources under
+   * `repoRoot/web/src` (the install lint, {@link lintInstalledPackUniforms}).
+   */
+  host?: HostUniformContract;
 };
 
 export type GlslStage = "vertex" | "fragment";
@@ -1063,8 +1071,12 @@ const unquote = (v: string) => v.trim().replace(/^(["'])(.*)\1$/, "$2");
  * needs `graphWalk: false` and an `idle` block; no list means every sky uniform; names outside
  * `PLUGIN_SKY_UNIFORMS` are filtered out). A row pins this against the host parser for every shipped pack.
  */
-export function manifestVizUniforms(pluginYml: string, repoRoot: string): PackManifestUniforms {
-  const sky = pluginSkyUniformNames(repoRoot);
+export function manifestVizUniforms(
+  pluginYml: string,
+  repoRoot: string,
+  skyUniforms?: readonly string[],
+): PackManifestUniforms {
+  const sky = skyUniforms ? [...skyUniforms] : pluginSkyUniformNames(repoRoot);
   const lines = pluginYml.split(/\r?\n/);
   const at = lines.findIndex((l) => /^viz\s*:\s*(?:#.*)?$/.test(l));
   if (at < 0) return { uniforms: [], source: "no-viz" };
@@ -1105,7 +1117,7 @@ export type PackSkyInput = {
  */
 export function lintPackUniforms(input: PackSkyInput, repoRoot: string, opts: UniformLintOptions = {}): PackLintViolation[] {
   const off = opts.disabledRules ?? new Set();
-  const preamble = hostSkyPreambleDecls(repoRoot);
+  const preamble: readonly UniformDecl[] = opts.host?.preamble ?? hostSkyPreambleDecls(repoRoot);
   const hostSets = new Set(preamble.map((d) => d.name));
   const hostType = new Map(preamble.map((d) => [d.name, d.type]));
   const out: PackLintViolation[] = [];
@@ -1141,7 +1153,7 @@ export function lintPackUniforms(input: PackSkyInput, repoRoot: string, opts: Un
       }
     }
   }
-  const manifest = input.manifest ? manifestVizUniforms(input.manifest.text, repoRoot) : null;
+  const manifest = input.manifest ? manifestVizUniforms(input.manifest.text, repoRoot, opts.host?.skyUniforms) : null;
   for (const fe of input.frontend) {
     const lex = lexTs(fe.text);
     for (const hit of lex.masked.matchAll(/\bwriteUniform\s*\(\s*(?=["'])/g)) {
@@ -1206,6 +1218,46 @@ export function readPackSkyInput(packDirAbs: string, repoPrefix: string, packId:
   const ymlAbs = path.join(packDirAbs, "plugin.yml");
   const manifest = fs.existsSync(ymlAbs) ? { repoRel: `${repoPrefix}/plugin.yml`, text: fs.readFileSync(ymlAbs, "utf8") } : null;
   return { packId, skies, frontend, manifest };
+}
+
+/**
+ * #171 (b) install lint: the uniform rules over one unpacked pack home (findings name it
+ * `plugins/src/<packId>/…`, as CI does). Reads every `.glsl` under the pack's `sky/`, its linted frontend TS
+ * and plugin.yml once each, and nothing outside the pack: a frontend import that leaves the pack
+ * is not followed (the boundary lint refuses it), and the host's uniform contract comes from
+ * `HOST_UNIFORM_CONTRACT` (the built install lint has no web/src to read; #186).
+ */
+export function lintInstalledPackUniforms(
+  packDirAbs: string,
+  repoRoot: string,
+  packId: string,
+  opts: UniformLintOptions = {},
+): PackLintViolation[] {
+  const home = path.resolve(packDirAbs);
+  const prefix = `plugins/src/${packId}`;
+  const input = readPackSkyInput(home, prefix, packId);
+  const absOf = (repoRel: string) => path.join(home, repoRel.slice(prefix.length + 1));
+  const texts = new Map(input.frontend.map((fe) => [absOf(fe.repoRel), fe.text]));
+  const inPack = (abs: string) => abs === home || abs.startsWith(home + path.sep);
+  const ctx: Ctx = {
+    repoRoot,
+    cache: new Map(),
+    readFile: (abs) => {
+      const known = texts.get(abs);
+      if (known !== undefined) return known;
+      if (!inPack(path.resolve(abs))) return null;
+      try {
+        return fs.readFileSync(abs, "utf8");
+      } catch {
+        return null;
+      }
+    },
+  };
+  const lintOpts: UniformLintOptions = { ...opts, host: opts.host ?? HOST_UNIFORM_CONTRACT };
+  const out: PackLintViolation[] = [];
+  for (const fe of input.frontend) out.push(...lintTsFile(ctx, absOf(fe.repoRel), fe.repoRel, lintOpts));
+  out.push(...lintPackUniforms(input, repoRoot, lintOpts));
+  return sortViolations(dedupe(out));
 }
 
 /** What one full uniform-lint tree scan saw: its findings and every pack it read. */
