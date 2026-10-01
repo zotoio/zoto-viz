@@ -53,7 +53,7 @@ from .pack_runtime import (
     _clear_zip_block_cache,
     zip_block_cache_key,
 )
-from .pack_install_copy import REASON_UPDATE_REFUSED
+from .pack_install_copy import REASON_PACK_BLOCKED, REASON_UPDATE_REFUSED
 from .plugin_install import (
     InstallCheckUnavailableError,
     InstallV2BlockedError,
@@ -1869,7 +1869,11 @@ def _attach_runtime(
             _LOG.warning("pack %s: frontend bundle failed, pack unavailable: %s", doc.get("id"), e)
         return None
     except ValueError as e:
-        errors.append({"file": rel, "error": str(e)})
+        row = {"file": rel, "error": str(e)}
+        if getattr(e, "reason_code", "") == REASON_PACK_BLOCKED:
+            # #240: a block (the words stay in ``error`` as before); the code is what callers read.
+            row["reasonCode"] = REASON_PACK_BLOCKED
+        errors.append(row)
         return None
     return extra
 
@@ -1971,7 +1975,8 @@ def _materialize_zip_plugin(
             "zip": rel,
             **{k: v for k, v in e.payload.items() if k != "message"},
         }
-        if "was blocked" in str(e):
+        if e.payload.get("reasonCode") == REASON_PACK_BLOCKED:
+            # #240: branch on the code, never the wording.
             row["error"] = "pack_boundary"
         remember_zip_block(cache_key, row)
         errors.append(row)
@@ -1997,9 +2002,11 @@ def _materialize_zip_plugin(
         if isinstance(e, pil.PackInstallLintSetupError):
             row["error"] = pil.REASON_INSTALL_CHECK_UNAVAILABLE
             row["message"] = text
-        elif "was blocked" in text:
+        elif getattr(e, "reason_code", "") == REASON_PACK_BLOCKED:
+            # #240: branch on the code, never the wording.
             row["error"] = "pack_boundary"
             row["message"] = text
+            row["reasonCode"] = REASON_PACK_BLOCKED
             if isinstance(e, PackBlockedError):
                 row["sentence"] = e.sentence
         elif getattr(e, "reason_code", "") == REASON_UPDATE_REFUSED:
