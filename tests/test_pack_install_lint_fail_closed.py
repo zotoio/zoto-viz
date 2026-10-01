@@ -671,7 +671,7 @@ def test_no_user_text_carries_a_repo_path_a_file_type_or_a_rule_id() -> None:
 
 
 def test_every_block_says_was_blocked_and_the_setup_refusal_never_does() -> None:
-    """plugin_local / plugins branch on the substring "was blocked" (never "was blocked:")."""
+    """#185's copy shape (never "was blocked:"). #240: callers branch on REASON_PACK_BLOCKED, not on these words."""
     blocks, setup = _every_block_and_setup_text()
     for text in blocks:
         if text == _FIX_TAIL:  # to_dict()["hint"] is the tail on its own

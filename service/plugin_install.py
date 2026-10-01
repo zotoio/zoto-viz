@@ -41,6 +41,7 @@ from .pack_block_copy import (
     SENTENCE_BOUNDARY,
     SENTENCE_CHECKS_FAILED,
     SENTENCE_SDK_OLDER,
+    REASON_PACK_BLOCKED,
     PackBlockedError,
     upgrade_block_message,
 )
@@ -581,7 +582,7 @@ def _install_staged_to_runtime_locked(
             if upgrade:
                 raise InstallV2BlockedError(
                     format_v2_blocked_message(name, installed_runtime_version(runtime), SENTENCE_BOUNDARY),
-                    payload={**e.block.to_dict(), "upgrade_blocked": "true", "zip": rel},
+                    payload={**e.block.to_dict(), "upgrade_blocked": "true", "zip": rel, "reasonCode": REASON_PACK_BLOCKED},
                 ) from e
             raise
         except InstallCheckUnavailableError as e:
@@ -608,7 +609,14 @@ def _install_staged_to_runtime_locked(
                     sentence, tail = SENTENCE_CHECKS_FAILED, BLOCK_FIX_TAIL
                 raise InstallV2BlockedError(
                     format_v2_blocked_message(name, installed_runtime_version(runtime), sentence, tail=tail, reason=reason),
-                    payload={"error": "pack_install_blocked", "upgrade_blocked": "true", "zip": rel, "sentence": sentence},
+                    # #240: block copy, so the block's code rides with it (callers branch on it).
+                    payload={
+                        "error": "pack_install_blocked",
+                        "upgrade_blocked": "true",
+                        "zip": rel,
+                        "sentence": sentence,
+                        "reasonCode": REASON_PACK_BLOCKED,
+                    },
                 ) from e
             raise
 
