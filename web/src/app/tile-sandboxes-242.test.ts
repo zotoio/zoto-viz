@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PackAssetTokenInvalidError, setPackAssetTokenForTests } from "../core/http";
 import { loadShippedPackSpec } from "../plugins/fixtures/host-idle-shipped-packs";
 import { PluginSandbox, sandboxSetSizesForTests, setPluginModuleSandboxUrlForTests } from "../plugins/host";
-import * as packAssetFrame from "../plugins/pack-asset-frame";
 import { resetRebuildSleepForTests, setRebuildSleepForTests } from "../plugins/pack-asset-rebuild";
 import type { PluginView } from "../plugins/plugin";
 import { bindVizDriveElement, noteSandboxWrite, resetVizDriveState, vizDriveFor } from "../plugins/viz-drive";
@@ -29,8 +28,10 @@ const DRIVEN = "topology";
 describe("#242 pane sandboxes: restart and drop stop the old attach", () => {
   const made: PluginSandbox[] = [];
   let opened = 0;
+  let packAssetFrame: typeof import("../plugins/pack-asset-frame");
 
-  beforeEach(() => {
+  beforeEach(async () => {
+    packAssetFrame = await import("../plugins/pack-asset-frame");
     opened = 0;
     vi.spyOn(packAssetFrame, "openPackAssetFrame").mockImplementation(async () => {
       opened += 1;
@@ -70,7 +71,7 @@ describe("#242 pane sandboxes: restart and drop stop the old attach", () => {
     });
   }
 
-  /** Bounded below the test timeout, so a pane that never boots fails here, not as a timeout. */
+  /** Bounded below the test timeout: a pane that never boots fails this check instead of timing out. */
   async function untilReady(tiles: TileSandboxes<PluginSandbox>): Promise<void> {
     await vi.waitFor(() => {
       expect(tiles.readyPackFor(PANE), "the restarted pane boots its pack").toBe(BACKROOMS.id);
