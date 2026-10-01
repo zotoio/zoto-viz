@@ -201,7 +201,17 @@ const tiles = new Map<string, TileEntry>();
  * context is back, so a sky wait's "starting" / "ready" (or a clear) waits here and applies when
  * the tile leaves context-lost.
  */
-const heldUnderContextLost = new Map<string, { viewId: string; state: ViewState | null; cleared?: true }>();
+const heldUnderContextLost = new Map<string, { viewId: string; state: ViewState | null; cleared?: true; paint?: () => void }>();
+/**
+ * #216: the Retry of a tile's Couldn't start / load-failed (a pack load that failed). A lost context
+ * takes that notice down (the tile says it can't draw); when the context is back and drew, the
+ * load runs again once through this Retry, and only a failed rerun shows Couldn't start again.
+ */
+const loadRetry = new Map<string, () => void>();
+
+function isLoadFailed(state: ViewState | null | undefined): boolean {
+  return state?.kind === "couldnt-start" && state.reason === "load-failed";
+}
 const listeners = new Set<(tileId: string) => void>();
 
 function defaultTileEl(tileId: string): HTMLElement | null {
@@ -261,6 +271,7 @@ function notify(tileId: string): void {
  */
 export function setViewState(tileId: string, viewId: string, state: ViewState, el?: HTMLElement | null): void {
   if (!tileId) return;
+  if (!isLoadFailed(state)) loadRetry.delete(tileId);
   const prev = tiles.get(tileId);
   if (prev && holdsContextLost(prev.state) && !holdsContextLost(state)) {
     heldUnderContextLost.set(tileId, { viewId, state });
@@ -294,6 +305,7 @@ export function clearViewState(tileId: string): void {
   const el = viewStateTileEl(tileId);
   const prev = tiles.get(tileId)!;
   tiles.delete(tileId);
+  loadRetry.delete(tileId);
   if (el) {
     if (prev.state.kind === "needs-you" || prev.state.kind === "couldnt-start") removeStateNotice(el);
     delete el.dataset.viewState;
@@ -314,6 +326,8 @@ export function enterContextLost(tileId: string, opts: { reload?: boolean } = {}
   if (!tileId) return;
   const prev = tiles.get(tileId);
   if (prev && !holdsContextLost(prev.state)) heldUnderContextLost.set(tileId, { viewId: prev.viewId, state: prev.state });
+  // #216: a failed pack load's notice comes down; the load reruns when the context is back.
+  if (prev && isLoadFailed(prev.state) && loadRetry.has(tileId)) removeStateNotice(viewStateTileEl(tileId));
   else if (!prev) heldUnderContextLost.set(tileId, { viewId: tileId, state: null });
   const state: ViewState = opts.reload
     ? { kind: "cant-draw", reason: "context-lost", reload: true }
@@ -340,8 +354,14 @@ export function leaveContextLost(tileId: string): void {
   }
   const back = under?.state && under.state.kind !== "ready" ? under.state : { kind: "ready" as const };
   tiles.set(tileId, { viewId: under?.viewId ?? cur.viewId, state: back, el: cur.el });
+  const rerun = isLoadFailed(back) ? loadRetry.get(tileId) : undefined;
+  loadRetry.delete(tileId);
+  // A notice asked for while the context was lost shows now (a failed load reruns instead).
+  if (!rerun) under?.paint?.();
   stampViewState(tileId);
   notify(tileId);
+  // #216: the pack load that failed under the lost context runs again, once (its notice's Retry).
+  rerun?.();
 }
 
 /** This tile's own shader failed to compile or link (#171 c). */
@@ -389,19 +409,30 @@ export function showViewState(
   hostEl?: HTMLElement | null,
 ): void {
   const el = tileEl(tileId) ?? hostEl ?? null;
-  if (el && (state.kind === "needs-you" || state.kind === "couldnt-start")) {
+  const paint = el && (state.kind === "needs-you" || state.kind === "couldnt-start") ? () => {
     const copy = viewStateCopy(state, viewName, viewStateTile(tileId, el));
     const onAction = copy.action === "review" ? actions.onReview : copy.action === "retry" ? actions.onRetry : undefined;
     paintPackAssetPaneNotice(el, copy.text, "fail", onAction
       ? { showRetry: true, onRetry: onAction, retryLabel: copy.button ?? undefined, retryAction: copy.action ?? undefined, onRetryFocused: actions.onActionFocused }
       : undefined);
+  } : undefined;
+  const cur = tiles.get(tileId);
+  if (cur && holdsContextLost(cur.state) && !holdsContextLost(state)) {
+    // #216: the tile already says it can't draw. Its notice waits with the held state (one message).
+    setViewState(tileId, viewId, state, el);
+    const held = heldUnderContextLost.get(tileId);
+    if (held && paint) heldUnderContextLost.set(tileId, { ...held, paint });
+  } else {
+    paint?.();
+    setViewState(tileId, viewId, state, el);
   }
-  setViewState(tileId, viewId, state, el);
+  if (isLoadFailed(state) && actions.onRetry) loadRetry.set(tileId, actions.onRetry);
 }
 
 /** Tiles only: host listeners registered at module load stay. */
 export function resetViewStatesForTests(): void {
   tiles.clear();
   heldUnderContextLost.clear();
+  loadRetry.clear();
   tileEl = defaultTileEl;
 }
