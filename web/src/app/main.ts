@@ -177,6 +177,7 @@ import {
 } from "../plugins/viz-host";
 import {
   TILE_HEAL_FALLBACK_MODE,
+  tileCantDraw,
   tileFeedsPaused,
   type HealStep,
 } from "../plugins/tile-health";
@@ -2454,6 +2455,7 @@ tileHealth = createProductionTileHealthMonitor({
     return true;
   },
   couldntStart: (id) => viewStateOf(id)?.kind === "couldnt-start",
+  cantDraw: (id) => tileCantDraw(viewStateOf(id)),
   feedsPaused: (id) => tileFeedsPaused(lastRaw?.sources, parseSourceBind(optsFor(modeById(tileHealthModeId(id)))).source),
 });
 function onLiveBlank(tileId: string, packId: string, blank: boolean): void {
