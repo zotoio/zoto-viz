@@ -6,6 +6,7 @@
  */
 
 import type { Viewport } from "../graph/render-host";
+import type { SourceLive } from "../core/sources";
 
 export const TILE_CHECK_MS = 2000;
 /** After load, view change, or source change — empty checks reset and do not count. */
@@ -70,6 +71,16 @@ export interface TileEmptyInput {
    * `false` overrules the patches (the sky shows something elsewhere); undefined keeps their verdict.
    */
   skyFlat?: boolean;
+}
+
+/**
+ * #230: the tile's feeds are paused on purpose (`live.paused`): its bound source is paused, or, with
+ * no bound source, every source is. Its picture may then hold still; that is not a stall.
+ */
+export function tileFeedsPaused(sources: Record<string, SourceLive> | undefined, bindSource?: string): boolean {
+  const all = Object.values(sources ?? {});
+  if (bindSource) return all.some((s) => s.id === bindSource && s.paused === true);
+  return all.length > 0 && all.every((s) => s.paused === true);
 }
 
 /** True when this 2 s check should count as EMPTY. */
