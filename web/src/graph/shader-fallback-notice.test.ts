@@ -22,7 +22,7 @@ describe("shader fallback gfx wall notice", () => {
     const { host, wall } = wallHost();
     host.canvas.dispatchEvent(new Event("webglcontextlost", { cancelable: true }));
     const notice = wall.querySelector(".gfx-wall-notice")!;
-    expect(notice.getAttribute("role")).toBe("status");
+    expect(notice.getAttribute("role")).toBe("alert"); // #236
     host.dispose();
     wall.remove();
   });

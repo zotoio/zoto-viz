@@ -264,9 +264,9 @@ describe("#179 UX Pro: contextRecovery agrees with the wall, and no visible stri
   });
 });
 
-/** Every `role="status"` region on the wall that carries a graphics-loss message. */
+/** Every live region on the wall (`role="status"`, or `role="alert"` for the wall notice since #236) that carries a graphics-loss message. */
 const lossStatusRegions = (w: Wall) =>
-  [...w.wall.querySelectorAll('[role="status"]')].filter((el) => /graphics/i.test(el.textContent ?? ""));
+  [...w.wall.querySelectorAll('[role="status"], [role="alert"]')].filter((el) => /graphics/i.test(el.textContent ?? ""));
 /** Every button on the wall labelled "Reload". */
 const reloadLabelled = (w: Wall) => [...w.wall.querySelectorAll("button")].filter((b) => (b.textContent ?? "").trim() === "Reload");
 const tileSurfaces = (w: Wall) => w.wall.querySelectorAll(".tile-cant-draw");
@@ -290,7 +290,7 @@ describe("#179 part (c) surface: a loss is said once, on the wall; only a shader
     vi.unstubAllGlobals();
   });
 
-  it("mosaic of 3 in a loss: exactly one role=status region says it, no Reload before reload:true, exactly one Reload after, never Restoring under it", () => {
+  it("mosaic of 3 in a loss: exactly one live region says it, no Reload before reload:true, exactly one Reload after, never Restoring under it", () => {
     w = bootWall(["a", "b", "c"]);
     for (const id of ["a", "b", "c"]) setViewState(id, `plugin:${id}`, { kind: "ready" });
     w.frame();

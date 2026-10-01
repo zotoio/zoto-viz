@@ -37,7 +37,8 @@ export class GfxWallNotice {
     this.shown = true;
     const el = document.createElement("div");
     el.className = "gfx-wall-notice";
-    el.setAttribute("role", "status");
+    // #236: announced at once (role=alert); focus moves to its action when it has one (Reload).
+    el.setAttribute("role", "alert");
     el.tabIndex = -1;
     el.textContent = GFX_INTERRUPTED_NOTICE;
     this.wall.appendChild(el);
@@ -68,7 +69,13 @@ export class GfxWallNotice {
     if (!this.el) return;
     if (this.restoreTimer) clearTimeout(this.restoreTimer);
     this.reloadOffered = false;
+    // #236: Reload had focus and is about to go: hand focus to the wall, as a restore does, not to <body>.
+    const focusOnReload = this.el.contains(document.activeElement);
     this.el.textContent = GFX_INTERRUPTED_NOTICE;
+    if (focusOnReload) {
+      this.wall.tabIndex = -1;
+      this.wall.focus();
+    }
     this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
   }
 
@@ -106,6 +113,7 @@ export class GfxWallNotice {
     btn.addEventListener("click", () => location.reload());
     this.el.appendChild(msg);
     this.el.appendChild(btn);
+    btn.focus();
     this.opts.onReloadOffered?.();
   }
 }
