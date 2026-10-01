@@ -106,6 +106,9 @@ export class LabelLayer {
   constructor() {
     this.domElement = document.createElement("div");
     this.domElement.style.overflow = "hidden";
+    // #248: its own stacking context, so the per-label depth z (up to ~50000, render()) only sorts the
+    // labels among themselves and the layer as a whole stays under the wall notice and the page panels.
+    this.domElement.style.isolation = "isolate";
   }
 
   get size(): number { return this.items.size; }
