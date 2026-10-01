@@ -24,10 +24,11 @@ function setVisibility(v: DocumentVisibilityState): void {
 /** A tile scene whose sky draws a frame only when the row says so. */
 function drawnSource() {
   const cbs = new Set<(id: string) => void>();
+  let drawn: string | null = null;
   const src: SkyDrawnSource & { draw: (id: string) => void } = {
-    pluginSkyDrawn: null,
+    get pluginSkyDrawn() { return drawn; },
     onPluginSkyDrawn: (cb) => { cbs.add(cb); return () => { cbs.delete(cb); }; },
-    draw: (id) => { src.pluginSkyDrawn = id; for (const cb of [...cbs]) cb(id); },
+    draw: (id) => { drawn = id; for (const cb of [...cbs]) cb(id); },
   };
   return src;
 }
