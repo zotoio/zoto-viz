@@ -20,11 +20,17 @@ import {
   scanStarterPackCatalog,
   stageStarterTree,
   STARTER_CI_PACK_ID,
+  starterCiPythonReady,
 } from "./starter-pack-pipeline";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const starterRoot = path.join(repoRoot, "plugins/sdk/starter");
 const mappingYaml = readFileSync(path.join(starterRoot, "data-mapping.yml"), "utf8");
+// #232: the scan row needs a real interpreter with the service deps; without one it skips and says why.
+const servicePython = starterCiPythonReady(repoRoot);
+if (!servicePython.ready) {
+  console.warn(`starter-template: plugins.scan row skipped: ${servicePython.reason}`);
+}
 
 describe("pack starter template", () => {
   it("data-mapping covers every used field", () => {
@@ -108,7 +114,7 @@ describe("pack starter template", () => {
     expect(indexSrc).toMatch(/getVizZoto/);
   });
 
-  it("staged starter passes plugins.scan without catalog errors", () => {
+  it.skipIf(!servicePython.ready)("staged starter passes plugins.scan without catalog errors", () => {
     const { stageRoot } = stageStarterTree(starterRoot, repoRoot);
     try {
       const scan = scanStarterPackCatalog(repoRoot, stageRoot, STARTER_CI_PACK_ID);
