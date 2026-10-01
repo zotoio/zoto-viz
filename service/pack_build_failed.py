@@ -4,9 +4,9 @@ The check did run, and the pack just didn't build (an esbuild error), so this is
 ("<Name> was blocked because …", service/pack_block_copy.py) nor a check that couldn't run ("Couldn't
 safety-check …", #111 / #186). It never says "blocked" and never suggests pack lint:
 
-    fresh install: "<Name> couldn't be built, so it wasn't installed."
-    update:        "The new version of <Name> couldn't be built, so it wasn't updated. <still>"
-                   (<still>: the setup copy table's ``still`` / ``still_unknown`` sentence)
+    fresh install: the setup copy table's ``build_failed.install``
+    update:        its ``build_failed.upgrade``, ending with the table's ``still`` / ``still_unknown``
+                   sentence (web/scripts/pack-install-lint-setup-copy.json)
 
 The raw esbuild error (with its staging paths) is for the log only, never the user text. Callers branch
 on :data:`REASON_PACK_BUILD_FAILED` (``reason_code`` on :class:`PackBuildFailedError`, ``reasonCode`` on
@@ -14,13 +14,14 @@ the payload / catalog row), never on these words.
 """
 from __future__ import annotations
 
-from .pack_install_lint import still_sentence
+from .pack_install_lint import SETUP_COPY, still_sentence
 
 #: #253: carried as ``reasonCode`` next to the row's ``error`` category (``pack_install_blocked``).
 REASON_PACK_BUILD_FAILED = "pack_build_failed"
 
-BUILD_FAILED_INSTALL = "{name} couldn't be built, so it wasn't installed."
-BUILD_FAILED_UPGRADE = "The new version of {name} couldn't be built, so it wasn't updated. {still}"
+# The words live in the shared copy table (web/scripts/pack-install-lint-setup-copy.json ``build_failed``).
+BUILD_FAILED_INSTALL = str(SETUP_COPY["build_failed"]["install"])
+BUILD_FAILED_UPGRADE = str(SETUP_COPY["build_failed"]["upgrade"])
 
 
 def _label(name: str | None) -> str:
