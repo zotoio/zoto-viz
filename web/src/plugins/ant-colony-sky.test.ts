@@ -70,6 +70,8 @@ function wrappedSky(ray: SkyRay = IDENTITY_SKY_RAY, span?: SkySpan): string {
 type PackOut = { slots: Float32Array; uniforms: PluginSkySmokeUniforms };
 
 let onFrame: ((frame: VizDataFrame) => void) | null = null;
+/** The pack module's antColonyTeardown: drops its colony so the next onFrame starts a fresh one. */
+let resetColony: (() => void) | null = null;
 let slots = new Float32Array(VIZ_UBO.totalFloats);
 let written: Record<string, number | [number, number, number]> = {};
 
@@ -88,7 +90,8 @@ beforeAll(async () => {
     },
     writeParticles: () => {},
   };
-  await import("../../../plugins/src/ant-colony/frontend/index");
+  const pack = await import("../../../plugins/src/ant-colony/frontend/index");
+  resetColony = pack.antColonyTeardown;
   onFrame = (globalThis as unknown as { zoto: { onFrame: typeof onFrame } }).zoto.onFrame;
 });
 
@@ -235,8 +238,32 @@ describe("ant-colony on the app's production path (live LAN frame, host look uni
     const frames = lanFrames35s({ fixture: "host" }, 2, 60);
     expect(frames.at(-1)!.talkers).toHaveLength(7);
     expect(frames.at(-1)!.demoSlices?.talkers, "live LAN talkers, not the idle fixture").toBeUndefined();
+    // #225: a fresh colony for every slot set. The writer has no randomness (colony.ts hashes the
+    // look's seed); what made two calls differ was the pack module's colony carrying on from the
+    // previous rows' frames.
+    resetColony!();
     return runPack(frames).slots;
   }
+
+  /**
+   * #225: two fresh app-path slot sets are identical, and so is the wall they draw. Revert: drop
+   * the colony reset in appSlots (the second set continues the first set's colony) -> red.
+   */
+  it("builds identical fresh slot sets on two calls, and they draw the same wall", async () => {
+    const a = appSlots();
+    const b = appSlots();
+    let differ = 0;
+    let worst = 0;
+    for (let i = 0; i < a.length; i++) {
+      const d = Math.abs(a[i]! - b[i]!);
+      if (d > 0) differ++;
+      worst = Math.max(worst, d);
+    }
+    expect(differ, `fresh slot sets: ${differ} of ${a.length} floats differ, worst ${worst}`).toBe(0);
+    const wallA = await appWallLuma(ANT_LOOK_SLIDERS.skyBright, 1, undefined, a);
+    const wallB = await appWallLuma(ANT_LOOK_SLIDERS.skyBright, 1, undefined, b);
+    expect(wallB, "the two fresh slot sets read back the same wall").toEqual(wallA);
+  }, 60_000);
 
   /**
    * Where QE's patches land depends on where this seed digs the nest for these IPs (UX Pro's
