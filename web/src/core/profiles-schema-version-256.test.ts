@@ -217,6 +217,13 @@ function profilesServer(blobs: Record<string, unknown>, defaultId: string, model
 }
 
 const v1 = () => ({ ...savedBlob(), v: 1 });
+
+/** A sent body's settings: its v and whether it carries a load-time marker. */
+function stored(c: Sent | undefined): { v: unknown; markers: string[] } {
+  const settings = c?.body && typeof c.body === "object" && "settings" in c.body ? c.body.settings : null;
+  if (!settings || typeof settings !== "object") return { v: undefined, markers: [] };
+  return { v: "v" in settings ? settings.v : undefined, markers: Object.keys(settings).filter((k) => k === "legacy" || k === "newer") };
+}
 const v99 = () => ({ ...savedBlob(), v: 99, futureOnly: { x: 1 } });
 
 function buttonIn(root: ParentNode, label: string): HTMLButtonElement {
@@ -262,6 +269,9 @@ describe("#256b: nothing writes over a newer profile; the line is announced once
     buttonIn(a.bar, "Save").click();
     await answer("Save profile", "Save");
     await vi.waitFor(() => expect(ok.writesTo("mine")).toHaveLength(1));
+    // What the host collects here (shippedSettings) carries the markers; the PUT doesn't.
+    expect(a.store.newerProfile).toBe(false);
+    expect(stored(ok.writesTo("mine")[0])).toEqual({ v: 1, markers: [] });
     document.body.replaceChildren();
 
     const srv = profilesServer({ future: v99() }, "future");
@@ -280,8 +290,9 @@ describe("#256b: nothing writes over a newer profile; the line is announced once
     const ok = profilesServer({ gemma4: v1() }, "gemma4", { gemma4: "gemma4" });
     const a = store();
     await a.store.boot();
-    await a.store.writeAi(shippedSettings(), "gemma4");
+    await a.store.writeAi(normalizeSettings(v1()), "gemma4");
     expect(ok.writesTo("gemma4")).toHaveLength(1);
+    expect(stored(ok.writesTo("gemma4")[0])).toEqual({ v: 1, markers: [] });
     document.body.replaceChildren();
 
     const srv = profilesServer({ gemma4: v99(), [USER_ID]: v1() }, "gemma4", { gemma4: "gemma4" });
