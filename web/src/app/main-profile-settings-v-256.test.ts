@@ -3,7 +3,10 @@
  * collection (main-entry-env, #239); each "boot" below runs its catalog boot (the test hook), which
  * applies the same-tab session snapshot (applySettings) and then writes it back from
  * collectSettings (persistLive), normalised by writeSessionLive. Two boots make one round trip:
- * collect -> normalise -> apply -> collect.
+ * collect -> normalise -> apply -> collect. The rows read that snapshot raw: readSessionLive
+ * normalises it again, and the first normalise has already stamped v: 1, so only the raw blob
+ * shows what collect wrote (a collect with no v is stored as legacy). The seed carries no aiCycle,
+ * which persistLive always writes, so its presence shows the boot did write the snapshot back.
  *
  * Row 4 pins the arcade families: every family in ARCADE_STORAGE_RE (read from main.ts's source,
  * not a hand-kept list) survives collect -> apply.
@@ -30,7 +33,7 @@ const { InertWorker } = vi.hoisted(() => {
 import "../../test-support/main-entry-env";
 import "./main";
 import { shippedSettings } from "../core/profiles";
-import { readSessionLive, SESSION_LIVE_KEY, writeSessionLive } from "../core/session-live";
+import { SESSION_LIVE_KEY, writeSessionLive } from "../core/session-live";
 import { mainEntryTestBootCatalog } from "./main-entry-test-host";
 
 const MAIN_SRC = readFileSync(resolve(__dirname, "main.ts"), "utf8");
@@ -58,9 +61,27 @@ afterAll(() => {
   window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
 });
 
-async function boot(): Promise<ReturnType<typeof readSessionLive>> {
+type RawLive = { aiCycle?: unknown; settings?: Record<string, unknown> };
+
+/** The same-tab session snapshot as stored, before readSessionLive normalises it again. */
+function rawLive(): RawLive {
+  const raw = sessionStorage.getItem(SESSION_LIVE_KEY);
+  const live: RawLive = raw ? JSON.parse(raw) : {};
+  return live;
+}
+
+/** One catalog boot; returns the snapshot it wrote back, raw. */
+async function boot(): Promise<RawLive> {
+  expect("aiCycle" in rawLive()).toBe(false);
   await mainEntryTestBootCatalog();
-  return readSessionLive();
+  const live = rawLive();
+  expect("aiCycle" in live).toBe(true);
+  return live;
+}
+
+/** Seed the snapshot the next boot applies, without the aiCycle persistLive adds. */
+function seed(settings: RawLive["settings"]): void {
+  writeSessionLive({ profileId: "user", dirty: false, settings: { ...shippedSettings(), ...settings } });
 }
 
 describe("#256: main.ts collect / apply keep v: 1 and every arcade family", () => {
@@ -76,16 +97,20 @@ describe("#256: main.ts collect / apply keep v: 1 and every arcade family", () =
   });
 
   it("(2) round trip collect -> normalise -> apply -> collect is stable and keeps v: 1", async () => {
-    writeSessionLive({ profileId: "user", dirty: false, settings: { ...shippedSettings(), dream: true, merge: true } });
+    seed({ dream: true, merge: true });
     const first = await boot();
-    expect(first?.settings.v).toBe(1);
-    // collectSettings itself wrote v: a blob without it would normalise as legacy.
-    expect(first?.settings.legacy).toBe(false);
-    expect(first?.settings.dream).toBe(true);
+    expect(first.settings?.v).toBe(1);
+    // collectSettings itself wrote v: a collect without it is stored as legacy.
+    expect(first.settings?.legacy).toBe(false);
+    expect(first.settings?.newer).toBe(false);
+    expect(first.settings?.dream).toBe(true);
+    expect(first.settings?.merge).toBe(true);
+    // Apply what collect wrote, and collect again (persistLive drops the aiCycle marker in).
+    seed(first.settings);
     const second = await boot();
-    expect(second?.settings.v).toBe(1);
-    expect(second?.settings.legacy).toBe(false);
-    expect(second?.settings).toEqual(first?.settings);
+    expect(second.settings?.v).toBe(1);
+    expect(second.settings?.legacy).toBe(false);
+    expect(second.settings).toEqual(first.settings);
   });
 
   it("(4) all 14 arcade families in ARCADE_STORAGE_RE survive collect -> apply", async () => {
@@ -95,16 +120,17 @@ describe("#256: main.ts collect / apply keep v: 1 and every arcade family", () =
     const arcade = Object.fromEntries(families.map((f) => [`zoto-viz.${f}.best`, `score-${f}`]));
     for (const k of Object.keys(arcade)) expect(re.test(k), k).toBe(true);
     // Apply puts every family's key into this browser, and collect reads every one back.
-    writeSessionLive({ profileId: "user", dirty: false, settings: { ...shippedSettings(), arcade } });
+    seed({ arcade });
     const first = await boot();
     expect(arcadeKeys()).toEqual(Object.keys(arcade).sort());
-    expect(first?.settings.arcade).toEqual(arcade);
+    expect(first.settings?.arcade).toEqual(arcade);
     // Drop them from the browser: the collected blob alone brings all 14 back.
     for (const k of arcadeKeys()) localStorage.removeItem(k);
     expect(arcadeKeys()).toEqual([]);
+    seed(first.settings);
     const second = await boot();
     expect(arcadeKeys()).toHaveLength(14);
     for (const [k, v] of Object.entries(arcade)) expect(localStorage.getItem(k), k).toBe(v);
-    expect(second?.settings.arcade).toEqual(arcade);
+    expect(second.settings?.arcade).toEqual(arcade);
   });
 });
