@@ -2404,6 +2404,8 @@ mosaic = new Mosaic({
   onCloseLast: () => {
     settings.applyAnim({ ...settings.animSettings, mosaic: "off", mosaicTree: null, mosaicMaxId: "", mosaicTiles: [] });
   },
+  // #242 N3: a removed pane's own sandbox unloads now; the present listener's sync stays the backstop.
+  onPaneDrop: (id) => tileSandboxes.drop(id),
   onPanePick: (from, to) => pickMosaicPane(from, to),
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
