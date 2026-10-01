@@ -310,6 +310,8 @@ export class Mosaic {
     onPromote: (id: string, theme: Theme | null) => void;
     onLayout: (patch: MosaicLayoutPatch) => void;
     onCloseLast: () => void;
+    /** #242 N3: a pane left the wall. main.ts unloads the pane's own sandbox here, not at the next present. */
+    onPaneDrop?: (id: string) => void;
     /** Live tile picker (consent, setMode, sky sync). When set, pane chrome uses this instead of bare assignViews. */
     onPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
     paneCog?: (id: string) => HTMLButtonElement;
@@ -1027,6 +1029,7 @@ export class Mosaic {
     this.panes.delete(id);
     clearVizDrive(id);
     this.themes.delete(id);
+    this.cfg.onPaneDrop?.(id);
   }
 
   private placeTree(): void {
@@ -1352,6 +1355,7 @@ export class Mosaic {
   }
 
   private teardown(): void {
+    const gone = [...this.panes.keys()];
     syncVizTileScope([]);
     for (const e of this.extras) e.scene.dispose();
     this.extras = [];
@@ -1369,6 +1373,8 @@ export class Mosaic {
     this.tree = null;
     this.maximized = null;
     this.cfg.wall.replaceChildren();
+    // #242 N3: the wall went (off, or its last pane closed): every pane's own sandbox goes now too.
+    for (const id of gone) this.cfg.onPaneDrop?.(id);
   }
 }
 
