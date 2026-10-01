@@ -553,7 +553,7 @@ describe("#233 a pane dropped while its attach is in flight never boots", () => 
     return { sizes: sandboxSetSizesForTests(), listeners: messageListeners.size };
   }
 
-  /** B boots fully, and the layout puts both panes in scope (as main.ts does when panes join). */
+  /** B boots fully, and the layout puts both panes in scope (main.ts does the same when panes join). */
   async function bootPaneB(tiles: TileSandboxes<PluginSandbox>): Promise<void> {
     void tiles.load(PANE_B, BACKROOMS);
     await untilReady(tiles, PANE_B, BACKROOMS.id);
