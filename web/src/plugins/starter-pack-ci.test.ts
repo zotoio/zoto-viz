@@ -1,4 +1,3 @@
-import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -17,24 +16,12 @@ import {
   runStarterPackDrawPipeline,
   STARTER_CI_PACK_ID,
   stageStarterTree,
+  starterCiPythonReady,
 } from "./starter-pack-pipeline";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const esbuildBin = path.join(repoRoot, "web/node_modules/.bin/esbuild");
 const starterTemplate = path.join(repoRoot, "plugins/sdk/starter");
-
-function pythonDepsReady(): boolean {
-  try {
-    execFileSync("python3", ["-c", "from service import plugins"], {
-      cwd: repoRoot,
-      env: { ...process.env, PYTHONPATH: repoRoot },
-      stdio: "ignore",
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function lintStarterAsShippedPack(packRoot: string) {
   return scanPackDirectory(packRoot, repoRoot);
@@ -48,8 +35,13 @@ function withSysFailed(frame: VizDataFrame, failed: number): VizDataFrame {
   };
 }
 
-const ciDrawReady = existsSync(esbuildBin) && pythonDepsReady();
+// #229: gate on the interpreter the rows actually use (repoPython), not on bare python3.
+const pythonGate = starterCiPythonReady(repoRoot);
+const ciDrawReady = existsSync(esbuildBin) && pythonGate.ready;
 const ciCompileReady = ciDrawReady;
+if (!ciCompileReady) {
+  console.warn(`starter-pack-ci: compile/draw rows skipped: ${existsSync(esbuildBin) ? pythonGate.reason : `no ${esbuildBin}`}`);
+}
 
 describe("pack starter template CI", () => {
   afterAll(async () => {
@@ -148,6 +140,35 @@ describe("pack starter template CI", () => {
     } finally {
       rmSync(stageRoot, { recursive: true, force: true });
     }
+  });
+
+  const FAKE_PYTHON = "/nonexistent/zoto-229/bin/python";
+
+  it("#229 gate: ready on ZOTO_VIZ_PYTHON when the repo .venv is hidden from the picker", () => {
+    const calls: string[] = [];
+    const gate = starterCiPythonReady(repoRoot, {
+      env: { ZOTO_VIZ_PYTHON: FAKE_PYTHON },
+      exists: () => false,
+      run: (python) => {
+        calls.push(python);
+        return "";
+      },
+    });
+    expect(gate).toEqual({ ready: true, python: FAKE_PYTHON, reason: "" });
+    expect(calls).toEqual([FAKE_PYTHON]);
+  });
+
+  it("#229 gate: not ready, naming the import error, when the picked interpreter lacks the deps", () => {
+    const gate = starterCiPythonReady(repoRoot, {
+      env: { ZOTO_VIZ_PYTHON: FAKE_PYTHON },
+      exists: () => false,
+      run: () => {
+        throw new Error("ModuleNotFoundError: No module named 'aiohttp'\nTraceback (most recent call last):");
+      },
+    });
+    expect(gate.ready).toBe(false);
+    expect(gate.python).toBe(FAKE_PYTHON);
+    expect(gate.reason).toContain("ModuleNotFoundError: No module named 'aiohttp'");
   });
 
   it("idle vs idle-failed failure visuals differ (starter sim)", () => {
