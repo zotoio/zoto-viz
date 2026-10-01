@@ -1,10 +1,11 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setPackAssetTokenForTests } from "../core/http";
+import { PackAssetTokenInvalidError, setPackAssetTokenForTests } from "../core/http";
 import { loadShippedPackSpec } from "../plugins/fixtures/host-idle-shipped-packs";
-import { PluginSandbox, setPluginModuleSandboxUrlForTests } from "../plugins/host";
+import { PluginSandbox, sandboxSetSizesForTests, setPluginModuleSandboxUrlForTests } from "../plugins/host";
 import * as packAssetFrame from "../plugins/pack-asset-frame";
+import { resetRebuildSleepForTests, setRebuildSleepForTests } from "../plugins/pack-asset-rebuild";
 import type { PluginView } from "../plugins/plugin";
 import { bindVizDriveElement, noteSandboxWrite, resetVizDriveState, vizDriveFor } from "../plugins/viz-drive";
 import { attachPaneSandbox, TileSandboxes } from "./tile-sandboxes";
@@ -12,7 +13,9 @@ import { attachPaneSandbox, TileSandboxes } from "./tile-sandboxes";
 /**
  * #242 (follow-up to #233), on real PluginSandboxes and main.ts's own pane attach (attachPaneSandbox).
  * N4: a restarted pane's old attach that settles late must not clear the new sandbox's drive.
- * Revert: the dropReady guard (host.ts).
+ * F1: a restart stops the old attach, whether it waits on the pre-attach import (iii) or on the
+ * asset rebuild's retry sleep (iv).
+ * Reverts: N4 the dropReady guard (host.ts), F1 `prev.abort.abort()` in load().
  */
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -43,6 +46,7 @@ describe("#242 pane sandboxes: restart and drop stop the old attach", () => {
     setPluginModuleSandboxUrlForTests(null);
     setPackAssetTokenForTests("_sandbox", "");
     packAssetFrame.resetPackAssetFrameState();
+    resetRebuildSleepForTests();
     resetVizDriveState();
   });
 
@@ -69,6 +73,34 @@ describe("#242 pane sandboxes: restart and drop stop the old attach", () => {
     }, { timeout: 3_000 });
   }
 
+  /** The restarted pane's attach reached its load: an old attach not stopped has loaded by now. */
+  async function untilFreshLoads(tiles: TileSandboxes<PluginSandbox>): Promise<void> {
+    const freshLoads = vi.spyOn(tiles.sandboxFor(PANE), "loadModule");
+    await settle(() => freshLoads.mock.calls.length > 0);
+    expect(freshLoads, "the restarted pane's attach reached its load").toHaveBeenCalled();
+  }
+
+  /** Real macrotasks (fake timers only fake setTimeout / clearTimeout). */
+  async function settle(until: () => boolean, max = 200): Promise<void> {
+    for (let i = 0; i < max && !until(); i++) await new Promise<void>((r) => { setImmediate(r); });
+  }
+
+  /** True once `p` settles, false after `ms` (real timers): a hung attach fails a check, not the row. */
+  async function settlesWithin(p: Promise<unknown>, ms = 1_000): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const late = new Promise<boolean>((r) => { timer = setTimeout(() => r(false), ms); });
+    const done = await Promise.race([p.then(() => true, () => true), late]);
+    clearTimeout(timer);
+    return done;
+  }
+
+  /** After the restart settled and the pane dropped: nothing of the replaced sandbox is left. */
+  function expectReplacedGone(old: PluginSandbox, base: { live: number; ready: number }): void {
+    expect.soft(old.readyPack, "readyPack of the replaced sandbox").toBe("");
+    expect.soft(sandboxSetSizesForTests(), "live / ready sandboxes after the pane drops").toEqual(base);
+    expect.soft(document.querySelectorAll("iframe"), "iframes left after the pane drops").toHaveLength(0);
+  }
+
   it("(N4) a restarted pane's old attach settling late leaves the new sandbox's drive at sandbox", async () => {
     bindVizDriveElement(PANE, document.createElement("div"));
     let inOpen = false;
@@ -93,4 +125,51 @@ describe("#242 pane sandboxes: restart and drop stop the old attach", () => {
     expect.soft(vizDriveFor(PANE), "the restarted pane's drive after the old attach settles late").toBe("sandbox");
     expect.soft(fresh.readyPack, "the new sandbox stays ready").toBe(BACKROOMS.id);
   });
+
+  it("(iii) restarted during the pre-attach wait (the import): the old attach never loads", async () => {
+    const tiles = paneTiles();
+    const base = sandboxSetSizesForTests();
+    const first = tiles.load(PANE, BACKROOMS); // its attach now waits on the import
+    const old = tiles.sandboxFor(PANE);
+    const oldLoads = vi.spyOn(old, "loadModule");
+    const restarted = tiles.restart(PANE);
+    await untilFreshLoads(tiles); // the import resolved for both attaches, the old one first
+    expect.soft(oldLoads, "loadModule on the replaced sandbox after the restart").toHaveBeenCalledTimes(0);
+    await untilReady(tiles);
+    expect.soft(await settlesWithin(first), "the old attach settles").toBe(true);
+    expect.soft(await settlesWithin(restarted), "the restart settles").toBe(true);
+    tiles.drop(PANE);
+    expectReplacedGone(old, base);
+  });
+
+  it("(iv) restarted during the asset rebuild's retry sleep: the old sleep is aborted and never retries", async () => {
+    const sleeps: AbortSignal[] = [];
+    let entered = (): void => {};
+    const sleeping = new Promise<void>((r) => { entered = r; });
+    let wake = (): void => {};
+    setRebuildSleepForTests((_ms, signal) => new Promise<void>((resolve, reject) => {
+      sleeps.push(signal);
+      wake = resolve;
+      signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+      entered();
+    }));
+    vi.mocked(packAssetFrame.openPackAssetFrame).mockRejectedValueOnce(new PackAssetTokenInvalidError(BACKROOMS.id));
+    const tiles = paneTiles();
+    const base = sandboxSetSizesForTests();
+    const first = tiles.load(PANE, BACKROOMS);
+    const old = tiles.sandboxFor(PANE);
+    await sleeping; // the first load hit an invalid token; the rebuild waits to retry
+    const oldLoads = vi.spyOn(old, "loadModule");
+    const restarted = tiles.restart(PANE);
+    expect.soft(sleeps[0]?.aborted, "the old rebuild's sleep is aborted by the restart").toBe(true);
+    wake(); // the sleep ends: a retry that was not stopped would boot the replaced sandbox now
+    await untilFreshLoads(tiles);
+    expect.soft(oldLoads, "loadModule on the replaced sandbox after the restart").toHaveBeenCalledTimes(0);
+    await untilReady(tiles);
+    expect.soft(await settlesWithin(first), "the old attach settles").toBe(true);
+    expect.soft(await settlesWithin(restarted), "the restart settles").toBe(true);
+    tiles.drop(PANE);
+    expectReplacedGone(old, base);
+  });
+
 });
