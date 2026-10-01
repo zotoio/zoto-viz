@@ -260,8 +260,8 @@ describe("#216: a pack tile says a lost context on the tile, with Retry, never a
     w.browser.restoreWorks = true;
 
     retryButton(w)!.click();
-    vi.advanceTimersByTime(0);
-    vi.advanceTimersByTime(0);
+    // Retry's restore request, then the browser's restored event (each its own later task).
+    vi.advanceTimersByTime(10);
     expect(w.browser.lost).toBe(false);
     w.lose();
     expectCouldntDraw(w);
@@ -284,8 +284,8 @@ describe("#216: a pack tile says a lost context on the tile, with Retry, never a
     w.browser.restoreWorks = true;
 
     retryButton(w)!.click();
-    vi.advanceTimersByTime(0);
-    vi.advanceTimersByTime(0);
+    // Retry's restore request, then the browser's restored event (each its own later task).
+    vi.advanceTimersByTime(10);
     w.frame();
     expect(drawNotices(w)).toHaveLength(0);
     expect(pane(w).querySelectorAll(".tile-cant-draw")).toHaveLength(0);
@@ -301,8 +301,8 @@ describe("#216: a pack tile says a lost context on the tile, with Retry, never a
     w.browser.restoreWorks = true;
 
     retryButton(w)!.click();
-    vi.advanceTimersByTime(0);
-    vi.advanceTimersByTime(0);
+    // Retry's restore request, then the browser's restored event (each its own later task).
+    vi.advanceTimersByTime(10);
     w.frame();
     expect(drawNotices(w)).toHaveLength(0);
     expect(viewStateOf("rcs")?.kind).not.toBe("cant-draw");

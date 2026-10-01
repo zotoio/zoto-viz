@@ -314,7 +314,12 @@ const renderHost = new RenderHost($("wall"));
 // Each tile's cant-draw view state follows the host: lost context, Reload offered, drawn again, shader failures (#171 c).
 bindCantDrawViewState(renderHost);
 // One tile's shader failure gets its own "couldn't draw" line; a lost context is the wall notice's alone (#179 c).
-bindCantDrawSurface((viewId, packId) => pluginSpecForMode(viewId)?.name ?? packId);
+// A pack tile says a lost context on the tile with Retry (#216); Retry asks the host for the
+// context back, never a new sky wait.
+bindCantDrawSurface((viewId, packId) => pluginSpecForMode(viewId)?.name ?? packId, {
+  isPack: (viewId) => pluginHasFrontend(pluginSpecForMode(viewId)),
+  retry: () => renderHost.recreateContext(),
+});
 mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });

@@ -118,8 +118,20 @@ function couldntStartText(name: string, reason: CouldntStartReason): string {
   }
 }
 
+/**
+ * Where else the copy is shaped: `pack` when the tile's view is a pack with its own frontend
+ * (#216). Such a tile says a lost context on the tile itself, with Retry; other tiles leave it to
+ * the wall notice.
+ */
+export type ViewStateCopyOpts = { pack?: boolean };
+
 /** Plain copy for a state: one sentence and at most one button. */
-export function viewStateCopy(state: ViewState, viewName: string, tile: ViewStateCopyTile): ViewStateCopy {
+export function viewStateCopy(
+  state: ViewState,
+  viewName: string,
+  tile: ViewStateCopyTile,
+  opts: ViewStateCopyOpts = {},
+): ViewStateCopy {
   const name = viewName.trim() || "This view";
   switch (state.kind) {
     case "starting":
@@ -133,6 +145,9 @@ export function viewStateCopy(state: ViewState, viewName: string, tile: ViewStat
       if (state.reason === "missing") return { text: couldntStartText(name, state.reason), action: null, button: null };
       return { text: couldntStartText(name, state.reason), action: "retry", button: "Retry" };
     case "cant-draw":
+      // A pack draws its own picture: without its own line the board is silently blank (#216).
+      // Retry asks for the context back; the wall notice still says the loss for everyone.
+      if (state.reason === "context-lost" && opts.pack) return { text: `${name} couldn't draw.`, action: "retry", button: "Retry" };
       // Copy only: which surface paints it (tile fallback, wall notice) and its button are #179 (c).
       return { text: cantDrawText(name, state, isSoloTile(tile)), action: null, button: null };
     default:
