@@ -88,7 +88,7 @@ describe("mosaic warming clears per pane", () => {
   it("wiring: each tile settles in its own load's finally, and an installed pack sky re-checks its pane", () => {
     const main = readFileSync(resolve(__dirname, "../app/main.ts"), "utf8");
     const sync = main.slice(main.indexOf("async function syncPluginSky("), main.indexOf("function teardownMosaicPanelView("));
-    expect(sync).toContain("await loadTilesSettlingEach(m.tileIds, signal,");
+    expect(sync).toContain("await loadTilesSettlingEach(skyTiles, signal,");
     expect(sync).toMatch(/\(id\) => \{ if \(m\.on\) m\.settlePane\(id\); \}\);/);
     const install = main.slice(main.indexOf("async function installPluginSky("), main.indexOf("const skyWaitTiles"));
     expect(install.indexOf("mosaic.settlePane(paneId)")).toBeGreaterThan(install.indexOf("landWhenDrawn(skyWaits"));
