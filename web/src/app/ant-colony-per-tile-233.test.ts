@@ -551,18 +551,21 @@ describe("#233 a pane dropped while its attach is in flight never boots", () => 
     return { sizes: sandboxSetSizesForTests(), listeners: messageListeners.size };
   }
 
-  /** After the drop and the late attach / retry: nothing of the dropped pane is left running. */
+  /**
+   * After the drop and the late attach / retry: nothing of the dropped pane is left running.
+   * Soft: every check reports on its own, so one revert shows all that it breaks.
+   */
   function expectGone(dropped: PluginSandbox, base: Baseline): void {
-    expect(dropped.readyPack, "readyPack of the dropped pane's sandbox").toBe("");
-    expect(document.querySelectorAll("iframe"), "iframes left for the dropped pane").toHaveLength(0);
-    expect(sandboxSetSizesForTests(), "live / ready sandboxes vs before the load").toEqual(base.sizes);
-    expect(messageListeners.size, "window message listeners vs before the load").toBe(base.listeners);
+    expect.soft(dropped.readyPack, "readyPack of the dropped pane's sandbox").toBe("");
+    expect.soft(document.querySelectorAll("iframe"), "iframes left for the dropped pane").toHaveLength(0);
+    expect.soft(sandboxSetSizesForTests(), "live / ready sandboxes vs before the load").toEqual(base.sizes);
+    expect.soft(messageListeners.size, "window message listeners vs before the load").toBe(base.listeners);
     const probe = `probe-${probes++}`;
     const el = document.createElement("div");
     bindVizDriveElement(probe, el);
     noteSandboxWrite(probe); // lands as "sandbox" only while the global ready flag is up
-    expect(vizDriveFor(probe), "global sandbox ready").toBe("none");
-    expect(vizTileBudgetRegistry.activeTileCount(), "tiles in scope (scope [\"main\"])").toBe(1);
+    expect.soft(vizDriveFor(probe), "global sandbox ready").toBe("none");
+    expect.soft(vizTileBudgetRegistry.activeTileCount(), "tiles in scope (scope [\"main\"])").toBe(1);
   }
 
   it("(i) dropped during the pre-attach wait (the import): the late attach bails before loading", async () => {
@@ -573,7 +576,7 @@ describe("#233 a pane dropped while its attach is in flight never boots", () => 
     const loads = vi.spyOn(dropped, "loadModule");
     tiles.drop(BACKROOMS.id);
     await loading;
-    expect(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
+    expect.soft(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
     expectGone(dropped, base);
   });
 
@@ -597,7 +600,7 @@ describe("#233 a pane dropped while its attach is in flight never boots", () => 
     tiles.drop(BACKROOMS.id);
     wake();
     await loading;
-    expect(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
+    expect.soft(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
     expectGone(dropped, base);
   });
 });
