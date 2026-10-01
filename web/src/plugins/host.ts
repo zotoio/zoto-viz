@@ -25,7 +25,7 @@ import {
   markPackNavigationStopped,
   registerPackNavigationRemove,
 } from "./pack-asset-navigation";
-import { noteSandboxWrite, setSandboxReady } from "./viz-drive";
+import { clearSandboxWrote, noteSandboxWrite, setSandboxReady } from "./viz-drive";
 import { syncVizTileScope } from "./viz-tile-budget";
 import { validateVizWriteBatch, vizWriteBatchByteSize, type VizWriteBatchPayload } from "./viz-write-batch";
 import { notePackWriteBatch } from "../core/pack-host-perf";
@@ -112,6 +112,15 @@ export function packAssetUrlWithToken(token: string, packId: string, ...parts: s
 }
 
 const activePackAssetFrameByTile = new Map<string, string>();
+/** #233: sandboxes with a pack loaded, and those whose frame sent `ready` (one per tile). */
+const liveSandboxes = new Set<PluginSandbox>();
+const readySandboxes = new Set<PluginSandbox>();
+
+/** Tests only (#233): how many sandboxes are loaded / ready right now. */
+export function sandboxSetSizesForTests(): { live: number; ready: number } {
+  return { live: liveSandboxes.size, ready: readySandboxes.size };
+}
+
 const sandboxAssetTokenByFrame = new Map<string, string>();
 let lastSandboxBootNonce = "";
 
@@ -285,10 +294,17 @@ export class PluginSandbox {
     window.addEventListener("message", this.onWindowMessage);
   }
 
+  /** This sandbox is no longer ready: only its own tile's drive drops while another tile's runs. */
+  private dropReady(): void {
+    readySandboxes.delete(this);
+    if (readySandboxes.size) clearSandboxWrote(this.activeTileId);
+    else setSandboxReady(false);
+  }
+
   unload(): void {
     this.bootEpoch += 1;
     window.removeEventListener("message", this.onWindowMessage);
-    setSandboxReady(false);
+    this.dropReady();
     this.cancelBootWait();
     this.bootReject = null;
     this.activePackId = "";
@@ -317,7 +333,9 @@ export class PluginSandbox {
     this.iframe = null;
     this.iframeLoadCount = 0;
     this.lastPresentFrameMs = -1;
-    syncVizTileScope(["main"]);
+    liveSandboxes.delete(this);
+    // #233: the tile scope resets with the last sandbox, not under another tile's live one.
+    if (!liveSandboxes.size) syncVizTileScope(["main"]);
   }
 
   private teardownPort(): void {
@@ -359,6 +377,7 @@ export class PluginSandbox {
     viz?: VizPluginContract,
   ): Promise<void> {
     this.unload();
+    liveSandboxes.add(this);
     this.activePackId = id;
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
@@ -403,6 +422,7 @@ export class PluginSandbox {
     const inflight = this.inflightModule;
     if (inflight && inflight.key === key && inflight.epoch === this.bootEpoch) return inflight.promise;
     this.unload();
+    liveSandboxes.add(this);
     this.activePackId = "";
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
@@ -440,6 +460,7 @@ export class PluginSandbox {
     viz?: VizPluginContract,
   ): Promise<void> {
     this.unload();
+    liveSandboxes.add(this);
     this.activePackId = "";
     this.caps = caps.filter((c) => ALLOWED.has(c));
     this.vizContract = viz;
@@ -551,7 +572,9 @@ export class PluginSandbox {
       this.iframe = null;
     }
     if (fid) await closePackAssetFrameForTile(tile, fid);
-    setSandboxReady(false);
+    // #233: stays in liveSandboxes: its tile (and notice) remains until unload() tears it down,
+    // and that unload is what resets the scope, which is what this path did before #233.
+    this.dropReady();
     registerPackNavigationRemove(tile, () => {
       this.navigationHost?.closeTile?.(tile);
     });
@@ -695,6 +718,7 @@ export class PluginSandbox {
     if (d.type === "ready") {
       if (d.bootNonce !== this.bootNonce) return;
       recordSandboxBoot("ready");
+      readySandboxes.add(this);
       setSandboxReady(true);
       return;
     }
