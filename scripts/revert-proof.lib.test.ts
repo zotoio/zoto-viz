@@ -127,9 +127,9 @@ describe("vitest JSON selection by full name", () => {
 });
 
 function runSingleOverlayCase(
-  describeTitle,
-  innerTestSource,
-  leafTitle,
+  describeTitle: string,
+  innerTestSource: string,
+  leafTitle: string,
   topImports = "",
 ) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "rp-overlay-one-"));
@@ -757,11 +757,11 @@ describe("revert-proof CI gate (item 9)", () => {
     const { decideBaseSelftestStep, SELFTEST_MARKER } = await import("./revert-proof-ci-gate.mjs");
     const baseSha = "aabbccdd";
     const decision = decideBaseSelftestStep(
-      (p) =>
+      (p: string) =>
         p === `${baseSha}:${SELFTEST_MARKER}` || p === `${baseSha}:scripts/revert-proof.lib.test.ts`,
       baseSha,
       () => true,
-      (p) =>
+      (p: string) =>
         p.endsWith("revert-proof.lib.test.ts")
           ? "revert-proofs/48/classify-rejects-plain-meta.patch"
           : "",
@@ -774,7 +774,7 @@ describe("revert-proof CI gate (item 9)", () => {
     const { decideBaseSelftestStep, SELFTEST_MARKER } = await import("./revert-proof-ci-gate.mjs");
     const baseSha = "deadbeef";
     const gitPath = `${baseSha}:${SELFTEST_MARKER}`;
-    const decision = decideBaseSelftestStep((p) => p === gitPath, baseSha, () => true, () => "");
+    const decision = decideBaseSelftestStep((p: string) => p === gitPath, baseSha, () => true, () => "");
     expect(decision.action).toBe("run");
     expect(decision.case).toBe("base_has_marker");
     expect(decision.check).toBe(`git cat-file -e ${gitPath}`);
@@ -788,7 +788,7 @@ describe("revert-proof CI gate (item 9)", () => {
     const decision = decideBaseSelftestStep(
       () => false,
       head,
-      (ref) => ref === `${head}^{commit}`,
+      (ref: string) => ref === `${head}^{commit}`,
       () => "",
     );
     expect(decision.action).toBe("skip");
@@ -811,7 +811,7 @@ describe("revert-proof CI gate (item 9)", () => {
       return;
     }
     const unfetched = decideBaseSelftestStep(
-      (p) => p === `${missing}:${SELFTEST_MARKER}`,
+      (p: string) => p === `${missing}:${SELFTEST_MARKER}`,
       missing,
       commitExists,
       () => "",
