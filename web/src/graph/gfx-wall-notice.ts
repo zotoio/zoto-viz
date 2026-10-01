@@ -10,9 +10,23 @@ export type GfxWallNoticeOpts = {
   onReloadOffered?: () => void;
 };
 
-/** Single wall-level status when the shared WebGL context is lost. */
+/** The marker a tile's own surface sets while it says a lost context itself (#216, cant-draw-surface). */
+const TILE_SURFACE_ATTR = "data-cant-draw-surface";
+const TILE_SAYS_LOSS = "context-lost";
+
+/**
+ * Single wall-level status when the shared WebGL context is lost.
+ *
+ * #236: a solo tile that already says the loss itself (a pack tile, #216: its own "couldn't draw"
+ * line with Retry, marked `data-cant-draw-surface="context-lost"`) gets no second notice from the
+ * wall: the wall notice stays in the DOM, keeps its state, and is `hidden` (out of the accessibility
+ * tree, so the loss is announced once, by the tile). It follows the marker while the notice is up
+ * (set, cleared or changed): a tile that stops saying it (e.g. switched to a non-pack view) gets the
+ * wall notice back. A "shader" marker, a non-pack tile, or a mosaic keep the wall notice as before.
+ */
 export class GfxWallNotice {
   private el: HTMLDivElement | null = null;
+  private tileWatch: MutationObserver | null = null;
   private shown = false;
   private restoreTimer: ReturnType<typeof setTimeout> | null = null;
   private reloadOffered = false;
@@ -43,7 +57,47 @@ export class GfxWallNotice {
     el.textContent = GFX_INTERRUPTED_NOTICE;
     this.wall.appendChild(el);
     this.el = el;
+    this.watchTiles();
     this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
+  }
+
+  /** The wall's tiles: its mosaic panes, or with none, the solo scene. */
+  private tiles(): HTMLElement[] {
+    const panes = [...this.wall.querySelectorAll<HTMLElement>(":scope > .mosaic-pane")];
+    return panes.length ? panes : [...this.wall.querySelectorAll<HTMLElement>(":scope > #scene")];
+  }
+
+  /** A solo tile already says the loss itself (#236): the wall notice would be a second one. */
+  private tileSaysLoss(): boolean {
+    const tiles = this.tiles();
+    return tiles.length === 1 && tiles[0]!.getAttribute(TILE_SURFACE_ATTR) === TILE_SAYS_LOSS;
+  }
+
+  /** Hide or show the notice to match the tiles now; focus goes to Reload when it comes back with one. */
+  private syncToTiles(): void {
+    const el = this.el;
+    if (!el) return;
+    const hide = this.tileSaysLoss();
+    if (el.hidden === hide) return;
+    if (hide && el.contains(document.activeElement)) {
+      this.wall.tabIndex = -1;
+      this.wall.focus();
+    }
+    el.hidden = hide;
+    if (!hide) el.querySelector<HTMLButtonElement>(".gfx-wall-reload")?.focus();
+  }
+
+  /** While the notice is up, follow the tiles' surface marker and the wall's tiles coming and going. */
+  private watchTiles(): void {
+    this.syncToTiles();
+    if (this.tileWatch || typeof MutationObserver === "undefined") return;
+    this.tileWatch = new MutationObserver(() => this.syncToTiles());
+    this.tileWatch.observe(this.wall, { subtree: true, childList: true, attributes: true, attributeFilter: [TILE_SURFACE_ATTR] });
+  }
+
+  private unwatchTiles(): void {
+    this.tileWatch?.disconnect();
+    this.tileWatch = null;
   }
 
   onContextRestored(): void {
@@ -54,6 +108,7 @@ export class GfxWallNotice {
     const btn = this.el?.querySelector(".gfx-wall-reload") as HTMLButtonElement | null;
     const focusOnReload = btn !== null && document.activeElement === btn;
     const hadLateReload = this.reloadOffered;
+    this.unwatchTiles();
     this.el?.remove();
     this.el = null;
     this.shown = false;
@@ -76,6 +131,7 @@ export class GfxWallNotice {
       this.wall.tabIndex = -1;
       this.wall.focus();
     }
+    this.syncToTiles();
     this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
   }
 
@@ -85,6 +141,7 @@ export class GfxWallNotice {
       clearTimeout(this.restoreTimer);
       this.restoreTimer = null;
     }
+    this.unwatchTiles();
     this.el?.remove();
     this.el = null;
     this.shown = false;
@@ -113,7 +170,7 @@ export class GfxWallNotice {
     btn.addEventListener("click", () => location.reload());
     this.el.appendChild(msg);
     this.el.appendChild(btn);
-    btn.focus();
+    if (!this.el.hidden) btn.focus();
     this.opts.onReloadOffered?.();
   }
 }
