@@ -208,4 +208,42 @@ describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger,
       host.dispose();
     }
   });
+
+  it("(c) hosted mosaic pane: a Retry press is not taken by the camera and clicks; a press or wheel elsewhere on the pane still moves the camera", () => {
+    // ZotoBoss + UX Pro: the Retry press fix is shared with mosaic panes; everything else on a pane is as on main.
+    const p = page(true, true);
+    const host = new RenderHost(p.wall, { software: true });
+    const scene = new NetScene(p.tile, { host });
+    const captured: number[] = [];
+    Object.defineProperty(p.tile, "setPointerCapture", { value: (id: number) => captured.push(id), configurable: true });
+    Object.defineProperty(p.tile, "releasePointerCapture", { value: () => {}, configurable: true });
+    Object.defineProperty(p.tile, "hasPointerCapture", { value: () => false, configurable: true });
+    const camera = vi.fn();
+    p.tile.addEventListener("pointerdown", camera);
+    try {
+      expect(getComputedStyle(p.line).overflowY, "a mosaic line does not scroll itself").not.toMatch(/^(auto|scroll)$/);
+      // Retry: no drag, no capture, and the click counts.
+      p.retry.dispatchEvent(press());
+      expect(captured, "mosaic Retry press: no pointer capture on the pane").toEqual([]);
+      expect(camera, "mosaic Retry press never reaches the pane's orbit handler").not.toHaveBeenCalled();
+      p.retry.click();
+      expect(p.retried).toEqual(["main"]);
+      // Next to Retry: a press on the pane (and through its pointer-events: none line) still reaches the camera.
+      p.tile.dispatchEvent(press());
+      expect(camera, "press on the bare pane: camera").toHaveBeenCalledTimes(1);
+      expect(captured, "press on the bare pane: orbit drag captures the pointer, as on main").toEqual([1]);
+      p.line.dispatchEvent(press());
+      p.text.dispatchEvent(press());
+      expect(camera, "press on the pane's line: camera, as on main").toHaveBeenCalledTimes(3);
+      // The wheel over the pane, its line and its text is still the camera's.
+      for (const target of [p.tile, p.line, p.text]) {
+        const ev = wheel();
+        target.dispatchEvent(ev);
+        expect(ev.defaultPrevented, `mosaic wheel over ${target.className}: camera, as on main`).toBe(true);
+      }
+    } finally {
+      scene.dispose();
+      host.dispose();
+    }
+  });
 });
