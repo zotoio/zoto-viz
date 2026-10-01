@@ -26,6 +26,7 @@ from .pack_id import refuse_case_insensitive_id_collision
 from .pack_zip_install_ux import installed_runtime_version
 from .pack_install_blocked_store import PackInstallStoreFault, clear_blocked_pack, pack_info_blocked_line
 from .pack_install_lint import REASON_INSTALL_CHECK_UNAVAILABLE, PackInstallLintSetupError
+from .pack_build_failed import REASON_PACK_BUILD_FAILED, build_failed_payload
 from . import pack_safe_zip as psz
 from .pack_install_copy import (
     REASON_ALREADY_EXISTS,
@@ -522,6 +523,9 @@ def install_local_zip(
                     {"ok": False, "error": "pack_boundary", "message": text, "reasonCode": REASON_PACK_BLOCKED},
                     activate=False,
                 )
+            if getattr(e, "reason_code", "") == REASON_PACK_BUILD_FAILED:
+                # #253: the pack didn't build (not a block); the raw build error is in the log only.
+                return _finish({"ok": False, **build_failed_payload(text)}, activate=False)
             return _finish({"ok": False, "error": text, "message": text}, activate=False)
         except InstallUpgradeRollbackError as e:
             return _finish(_upgrade_rollback_result(e), activate=activate)
@@ -661,6 +665,9 @@ def publish_local(body: dict[str, Any] | None) -> dict[str, Any]:
         if getattr(e, "reason_code", "") == REASON_PACK_BLOCKED:
             # #240: branch on the code, never the wording.
             return {"ok": False, "error": "pack_boundary", "message": text, "reasonCode": REASON_PACK_BLOCKED}
+        if getattr(e, "reason_code", "") == REASON_PACK_BUILD_FAILED:
+            # #253: the pack didn't build (not a block).
+            return {"ok": False, **build_failed_payload(text)}
         return {"ok": False, "error": text}
 
 
@@ -935,6 +942,9 @@ def retry_blocked_zip_install(sha256: str, *, activate: bool = True) -> dict[str
                 if getattr(e, "reason_code", "") == REASON_PACK_BLOCKED:
                     # #240: branch on the code, never the wording.
                     return {"ok": False, "error": "pack_boundary", "message": text, "reasonCode": REASON_PACK_BLOCKED}
+                if getattr(e, "reason_code", "") == REASON_PACK_BUILD_FAILED:
+                    # #253: the pack didn't build (not a block).
+                    return {"ok": False, **build_failed_payload(text), "id": pid}
                 return {"ok": False, "error": text, "id": pid}
         finally:
             psz.cleanup_staging_dir(staging)

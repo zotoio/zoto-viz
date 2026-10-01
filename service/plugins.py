@@ -61,6 +61,7 @@ from .plugin_install import (
     update_refused_payload,
 )
 from .pack_block_copy import BLOCK_AUTHOR_TAIL, GRAPHICS_CODE_ERROR, PackBlockedError
+from .pack_build_failed import REASON_PACK_BUILD_FAILED, PackBuildFailedError
 from .pack_zip_install_ux import installed_runtime_version
 from . import data_source_plugin as dsp
 import yaml
@@ -519,7 +520,10 @@ def _check_install_lint_verdict(
                 # #171 (b) UX Pro: only the pack's author can fix its graphics code.
                 raise PackBlockedError(label, lint_msg, tail=BLOCK_AUTHOR_TAIL, reason=GRAPHICS_CODE_ERROR)
             raise PackBlockedError(label, lint_msg)
-        raise ValueError(proc.stderr.strip() or "esbuild failed")
+        # #253: the check ran and the pack didn't build. Not a block; the raw error is for the log only.
+        detail = proc.stderr.strip() or "esbuild failed"
+        _LOG.warning("pack build failed for %s: %s", doc.get("id"), detail)
+        raise PackBuildFailedError(label, detail=detail)
     if not pil.install_lint_passed(proc.returncode, proc.stderr, nonce=nonce, pack=str(doc.get("id") or "")):
         # #185: fail closed. Only the nonce-bound pass line, last on stderr, is a pass.
         _LOG.warning("pack install lint setup refusal (no_pass_verdict) for %s", doc.get("id"))
@@ -2009,6 +2013,11 @@ def _materialize_zip_plugin(
             row["reasonCode"] = REASON_PACK_BLOCKED
             if isinstance(e, PackBlockedError):
                 row["sentence"] = e.sentence
+        elif getattr(e, "reason_code", "") == REASON_PACK_BUILD_FAILED:
+            # #253: the pack didn't build (not a block); branch on the code, never the wording.
+            row["error"] = "pack_install_blocked"
+            row["message"] = text
+            row["reasonCode"] = REASON_PACK_BUILD_FAILED
         elif getattr(e, "reason_code", "") == REASON_UPDATE_REFUSED:
             # #111: branch on the code, never the wording.
             row["error"] = "pack_install_blocked"

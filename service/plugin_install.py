@@ -36,6 +36,7 @@ from .pack_install_copy import (
 )
 from .pack_sdk_contract import assert_pack_sdk_compatible, read_cached_sdk_manifest
 from .pack_zip_install_ux import installed_runtime_version
+from .pack_build_failed import REASON_PACK_BUILD_FAILED, PackBuildFailedError, build_failed_upgrade_message
 from .pack_block_copy import (
     BLOCK_FIX_TAIL,
     SENTENCE_BOUNDARY,
@@ -596,6 +597,20 @@ def _install_staged_to_runtime_locked(
                 raise InstallV2BlockedError(
                     format_install_lint_setup_upgrade_message(name or e.pack_name, installed_runtime_version(runtime), e.reason),
                     payload={"error": REASON_INSTALL_CHECK_UNAVAILABLE, "upgrade_blocked": "true", "zip": rel},
+                ) from e
+            raise
+        except PackBuildFailedError as e:
+            if upgrade:
+                # #253: the check ran and the new version didn't build. Not a block, so not the block
+                # copy or its code; the raw build error is already in the log.
+                raise InstallV2BlockedError(
+                    build_failed_upgrade_message(name or e.pack_name, installed_runtime_version(runtime)),
+                    payload={
+                        "error": "pack_install_blocked",
+                        "upgrade_blocked": "true",
+                        "zip": rel,
+                        "reasonCode": REASON_PACK_BUILD_FAILED,
+                    },
                 ) from e
             raise
         except ValueError as e:
