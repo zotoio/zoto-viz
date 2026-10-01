@@ -407,6 +407,8 @@ function persistLive(immediate = false): void {
       settings: collectSettings(),
       selected: scene.selectedIp,
       aiCycle: agent.cycleOn,
+      newerIds: profiles?.newerIds() ?? [],
+      legacy: profiles?.legacyProfile === true,
     });
   };
   if (immediate) {
@@ -3208,8 +3210,6 @@ function collectSettings(): ProfileSettings {
     arcadeSaved: true,
     modeOptionsSaved: true,
     v: PROFILE_SETTINGS_V,
-    legacy: false,
-    newer: false,
   };
 }
 

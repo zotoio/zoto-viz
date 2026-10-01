@@ -23,7 +23,7 @@ export const AI_ID = "ai";
 /** #256: the ProfileSettings schema this build reads and writes. A blob with no `v` is v0 (legacy). */
 export const PROFILE_SETTINGS_V = 1;
 /** #256: the profile bar's line for a profile saved by a newer build, which autosave leaves alone. */
-export const NEWER_PROFILE_NOTICE = "This profile was saved by a newer version of zoto-viz, so changes won't be saved to it.";
+export const NEWER_PROFILE_NOTICE = "This profile was saved by a newer version of zoto-viz, so changes won't be saved to it. Use Save as to keep them in a new profile.";
 const AI_PREV_KEY = "zoto-viz.ai.prevProfile";
 
 export interface ProfileMeta {
@@ -92,10 +92,21 @@ export interface ProfileSettings {
   modeOptionsSaved: boolean;
   /** #256: schema version; always the current one once normalised. */
   v: typeof PROFILE_SETTINGS_V;
-  /** #256: the stored blob had no `v` (saved before versioning); its next autosave upgrades it. */
-  legacy: boolean;
+  /**
+   * #256: the stored blob had no `v` (saved before versioning); its next autosave upgrades it.
+   * Load-time only, like `newer`: normalizeSettings sets both, and no saved blob carries them.
+   */
+  legacy?: boolean;
   /** #256: the stored blob's `v` is newer than this build's, so autosave never writes over it. */
-  newer: boolean;
+  newer?: boolean;
+}
+
+/** #256: a profile blob as written to the server: current `v`, without the load-time markers. */
+export function storedSettings(s: ProfileSettings): Omit<ProfileSettings, "legacy" | "newer"> {
+  const out: ProfileSettings = { ...s, v: PROFILE_SETTINGS_V };
+  delete out.legacy;
+  delete out.newer;
+  return out;
 }
 
 /** Settings the operator toggles outside the motion / graph blob. */
@@ -121,6 +132,17 @@ export interface ProfileAi {
   cursorModel: string;
   /** Header AI. Off unless this profile saved it on — a missing blob must not switch profiles. */
   cycle: boolean;
+}
+
+/** A same-tab session snapshot as ProfileStore applies it at boot. */
+export interface SessionApply {
+  profileId: string;
+  dirty?: boolean;
+  settings: unknown;
+  /** #256: profiles the page knew were saved by a newer build. */
+  newerIds?: string[];
+  /** #256: the snapshot's profile still had a legacy (v0) blob on the server. */
+  legacy?: boolean;
 }
 
 export interface ProfileHost {
@@ -464,8 +486,12 @@ export class ProfileStore {
   private recoverTimer = 0;
   private recoverDelay = 2000;
   private recovering = false;
-  /** #256: the loaded profile whose blob a newer build saved; nothing here writes over it. */
-  private newerId = "";
+  /** #256: profiles whose loaded blob a newer build saved; nothing here writes over them. */
+  private readonly newer = new Set<string>();
+  /** #256: the loaded profile whose blob has no `v` yet (cleared once a write upgrades it). */
+  private legacyId = "";
+  /** #256: the newer profile whose line the status span shows; set once per load of it. */
+  private noticeId = "";
   private readonly host: ProfileHost;
   private readonly sel: { setOptions(o: { value: string; label: string; hint?: string }[]): void; value: string; el: HTMLElement };
   private readonly bar: HTMLElement;
@@ -484,6 +510,8 @@ export class ProfileStore {
     this.bar.hidden = true;
     this.status = document.createElement("span");
     this.status.className = "msg";
+    // #256: in the bar, empty, before any line is set, so the line is announced when it is.
+    this.status.setAttribute("role", "status");
     const actions = document.createElement("span");
     actions.className = "actions";
     this.saveBtn = btn("Save", "save these settings to the current profile");
@@ -511,7 +539,17 @@ export class ProfileStore {
 
   /** #256: the current profile was saved by a newer version of zoto-viz. */
   get newerProfile(): boolean {
-    return !!this.current && this.newerId === this.current;
+    return !!this.current && this.newer.has(this.current);
+  }
+
+  /** #256: the current profile's stored blob predates `v`. */
+  get legacyProfile(): boolean {
+    return !!this.current && this.legacyId === this.current;
+  }
+
+  /** #256: every profile known to be newer, for the same-tab session snapshot. */
+  newerIds(): string[] {
+    return [...this.newer];
   }
 
   meta(id = this.current): ProfileMeta | undefined {
@@ -526,7 +564,7 @@ export class ProfileStore {
     return this.meta()?.shipped === true || isShippedId(this.current);
   }
 
-  async boot(live?: { profileId: string; dirty?: boolean; settings: unknown } | null): Promise<boolean> {
+  async boot(live?: SessionApply | null): Promise<boolean> {
     let data: ProfileList;
     try {
       data = await this.pullList();
@@ -642,7 +680,7 @@ export class ProfileStore {
   /** Best-effort factory + user rows. A write failure must not flip available off. */
   private async ensureCatalog(data: ProfileList): Promise<ProfileList> {
     try {
-      await api("/api/profiles/shipped", { method: "POST", body: JSON.stringify({ settings: shippedSettings() }) });
+      await api("/api/profiles/shipped", { method: "POST", body: JSON.stringify({ settings: storedSettings(shippedSettings()) }) });
       data = await api<ProfileList>("/api/profiles");
     } catch (e) {
       console.warn("zoto-viz profiles shipped:", e);
@@ -654,7 +692,7 @@ export class ProfileStore {
         body: JSON.stringify({
           id: USER_ID,
           label: USER_ID,
-          settings: { ...this.host.collect(), autosave: true },
+          settings: storedSettings({ ...this.host.collect(), autosave: true }),
           make_default: data.fresh || data.default === USER_ID || isShippedId(data.default),
         }),
       });
@@ -698,7 +736,7 @@ export class ProfileStore {
   }
 
   /** Apply a same-tab session snapshot instead of the startup default. */
-  applySession(live: { profileId: string; dirty?: boolean; settings: unknown }): boolean {
+  applySession(live: SessionApply): boolean {
     const raw = live.profileId === LEGACY_SHIPPED_ID ? SHIPPED_ID : live.profileId;
     let id = raw && this.list.some((p) => p.id === raw)
       ? raw
@@ -707,9 +745,16 @@ export class ProfileStore {
     this.current = id;
     this.sel.value = id;
     const settings = normalizeSettings(live.settings);
-    this.newerId = settings.newer ? id : "";
+    // #256: the snapshot's settings were re-stamped v: 1, so what the page learned from the server
+    // load rides beside them. A session apply runs once, at boot: the snapshot is its record.
+    this.newer.clear();
+    this.noticeId = "";
+    for (const n of live.newerIds ?? []) this.newer.add(n);
+    if (settings.newer) this.newer.add(id);
+    this.legacyId = settings.legacy || (live.legacy === true && id === raw) ? id : "";
     this.dirty = !!live.dirty && !this.shipped && !this.newerProfile;
-    quiet(() => this.host.apply(settings));
+    const applied = this.legacyProfile ? { ...settings, legacy: true } : settings;
+    quiet(() => this.host.apply(applied));
     this.adoptAutosave(settings.autosave);
     this.syncChrome();
     return true;
@@ -744,15 +789,21 @@ export class ProfileStore {
     const id = workingProfileId(this.defaultId, this.list.map((p) => p.id));
     const settings: ProfileSettings = { ...this.host.collect(), autosave: true };
     try {
+      if (this.newer.has(id)) {
+        // #256: a newer build saved the working profile; keep the edit here, unsaved.
+        this.dirty = true;
+        this.syncChrome();
+        return;
+      }
       if (this.list.some((p) => p.id === id)) {
-        await api(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify({ settings }) });
+        await api(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify({ settings: storedSettings(settings) }) });
       } else {
         await api("/api/profiles", {
           method: "POST",
           body: JSON.stringify({
             id,
             label: id,
-            settings,
+            settings: storedSettings(settings),
             make_default: isShippedId(this.defaultId),
           }),
         });
@@ -812,7 +863,9 @@ export class ProfileStore {
       ? shippedSettings()
       : normalizeSettings((await api<{ settings: unknown }>(`/api/profiles/${id}`)).settings);
     this.current = id;
-    this.newerId = settings.newer ? id : "";
+    if (settings.newer) this.newer.add(id);
+    else this.newer.delete(id);
+    this.legacyId = settings.legacy ? id : "";
     this.dirty = false;
     this.sel.value = id;
     const apply = () => { this.host.apply(settings); };
@@ -885,7 +938,7 @@ export class ProfileStore {
           id,
           label: model,
           model,
-          settings: normalizeSettings(raw.settings),
+          settings: storedSettings(normalizeSettings(raw.settings)),
           make_default: this.defaultId === AI_ID,
         }),
       });
@@ -909,7 +962,7 @@ export class ProfileStore {
     }
     await api("/api/profiles", {
       method: "POST",
-      body: JSON.stringify({ id, label: model, model, settings, make_default: false }),
+      body: JSON.stringify({ id, label: model, model, settings: storedSettings(settings), make_default: false }),
     });
     this.ingest(await api<ProfileList>("/api/profiles"));
     this.current = id;
@@ -933,12 +986,13 @@ export class ProfileStore {
     const id = slug && (this.list.some((p) => p.id === slug) || this.current === slug)
       ? (this.list.some((p) => p.id === slug) ? slug : this.current)
       : "";
-    if (!id || this.meta(id)?.shipped) return;
+    if (!id || this.meta(id)?.shipped || this.newer.has(id)) return;
     const label = tag || this.meta(id)?.model || this.meta(id)?.label || id;
-    const body: Record<string, unknown> = { settings: next, label };
+    const body: Record<string, unknown> = { settings: storedSettings(next), label };
     if (tag) body.model = tag;
     else if (this.meta(id)?.model) body.model = this.meta(id)!.model;
     await api(`/api/profiles/${id}`, { method: "PUT", body: JSON.stringify(body) });
+    if (this.legacyId === id) this.legacyId = "";
     this.keepHomeAi(next.ai);
     if (this.current === id) {
       this.dirty = false;
@@ -987,11 +1041,13 @@ export class ProfileStore {
     if (this.shipped || this.newerProfile || !this.current || !this.available) return false;
     const gen = ++this.saveGen;
     const settings = this.host.collect();
+    const target = this.current;
     try {
-      await api(`/api/profiles/${this.current}`, {
+      await api(`/api/profiles/${target}`, {
         method: "PUT",
-        body: JSON.stringify({ settings }),
+        body: JSON.stringify({ settings: storedSettings(settings) }),
       });
+      if (this.legacyId === target) this.legacyId = "";
       this.keepHomeAi(settings.ai);
       if (gen !== this.saveGen) return true;
       this.dirty = false;
@@ -1057,7 +1113,7 @@ export class ProfileStore {
     try {
       await api("/api/profiles", {
         method: "POST",
-        body: JSON.stringify({ id, label: id, settings: { ...this.host.collect(), autosave: true }, make_default: makeDefault }),
+        body: JSON.stringify({ id, label: id, settings: storedSettings({ ...this.host.collect(), autosave: true }), make_default: makeDefault }),
       });
       const data = await api<ProfileList>("/api/profiles");
       this.ingest(data);
@@ -1155,6 +1211,7 @@ export class ProfileStore {
 
     if (!this.available) {
       this.bar.hidden = false;
+      this.noticeId = "";
       this.status.textContent = "Profiles file unavailable — settings stay in this browser until the monitor can write ~/.zoto-viz/profiles.yml.";
       this.saveBtn.hidden = true;
       this.discardBtn.hidden = true;
@@ -1163,11 +1220,19 @@ export class ProfileStore {
     }
     if (this.newerProfile) {
       this.bar.hidden = false;
-      this.status.textContent = NEWER_PROFILE_NOTICE;
+      // #256: once per load of the profile; re-renders and reloads of it leave the line alone.
+      if (this.noticeId !== this.current) {
+        this.status.textContent = NEWER_PROFILE_NOTICE;
+        this.noticeId = this.current;
+      }
+      const active = document.activeElement;
+      const refocus = active === this.saveBtn || active === this.discardBtn;
       this.saveBtn.hidden = true;
       this.discardBtn.hidden = true;
+      if (refocus) this.saveAsBtn.focus();
       return;
     }
+    this.noticeId = "";
     this.saveBtn.hidden = false;
     this.discardBtn.hidden = false;
     if (!this.dirty) {
