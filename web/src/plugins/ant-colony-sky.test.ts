@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { wrapPluginSky } from "./plugin-sky-probe";
 import {
   closePluginSkySmokeBrowser,
@@ -100,7 +100,19 @@ afterAll(async () => {
   await closePluginSkySmokeBrowser();
 });
 
+// #231: every row starts from a fresh colony, so its slots don't depend on which rows ran first.
+beforeEach(() => {
+  resetColony?.();
+});
+
 const EMPTY: VizDataFrame = { t: 1, dt: 0.1, audio: 0, packets: [], rf: [], talkers: [], headlines: [] };
+
+/** Ten quiet-LAN frames: four low-rate talkers and one small tcp packet. */
+function quietLanFrames(): VizDataFrame[] {
+  const talkers = ["gateway", "lan", "internet", "lan"].map((role, i) => ({ id: `192.168.1.${10 + i}`, rate: 0.5, role }));
+  const packets = [{ proto: "tcp", size: 80, field: 0.1 }];
+  return Array.from({ length: 10 }, (_, i) => ({ ...EMPTY, t: 1 + i * 0.1, talkers, packets }));
+}
 
 /** Run the pack's real onFrame over a few frames (the colony digs in over ticks). */
 function runPack(frames: VizDataFrame[]): PackOut {
@@ -184,10 +196,7 @@ describe("ant-colony sky frames the formicarium on the host camera", () => {
   }, 60_000);
 
   it("shows the nest in the host view on a quiet LAN (pack onFrame, low-rate talkers)", async () => {
-    const talkers = ["gateway", "lan", "internet", "lan"].map((role, i) => ({ id: `192.168.1.${10 + i}`, rate: 0.5, role }));
-    const packets = [{ proto: "tcp", size: 80, field: 0.1 }];
-    const frames = Array.from({ length: 10 }, (_, i) => ({ ...EMPTY, t: 1 + i * 0.1, talkers, packets }));
-    await expectNestInView(runPack(frames));
+    await expectNestInView(runPack(quietLanFrames()));
   }, 60_000);
 
   it("shows the nest in the host view on host idle-fixture frames (pack onFrame)", async () => {
@@ -211,6 +220,19 @@ describe("ant-colony sky frames the formicarium on the host camera", () => {
     const w75 = await smokeRenderPluginSky(wrappedSky(worldDomeSkyRay(75)), out.slots, out.uniforms);
     expect(w15.pixelChecksum, "world-fixed dome control should differ across pitch").not.toBe(w75.pixelChecksum);
   }, 90_000);
+
+  /**
+   * #231: a runPack row reads the same slots after the rows above that it reads alone. Revert: drop
+   * the beforeEach colony reset (this row then carries on the colony those rows grew) -> red.
+   */
+  it("reads the same quiet-LAN slots after the rows above and on its own (fresh colony per row)", () => {
+    const afterOthers = runPack(quietLanFrames()).slots;
+    resetColony!();
+    const alone = runPack(quietLanFrames()).slots;
+    let differ = 0;
+    for (let i = 0; i < alone.length; i++) if (afterOthers[i] !== alone[i]) differ++;
+    expect(differ, `after the rows above: ${differ} of ${alone.length} floats differ from the row on its own`).toBe(0);
+  });
 });
 
 /**
