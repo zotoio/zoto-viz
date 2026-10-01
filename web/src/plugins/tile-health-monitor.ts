@@ -156,7 +156,7 @@ export class TileHealthMonitor {
 
   /**
    * A write that came from `tileId`'s sandbox frame (the pack itself is drawing there). #233: kept
-   * per tile, so writes noted on one tile never make another count as drawing.
+   * per tile, so writes noted on one tile never make another tile look drawn.
    */
   noteSandboxWrite(tileId = "main"): void {
     this.sandboxWriteGenByTile.set(tileId, (this.sandboxWriteGenByTile.get(tileId) ?? 0) + 1);

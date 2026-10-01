@@ -176,7 +176,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
   /**
    * Tile-health's couldn't-start for a pane that runs its own sandbox: the solo wording ("<Pack>
    * couldn't start.") on that pane, whose Retry restarts that pane's sandbox only. False when the
-   * tile has no sandbox of its own (main.ts then shows the shared pick's notice, as before).
+   * tile has no sandbox of its own (main.ts then shows the shared pick's notice, unchanged).
    */
   showCouldntStart(tileId: string, log?: string): boolean {
     const e = this.byTile.get(tileId);
@@ -310,7 +310,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
 
 /**
  * #233: main.ts's config batcher onPost. The shared sandbox gets the post when it has `storeId`
- * loaded (sandboxConfigPostMatchesLoaded, as before), and every pane sandbox on `storeId` gets the
+ * loaded (sandboxConfigPostMatchesLoaded, unchanged), and every pane sandbox on `storeId` gets the
  * same one post. Returns the pane posts.
  */
 export function postBatchedConfig<S extends TileSandboxLike>(
