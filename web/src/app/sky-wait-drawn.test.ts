@@ -2,6 +2,11 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SKY_WAIT_DEADLINE_MS, SkyLoads, SkyWaits, landWhenDrawn, type SkyDrawnSource } from "./sky-wait";
+// #234: loaded with the file, not inside a row. The scene module pulls in three.js and the whole
+// render stack, so a cold import inside the isOverlayControl row spent most of that row's limit on
+// module loading and ran over it whenever other test files were loading in parallel.
+import { isOverlayControl } from "../graph/scene";
+import { paintPackAssetPaneNotice } from "../plugins/pack-asset-pane-notice";
 
 class FakeTile implements SkyDrawnSource {
   pluginSkyDrawn: string | null = null;
@@ -173,9 +178,7 @@ describe("scene reports the first frame drawn with the sky", () => {
 describe("Retry press is not taken by the tile's camera handlers", () => {
   afterEach(() => { vi.restoreAllMocks(); document.body.replaceChildren(); });
 
-  it("isOverlayControl is true for the notice buttons and false for the canvas", async () => {
-    const { isOverlayControl } = await import("../graph/scene");
-    const { paintPackAssetPaneNotice } = await import("../plugins/pack-asset-pane-notice");
+  it("isOverlayControl is true for the notice buttons and false for the canvas", () => {
     const pane = document.createElement("div");
     const canvas = document.createElement("canvas");
     pane.append(canvas);
@@ -187,8 +190,7 @@ describe("Retry press is not taken by the tile's camera handlers", () => {
     expect(isOverlayControl(pane.querySelector(".mosaic-pane-notice-text"))).toBe(false);
   });
 
-  it("pointerdown on Retry does not reach a bubbling orbit handler on the tile", async () => {
-    const { paintPackAssetPaneNotice } = await import("../plugins/pack-asset-pane-notice");
+  it("pointerdown on Retry does not reach a bubbling orbit handler on the tile", () => {
     const pane = document.createElement("div");
     document.body.append(pane);
     const orbit = vi.fn();
