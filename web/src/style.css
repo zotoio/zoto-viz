@@ -502,6 +502,13 @@ body.mosaic .gfx-wall-notice { top: 12px; }
   border: 1px solid var(--accent); background: var(--bg); color: var(--fg);
 }
 .tile-cant-draw__retry:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* #250: a solo tile (#scene) spans the whole window, header#bar's band included, and its line and Retry
+   paint above the bar's z 5 (#248). So the solo line's box starts at the header's measured height
+   (--bar-h, as .gfx-wall-notice does, #236) and scrolls inside itself: overflow clips at the box's top
+   edge, so nothing in it can cross the bar on a short window. Safe centring keeps a too-tall line
+   reachable by scrolling instead of spilling past the top. Mosaic panes already sit under the bar. */
+body:not(.mosaic) #scene > .tile-cant-draw { top: var(--bar-h); overflow-y: auto; }
+body:not(.mosaic) #scene > .tile-cant-draw[data-reason="context-lost"] { justify-content: safe center; }
 /* #179 c: while a tile shows its couldn't-draw line, that tile's floating graph labels are hidden. */
 [data-cant-draw-surface] .label { visibility: hidden; }
 /* ...and the host latch's generic fallback line gives way to the tile's own couldn't-draw line (a pack's simple view keeps it). */
