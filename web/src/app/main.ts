@@ -32,7 +32,7 @@ import {
   presentDrive,
   refreshPluginDriveState,
 } from "./present-drive-app";
-import { applyModeImpl, showPickCouldntStart, type ApplyModeFlags, type ApplyModeHost, type MosaicAnimSnap } from "./apply-mode";
+import { applyModeImpl, showPickCouldntStart, viewLookSyncsSky, type ApplyModeFlags, type ApplyModeHost, type MosaicAnimSnap, type ViewLookOpts } from "./apply-mode";
 import type { ConsentReviewResult } from "./pack-consent";
 import {
   consentErrorOf,
@@ -489,7 +489,7 @@ function pinViewLook(): boolean {
 
 /** Pin theme / sky / floor / modulation from the active view's plugin YAML without writing the profile.
  *  Header AI cycling owns Dynamic sky and cadence look, except on plugin-owned stage views. */
-function applyViewLook(): void {
+function applyViewLook(opts?: ViewLookOpts): void {
   if (!uiReady) return;
   const pin = pinViewLook();
   if (mosaic?.on) {
@@ -498,7 +498,10 @@ function applyViewLook(): void {
     applyChrome(userChrome, false);
     const m = modeById(modeSel.value);
     const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
-    void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal).catch(() => {});
+    const skySpec = skySpecForMode(m.id, spec);
+    if (viewLookSyncsSky(opts, skySpec)) {
+      void syncPluginSky(skySpec, getActiveModeSwitchSignal() ?? refreshPluginSignal.signal).catch(() => {});
+    }
     return;
   }
   const look = pin ? lookForMode(modeSel.value) : undefined;
@@ -506,7 +509,11 @@ function applyViewLook(): void {
   const m = modeById(modeSel.value);
   const spec = m.pluginId ? pluginSpecs.find((p) => p.id === m.pluginId) ?? null : null;
   // A sky that fails (fetch or compile) is logged and shown on its tile by installPluginSky.
-  void syncPluginSky(skySpecForMode(m.id, spec), getActiveModeSwitchSignal() ?? refreshPluginSignal.signal).catch(() => {});
+  // #226: a pick's pack sky waits for the pack's ready; the sync after loadTsPlugin installs it.
+  const skySpec = skySpecForMode(m.id, spec);
+  if (viewLookSyncsSky(opts, skySpec)) {
+    void syncPluginSky(skySpec, getActiveModeSwitchSignal() ?? refreshPluginSignal.signal).catch(() => {});
+  }
   const want = look?.theme ?? theme.id;
   if (theme.id !== want) applyTheme(want, !!look?.theme, false);
   applyChrome(look?.chrome ?? userChrome, false);

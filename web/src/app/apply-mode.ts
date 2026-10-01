@@ -2,7 +2,7 @@ import type { ViewMode } from "../core/modes";
 import type { DreamAnim } from "../graph/scene";
 import type { ConsentReviewResult } from "./pack-consent";
 import type { PluginView } from "../plugins/plugin";
-import { lookForMode, pluginWall } from "../plugins/plugin";
+import { lookForMode, pluginHasFrontend, pluginWall } from "../plugins/plugin";
 import { packNeedsConsent } from "./plugin-consent-mount";
 import type { Select } from "../ui/ui";
 import type { Mosaic } from "../graph/mosaic";
@@ -30,6 +30,17 @@ export type MosaicAnimSnap = {
 };
 
 export type MosaicPaneRevert = { slot: string; modeId: string };
+
+/** How applyViewLook treats the pick's plugin sky. */
+export type ViewLookOpts = {
+  /** #226: the pack's sky installs after its ready (the sync after loadTsPlugin), not with the look. */
+  skyAfterReady?: boolean;
+};
+
+/** #226: applyViewLook syncs the sky itself unless the pick's pack sky waits for the pack's ready. */
+export function viewLookSyncsSky(opts: ViewLookOpts | undefined, skySpec: PluginView | null): boolean {
+  return !(opts?.skyAfterReady && pluginHasFrontend(skySpec));
+}
 
 export type ApplyModeHost = {
   modeById: (id: string) => ViewMode;
@@ -74,7 +85,7 @@ export type ApplyModeHost = {
     skyStage: boolean,
   ) => void;
   syncModeHud: (m: ViewMode, spec: PluginView | null) => void;
-  applyViewLook: () => void;
+  applyViewLook: (opts?: ViewLookOpts) => void;
   feedSetGraphBase: (base: string) => void;
   syncWifiIfNeeded: (m: ViewMode) => void;
   modeLabel: (m: ViewMode) => string;
@@ -220,7 +231,7 @@ function scheduleConsentFinalize(
     } else {
       host.applySoloModeVisuals(m, host.optsFor(m), spec, skyStage);
     }
-    host.applyViewLook();
+    host.applyViewLook({ skyAfterReady: host.shouldLoadPluginRuntime(m) });
   };
   void (async () => {
     let result: ConsentReviewResult = "failed";
@@ -339,14 +350,14 @@ export function applyModeImpl(
       }
     }
     host.applyMosaicModeVisuals(m, opts, spec, tileStage);
-    host.applyViewLook();
+    host.applyViewLook({ skyAfterReady: !gateScene && host.shouldLoadPluginRuntime(m) });
     if (gateScene && spec) gateUntilOk(host, m, spec, signal);
     scheduleConsentFinalize(host, m, spec, paneSpec, prevLive, signal);
     return;
   }
 
   host.applySoloModeVisuals(m, opts, spec, tileStage);
-  host.applyViewLook();
+  host.applyViewLook({ skyAfterReady: !gateScene && host.shouldLoadPluginRuntime(m) });
   if (gateScene && spec) gateUntilOk(host, m, spec, signal);
   scheduleConsentFinalize(host, m, spec, paneSpec, prevLive, signal);
 }
