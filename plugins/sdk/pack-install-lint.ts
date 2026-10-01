@@ -17,7 +17,8 @@ import { resolvePackBundleImport } from "./pack-bundle-resolve.mjs";
 import { manifestFrontendEntries, scanPackInstallLint } from "./pack-lint";
 import { formatViolationMessage, plainBlockSummary } from "./pack-lint-hints";
 import { extractPackImports } from "./pack-lint-import";
-import type { PackLintViolation } from "./pack-lint-types";
+import { UNIFORM_BLOCKING_RULES, type PackLintViolation } from "./pack-lint-types";
+import { lintInstalledPackUniforms } from "./pack-lint-uniforms";
 
 export type PackInstallLintOptions = {
   /**
@@ -37,6 +38,13 @@ export type PackInstallBoundaryHit = { file: string; import: string; reason: str
  */
 export const DYNAMIC_IMPORT_NONLITERAL = "dynamic_import_nonliteral";
 
+/**
+ * #171 (b): the block reason when every finding is a blocking uniform rule (graphics code that would
+ * stop the pack drawing). The service then ends the user text with "Ask its author for a fixed
+ * version." instead of #185's "run pack lint" tail. A block that also has another finding has no reason.
+ */
+export const GRAPHICS_CODE_ERROR = "graphics_code_error";
+
 /** Where an unbundled frontend calls `import()` with a non-literal argument. */
 export type PackInstallNonLiteralImport = { file: string; line: number; import: string };
 
@@ -44,9 +52,16 @@ export type PackInstallLintVerdict =
   | { kind: "pass"; warnings: string[] }
   /**
    * `message` is the plain sentence for "<Name> was blocked because <message> …"; `details` are for the
-   * log. `reason` is set for install-only refusals that aren't a pack-lint rule (#194).
+   * log. `reason` is set for install-only refusals that aren't a pack-lint rule (#194), and for a
+   * block made only of blocking uniform rules (#171 (b), {@link GRAPHICS_CODE_ERROR}).
    */
-  | { kind: "block"; message: string; details: string[]; warnings: string[]; reason?: typeof DYNAMIC_IMPORT_NONLITERAL }
+  | {
+      kind: "block";
+      message: string;
+      details: string[];
+      warnings: string[];
+      reason?: typeof DYNAMIC_IMPORT_NONLITERAL | typeof GRAPHICS_CODE_ERROR;
+    }
   | ({ kind: "boundary"; warnings: string[] } & PackInstallBoundaryHit);
 
 /** Scripts a browser runs as is (so not `.ts` / `.tsx` / `.mts` / `.cts`, which only a bundle serves). */
@@ -121,11 +136,17 @@ export function runPackInstallLint(
   repoRoot: string,
   opts: PackInstallLintOptions = {},
 ): PackInstallLintVerdict {
-  const { blocks, warnings: warn } = scanPackInstallLint(packDirAbs, repoRoot);
+  const { blocks, warnings: warn } = scanPackInstallLint(packDirAbs, repoRoot, { uniforms: lintInstalledPackUniforms });
   const warnings = warn.map(logLine);
   if (blocks.length > 0) {
     // #185: `message` is plain words only; the raw file:line rule lines are diagnostics for the log.
-    return { kind: "block", message: plainBlockSummary(blocks), details: blocks.map(logLine), warnings };
+    const message = plainBlockSummary(blocks);
+    const details = blocks.map(logLine);
+    // #171 (b): only graphics code that would stop the pack drawing; a mixed block keeps #185's copy.
+    if (blocks.every((v) => UNIFORM_BLOCKING_RULES.has(v.rule))) {
+      return { kind: "block", reason: GRAPHICS_CODE_ERROR, message, details, warnings };
+    }
+    return { kind: "block", message, details, warnings };
   }
   if (opts.unbundled) {
     const hit = unbundledImportBoundary(packDirAbs, repoRoot);

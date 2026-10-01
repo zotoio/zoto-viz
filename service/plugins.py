@@ -18,6 +18,7 @@ import asyncio
 import hashlib
 import logging
 import os
+import re
 import shutil
 import signal
 import subprocess
@@ -59,7 +60,7 @@ from .plugin_install import (
     install_unchecked_payload,
     update_refused_payload,
 )
-from .pack_block_copy import PackBlockedError
+from .pack_block_copy import BLOCK_AUTHOR_TAIL, GRAPHICS_CODE_ERROR, PackBlockedError
 from .pack_zip_install_ux import installed_runtime_version
 from . import data_source_plugin as dsp
 import yaml
@@ -348,10 +349,8 @@ def bundle_setup_missing(returncode: int, stderr: str) -> bool:
     return "Cannot find package 'esbuild'" in stderr or "esbuild not importable" in stderr
 
 
-def _install_lint_block_from_compile(stderr: str) -> str | None:
-    """The plain-words ``message`` of the runner's ``pack-install-lint-block`` line (user-facing).
-
-    #185: the raw ``file:line rule`` lines (``details``) are logged at warning, never returned."""
+def _install_lint_block_line(stderr: str) -> dict[str, Any] | None:
+    """The runner's ``pack-install-lint-block`` JSON line, if stderr has one."""
     import json
 
     for line in stderr.splitlines():
@@ -363,11 +362,45 @@ def _install_lint_block_from_compile(stderr: str) -> str | None:
         except json.JSONDecodeError:
             continue
         if isinstance(raw, dict) and raw.get("type") == "pack-install-lint-block":
-            details = raw.get("details")
-            if isinstance(details, list) and details:
-                _LOG.warning("pack install lint block: %s", " | ".join(str(d) for d in details))
-            return str(raw.get("message") or "").strip() or None
+            return raw
     return None
+
+
+def _install_lint_block_from_compile(stderr: str) -> str | None:
+    """The plain-words ``message`` of the runner's ``pack-install-lint-block`` line (user-facing).
+
+    #185: the raw ``file:line rule`` lines (``details``) are logged at warning, never returned."""
+    raw = _install_lint_block_line(stderr)
+    if raw is None:
+        return None
+    details = raw.get("details")
+    if isinstance(details, list) and details:
+        _LOG.warning("pack install lint block: %s", " | ".join(str(d) for d in details))
+    return str(raw.get("message") or "").strip() or None
+
+
+def _install_lint_block_reason(stderr: str) -> str:
+    """The block line's ``reason`` (#194 ``dynamic_import_nonliteral``, #171 (b) ``graphics_code_error``), or ""."""
+    raw = _install_lint_block_line(stderr)
+    return str((raw or {}).get("reason") or "")
+
+
+# A finding line the install lint writes to stderr: "<file>[:<line>] <rule-id> — <message>".
+_INSTALL_LINT_FINDING_RE = re.compile(r"^\S+ [a-z]+(?:-[a-z]+)+ — ")
+
+
+def _log_install_lint_warnings(stderr: str) -> None:
+    """#171 (b): log the install lint's warn-only findings (rule, file, line); never user text.
+
+    bundle-pack-entry.mjs writes each warning as a plain finding line on stderr; on a block it also
+    writes the block's own finding lines, which ``pack install lint block:`` already logs."""
+    raw = _install_lint_block_line(stderr)
+    details = raw.get("details") if raw else None
+    blocked = {str(d) for d in details} if isinstance(details, list) else set()
+    for line in stderr.splitlines():
+        text = line.strip()
+        if text and text not in blocked and _INSTALL_LINT_FINDING_RE.match(text):
+            _LOG.warning("pack install lint warning: %s", text)
 
 
 # Service-side limit for one bundle-pack-entry.mjs run. #186: the script bounds the install lint itself
@@ -474,6 +507,7 @@ def _check_install_lint_verdict(
         # #186: the cause is for the log only; the user gets the one setup sentence.
         _LOG.warning("pack install lint setup refusal (%s) for %s", reason, doc.get("id"))
         raise pil.PackInstallLintSetupError(label, reason)
+    _log_install_lint_warnings(proc.stderr)
     if proc.returncode != 0:
         block = boundary_from_compile(doc, proc.stderr)
         if block:
@@ -481,6 +515,9 @@ def _check_install_lint_verdict(
         lint_msg = _install_lint_block_from_compile(proc.stderr)
         if lint_msg:
             # #185: one shape for every block (pack_block_copy); raw findings are in the log only.
+            if _install_lint_block_reason(proc.stderr) == GRAPHICS_CODE_ERROR:
+                # #171 (b) UX Pro: only the pack's author can fix its graphics code.
+                raise PackBlockedError(label, lint_msg, tail=BLOCK_AUTHOR_TAIL, reason=GRAPHICS_CODE_ERROR)
             raise PackBlockedError(label, lint_msg)
         raise ValueError(proc.stderr.strip() or "esbuild failed")
     if not pil.install_lint_passed(proc.returncode, proc.stderr, nonce=nonce, pack=str(doc.get("id") or "")):

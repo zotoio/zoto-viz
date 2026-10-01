@@ -181,9 +181,12 @@ def format_v2_blocked_message(
     sentence: str,
     *,
     tail: str = BLOCK_FIX_TAIL,
+    reason: str = "",
 ) -> str:
-    """#185: upgrade block copy; ``old_version`` is the installed version (never a hard-coded v1)."""
-    return upgrade_block_message(name, sentence, old_version, tail=tail)
+    """#185: upgrade block copy; ``old_version`` is the installed version (never a hard-coded v1).
+
+    #171 (b): ``reason`` is the install lint's block reason (``graphics_code_error`` has its own copy)."""
+    return upgrade_block_message(name, sentence, old_version, tail=tail, reason=reason)
 
 
 def format_v2_start_failed_message(name: str, version: str | int | None, old_version: str | int | None = None) -> str:
@@ -596,14 +599,15 @@ def _install_staged_to_runtime_locked(
             raise
         except ValueError as e:
             if upgrade:
+                reason = ""
                 if isinstance(e, PackBlockedError):
-                    sentence, tail = e.sentence, e.tail
+                    sentence, tail, reason = e.sentence, e.tail, e.reason
                 else:
                     # Not a plain-words block (esbuild error, bad manifest): keep the raw text in the log.
                     _LOG.warning("pack upgrade blocked for %s: %s", pid, e)
                     sentence, tail = SENTENCE_CHECKS_FAILED, BLOCK_FIX_TAIL
                 raise InstallV2BlockedError(
-                    format_v2_blocked_message(name, installed_runtime_version(runtime), sentence, tail=tail),
+                    format_v2_blocked_message(name, installed_runtime_version(runtime), sentence, tail=tail, reason=reason),
                     payload={"error": "pack_install_blocked", "upgrade_blocked": "true", "zip": rel, "sentence": sentence},
                 ) from e
             raise
