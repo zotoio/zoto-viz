@@ -48,6 +48,24 @@ export const PACK_INSTALL_CHECK_UNAVAILABLE = "pack_install_check_unavailable";
  */
 export const PACK_UPDATE_REFUSED = "update_refused";
 
+/**
+ * #240: a pack check blocked the install or update ("<Name> was blocked because …", the #185 copy).
+ * service/pack_block_copy.py's REASON_PACK_BLOCKED, carried as `reasonCode` the way #111 carries
+ * PACK_UPDATE_REFUSED. The surface takes the block from this code alone, never from the words, so the
+ * service's copy can be reworded without a block being missed; the message is shown as is.
+ */
+export const PACK_BLOCKED = "pack_blocked";
+
+/** Row `error` categories; anything else in `error` next to PACK_BLOCKED is the service's own words. */
+const PACK_REFUSAL_CATEGORIES = new Set<string>([
+  "pack_boundary",
+  "pack_sdk_contract",
+  "pack_install_blocked",
+  "pack_install_start_failed",
+  "pack_install_interrupted",
+  PACK_INSTALL_CHECK_UNAVAILABLE,
+]);
+
 const CHAT_SERVICE_WORDED_ERRORS = new Set<string>([
   PACK_INSTALL_CHECK_UNAVAILABLE,
   "pack_boundary",
@@ -102,13 +120,9 @@ export function isPackInstallBlockedPayload(v: unknown): v is PackInstallBlocked
   const o = v as PackInstallBlockedPayload;
   const text = `${o.message ?? ""} ${o.error ?? ""}`;
   return (
-    o.error === "pack_boundary"
-    || o.error === "pack_sdk_contract"
-    || o.error === "pack_install_blocked"
-    || o.error === "pack_install_start_failed"
-    || o.error === "pack_install_interrupted"
-    || o.error === PACK_INSTALL_CHECK_UNAVAILABLE
-    || text.includes("was blocked")
+    PACK_REFUSAL_CATEGORIES.has(String(o.error))
+    // #240: a block is known by its code, never by the words "was blocked".
+    || o.reasonCode === PACK_BLOCKED
     || text.includes("Couldn't safety-check")
     || text.includes("was interrupted")
     || text.includes("couldn't start")
@@ -120,7 +134,9 @@ export function isPackInstallBlockedPayload(v: unknown): v is PackInstallBlocked
 
 export function formatPackInstallBlocked(payload: PackInstallBlockedPayload): string {
   if (payload.message) return payload.message;
-  if (typeof payload.error === "string" && payload.error.includes("was blocked")) return payload.error;
+  // #240: a block whose words came in `error` (the catalog's fallback row): show them as is.
+  if (payload.reasonCode === PACK_BLOCKED && typeof payload.error === "string" && payload.error
+    && !PACK_REFUSAL_CATEGORIES.has(payload.error)) return payload.error;
   // #185: same shape as service/pack_block_copy.py; file / import stay in the payload, not the text.
   const name = payload.name || payload.id || "Plugin";
   return (
@@ -210,9 +226,10 @@ export function consumePackInstallNotices(notices: readonly PackInstallNotice[] 
   return shown;
 }
 
-export function catalogErrorLooksBlocked(error: string): boolean {
+/** `reasonCode` is the row's code (#240: PACK_BLOCKED makes it a block, whatever `error` says). */
+export function catalogErrorLooksBlocked(error: string, reasonCode?: string): boolean {
   return (
-    error.includes("was blocked")
+    reasonCode === PACK_BLOCKED
     || error.includes("Couldn't safety-check")
     || error.includes("pack-bundle-boundary")
     || error.includes("Built for an older zoto-viz SDK")

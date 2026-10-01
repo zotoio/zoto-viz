@@ -3,24 +3,15 @@
  * unavailable-pack setup banner). A consent change used to call modeSel.setOptions() directly, so
  * the banner stayed stale. Boots the real main.ts entry (same harness as main.wiring.test.ts).
  */
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+// #252, as #239: the page first, then main.ts, both while the file is collected (see main-entry-env.ts).
+import "../../test-support/main-entry-env";
+import "./main";
+// Same module instances main.ts bound to (one registry for the file, never reset).
+import { setUnavailableCatalog } from "../plugins/plugin-unavailable";
+import { noteConsentGranted } from "./consent-store";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const indexHtml = readFileSync(path.join(here, "../../index.html"), "utf8");
-const bodyHtml = (indexHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? "").replace(
-  /<script[\s\S]*?<\/script>/gi,
-  "",
-);
 const FIX = "Run `pnpm install` in `web/` on the server, then reload.";
-
-class MockWebSocket {
-  constructor(_url: string) {}
-  close() {}
-  addEventListener() {}
-}
 
 async function ticks(n: number): Promise<void> {
   for (let i = 0; i < n; i++) await new Promise((resolve) => setTimeout(resolve, 0));
@@ -44,25 +35,16 @@ describe("main entry: consent change refreshes the header picker through one pat
   afterEach(async () => {
     await ticks(8);
     vi.unstubAllGlobals();
-    vi.resetModules();
     document.body.innerHTML = "";
   });
 
-  // 30 s hook: a load accommodation, not a behaviour change (booting main.ts overran 10 s on a loaded box).
   beforeEach(async () => {
     expect.hasAssertions();
-    document.body.innerHTML = bodyHtml;
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    vi.resetModules();
-    await import("./main");
-    await vi.waitFor(() => document.querySelector("#modeBox #mode button") !== null, { timeout: 25_000, interval: 20 });
+    await vi.waitFor(() => document.querySelector("#modeBox #mode button") !== null);
     await ticks(48);
-  }, 30_000);
+  });
 
-  it("after a consent change, the header picker's options and its unavailable banner both refresh", { timeout: 20_000 }, async () => {
-    // Same module instances main.ts bound to (imported after it, no reset in between).
-    const { setUnavailableCatalog } = await import("../plugins/plugin-unavailable");
-    const { noteConsentGranted } = await import("./consent-store");
+  it("after a consent change, the header picker's options and its unavailable banner both refresh", async () => {
     expect(menuState()).toEqual({ banner: null, koiRow: false });
     // The catalog now says a pack can't load, but nothing has refreshed the picker yet.
     setUnavailableCatalog([{ id: "koi-pond", name: "Koi Pond", reason: "esbuild_unavailable" }]);

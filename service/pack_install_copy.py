@@ -4,7 +4,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from .pack_block_copy import BLOCK_FIX_TAIL, BLOCK_INSTALL, block_message
+# REASON_PACK_BLOCKED (#240) is re-exported here next to the other reason codes.
+from .pack_block_copy import BLOCK_FIX_TAIL, BLOCK_INSTALL, REASON_PACK_BLOCKED, block_message
 
 REASON_PACK_INSTALL_BLOCKED = "pack_install_blocked"
 REASON_PACK_INSTALL_FAULT = "pack_install_fault"
@@ -17,6 +18,8 @@ REASON_BOUNDARY_BLOCKED = "pack_boundary"
 #: next to the row's ``error`` category (the reasonCode convention of plugin_manifest_block rows).
 #: Service and web branch on this code, never on the message, so the wording can change freely.
 REASON_UPDATE_REFUSED = "update_refused"
+#: #240: REASON_PACK_BLOCKED ("pack_blocked", imported above): a pack check blocked the install or
+#: update. Defined with the block copy in service/pack_block_copy.py, carried as ``reasonCode`` the same way.
 #: #200: a fresh install whose safety check couldn't run, for a cause that isn't a setup one.
 #: Carried as ``reasonCode`` next to ``error: pack_install_check_unavailable``; the message is the shared
 #: copy table's ``install_unchecked``.

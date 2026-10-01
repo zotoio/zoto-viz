@@ -18,8 +18,10 @@ drawing (install lint reason ``graphics_code_error``) keeps that head on an upgr
 
 <sentence> is plain words ("it tries to reach outside its sandbox."; see PACK_LINT_PLAIN_SUMMARY in
 plugins/sdk/pack-lint-hints.ts). No file paths, import specifiers, rule ids or repo/README paths in
-user text; those go to ``details`` and the log. Every block keeps the words "was blocked" (callers
-branch on them); the setup refusal ("Couldn't safety-check …") never contains them.
+user text; those go to ``details`` and the log. #240: callers never branch on the words: every block
+carries :data:`REASON_PACK_BLOCKED` (``reason_code`` on :class:`PackBlockedError`, ``reasonCode`` on the
+payload / catalog row), so this copy can be reworded without a caller losing the block. The setup
+refusal ("Couldn't safety-check …") is not a block and never carries the code.
 """
 from __future__ import annotations
 
@@ -33,6 +35,12 @@ BLOCK_UPGRADE_OLD_UNKNOWN = (
     "{name} was blocked because {sentence} Nothing was updated, so the version you had is still installed."
 )
 BLOCK_FIX_TAIL = "If you made this pack, run pack lint to see what to fix."
+
+#: #240: a pack check blocked the install or update (the copy above). Carried as ``reasonCode`` next to
+#: the row's ``error`` category, like #111's REASON_UPDATE_REFUSED (service/pack_install_copy.py).
+#: Service and web branch on this code, never on the message, so the wording can change freely.
+#: web/src/plugins/pack-install-surface.ts PACK_BLOCKED is the same value.
+REASON_PACK_BLOCKED = "pack_blocked"
 
 # #171 (b): the install lint's block reason for graphics code that would stop the pack drawing
 # (plugins/sdk/pack-install-lint.ts GRAPHICS_CODE_ERROR), and its copy.
@@ -91,7 +99,11 @@ class PackBlockedError(ValueError):
 
     Upgrades re-word it with :func:`upgrade_block_message` from ``sentence`` / ``tail`` / ``reason``.
     ``details`` are diagnostics (file:line findings, the README link) for the log only. ``reason`` is
-    the install lint's block reason when it shapes the copy (#171 (b) ``GRAPHICS_CODE_ERROR``)."""
+    the install lint's block reason when it shapes the copy (#171 (b) ``GRAPHICS_CODE_ERROR``).
+
+    #240: callers branch on ``reason_code`` (:data:`REASON_PACK_BLOCKED`), never on the message text."""
+
+    reason_code = REASON_PACK_BLOCKED
 
     def __init__(
         self,
