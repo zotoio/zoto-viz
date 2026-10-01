@@ -20,6 +20,10 @@ export const LEGACY_SHIPPED_ID = "netviz";
 export const USER_ID = "user";
 /** Legacy cycling profile id; new agent profiles are named after the Ollama model. */
 export const AI_ID = "ai";
+/** #256: the ProfileSettings schema this build reads and writes. A blob with no `v` is v0 (legacy). */
+export const PROFILE_SETTINGS_V = 1;
+/** #256: the profile bar's line for a profile saved by a newer build, which autosave leaves alone. */
+export const NEWER_PROFILE_NOTICE = "This profile was saved by a newer version of zoto-viz, so changes won't be saved to it.";
 const AI_PREV_KEY = "zoto-viz.ai.prevProfile";
 
 export interface ProfileMeta {
@@ -86,6 +90,12 @@ export interface ProfileSettings {
   pluginsSaved: boolean;
   arcadeSaved: boolean;
   modeOptionsSaved: boolean;
+  /** #256: schema version; always the current one once normalised. */
+  v: typeof PROFILE_SETTINGS_V;
+  /** #256: the stored blob had no `v` (saved before versioning); its next autosave upgrades it. */
+  legacy: boolean;
+  /** #256: the stored blob's `v` is newer than this build's, so autosave never writes over it. */
+  newer: boolean;
 }
 
 /** Settings the operator toggles outside the motion / graph blob. */
@@ -187,6 +197,9 @@ export function shippedSettings(): ProfileSettings {
     pluginsSaved: true,
     arcadeSaved: true,
     modeOptionsSaved: true,
+    v: PROFILE_SETTINGS_V,
+    legacy: false,
+    newer: false,
   };
 }
 
@@ -297,6 +310,8 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     : d.modeOptions;
   const arcade = s.arcade && typeof s.arcade === "object" ? s.arcade as Record<string, string> : {};
   const plugins = s.plugins && typeof s.plugins === "object" ? s.plugins as Record<string, Record<string, string>> : {};
+  // #256: the markers come from the stored `v` alone, never from a stored legacy / newer.
+  const savedV = typeof s.v === "number" && Number.isInteger(s.v) && s.v >= 1 ? s.v : 0;
   return {
     theme: typeof s.theme === "string" ? s.theme : d.theme,
     dream: bool(s.dream, d.dream),
@@ -363,6 +378,9 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     pluginsSaved: !!s.plugins && typeof s.plugins === "object",
     arcadeSaved: !!s.arcade && typeof s.arcade === "object",
     modeOptionsSaved: !!s.modeOptions && typeof s.modeOptions === "object",
+    v: PROFILE_SETTINGS_V,
+    legacy: savedV === 0,
+    newer: savedV > PROFILE_SETTINGS_V,
   };
 }
 
@@ -446,6 +464,8 @@ export class ProfileStore {
   private recoverTimer = 0;
   private recoverDelay = 2000;
   private recovering = false;
+  /** #256: the loaded profile whose blob a newer build saved; nothing here writes over it. */
+  private newerId = "";
   private readonly host: ProfileHost;
   private readonly sel: { setOptions(o: { value: string; label: string; hint?: string }[]): void; value: string; el: HTMLElement };
   private readonly bar: HTMLElement;
@@ -486,7 +506,12 @@ export class ProfileStore {
   }
 
   get canAutosave(): boolean {
-    return this.available && !!this.current && !this.shipped;
+    return this.available && !!this.current && !this.shipped && !this.newerProfile;
+  }
+
+  /** #256: the current profile was saved by a newer version of zoto-viz. */
+  get newerProfile(): boolean {
+    return !!this.current && this.newerId === this.current;
   }
 
   meta(id = this.current): ProfileMeta | undefined {
@@ -681,8 +706,9 @@ export class ProfileStore {
     if (isShippedId(id) && this.list.some((p) => p.id === USER_ID)) id = USER_ID;
     this.current = id;
     this.sel.value = id;
-    this.dirty = !!live.dirty && !this.shipped;
     const settings = normalizeSettings(live.settings);
+    this.newerId = settings.newer ? id : "";
+    this.dirty = !!live.dirty && !this.shipped && !this.newerProfile;
     quiet(() => this.host.apply(settings));
     this.adoptAutosave(settings.autosave);
     this.syncChrome();
@@ -695,6 +721,7 @@ export class ProfileStore {
       void this.adoptWorking();
       return;
     }
+    if (this.newerProfile) return;
     if (this.canAutosave) {
       this.scheduleSave();
       return;
@@ -785,6 +812,7 @@ export class ProfileStore {
       ? shippedSettings()
       : normalizeSettings((await api<{ settings: unknown }>(`/api/profiles/${id}`)).settings);
     this.current = id;
+    this.newerId = settings.newer ? id : "";
     this.dirty = false;
     this.sel.value = id;
     const apply = () => { this.host.apply(settings); };
@@ -956,7 +984,7 @@ export class ProfileStore {
   }
 
   private async writeNow(): Promise<boolean> {
-    if (this.shipped || !this.current || !this.available) return false;
+    if (this.shipped || this.newerProfile || !this.current || !this.available) return false;
     const gen = ++this.saveGen;
     const settings = this.host.collect();
     try {
@@ -1131,6 +1159,13 @@ export class ProfileStore {
       this.saveBtn.hidden = true;
       this.discardBtn.hidden = true;
       this.saveAsBtn.hidden = true;
+      return;
+    }
+    if (this.newerProfile) {
+      this.bar.hidden = false;
+      this.status.textContent = NEWER_PROFILE_NOTICE;
+      this.saveBtn.hidden = true;
+      this.discardBtn.hidden = true;
       return;
     }
     this.saveBtn.hidden = false;
