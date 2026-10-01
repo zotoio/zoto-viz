@@ -82,6 +82,11 @@ export interface TileHealthDeps {
   onCantStart?: (tileId: string, packId: string) => boolean;
   /** Optional (#216): the tile shows couldn't-start. Not judged until Retry starts it again. */
   couldntStart?: (tileId: string) => boolean;
+  /**
+   * Optional (#230): the tile's feeds are paused. Like sky speed 0 (read off the tile's scene), the
+   * picture then holds still on purpose, so an unchanged picture is not counted as stalled.
+   */
+  feedsPaused?: (tileId: string) => boolean;
 }
 
 export class TileHealthMonitor {
@@ -101,6 +106,7 @@ export class TileHealthMonitor {
   private readonly lastPackByTile = new Map<string, string>();
   private readonly lastSandboxGenByTile = new Map<string, number>();
   private readonly liveBlankShown = new Map<string, string>();
+  private readonly frozenByTile = new Map<string, boolean>();
   /** Times of spaced uniform reads while live-drawing (notice needs LIVE_BLANK_READS of them). */
   private readonly liveBlankReads = new Map<string, number[]>();
   private packDrawingNothing = false;
@@ -279,6 +285,11 @@ export class TileHealthMonitor {
       this.liveBlankReads.delete(tileId);
       this.setLiveBlank(tileId, null);
     }
+    // #230: sky speed 0 or paused feeds: the stalled check skips the tile. Undone: the normal load
+    // grace (as a view bind or Retry), so nobody gets a notice right after unpausing.
+    const frozen = this.frozenOnPurpose(tileId);
+    if (this.frozenByTile.get(tileId) && !frozen) this.noteGrace(tileId, now);
+    this.frozenByTile.set(tileId, frozen);
     const exemptIn = this.exemptInput(tileId, now);
     let prev = this.stateFor(tileId);
     prev = applyTileExemptReset(prev, exemptIn);
@@ -306,7 +317,12 @@ export class TileHealthMonitor {
       this.runLiveFloor(tileId, packId, patch, now, skyFlat);
       return;
     }
-    this.runTileCheck(tileId, now, sc, patch, skyFlat);
+    this.runTileCheck(tileId, now, sc, patch, skyFlat, frozen);
+  }
+
+  /** #230: sky speed 0 (the tile's own scene) or paused feeds hold the picture still on purpose. */
+  private frozenOnPurpose(tileId: string): boolean {
+    return this.deps.sceneFor(tileId)?.dreamAnim?.skySpeed === 0 || this.deps.feedsPaused?.(tileId) === true;
   }
 
   /**
@@ -371,6 +387,7 @@ export class TileHealthMonitor {
     sc: NetScene,
     patch: TilePatchBytes,
     skyFlat?: boolean,
+    frozen = false,
   ): void {
     const prev = this.stateFor(tileId);
     const spec = this.deps.packFor(tileId);
@@ -386,7 +403,7 @@ export class TileHealthMonitor {
         skyFlat,
         lastCheckPictureSerial: prev.lastCheckPictureSerial,
         signals: {
-          mayBeStatic: this.deps.mayBeStatic(spec),
+          mayBeStatic: this.deps.mayBeStatic(spec) || frozen,
           contextLost: sc.gpuContextLost,
           pictureSerial: sc.pictureSerial,
           dataFramesArriving: dataArriving,
@@ -466,6 +483,7 @@ export class TileHealthMonitor {
     this.lastPackByTile.delete(tileId);
     this.liveBlankReads.delete(tileId);
     this.lastSandboxGenByTile.delete(tileId);
+    this.frozenByTile.delete(tileId);
     this.setLiveBlank(tileId, null);
     this.observers.get(tileId)?.disconnect();
     this.observers.delete(tileId);
