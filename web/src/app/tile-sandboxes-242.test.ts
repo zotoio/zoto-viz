@@ -14,12 +14,15 @@ import { attachPaneSandbox, TileSandboxes } from "./tile-sandboxes";
  * #242 (follow-up to #233), on real PluginSandboxes and main.ts's own pane attach (attachPaneSandbox).
  * N4: a restarted pane's old attach that settles late must not clear the new sandbox's drive.
  * F1: a restart stops the old attach, whether it waits on the pre-attach import (iii) or on the
- * asset rebuild's retry sleep (iv).
- * Reverts: N4 the dropReady guard (host.ts), F1 `prev.abort.abort()` in load().
+ * asset rebuild's retry sleep (iv). F2: a drop during the real retry sleep aborts the rebuild, clears
+ * its timer and ends the pane's pack load (v).
+ * Reverts: N4 the dropReady guard (host.ts), F1 `prev.abort.abort()` in load(), F2 the stopRebuild
+ * listener in attachPaneSandbox and the sleep's clearTimeout (pack-asset-rebuild.ts).
  */
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const BACKROOMS: PluginView = { ...loadShippedPackSpec(REPO, "backrooms"), hash: "h-backrooms", has_frontend: true };
+const LABEL = BACKROOMS.name ?? BACKROOMS.id;
 const PANE = BACKROOMS.id;
 const DRIVEN = "topology";
 
@@ -40,6 +43,7 @@ describe("#242 pane sandboxes: restart and drop stop the old attach", () => {
   });
 
   afterEach(() => {
+    vi.useRealTimers();
     for (const sb of made.splice(0)) sb.unload();
     vi.restoreAllMocks();
     document.querySelectorAll("iframe").forEach((el) => el.remove());
@@ -172,4 +176,26 @@ describe("#242 pane sandboxes: restart and drop stop the old attach", () => {
     expectReplacedGone(old, base);
   });
 
+  it("(v) dropped during the real retry sleep: the rebuild is aborted, its timer cleared, the pack load ended", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+    const rebuilds = vi.spyOn(packAssetFrame, "registerPackAssetRebuildAbort");
+    vi.mocked(packAssetFrame.openPackAssetFrame).mockRejectedValueOnce(new PackAssetTokenInvalidError(BACKROOMS.id));
+    const tiles = paneTiles();
+    const timers = vi.getTimerCount();
+    const loading = tiles.load(PANE, BACKROOMS);
+    const dropped = tiles.sandboxFor(PANE);
+    await settle(() => packAssetFrame.tileRebuildInFlight(PANE, LABEL));
+    expect(packAssetFrame.tileRebuildInFlight(PANE, LABEL), "the rebuild waits to retry").toBe(true);
+    expect(vi.getTimerCount(), "the retry sleep's timer is armed").toBeGreaterThan(timers);
+    const rebuild = rebuilds.mock.calls.at(-1)?.[2];
+    const loads = vi.spyOn(dropped, "loadModule");
+    tiles.drop(PANE);
+    await settle(() => false, 20);
+    expect.soft(rebuild?.signal.aborted, "the rebuild's abort signal (its sleep's) after the drop").toBe(true);
+    expect.soft(vi.getTimerCount(), "pending timers vs before the load").toBe(timers);
+    expect.soft(packAssetFrame.isActivePackLoad(PANE, LABEL), "the pane's pack load is still active").toBe(false);
+    expect.soft(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
+    await vi.runOnlyPendingTimersAsync(); // lets a sleep that was not stopped end, so the row settles
+    await loading;
+  });
 });
