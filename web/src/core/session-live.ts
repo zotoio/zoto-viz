@@ -9,6 +9,10 @@ export interface SessionLive {
   settings: ProfileSettings;
   selected?: string | null;
   aiCycle?: boolean;
+  /** #256: profiles known to be newer; the settings above were re-stamped v: 1 and can't say. */
+  newerIds?: string[];
+  /** #256: the profile's server blob is still legacy (v0). */
+  legacy?: boolean;
 }
 
 export function readSessionLive(store: Pick<Storage, "getItem"> | null = defaultStore()): SessionLive | null {
@@ -25,6 +29,8 @@ export function readSessionLive(store: Pick<Storage, "getItem"> | null = default
       settings: normalizeSettings(j.settings),
       selected: typeof j.selected === "string" && j.selected ? j.selected : null,
       aiCycle: j.aiCycle === true,
+      newerIds: Array.isArray(j.newerIds) ? j.newerIds.filter((n): n is string => typeof n === "string") : [],
+      legacy: j.legacy === true,
     };
   } catch {
     return null;

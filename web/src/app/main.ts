@@ -69,7 +69,7 @@ import {
   flashModeLoadFailed,
   initModeSwitchStatusStrip,
 } from "./mode-switch-message";
-import { ProfileStore, aiCycleSettings, homeAiActive, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
+import { PROFILE_SETTINGS_V, ProfileStore, aiCycleSettings, homeAiActive, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
 import {
   loadVizGovernorSetting,
   setVizGovernorSetting,
@@ -407,6 +407,8 @@ function persistLive(immediate = false): void {
       settings: collectSettings(),
       selected: scene.selectedIp,
       aiCycle: agent.cycleOn,
+      newerIds: profiles?.newerIds() ?? [],
+      legacy: profiles?.legacyProfile === true,
     });
   };
   if (immediate) {
@@ -3207,6 +3209,7 @@ function collectSettings(): ProfileSettings {
     pluginsSaved: true,
     arcadeSaved: true,
     modeOptionsSaved: true,
+    v: PROFILE_SETTINGS_V,
   };
 }
 
