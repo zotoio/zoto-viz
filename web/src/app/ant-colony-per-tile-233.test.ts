@@ -1,13 +1,21 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setPackAssetTokenForTests } from "../core/http";
+import { PackAssetTokenInvalidError, setPackAssetTokenForTests } from "../core/http";
 import type { NetScene } from "../graph/scene";
 import type { RenderHost } from "../graph/render-host";
 import { viewMutAsDeviceRect } from "../graph/pack-mirror-rect";
 import { loadShippedPackSpec } from "../plugins/fixtures/host-idle-shipped-packs";
 import { pluginIdleOf } from "../plugins/fixtures/golden-state";
-import { PluginSandbox, setPluginModuleSandboxUrlForTests, type PluginHostHandlers } from "../plugins/host";
+import {
+  PluginSandbox,
+  sandboxSetSizesForTests,
+  setPluginModuleSandboxUrlForTests,
+  type PluginHostHandlers,
+} from "../plugins/host";
+import { resetRebuildSleepForTests, setRebuildSleepForTests } from "../plugins/pack-asset-rebuild";
+import { bindVizDriveElement, noteSandboxWrite, resetVizDriveState, vizDriveFor } from "../plugins/viz-drive";
+import { syncVizTileScope, vizTileBudgetRegistry } from "../plugins/viz-tile-budget";
 import { attachPluginFrontend, configStoreId, type PluginView } from "../plugins/plugin";
 import { packFeedPaneNotice } from "../plugins/plugin-pack-feed";
 import { tileCantDraw, TILE_HEALTH_PATCHES, TILE_PATCH, type TilePatchBytes } from "../plugins/tile-health";
@@ -19,6 +27,7 @@ import { mockPartial } from "../../test-support/mock-partial";
 import { bindCantDrawSurface } from "./cant-draw-surface";
 import { SandboxConfigBatcher } from "./sandbox-config-batcher";
 import {
+  attachPaneSandbox,
   paneSandboxGaps,
   postBatchedConfig,
   TileSandboxes,
@@ -484,6 +493,112 @@ describe("#233 settings reach each Ant pane's own sandbox, once per change, in p
     tiles.frame(demoFrame(0));
     expect(c.liveFrame === frameC && !!frameC?.isConnected, "the late pane keeps its iframe").toBe(true);
     expect([a, b, c].map((sb) => sb.readyPack), "packs ready").toEqual([ANT.id, ANT.id, ANT.id]);
+  });
+});
+
+// The real-sandbox describes run before the colony ones: those re-evaluate the Ant module with
+// vi.resetModules(), after which a dynamic import (the pack-asset spies, attachPaneSandbox's import)
+// would get fresh module instances that the statically imported host does not use.
+describe("#233 a pane dropped while its attach is in flight never boots", () => {
+  const rows = realSandboxRows();
+  /** Window `message` listeners added and not yet removed (wrapped on the test window). */
+  const messageListeners = new Set<unknown>();
+  let probes = 0;
+
+  beforeEach(() => {
+    messageListeners.clear();
+    const add = window.addEventListener.bind(window);
+    const remove = window.removeEventListener.bind(window);
+    vi.spyOn(window, "addEventListener").mockImplementation((type, fn, opts) => {
+      if (type === "message") messageListeners.add(fn);
+      add(type, fn, opts);
+    });
+    vi.spyOn(window, "removeEventListener").mockImplementation((type, fn, opts) => {
+      if (type === "message") messageListeners.delete(fn);
+      remove(type, fn, opts);
+    });
+    resetVizDriveState();
+    vizTileBudgetRegistry.reset();
+  });
+
+  afterEach(() => {
+    resetRebuildSleepForTests();
+    resetVizDriveState();
+    vizTileBudgetRegistry.reset();
+  });
+
+  /** One Backrooms pane on main.ts's own attach (attachPaneSandbox: import, asset rebuild, attach). */
+  function paneTiles(): TileSandboxes<PluginSandbox> {
+    const box = (): PluginSandbox => {
+      const sb = new PluginSandbox();
+      rows.made.push(sb);
+      return sb;
+    };
+    return new TileSandboxes<PluginSandbox>({
+      main: box(),
+      create: box,
+      drivenTile: () => DRIVEN,
+      target: () => null,
+      mayLoad: () => true,
+      attach: (sb, spec, tileId, config, signal) => attachPaneSandbox(sb, spec, tileId, config, signal, null),
+    });
+  }
+
+  type Baseline = { sizes: { live: number; ready: number }; listeners: number };
+
+  function baseline(): Baseline {
+    syncVizTileScope(["main", DRIVEN, BACKROOMS.id]);
+    return { sizes: sandboxSetSizesForTests(), listeners: messageListeners.size };
+  }
+
+  /** After the drop and the late attach / retry: nothing of the dropped pane is left running. */
+  function expectGone(dropped: PluginSandbox, base: Baseline): void {
+    expect(dropped.readyPack, "readyPack of the dropped pane's sandbox").toBe("");
+    expect(document.querySelectorAll("iframe"), "iframes left for the dropped pane").toHaveLength(0);
+    expect(sandboxSetSizesForTests(), "live / ready sandboxes vs before the load").toEqual(base.sizes);
+    expect(messageListeners.size, "window message listeners vs before the load").toBe(base.listeners);
+    const probe = `probe-${probes++}`;
+    const el = document.createElement("div");
+    bindVizDriveElement(probe, el);
+    noteSandboxWrite(probe); // lands as "sandbox" only while the global ready flag is up
+    expect(vizDriveFor(probe), "global sandbox ready").toBe("none");
+    expect(vizTileBudgetRegistry.activeTileCount(), "tiles in scope (scope [\"main\"])").toBe(1);
+  }
+
+  it("(i) dropped during the pre-attach wait (the import): the late attach bails before loading", async () => {
+    const tiles = paneTiles();
+    const base = baseline();
+    const loading = tiles.load(BACKROOMS.id, BACKROOMS); // its attach now waits on the import
+    const dropped = tiles.sandboxFor(BACKROOMS.id);
+    const loads = vi.spyOn(dropped, "loadModule");
+    tiles.drop(BACKROOMS.id);
+    await loading;
+    expect(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
+    expectGone(dropped, base);
+  });
+
+  it("(ii) dropped during the asset rebuild's retry wait: the retry never runs", async () => {
+    const assets = await import("../plugins/pack-asset-frame");
+    vi.mocked(assets.openPackAssetFrame).mockRejectedValueOnce(new PackAssetTokenInvalidError(BACKROOMS.id));
+    let entered = (): void => {};
+    const sleeping = new Promise<void>((r) => { entered = r; });
+    let wake = (): void => {};
+    setRebuildSleepForTests((_ms, signal) => new Promise<void>((resolve, reject) => {
+      wake = resolve;
+      signal.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError")), { once: true });
+      entered();
+    }));
+    const tiles = paneTiles();
+    const base = baseline();
+    const loading = tiles.load(BACKROOMS.id, BACKROOMS);
+    const dropped = tiles.sandboxFor(BACKROOMS.id);
+    await sleeping; // the first load hit an invalid token; the rebuild waits to retry
+    const loads = vi.spyOn(dropped, "loadModule");
+    tiles.drop(BACKROOMS.id);
+    wake();
+    await loading;
+    expect(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
+    expectGone(dropped, base);
   });
 });
 

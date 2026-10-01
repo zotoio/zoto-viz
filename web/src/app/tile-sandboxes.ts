@@ -1,5 +1,5 @@
-import type { PluginHostHandlers } from "../plugins/host";
-import { configStoreId, pluginHasFrontend, vizContractFor, type PluginView } from "../plugins/plugin";
+import type { PluginHostHandlers, PluginSandbox } from "../plugins/host";
+import { attachPluginFrontend, configStoreId, pluginHasFrontend, vizContractFor, type PluginView } from "../plugins/plugin";
 import {
   applyPackFeedPaneNotice,
   markSandboxStartupFailed,
@@ -7,7 +7,12 @@ import {
   markSandboxUnloaded,
   type MosaicNoticeHost,
 } from "../plugins/plugin-pack-feed";
-import { registerPackAssetRetry } from "../plugins/pack-asset-frame";
+import {
+  abortPackAssetRebuildForTile,
+  endActivePackLoad,
+  registerPackAssetRetry,
+  unregisterPackAssetRetry,
+} from "../plugins/pack-asset-frame";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { setViewState, showViewState, viewStateOf } from "./view-state";
 import {
@@ -81,8 +86,17 @@ export interface TileSandboxDeps<S extends TileSandboxLike> {
   target: (tileId: string) => TileSandboxTarget | null;
   /** Packs this host may boot at all (TS plugins on, consent given). */
   mayLoad: (spec: PluginView) => boolean;
-  /** Boot `spec` in the tile's own sandbox with `config` (attachPluginFrontend in main.ts). */
-  attach: (sandbox: S, spec: PluginView, tileId: string, config: Record<string, string>) => Promise<void>;
+  /**
+   * Boot `spec` in the tile's own sandbox with `config` (attachPaneSandbox in main.ts). `signal`
+   * aborts when the pane is dropped or restarted: the attach must not boot the sandbox after that.
+   */
+  attach: (
+    sandbox: S,
+    spec: PluginView,
+    tileId: string,
+    config: Record<string, string>,
+    signal: AbortSignal,
+  ) => Promise<void>;
   /** The pack's current config values (main.ts sandboxPluginConfig): what boots and gets pushed. */
   configFor?: (spec: PluginView) => Record<string, string>;
   /** After the tile's pack is ready: its sky installs now (#226 order, per tile). */
@@ -100,6 +114,10 @@ type TileEntry<S> = {
   ready: boolean;
   /** The config the pane booted with (JSON), to catch up once on ready if settings moved since. */
   bootConfig: string;
+  /** Aborted by drop() or a restart: the in-flight attach (and its asset rebuild) stops. */
+  abort: AbortController;
+  /** This load's pack-asset Retry handler (unregistered on drop). */
+  retry: () => void;
 };
 
 export class TileSandboxes<S extends TileSandboxLike> {
@@ -217,6 +235,10 @@ export class TileSandboxes<S extends TileSandboxLike> {
     const e = this.byTile.get(tileId);
     if (!e) return;
     this.byTile.delete(tileId);
+    // An attach still in flight (the pre-attach import, or the asset rebuild's retry wait) must not
+    // boot this sandbox after it is gone.
+    e.abort.abort();
+    unregisterPackAssetRetry(tileId, e.retry);
     e.sandbox.unload();
     markSandboxUnloaded(tileId);
   }
@@ -231,21 +253,37 @@ export class TileSandboxes<S extends TileSandboxLike> {
 
   async load(tileId: string, spec: PluginView): Promise<void> {
     const prev = this.byTile.get(tileId);
-    if (prev) prev.sandbox.unload();
+    if (prev) {
+      prev.abort.abort();
+      prev.sandbox.unload();
+    }
     const sandbox = this.deps.create();
     sandbox.setActiveTile(tileId);
     const contract = vizContractFor(spec) ?? (spec.capabilities?.includes("viz.write") ? defaultVizContract() : undefined);
     const writer = bindVizWriterCore(null, contract).writer;
     const config = this.deps.configFor?.(spec) ?? {};
-    const entry: TileEntry<S> = { sandbox, spec, writer, ready: false, bootConfig: JSON.stringify(config) };
+    const retry = (): void => { void this.restart(tileId); };
+    const entry: TileEntry<S> = {
+      sandbox,
+      spec,
+      writer,
+      ready: false,
+      bootConfig: JSON.stringify(config),
+      abort: new AbortController(),
+      retry,
+    };
     sandbox.handlers = this.handlersFor(tileId, writer);
     this.byTile.set(tileId, entry);
     const label = spec.name ?? spec.id;
-    registerPackAssetRetry(tileId, label, () => { void this.restart(tileId); });
+    registerPackAssetRetry(tileId, label, retry);
     const viewId = mosaicTileViewId(tileId);
     try {
-      await this.deps.attach(sandbox, spec, tileId, config);
-      if (this.byTile.get(tileId) !== entry) return;
+      await this.deps.attach(sandbox, spec, tileId, config, entry.abort.signal);
+      // Backstop: dropped or restarted while attaching. Whatever booted is unloaded, never kept.
+      if (this.byTile.get(tileId) !== entry) {
+        sandbox.unload();
+        return;
+      }
       // An aborted or navigation-stopped load resolves without ready; that tile shows its own notice.
       if (sandbox.readyPack !== spec.id) return;
       entry.ready = true;
@@ -255,7 +293,10 @@ export class TileSandboxes<S extends TileSandboxLike> {
       applyPackFeedPaneNotice(this.deps.noticeHost?.(), tileId, label);
       this.deps.afterReady?.(tileId);
     } catch (e) {
-      if (this.byTile.get(tileId) !== entry) return;
+      if (this.byTile.get(tileId) !== entry) {
+        sandbox.unload();
+        return;
+      }
       console.warn("zoto-viz plugin runtime:", tileId, e);
       markSandboxStartupFailed(tileId);
       sandbox.unload();
@@ -321,4 +362,37 @@ export function postBatchedConfig<S extends TileSandboxLike>(
 ): number {
   if (shared.loaded) shared.setConfig(config);
   return panes.pushConfig(storeId, config);
+}
+
+type PaneNoticeHost = Parameters<typeof import("../plugins/pack-asset-rebuild").runPackAssetProtectedLoad>[2];
+
+/**
+ * #233: main.ts's attach for a pane's own sandbox. `signal` (the pane entry's) is checked after the
+ * pre-attach import and before every load attempt, and aborting it also stops the tile's asset
+ * rebuild loop, so a dropped pane never boots. attachPluginFrontend gets it too.
+ */
+export async function attachPaneSandbox(
+  sandbox: PluginSandbox,
+  spec: PluginView,
+  tileId: string,
+  config: Record<string, string>,
+  signal: AbortSignal,
+  noticeHost: PaneNoticeHost,
+): Promise<void> {
+  const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
+  if (signal.aborted) return;
+  const label = spec.name ?? spec.id;
+  const stopRebuild = (): void => {
+    abortPackAssetRebuildForTile(tileId, label);
+    endActivePackLoad(tileId, label);
+  };
+  signal.addEventListener("abort", stopRebuild, { once: true });
+  try {
+    await runPackAssetProtectedLoad(tileId, label, noticeHost, async () => {
+      if (signal.aborted) return;
+      await attachPluginFrontend(sandbox, spec, config, signal);
+    });
+  } finally {
+    signal.removeEventListener("abort", stopRebuild);
+  }
 }

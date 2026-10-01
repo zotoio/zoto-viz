@@ -239,7 +239,7 @@ import {
 } from "./main-viz-tile-lines";
 import { vizClockMs } from "../core/viz-clock";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
-import { postBatchedConfig, TileSandboxes } from "./tile-sandboxes";
+import { attachPaneSandbox, postBatchedConfig, TileSandboxes } from "./tile-sandboxes";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -540,12 +540,8 @@ const tileSandboxes = new TileSandboxes<PluginSandbox>({
   drivenTile: () => sandboxVizTileId(),
   target: (id) => (mosaic?.on ? mosaic.graphScene(id) : null),
   mayLoad: (spec) => tsPluginsAllowed() && !packNeedsConsent(spec),
-  attach: async (sb, spec, tileId, config) => {
-    const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
-    await runPackAssetProtectedLoad(tileId, spec.name ?? spec.id, mosaic, async () => {
-      await attachPluginFrontend(sb, spec, { ...config, ...hostTileConfig() });
-    });
-  },
+  attach: (sb, spec, tileId, config, signal) =>
+    attachPaneSandbox(sb, spec, tileId, { ...config, ...hostTileConfig() }, signal, mosaic),
   configFor: (spec) => sandboxPluginConfig(spec),
   // #226 per tile: the pane's sky installs once its own pack is ready.
   afterReady: () => { void syncPluginSky(null, refreshPluginSignal.signal).catch(() => {}); },

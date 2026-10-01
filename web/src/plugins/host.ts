@@ -115,6 +115,12 @@ const activePackAssetFrameByTile = new Map<string, string>();
 /** #233: sandboxes with a pack loaded, and those whose frame sent `ready` (one per tile). */
 const liveSandboxes = new Set<PluginSandbox>();
 const readySandboxes = new Set<PluginSandbox>();
+
+/** Tests only (#233): how many sandboxes are loaded / ready right now. */
+export function sandboxSetSizesForTests(): { live: number; ready: number } {
+  return { live: liveSandboxes.size, ready: readySandboxes.size };
+}
+
 const sandboxAssetTokenByFrame = new Map<string, string>();
 let lastSandboxBootNonce = "";
 
