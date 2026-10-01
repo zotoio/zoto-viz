@@ -70,9 +70,13 @@ export class GfxWallNotice {
     this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
   }
 
-  /** The wall's tiles: its mosaic panes, or with none, the solo scene. */
+  /**
+   * The wall's tiles: its mosaic panes, or with none, the solo scene. #273: panes sit inside
+   * `.mosaic-split`s (Mosaic.placeTree), not on the wall itself, and one of them holds `#scene`.
+   * Document order is board order: a split's first side is its left / top one.
+   */
   private tiles(): HTMLElement[] {
-    const panes = [...this.wall.querySelectorAll<HTMLElement>(":scope > .mosaic-pane")];
+    const panes = [...this.wall.querySelectorAll<HTMLElement>(".mosaic-pane")];
     return panes.length ? panes : [...this.wall.querySelectorAll<HTMLElement>(":scope > #scene")];
   }
 

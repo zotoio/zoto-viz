@@ -227,6 +227,18 @@ export function setViewStateTileResolver(fn: ((tileId: string) => HTMLElement | 
   tileEl = fn ?? defaultTileEl;
 }
 
+/**
+ * #273: the view-state key for a tile id the render host reports. The main scene draws as tile
+ * "main", but on a mosaic `#scene` sits inside a pane, and that pane's id is the tile everywhere
+ * else (its sky wait, card, notices and state; main.ts keys it by the pane id): the pane holding
+ * `#scene` counts as a tile like any other. On the solo wall "main" stays "main".
+ */
+export function viewStateTileKey(tileId: string): string {
+  if (tileId !== "main" || typeof document === "undefined") return tileId;
+  const pane = document.getElementById("scene")?.parentElement;
+  return (pane?.classList.contains("mosaic-pane") && pane.dataset.mode) || tileId;
+}
+
 /** The tile's element: the host resolver first, else the element the writer handed in. */
 export function viewStateTileEl(tileId: string): HTMLElement | null {
   const found = tileEl(tileId);
