@@ -54,9 +54,7 @@ const FULL_TREE_SCAN_TIMEOUT_MS = 30_000;
 let tree: UniformTreeScan = { violations: [], packs: [] };
 
 beforeAll(() => {
-  const t0 = performance.now();
   tree = scanUniformTree(repoRoot);
-  console.info(`uniform lint full-tree scan: ${Math.round(performance.now() - t0)} ms`);
 }, FULL_TREE_SCAN_TIMEOUT_MS);
 
 function lintTsFixture(rel: string, opts?: UniformLintOptions): PackLintViolation[] {
