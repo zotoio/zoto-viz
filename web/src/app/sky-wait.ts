@@ -7,6 +7,14 @@ export const SKY_WAIT_DEADLINE_MS = 45_000;
 /** A deadline that fires this late means the page was blocked (e.g. a synchronous shader compile). */
 export const SKY_WAIT_DRIFT_MS = 2_000;
 
+/**
+ * The page is in a background tab (#237): the browser pauses requestAnimationFrame, so no sky can
+ * draw, and the deadline must not count this time.
+ */
+function pageHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
+
 export type SkyWaitState = "starting" | "failed:timeout";
 
 export interface SkyWaitHost {
@@ -29,12 +37,23 @@ export interface SkyWaitHost {
  * starting (name card, never healed, never judged blank) until the sky lands, or, after
  * SKY_WAIT_DEADLINE_MS, failed:timeout ("<View> couldn't start." with Retry, still never healed
  * to another view). It never gets a built-in stand-in sky or a fallback pack.
+ *
+ * The deadline counts visible time only (#237): while the tab is hidden the countdown is paused
+ * (`left` keeps what remains) and it resumes on `visibilitychange`. The listener is on `document`
+ * only while a wait exists; `dispose` removes it and every timer.
  */
 export class SkyWaits {
   private readonly waits = new Map<
     string,
-    { state: SkyWaitState; timer: ReturnType<typeof setTimeout> | null; due: number }
+    { state: SkyWaitState; timer: ReturnType<typeof setTimeout> | null; due: number; left?: number }
   >();
+
+  /** `visibilitychange` on `document` while any wait exists (#237). */
+  private watchingVisibility = false;
+  private readonly onVisibility = (): void => {
+    if (pageHidden()) this.pauseHidden();
+    else this.resumeVisible();
+  };
 
   /** Which load (its signal) owns each tile's wait: only the owner's abort may end it. */
   private readonly owners = new Map<string, AbortSignal>();
@@ -57,7 +76,9 @@ export class SkyWaits {
     if (cur?.state === "starting") return;
     if (cur) this.clearFailed(key);
     const el = this.host.hostEl(key);
-    showSkyStartingCard(el, this.host.name(key));
+    // Under a lost context the tile's couldn't-draw line owns it (#216): Starting is kept beneath
+    // and its card comes back with the context (cant-draw-surface), not over the line.
+    if (!contextLost(key)) showSkyStartingCard(el, this.host.name(key));
     setViewState(key, this.viewId(key), { kind: "starting" }, el);
     this.arm(key);
   }
@@ -70,10 +91,57 @@ export class SkyWaits {
     return this.host.now?.() ?? performance.now();
   }
 
-  private arm(key: string): void {
-    const due = this.now() + this.deadlineMs;
-    const timer = setTimeout(() => this.deadline(key), this.deadlineMs);
+  private arm(key: string, ms = this.deadlineMs): void {
+    this.watchVisibility();
+    if (pageHidden()) {
+      // Background tab (#237): no frame can draw, so the countdown waits for the tab to show.
+      this.waits.set(key, { state: "starting", timer: null, due: Number.POSITIVE_INFINITY, left: ms });
+      return;
+    }
+    const due = this.now() + ms;
+    const timer = setTimeout(() => this.deadline(key), ms);
     this.waits.set(key, { state: "starting", timer, due });
+  }
+
+  /** The tab went to the background: every running countdown stops and keeps what is left (#237). */
+  private pauseHidden(): void {
+    const now = this.now();
+    for (const [key, cur] of this.waits) {
+      if (cur.state !== "starting" || !cur.timer) continue;
+      clearTimeout(cur.timer);
+      const left = Math.max(0, cur.due - now);
+      this.waits.set(key, { ...cur, timer: null, left });
+      console.info(`[zoto-viz sky] tile=${key} step=deadline-pause reason=hidden left_ms=${Math.round(left)}`);
+    }
+  }
+
+  /** The tab is visible again: each paused countdown goes on with the visible time it had left. */
+  private resumeVisible(): void {
+    for (const [key, cur] of this.waits) {
+      if (cur.state !== "starting" || cur.timer || cur.left === undefined) continue;
+      console.info(`[zoto-viz sky] tile=${key} step=deadline-resume reason=visible left_ms=${Math.round(cur.left)}`);
+      this.arm(key, cur.left);
+    }
+  }
+
+  private watchVisibility(): void {
+    if (this.watchingVisibility || typeof document === "undefined") return;
+    document.addEventListener("visibilitychange", this.onVisibility);
+    this.watchingVisibility = true;
+  }
+
+  private unwatchVisibility(): void {
+    if (!this.watchingVisibility) return;
+    document.removeEventListener("visibilitychange", this.onVisibility);
+    this.watchingVisibility = false;
+  }
+
+  /** Stop every countdown and remove the visibility listener (the waits' cards and states stay). */
+  dispose(): void {
+    for (const cur of this.waits.values()) if (cur.timer) clearTimeout(cur.timer);
+    this.waits.clear();
+    this.owners.clear();
+    this.unwatchVisibility();
   }
 
   /** The sky is on screen: the card fades out. */
@@ -128,11 +196,24 @@ export class SkyWaits {
       this.landed(key);
       return;
     }
+    // The context is lost (#216): the sky can't draw, and the tile already says "couldn't draw"
+    // with Retry. Hold the countdown until the context is back rather than say couldn't start.
+    if (contextLost(key)) {
+      console.info(`[zoto-viz sky] tile=${key} step=deadline-hold reason=context-lost`);
+      this.arm(key);
+      return;
+    }
     // Fired late: the page was blocked, so the tile had no real chance to draw. Start again
     // rather than flash "couldn't start" on a sky whose ready signal is a frame away.
     if (this.now() - cur.due > SKY_WAIT_DRIFT_MS) {
       console.info(`[zoto-viz sky] tile=${key} step=deadline-restart reason=main-thread-blocked`);
       this.arm(key);
+      return;
+    }
+    // Fired in a background tab before visibilitychange said so (#237): no frame could draw.
+    // Pause with the drift allowance left, so a sky a frame away can land once the tab shows.
+    if (pageHidden()) {
+      this.waits.set(key, { ...cur, timer: null, left: SKY_WAIT_DRIFT_MS });
       return;
     }
     const el = this.host.hostEl(key);
@@ -166,7 +247,14 @@ export class SkyWaits {
     const cur = this.waits.get(key);
     if (cur?.timer) clearTimeout(cur.timer);
     this.waits.delete(key);
+    if (this.waits.size === 0) this.unwatchVisibility();
   }
+}
+
+/** The tile's view state is cant-draw / context-lost (#179, #216). */
+function contextLost(key: string): boolean {
+  const vs = viewStateOf(key);
+  return vs?.kind === "cant-draw" && vs.reason === "context-lost";
 }
 
 /** The part of a tile scene the wait needs: the sky it has actually drawn a frame with. */

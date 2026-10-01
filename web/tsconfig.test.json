@@ -58,10 +58,5 @@
   "exclude": [
     // SHRINK-ONLY: test files that still have tsc errors. Fix a file, then delete its line; never add
     // a path here (a new test file must type-check). Each path here must still have >= 1 tsc error.
-    // HELD (#192): scripts/revert-proof* is a held path. Do not fix, edit or move these files, and do
-    // not remove them from this list; ask ZotoBoss. Exempt from the shrink-only rule above.
-    "../scripts/revert-proof.dogfood.test.ts",
-    "../scripts/revert-proof.lib.test.ts",
-    "../scripts/revert-proof.test.ts"
   ]
 }
