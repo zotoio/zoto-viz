@@ -76,7 +76,9 @@ export class SkyWaits {
     if (cur?.state === "starting") return;
     if (cur) this.clearFailed(key);
     const el = this.host.hostEl(key);
-    showSkyStartingCard(el, this.host.name(key));
+    // Under a lost context the tile's couldn't-draw line owns it (#216): Starting is kept beneath
+    // and its card comes back with the context (cant-draw-surface), not over the line.
+    if (!contextLost(key)) showSkyStartingCard(el, this.host.name(key));
     setViewState(key, this.viewId(key), { kind: "starting" }, el);
     this.arm(key);
   }
@@ -194,6 +196,13 @@ export class SkyWaits {
       this.landed(key);
       return;
     }
+    // The context is lost (#216): the sky can't draw, and the tile already says "couldn't draw"
+    // with Retry. Hold the countdown until the context is back rather than say couldn't start.
+    if (contextLost(key)) {
+      console.info(`[zoto-viz sky] tile=${key} step=deadline-hold reason=context-lost`);
+      this.arm(key);
+      return;
+    }
     // Fired late: the page was blocked, so the tile had no real chance to draw. Start again
     // rather than flash "couldn't start" on a sky whose ready signal is a frame away.
     if (this.now() - cur.due > SKY_WAIT_DRIFT_MS) {
@@ -240,6 +249,12 @@ export class SkyWaits {
     this.waits.delete(key);
     if (this.waits.size === 0) this.unwatchVisibility();
   }
+}
+
+/** The tile's view state is cant-draw / context-lost (#179, #216). */
+function contextLost(key: string): boolean {
+  const vs = viewStateOf(key);
+  return vs?.kind === "cant-draw" && vs.reason === "context-lost";
 }
 
 /** The part of a tile scene the wait needs: the sky it has actually drawn a frame with. */

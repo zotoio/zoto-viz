@@ -2,8 +2,8 @@
 // `pnpm install` in web/ regenerates it (the `prepare` script); pack-install-lint-prebuilt.test.ts
 // fails when it doesn't match a fresh build of the sources.
 // plugins/sdk/pack-install-lint.ts
-import fs4 from "node:fs";
-import path4 from "node:path";
+import fs5 from "node:fs";
+import path5 from "node:path";
 
 // plugins/sdk/pack-bundle-resolve.mjs
 import fs from "node:fs";
@@ -573,6 +573,11 @@ function packSymlinkEscapes(packDirAbs, packRepoPrefix, repoRoot) {
 }
 
 // plugins/sdk/pack-lint-types.ts
+var UNIFORM_BLOCKING_RULES = /* @__PURE__ */ new Set([
+  "glsl-uniform-undeclared",
+  "uniform-type-conflict",
+  "write-uniform-not-in-manifest"
+]);
 function violationKey(v) {
   return `${v.file}\0${v.rule}\0${v.target}`;
 }
@@ -694,13 +699,14 @@ var PACK_LINT_PLAIN_SUMMARY = {
   "unverified-import-call": "it loads code in a way that can't be checked.",
   "get-config-in-on-frame": "it reads its settings in a way that isn't allowed.",
   "host-imports-pack-src": "it loads code from outside its own folder.",
-  // #171b's uniform rules (combined with #185). The install lint doesn't block on them today
-  // (INSTALL_BLOCK_RULES), so these only keep the table complete.
-  "glsl-uniform-undeclared": "it reads a shader setting it never declares.",
+  // #171 (b): the three blocking uniform rules block an install with one sentence (UX Pro); the
+  // service ends that block with "Ask its author for a fixed version." (reason graphics_code_error).
+  "glsl-uniform-undeclared": "its graphics code has an error that would stop it drawing.",
+  "uniform-type-conflict": "its graphics code has an error that would stop it drawing.",
+  "write-uniform-not-in-manifest": "its graphics code has an error that would stop it drawing.",
+  // Warn-only at install (INSTALL_WARN_RULES): never shown to the user; these keep the table complete.
   "glsl-uniform-unset": "it reads a shader setting that nothing sets.",
-  "uniform-set-undeclared": "it sets a shader setting its shader never declares.",
-  "uniform-type-conflict": "it redefines one of the app's shader settings with a different type.",
-  "write-uniform-not-in-manifest": "it writes a shader setting it doesn't list in its manifest."
+  "uniform-set-undeclared": "it sets a shader setting its shader never declares."
 };
 var PACK_LINT_PLAIN_FALLBACK = "it uses code the pack sandbox doesn't allow.";
 function plainBlockSummary(violations) {
@@ -942,8 +948,19 @@ function manifestFrontendEntries(packDirAbs) {
   if (nested) out.push(nested);
   return out.map((p) => path3.posix.normalize(p.replace(/\\/g, "/")).replace(/^\.\//, ""));
 }
-var INSTALL_BLOCK_RULES = /* @__PURE__ */ new Set(["sandbox-escape", "host-transport-escape"]);
-var INSTALL_WARN_RULES = /* @__PURE__ */ new Set(["inline-zoto-declare", "pack-zoto-binding"]);
+var INSTALL_BLOCK_RULES = /* @__PURE__ */ new Set([
+  "sandbox-escape",
+  "host-transport-escape",
+  "glsl-uniform-undeclared",
+  "uniform-type-conflict",
+  "write-uniform-not-in-manifest"
+]);
+var INSTALL_WARN_RULES = /* @__PURE__ */ new Set([
+  "inline-zoto-declare",
+  "pack-zoto-binding",
+  "glsl-uniform-unset",
+  "uniform-set-undeclared"
+]);
 function packIdFromPluginYml(packDirAbs) {
   try {
     const yml = fs3.readFileSync(path3.join(packDirAbs, "plugin.yml"), "utf8");
@@ -953,13 +970,16 @@ function packIdFromPluginYml(packDirAbs) {
     return null;
   }
 }
-function scanPackInstallLint(packDirAbs, repoRoot) {
+function scanPackInstallLint(packDirAbs, repoRoot, opts = {}) {
   const packId = packIdFromPluginYml(packDirAbs) ?? path3.basename(packDirAbs);
-  const violations = scanPackDirectory(packDirAbs, repoRoot, {
-    packId,
-    repoPathPrefix: `plugins/src/${packId}`,
-    frontendScripts: true
-  });
+  const violations = [
+    ...scanPackDirectory(packDirAbs, repoRoot, {
+      packId,
+      repoPathPrefix: `plugins/src/${packId}`,
+      frontendScripts: true
+    }),
+    ...opts.uniforms?.(packDirAbs, repoRoot, packId) ?? []
+  ];
   const legacyBlocks = legacyZotoViolationsOnDisallowedPacks(violations);
   const legacyBlockKeys = new Set(legacyBlocks.map(violationKey));
   const blocks = [
@@ -1007,8 +1027,1015 @@ function scanPackDirectory(packDirAbs, repoRoot, opts = {}) {
   return violations;
 }
 
+// plugins/sdk/pack-lint-uniforms.ts
+import fs4 from "node:fs";
+import path4 from "node:path";
+
+// plugins/sdk/pack-lint-host-uniforms.ts
+var HOST_UNIFORM_CONTRACT = {
+  preamble: [
+    { name: "zotoVizSlots", type: "vec4" },
+    { name: "uResolution", type: "vec2" },
+    { name: "uTime", type: "float" },
+    { name: "uOpacity", type: "float" },
+    { name: "uBright", type: "float" },
+    { name: "uAudio", type: "float" },
+    { name: "uAccent", type: "vec3" },
+    { name: "uBg", type: "vec3" },
+    { name: "uRenderScale", type: "float" }
+  ],
+  skyUniforms: ["uTime", "uOpacity", "uBright", "uAudio", "uAccent", "uBg", "uRenderScale"]
+};
+
+// plugins/sdk/pack-lint-uniforms.ts
+var CUSTOM_UNIFORM_SCAN = /\b(u[A-Z]\w*|zotoVizSlots)\b/g;
+var HOST_SKY_PREAMBLE_SOURCE = {
+  file: "web/src/plugins/plugin-sky-probe.ts",
+  constName: "preamble"
+};
+var PLUGIN_SKY_UNIFORMS_SOURCE = {
+  file: "web/src/plugins/plugin-sky-uniforms.ts",
+  constName: "PLUGIN_SKY_UNIFORMS"
+};
+var REGEX_PREV_CHARS = /* @__PURE__ */ new Set(["", "(", ",", "=", ":", "[", "!", "&", "|", "?", "{", "}", ";", "+", "-", "*", "%", "<", ">", "~", "^"]);
+var REGEX_PREV_WORDS = /* @__PURE__ */ new Set(["return", "typeof", "case", "in", "of", "delete", "void", "throw", "new", "yield", "await", "else", "do"]);
+function cook(raw) {
+  return raw.replace(/\\(u\{[0-9a-fA-F]+\}|u[0-9a-fA-F]{4}|x[0-9a-fA-F]{2}|[\s\S])/g, (_m, e) => {
+    switch (e[0]) {
+      case "n":
+        return "\n";
+      case "t":
+        return "	";
+      case "r":
+        return "\r";
+      case "0":
+        return "\0";
+      case "\n":
+        return "";
+      case "u":
+        return e.length > 1 ? String.fromCodePoint(parseInt(e.replace(/[u{}]/g, ""), 16)) : e;
+      case "x":
+        return e.length > 1 ? String.fromCharCode(parseInt(e.slice(1), 16)) : e;
+      default:
+        return e;
+    }
+  });
+}
+function lexTs(source) {
+  const len = source.length;
+  const out = new Array(len);
+  const strings = [];
+  let lastSig = "";
+  let lastWord = "";
+  let afterSpace = false;
+  const blank = (from, to) => {
+    for (let k = from; k < to; k++) out[k] = source[k] === "\n" ? "\n" : " ";
+  };
+  const tagBefore = (at) => /\/\*\s*glsl\s*\*\/\s*$/.test(source.slice(Math.max(0, at - 40), at));
+  const scanQuote = (i) => {
+    const q = source[i];
+    let j = i + 1;
+    while (j < len && source[j] !== q && source[j] !== "\n") j += source[j] === "\\" ? 2 : 1;
+    const end = Math.min(len, j + 1);
+    out[i] = q;
+    blank(i + 1, end - 1);
+    if (end - 1 < len) out[end - 1] = source[end - 1];
+    strings.push({ start: i, end, kind: "quote", text: cook(source.slice(i + 1, end - 1)), parts: [], tagged: tagBefore(i) });
+    return end;
+  };
+  let scanCode;
+  const scanTemplate = (i) => {
+    out[i] = "`";
+    const lit = { start: i, end: i, kind: "template", text: "", parts: [], tagged: tagBefore(i) };
+    strings.push(lit);
+    let j = i + 1;
+    let chunkStart = j;
+    const flush = (to) => {
+      lit.parts.push({ text: cook(source.slice(chunkStart, to)) });
+      blank(chunkStart, to);
+    };
+    while (j < len) {
+      const c = source[j];
+      if (c === "\\") {
+        j += 2;
+        continue;
+      }
+      if (c === "`") break;
+      if (c === "$" && source[j + 1] === "{") {
+        flush(j);
+        out[j] = "$";
+        out[j + 1] = "{";
+        const exprStart = j + 2;
+        const close = scanCode(exprStart, true);
+        lit.parts.push({ expr: source.slice(exprStart, close), exprStart });
+        if (close < len) out[close] = "}";
+        j = close + 1;
+        chunkStart = j;
+        continue;
+      }
+      j++;
+    }
+    flush(Math.min(j, len));
+    if (j < len) out[j] = "`";
+    lit.end = Math.min(len, j + 1);
+    lit.text = lit.parts.map((p) => "text" in p ? p.text : "").join("");
+    return lit.end;
+  };
+  const scanRegex = (i) => {
+    let j = i + 1;
+    let inClass = false;
+    while (j < len && source[j] !== "\n") {
+      const c = source[j];
+      if (c === "\\") {
+        j += 2;
+        continue;
+      }
+      if (c === "[") inClass = true;
+      else if (c === "]") inClass = false;
+      else if (c === "/" && !inClass) break;
+      j++;
+    }
+    j++;
+    while (j < len && /[a-z]/i.test(source[j])) j++;
+    out[i] = "/";
+    blank(i + 1, j);
+    return j;
+  };
+  scanCode = (start, stopOnBrace) => {
+    let i = start;
+    let depth = 0;
+    while (i < len) {
+      const ch = source[i];
+      const next = source[i + 1];
+      if (ch === "/" && next === "/") {
+        let j = i;
+        while (j < len && source[j] !== "\n") j++;
+        blank(i, j);
+        i = j;
+        continue;
+      }
+      if (ch === "/" && next === "*") {
+        let j = i + 2;
+        while (j < len - 1 && !(source[j] === "*" && source[j + 1] === "/")) j++;
+        j = Math.min(len, j + 2);
+        blank(i, j);
+        i = j;
+        continue;
+      }
+      if (ch === "'" || ch === '"') {
+        i = scanQuote(i);
+        lastSig = "x";
+        lastWord = "";
+        continue;
+      }
+      if (ch === "`") {
+        i = scanTemplate(i);
+        lastSig = "x";
+        lastWord = "";
+        continue;
+      }
+      if (ch === "/" && (REGEX_PREV_CHARS.has(lastSig) || REGEX_PREV_WORDS.has(lastWord))) {
+        i = scanRegex(i);
+        lastSig = "x";
+        lastWord = "";
+        continue;
+      }
+      if (stopOnBrace) {
+        if (ch === "{") depth++;
+        else if (ch === "}") {
+          if (depth === 0) return i;
+          depth--;
+        }
+      }
+      out[i] = ch;
+      if (/\s/.test(ch)) {
+        afterSpace = true;
+      } else {
+        if (/[\w$]/.test(ch)) {
+          lastWord = /[\w$]/.test(lastSig) && !afterSpace ? lastWord + ch : ch;
+        } else {
+          lastWord = "";
+        }
+        lastSig = ch;
+        afterSpace = false;
+      }
+      i++;
+    }
+    return i;
+  };
+  scanCode(0, false);
+  for (let k = 0; k < len; k++) if (out[k] === void 0) out[k] = source[k];
+  strings.sort((a, b) => a.start - b.start);
+  return { source, masked: out.join(""), strings };
+}
+function matchBracket(masked, open) {
+  const pairs = { "{": "}", "(": ")", "[": "]" };
+  const want = pairs[masked[open]];
+  if (!want) return -1;
+  const stack = [want];
+  for (let i = open + 1; i < masked.length; i++) {
+    const c = masked[i];
+    if (c in pairs) stack.push(pairs[c]);
+    else if (c === stack[stack.length - 1]) {
+      stack.pop();
+      if (stack.length === 0) return i;
+    }
+  }
+  return -1;
+}
+function splitTopLevel(masked, from, to, sep) {
+  const spans = [];
+  let depth = 0;
+  let s = from;
+  for (let i = from; i < to; i++) {
+    const c = masked[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") depth--;
+    else if (depth === 0 && c === sep) {
+      spans.push([s, i]);
+      s = i + 1;
+    }
+  }
+  spans.push([s, to]);
+  return spans;
+}
+function exprEnd(masked, from, stops = ";,") {
+  let depth = 0;
+  for (let i = from; i < masked.length; i++) {
+    const c = masked[i];
+    if (c === "(" || c === "[" || c === "{") depth++;
+    else if (c === ")" || c === "]" || c === "}") {
+      if (depth === 0) return i;
+      depth--;
+    } else if (depth === 0 && stops.includes(c)) return i;
+  }
+  return masked.length;
+}
+var GLSL_TYPE = "(?:float|int|uint|bool|[iub]?vec[234]|mat[234](?:x[234])?|[iu]?sampler\\w+)";
+var GLSL_HINT_RE = new RegExp(
+  String.raw`\bvoid\s+main\s*\(|\bgl_(?:Position|FragColor|FragCoord)\b|#include\s*<|#version\s+\d|\bprecision\s+(?:high|medium|low)p\b|^\s*(?:uniform|varying|attribute|in|out)\s+(?:(?:highp|mediump|lowp)\s+)?${GLSL_TYPE}\s+\w+`,
+  "m"
+);
+function looksLikeGlsl(text, tagged = false) {
+  return tagged || GLSL_HINT_RE.test(text);
+}
+function stripGlslComments(src) {
+  return src.replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, " ")).replace(/\/\/[^\n]*/g, "");
+}
+function glslUniformDecls(src) {
+  const code = stripGlslComments(src);
+  const out = [];
+  const plain = /\buniform\s+(?:(?:highp|mediump|lowp)\s+)?(\w+)\s+([^;{]+);/g;
+  let m;
+  while (m = plain.exec(code)) {
+    for (const part of m[2].split(",")) {
+      const name = part.trim().match(/^(\w+)/)?.[1];
+      if (name) out.push({ name, type: m[1], offset: m.index });
+    }
+  }
+  const block = /\buniform\s+\w+\s*\{([^}]*)\}\s*(\w+)?\s*;/g;
+  while (m = block.exec(code)) {
+    if (m[2]) {
+      out.push({ name: m[2], type: "block", offset: m.index });
+      continue;
+    }
+    for (const f of m[1].matchAll(/\b\w+\s+(\w+)\s*(?:\[[^\]]*\])?\s*;/g)) out.push({ name: f[1], type: "block-member", offset: m.index });
+  }
+  return out;
+}
+function glslCustomReads(src) {
+  let code = stripGlslComments(src);
+  code = code.replace(/\buniform\b[^;{]*(?:\{[^}]*\}[^;]*)?;/g, (m) => m.replace(/[^\n]/g, " "));
+  const locals = /* @__PURE__ */ new Set();
+  const localRe = new RegExp(String.raw`\b(?:${GLSL_TYPE}|void|struct)\s+(u[A-Z]\w*|zotoVizSlots)\b`, "g");
+  for (const m of code.matchAll(localRe)) locals.add(m[1]);
+  for (const m of code.matchAll(/#define\s+(u[A-Z]\w*)/g)) locals.add(m[1]);
+  const out = [];
+  const seen = /* @__PURE__ */ new Set();
+  for (const m of code.matchAll(CUSTOM_UNIFORM_SCAN)) {
+    const name = m[1];
+    if (locals.has(name) || seen.has(name)) continue;
+    if (code[m.index - 1] === ".") continue;
+    seen.add(name);
+    out.push({ name, offset: m.index });
+  }
+  return out;
+}
+function stageOf(src) {
+  return /\bgl_Position\b/.test(src) ? "vertex" : "fragment";
+}
+function loadTs(ctx, abs) {
+  if (ctx.cache.has(abs)) return ctx.cache.get(abs);
+  const text = ctx.readFile(abs);
+  const f = text == null ? null : { repoRel: path4.relative(ctx.repoRoot, abs).replace(/\\/g, "/"), abs, lex: lexTs(text) };
+  ctx.cache.set(abs, f);
+  return f;
+}
+function stringAt(f, at) {
+  return f.lex.strings.find((s) => s.start === at);
+}
+function constInit(f, name) {
+  const re = new RegExp(String.raw`\b(?:const|let|var)\s+${name.replace(/\$/g, "\\$")}\s*(?::[^=;]+)?=\s*`, "g");
+  const m = re.exec(f.lex.masked);
+  if (!m) return null;
+  const s = m.index + m[0].length;
+  return [s, exprEnd(f.lex.masked, s, ";")];
+}
+function importSource(f, name) {
+  const re = /\bimport\s+(?:type\s+)?\{([^}]*)\}\s*from\s*(["'])/g;
+  let m;
+  while (m = re.exec(f.lex.masked)) {
+    for (const part of m[1].split(",")) {
+      const bits = part.trim().split(/\s+as\s+/);
+      const imported = bits[0].replace(/^type\s+/, "").trim();
+      const local = (bits[1] ?? imported).trim();
+      if (local !== name) continue;
+      const lit = stringAt(f, m.index + m[0].length - 1);
+      if (!lit) return null;
+      return { spec: lit.text, imported };
+    }
+  }
+  return null;
+}
+function resolveImport(ctx, f, spec) {
+  if (!f.abs || !spec.startsWith(".")) return null;
+  const base = path4.resolve(path4.dirname(f.abs), spec);
+  for (const cand of [base, `${base}.ts`, path4.join(base, "index.ts")]) {
+    if (/\.ts$/.test(cand)) {
+      const got = loadTs(ctx, cand);
+      if (got) return got;
+    }
+  }
+  return null;
+}
+function objectProp(f, objName, prop, ctx, depth) {
+  let target = f;
+  let name = objName;
+  let span = constInit(f, objName);
+  if (!span) {
+    const imp = importSource(f, objName);
+    if (!imp || depth > 4) return null;
+    target = resolveImport(ctx, f, imp.spec);
+    if (!target) return null;
+    name = imp.imported;
+    span = constInit(target, name);
+    if (!span) return null;
+  }
+  const m = target.lex.masked;
+  const open = m.indexOf("{", span[0]);
+  if (open < 0 || open >= span[1]) return null;
+  const close = matchBracket(m, open);
+  const body = m.slice(open, close);
+  const pm = new RegExp(String.raw`[{,]\s*${prop}\s*:\s*`).exec(body);
+  if (!pm) return null;
+  const vs = open + pm.index + pm[0].length;
+  const lit = stringAt(target, vs);
+  if (lit && lit.kind === "quote") return lit.text;
+  const num = target.lex.source.slice(vs, exprEnd(m, vs)).trim();
+  return /^-?\d[\d_.]*$/.test(num) ? num.replace(/_/g, "") : null;
+}
+function resolveTemplate(ctx, f, lit, depth) {
+  if (lit.kind === "quote") return { glsl: lit.text, open: false, consts: /* @__PURE__ */ new Set() };
+  let glsl = "";
+  let open = false;
+  const consts = /* @__PURE__ */ new Set();
+  for (const p of lit.parts) {
+    if ("text" in p) {
+      glsl += p.text;
+      continue;
+    }
+    const r = resolveExpr(ctx, f, p.expr.trim(), depth + 1, true);
+    glsl += r.glsl;
+    open ||= r.open;
+    for (const c of r.consts) consts.add(c);
+  }
+  return { glsl, open, consts };
+}
+function resolveExpr(ctx, f, expr, depth, interp) {
+  const none = (open) => ({ glsl: interp ? " 0.0 " : "", open, consts: /* @__PURE__ */ new Set() });
+  if (depth > 8) return none(true);
+  const e = expr.trim().replace(/\s+as\s+\w[\w.<>[\]]*$/, "").replace(/^\((.*)\)$/s, "$1").trim();
+  if (/^[A-Za-z_$][\w$]*$/.test(e)) {
+    const span = constInit(f, e);
+    if (span) {
+      const r = resolveSpan(ctx, f, span[0], span[1], depth + 1);
+      r.consts.add(`${f.repoRel}#${e}`);
+      return r;
+    }
+    const imp = importSource(f, e);
+    if (imp) {
+      const target = resolveImport(ctx, f, imp.spec);
+      if (target) {
+        const s2 = constInit(target, imp.imported);
+        if (s2) return resolveSpan(ctx, target, s2[0], s2[1], depth + 1);
+      }
+    }
+    return none(true);
+  }
+  const mem = /^([A-Za-z_$][\w$]*)\.([A-Za-z_$][\w$]*)$/.exec(e);
+  if (mem) {
+    const v = objectProp(f, mem[1], mem[2], ctx, depth);
+    if (v != null) return { glsl: v, open: false, consts: /* @__PURE__ */ new Set() };
+    return none(true);
+  }
+  return none(!interp);
+}
+function resolveSpan(ctx, f, from, to, depth) {
+  const out = { glsl: "", open: false, consts: /* @__PURE__ */ new Set() };
+  for (const [s, t] of splitTopLevel(f.lex.masked, from, to, "+")) {
+    let a = s;
+    while (a < t && /\s/.test(f.lex.masked[a])) a++;
+    const lit = stringAt(f, a);
+    let r;
+    if (lit && f.lex.source.slice(lit.end, t).trim() === "") r = resolveTemplate(ctx, f, lit, depth);
+    else r = resolveExpr(ctx, f, f.lex.source.slice(a, t), depth, false);
+    out.glsl += r.glsl;
+    out.open ||= r.open;
+    for (const c of r.consts) out.consts.add(c);
+  }
+  return out;
+}
+function lineOf(f, at) {
+  return lineColAt(f.lex.source, at).line;
+}
+function objectKeys(ctx, f, open) {
+  const m = f.lex.masked;
+  const close = matchBracket(m, open);
+  if (close < 0) return null;
+  const out = [];
+  for (const [s, t] of splitTopLevel(m, open + 1, close, ",")) {
+    const seg = m.slice(s, t);
+    if (!seg.trim()) continue;
+    const lead = s + (seg.length - seg.trimStart().length);
+    if (seg.trim().startsWith("...")) return null;
+    const lit = stringAt(f, lead);
+    if (lit) {
+      out.push({ name: lit.text, line: lineOf(f, lead) });
+      continue;
+    }
+    const id = /^\s*([A-Za-z_$][\w$]*)\s*[:(,]?/.exec(seg);
+    if (id && !seg.trim().startsWith("[")) {
+      out.push({ name: id[1], line: lineOf(f, lead) });
+      continue;
+    }
+    const comp = /^\s*\[([^\]]+)\]\s*:/.exec(seg);
+    if (comp) {
+      const r = resolveExpr(ctx, f, f.lex.source.slice(lead + 1, lead + 1 + comp[1].length), 0, false);
+      if (r.open || !r.glsl) return null;
+      out.push({ name: r.glsl, line: lineOf(f, lead) });
+      continue;
+    }
+    return null;
+  }
+  return out;
+}
+function uniformsValueKeys(ctx, f, valueStart, valueEnd) {
+  const m = f.lex.masked;
+  let a = valueStart;
+  while (a < valueEnd && /\s/.test(m[a])) a++;
+  if (m[a] === "{") return objectKeys(ctx, f, a);
+  const call = /^(?:this\.)?([A-Za-z_$][\w$]*)\s*\(\s*\)\s*$/.exec(m.slice(a, valueEnd).trim());
+  if (!call) return null;
+  const def = new RegExp(String.raw`(?:^|[\s;}])(?:private\s+|public\s+|protected\s+|static\s+)*(?:function\s+)?${call[1]}\s*\([^)]*\)\s*(?::[^{]+)?\{`, "g").exec(m);
+  if (!def) return null;
+  const bodyOpen = def.index + def[0].length - 1;
+  const bodyClose = matchBracket(m, bodyOpen);
+  const ret = /\breturn\s*\{/.exec(m.slice(bodyOpen, bodyClose));
+  if (!ret) return null;
+  return objectKeys(ctx, f, bodyOpen + ret.index + ret[0].length - 1);
+}
+function receiverBefore(f, at) {
+  const before = f.lex.masked.slice(Math.max(0, at - 200), at);
+  const assign = /((?:this\.)?[A-Za-z_$][\w$]*)\s*=\s*$/.exec(before);
+  if (assign) return [assign[1]];
+  if (/\breturn\s*$/.test(before)) {
+    const fns = [...f.lex.masked.slice(0, at).matchAll(/\bfunction\s+([A-Za-z_$][\w$]*)\s*\(/g)];
+    const fn = fns[fns.length - 1]?.[1];
+    if (!fn) return [];
+    const recv = [...f.lex.masked.matchAll(new RegExp(String.raw`((?:this\.)?[A-Za-z_$][\w$]*)\s*=\s*${fn}\s*\(`, "g"))].map((x) => x[1]);
+    return recv;
+  }
+  return [];
+}
+function materialPrograms(ctx, f) {
+  const m = f.lex.masked;
+  const out = [];
+  for (const hit of m.matchAll(/\bnew\s+(?:THREE\.)?(?:Raw)?ShaderMaterial\s*\(\s*\{/g)) {
+    const open = hit.index + hit[0].length - 1;
+    const close = matchBracket(m, open);
+    if (close < 0) continue;
+    const prog = {
+      label: "ShaderMaterial",
+      line: lineOf(f, hit.index),
+      stages: [],
+      sets: [],
+      prefixDecls: [],
+      hostSets: /* @__PURE__ */ new Set(),
+      receivers: receiverBefore(f, hit.index)
+    };
+    let sawUniforms = false;
+    for (const [s, t] of splitTopLevel(m, open + 1, close, ",")) {
+      const kv = /^\s*(uniforms|vertexShader|fragmentShader)\s*(:)?/.exec(m.slice(s, t));
+      if (!kv) continue;
+      const valueStart = kv[2] ? s + kv[0].length : s;
+      if (kv[1] === "uniforms") {
+        sawUniforms = true;
+        prog.sets = kv[2] ? uniformsValueKeys(ctx, f, valueStart, t) : null;
+        continue;
+      }
+      const stage = kv[1] === "vertexShader" ? "vertex" : "fragment";
+      const r = kv[2] ? resolveSpan(ctx, f, valueStart, t, 0) : resolveExpr(ctx, f, kv[1], 0, false);
+      prog.stages.push({ stage, glsl: r.glsl, open: r.open, line: lineOf(f, valueStart) });
+      for (const c of r.consts) consumed.add(c);
+    }
+    if (!sawUniforms) prog.sets = [];
+    out.push(prog);
+  }
+  return out;
+}
+var consumed = /* @__PURE__ */ new Set();
+function onBeforeCompilePrograms(ctx, f) {
+  const m = f.lex.masked;
+  const progs = [];
+  const spans = [];
+  const re = /\.onBeforeCompile\s*=\s*(?:function\s*[\w$]*\s*)?\(\s*([A-Za-z_$][\w$]*)[^)]*\)\s*(?::[^={]+)?(?:=>\s*)?\{/g;
+  for (const hit of m.matchAll(re)) {
+    const p = hit[1];
+    const bodyOpen = hit.index + hit[0].length - 1;
+    const bodyClose = matchBracket(m, bodyOpen);
+    if (bodyClose < 0) continue;
+    spans.push([bodyOpen, bodyClose]);
+    const body = m.slice(bodyOpen, bodyClose);
+    const sets = [];
+    let setsOpen = false;
+    for (const s of body.matchAll(new RegExp(String.raw`\b${p}\.uniforms\.([A-Za-z_$][\w$]*)\s*=[^=]`, "g"))) {
+      sets.push({ name: s[1], line: lineOf(f, bodyOpen + s.index) });
+    }
+    for (const s of body.matchAll(new RegExp(String.raw`\b${p}\.uniforms\[\s*(?=["'])`, "g"))) {
+      const lit = stringAt(f, bodyOpen + s.index + s[0].length);
+      if (lit) sets.push({ name: lit.text, line: lineOf(f, lit.start) });
+      else setsOpen = true;
+    }
+    for (const s of body.matchAll(new RegExp(String.raw`\bObject\.assign\(\s*${p}\.uniforms\s*,\s*\{`, "g"))) {
+      const keys = objectKeys(ctx, f, bodyOpen + s.index + s[0].length - 1);
+      if (keys) sets.push(...keys);
+      else setsOpen = true;
+    }
+    const byStage = {
+      vertex: { stage: "vertex", glsl: "", open: false, line: 0 },
+      fragment: { stage: "fragment", glsl: "", open: false, line: 0 }
+    };
+    for (const s of body.matchAll(new RegExp(String.raw`\b${p}\.(vertexShader|fragmentShader)\s*=[^=]`, "g"))) {
+      const stage = s[1] === "vertexShader" ? "vertex" : "fragment";
+      const from = bodyOpen + s.index + s[0].length - 1;
+      const to = exprEnd(m, from, ";");
+      const st = byStage[stage];
+      if (!st.line) st.line = lineOf(f, from);
+      for (const lit of f.lex.strings) {
+        if (lit.start < from || lit.end > to) continue;
+        if (f.lex.strings.some((o) => o !== lit && o.start < lit.start && o.end > lit.end)) continue;
+        const r = resolveTemplate(ctx, f, lit, 0);
+        st.glsl += `
+${r.glsl}`;
+        st.open ||= r.open;
+        for (const c of r.consts) consumed.add(c);
+      }
+      for (const id of m.slice(from, to).matchAll(/(?<![\w$.])([A-Za-z_$][\w$]*)(?![\w$(])/g)) {
+        const name = id[1];
+        const idAt = from + id.index;
+        if (f.lex.strings.some((l) => idAt > l.start && idAt < l.end)) continue;
+        if (name === p || /^(?:replace|vertexShader|fragmentShader|true|false|null|undefined)$/.test(name)) continue;
+        const r = resolveExpr(ctx, f, name, 0, false);
+        if (r.open) continue;
+        st.glsl += `
+${r.glsl}`;
+        for (const c of r.consts) consumed.add(c);
+      }
+    }
+    progs.push({
+      label: "onBeforeCompile",
+      line: lineOf(f, hit.index),
+      stages: [byStage.vertex, byStage.fragment].filter((s) => s.line > 0),
+      sets: setsOpen ? null : sets,
+      prefixDecls: [],
+      hostSets: /* @__PURE__ */ new Set(),
+      receivers: []
+    });
+  }
+  return { progs, spans };
+}
+function glslLiterals(ctx, f) {
+  const out = [];
+  for (const lit of f.lex.strings) {
+    if (!looksLikeGlsl(lit.text, lit.tagged)) continue;
+    out.push({ lit, r: resolveTemplate(ctx, f, lit, 0) });
+  }
+  return out;
+}
+function rawGlProgram(ctx, f, lits) {
+  const m = f.lex.masked;
+  const sets = [];
+  for (const hit of m.matchAll(/\bgetUniformLocation\s*\(/g)) {
+    const open = hit.index + hit[0].length - 1;
+    const close = matchBracket(m, open);
+    const args = splitTopLevel(m, open + 1, close, ",");
+    const second = args[1];
+    if (!second) continue;
+    let a = second[0];
+    while (a < second[1] && /\s/.test(m[a])) a++;
+    const lit = stringAt(f, a);
+    if (lit && lit.kind === "quote") sets.push({ name: lit.text, line: lineOf(f, a) });
+  }
+  if (sets.length === 0) return null;
+  const stages = lits.filter(({ r }) => /\bvoid\s+main\s*\(/.test(r.glsl) || r.open).map(({ lit, r }) => ({ stage: stageOf(r.glsl), glsl: r.glsl, open: r.open, line: lineOf(f, lit.start) }));
+  return { label: "getUniformLocation", line: sets[0].line, stages, sets, prefixDecls: [], hostSets: /* @__PURE__ */ new Set(), receivers: [] };
+}
+function checkProgram(repoRel, prog, emit, opts) {
+  const off = opts.disabledRules ?? /* @__PURE__ */ new Set();
+  const allOpen = prog.stages.some((s) => s.open);
+  const declared = new Set(prog.prefixDecls.map((d) => d.name));
+  for (const s of prog.stages) for (const d of glslUniformDecls(s.glsl)) declared.add(d.name);
+  if (!off.has("uniform-set-undeclared") && prog.sets && !allOpen && prog.stages.length > 0) {
+    const seen = /* @__PURE__ */ new Set();
+    for (const s of prog.sets) {
+      if (declared.has(s.name) || seen.has(s.name)) continue;
+      seen.add(s.name);
+      emit({
+        file: repoRel,
+        line: s.line,
+        rule: "uniform-set-undeclared",
+        target: s.name,
+        detail: `${prog.label} (line ${prog.line}) sets ${s.name} but no stage declares \`uniform … ${s.name};\``
+      });
+    }
+  }
+  const setNames = /* @__PURE__ */ new Set([...prog.hostSets, ...(prog.sets ?? []).map((s) => s.name)]);
+  for (const st of prog.stages) {
+    const stageDecl = /* @__PURE__ */ new Set([...prog.prefixDecls.map((d) => d.name), ...glslUniformDecls(st.glsl).map((d) => d.name)]);
+    for (const read of glslCustomReads(st.glsl)) {
+      if (!stageDecl.has(read.name)) {
+        if (st.open || off.has("glsl-uniform-undeclared")) continue;
+        emit({
+          file: repoRel,
+          line: st.line,
+          rule: "glsl-uniform-undeclared",
+          target: `${st.stage}:${read.name}`,
+          detail: `${st.stage} shader reads undeclared uniform ${read.name} (${prog.label}, line ${prog.line})`
+        });
+        continue;
+      }
+      if (off.has("glsl-uniform-unset") || prog.sets === null) continue;
+      if (!setNames.has(read.name)) {
+        emit({
+          file: repoRel,
+          line: st.line,
+          rule: "glsl-uniform-unset",
+          target: `${st.stage}:${read.name}`,
+          detail: `${st.stage} shader declares and reads ${read.name} but ${prog.label} (line ${prog.line}) never sets it`
+        });
+      }
+    }
+  }
+}
+function dedupe(vs) {
+  const seen = /* @__PURE__ */ new Set();
+  return vs.filter((v) => {
+    const k = `${v.file}\0${v.rule}\0${v.target}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+function defaultCtx(repoRoot, overrides) {
+  return {
+    repoRoot,
+    cache: /* @__PURE__ */ new Map(),
+    readFile: (abs) => {
+      if (overrides?.has(abs)) return overrides.get(abs);
+      try {
+        return fs4.readFileSync(abs, "utf8");
+      } catch {
+        return null;
+      }
+    }
+  };
+}
+function sortViolations(vs) {
+  return vs.sort((a, b) => a.file.localeCompare(b.file) || a.rule.localeCompare(b.rule) || a.target.localeCompare(b.target));
+}
+function collectTsPrograms(ctx, abs, repoRel) {
+  const f = loadTs(ctx, abs);
+  if (!f) return null;
+  f.repoRel = repoRel;
+  consumed = /* @__PURE__ */ new Set();
+  const lits = glslLiterals(ctx, f);
+  if (lits.length === 0) return null;
+  const mats = materialPrograms(ctx, f);
+  const { progs: obc, spans: obcSpans } = onBeforeCompilePrograms(ctx, f);
+  const raw = rawGlProgram(ctx, f, lits);
+  return { f, lits, mats, obc, obcSpans, raw };
+}
+function aliasOf(f, recv, at) {
+  if (!/^[A-Za-z_$][\w$]*$/.test(recv)) return recv;
+  const hits = [...f.lex.masked.slice(0, at).matchAll(new RegExp(String.raw`\b(?:const|let)\s+${recv}\s*(?::[^=;]+)?=\s*((?:this\.)?[A-Za-z_$][\w$]*)\s*;`, "g"))];
+  return hits.length ? hits[hits.length - 1][1] : recv;
+}
+function lintTsFile(ctx, abs, repoRel, opts) {
+  const got = collectTsPrograms(ctx, abs, repoRel);
+  if (!got) return [];
+  const { f, lits, mats, obc, obcSpans, raw } = got;
+  const out = [];
+  const emit = (v) => out.push(v);
+  const programs = [...mats, ...obc, ...raw ? [raw] : []];
+  for (const p of programs) checkProgram(repoRel, p, emit, opts);
+  if (!opts.disabledRules?.has("uniform-set-undeclared")) {
+    const fileDecl = /* @__PURE__ */ new Set();
+    let fileOpen = programs.some((p) => p.stages.length === 0 || p.stages.some((st) => st.open));
+    for (const { r } of lits) {
+      for (const d of glslUniformDecls(r.glsl)) fileDecl.add(d.name);
+      fileOpen ||= r.open;
+    }
+    const m = f.lex.masked;
+    for (const hit of m.matchAll(/([\w$.)\]]*?)\.uniforms(?:\.([A-Za-z_$][\w$]*)|\[\s*(?=["']))/g)) {
+      const at = hit.index;
+      if (obcSpans.some(([a, b]) => at > a && at < b)) continue;
+      let name = hit[2];
+      if (!name) {
+        const lit = stringAt(f, at + hit[0].length);
+        if (!lit) continue;
+        name = lit.text;
+      }
+      if (name === "value") continue;
+      const recv = aliasOf(f, hit[1], at);
+      const prog = mats.find((p) => p.receivers.includes(recv));
+      let decl = fileDecl;
+      let open = fileOpen;
+      if (prog) {
+        decl = new Set(prog.stages.flatMap((s) => glslUniformDecls(s.glsl).map((d) => d.name)));
+        open = prog.stages.some((s) => s.open) || prog.stages.length === 0;
+      }
+      if (open || decl.has(name)) continue;
+      out.push({
+        file: repoRel,
+        line: lineOf(f, at),
+        rule: "uniform-set-undeclared",
+        target: name,
+        detail: `${recv || "material"}.uniforms.${name} is bound but no GLSL ${prog ? `for ${prog.label} (line ${prog.line})` : "in this file"} declares it`
+      });
+    }
+  }
+  if (!opts.disabledRules?.has("glsl-uniform-undeclared")) {
+    for (const { lit, r } of lits) {
+      if (!/\bvoid\s+main\s*\(/.test(r.glsl)) continue;
+      if (mats.some((p) => p.stages.some((s) => s.glsl.includes(r.glsl))) || obc.some((p) => p.stages.some((s) => s.glsl.includes(r.glsl)))) continue;
+      if (raw && raw.stages.some((s) => s.glsl === r.glsl)) {
+        continue;
+      }
+      const constName = /(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*(?::[^=;]+)?=\s*(?:\/\*\s*glsl\s*\*\/\s*)?$/.exec(
+        f.lex.source.slice(Math.max(0, lit.start - 120), lit.start)
+      )?.[1];
+      if (constName && consumed.has(`${repoRel}#${constName}`)) continue;
+      const compositions = [];
+      if (constName) {
+        const refs = [...f.lex.masked.matchAll(new RegExp(String.raw`(?<![\w$.])${constName}(?![\w$])`, "g"))].map((x) => x.index).filter((i) => i < lit.start - 120 || i > lit.end);
+        const exported = new RegExp(String.raw`\bexport\s+(?:const|let|var)\s+${constName}\b`).test(f.lex.masked);
+        if (refs.length === 0 && exported) continue;
+        for (const ref of refs) {
+          let s = ref;
+          while (s > 0 && !";{}(,=".includes(f.lex.masked[s - 1]) && !/\breturn\s$/.test(f.lex.masked.slice(s - 7, s))) s--;
+          const e = exprEnd(f.lex.masked, ref, ";,");
+          compositions.push(resolveSpan(ctx, f, s, e, 0));
+        }
+      }
+      if (compositions.length === 0) compositions.push(r);
+      const stage = stageOf(r.glsl);
+      for (const comp of compositions) {
+        const decl = new Set(glslUniformDecls(comp.glsl).map((d) => d.name));
+        for (const read of glslCustomReads(r.glsl)) {
+          if (decl.has(read.name) || comp.open || r.open) continue;
+          out.push({
+            file: repoRel,
+            line: lineOf(f, lit.start),
+            rule: "glsl-uniform-undeclared",
+            target: `${stage}:${read.name}`,
+            detail: `${stage} shader${constName ? ` ${constName}` : ""} reads undeclared uniform ${read.name}`
+          });
+        }
+      }
+    }
+  }
+  return dedupe(out);
+}
+var preambleCache = null;
+function hostSkyPreambleDecls(repoRoot) {
+  if (preambleCache?.root === repoRoot) return preambleCache.decls;
+  const ctx = defaultCtx(repoRoot);
+  const abs = path4.join(repoRoot, HOST_SKY_PREAMBLE_SOURCE.file);
+  const f = loadTs(ctx, abs);
+  const span = f && constInit(f, HOST_SKY_PREAMBLE_SOURCE.constName);
+  if (!f || !span) throw new Error(`uniform lint: host sky preamble not found at ${HOST_SKY_PREAMBLE_SOURCE.file}`);
+  const r = resolveSpan(ctx, f, span[0], span[1], 0);
+  if (r.open) throw new Error("uniform lint: host sky preamble has an unresolved interpolation");
+  const decls = glslUniformDecls(r.glsl);
+  preambleCache = { root: repoRoot, decls };
+  return decls;
+}
+var skyUniformsCache = null;
+function pluginSkyUniformNames(repoRoot) {
+  if (skyUniformsCache?.root === repoRoot) return skyUniformsCache.names;
+  const ctx = defaultCtx(repoRoot);
+  const f = loadTs(ctx, path4.join(repoRoot, PLUGIN_SKY_UNIFORMS_SOURCE.file));
+  const span = f && constInit(f, PLUGIN_SKY_UNIFORMS_SOURCE.constName);
+  if (!f || !span) throw new Error(`uniform lint: ${PLUGIN_SKY_UNIFORMS_SOURCE.constName} not found at ${PLUGIN_SKY_UNIFORMS_SOURCE.file}`);
+  const names = f.lex.strings.filter((l) => l.start >= span[0] && l.end <= span[1] && l.kind === "quote").map((l) => l.text);
+  if (names.length === 0) throw new Error(`uniform lint: ${PLUGIN_SKY_UNIFORMS_SOURCE.constName} is empty or not a literal array`);
+  skyUniformsCache = { root: repoRoot, names };
+  return names;
+}
+function yamlBlockChildren(lines) {
+  const out = /* @__PURE__ */ new Map();
+  const indentOf = (l) => l.length - l.trimStart().length;
+  const meaningful = lines.filter((l) => l.trim() && !l.trim().startsWith("#"));
+  if (meaningful.length === 0) return out;
+  const indent = indentOf(meaningful[0]);
+  let cur = null;
+  for (const l of meaningful) {
+    const ind = indentOf(l);
+    if (ind === indent && /^\s*-(?:\s|$)/.test(l) && cur) {
+      cur.lines.push(l);
+    } else if (ind === indent) {
+      const kv = /^\s*([\w-]+)\s*:\s*(.*)$/.exec(l);
+      cur = kv ? { value: kv[2].replace(/\s+#.*$/, "").trim(), lines: [] } : null;
+      if (kv && cur) out.set(kv[1], cur);
+    } else if (ind > indent && cur) {
+      cur.lines.push(l);
+    } else if (ind < indent) break;
+  }
+  return out;
+}
+var unquote = (v) => v.trim().replace(/^(["'])(.*)\1$/, "$2");
+function manifestVizUniforms(pluginYml, repoRoot, skyUniforms) {
+  const sky = skyUniforms ? [...skyUniforms] : pluginSkyUniformNames(repoRoot);
+  const lines = pluginYml.split(/\r?\n/);
+  const at = lines.findIndex((l) => /^viz\s*:\s*(?:#.*)?$/.test(l));
+  if (at < 0) return { uniforms: [], source: "no-viz" };
+  const body = [];
+  for (const l of lines.slice(at + 1)) {
+    if (l.trim() && !/^\s/.test(l) && !l.trim().startsWith("#")) break;
+    body.push(l);
+  }
+  const viz = yamlBlockChildren(body);
+  if (viz.get("graphWalk")?.value !== "false" || !viz.has("idle")) return { uniforms: [], source: "no-viz" };
+  const u = viz.get("uniforms");
+  if (!u || !u.value && u.lines.length === 0) return { uniforms: [...sky], source: "default" };
+  let listed;
+  if (u.value.startsWith("[")) {
+    listed = u.value.replace(/^\[|\]$/g, "").split(",").map(unquote).filter(Boolean);
+  } else if (!u.value) {
+    listed = u.lines.map((l) => /^\s*-\s*(.+?)\s*(?:#.*)?$/.exec(l)?.[1]).filter((x) => !!x).map(unquote);
+  } else {
+    return { uniforms: [...sky], source: "default" };
+  }
+  return { uniforms: listed.filter((n) => sky.includes(n)), source: "list" };
+}
+function lintPackUniforms(input, repoRoot, opts = {}) {
+  const off = opts.disabledRules ?? /* @__PURE__ */ new Set();
+  const preamble = opts.host?.preamble ?? hostSkyPreambleDecls(repoRoot);
+  const hostSets = new Set(preamble.map((d) => d.name));
+  const hostType = new Map(preamble.map((d) => [d.name, d.type]));
+  const out = [];
+  const declared = new Set(hostSets);
+  for (const sky of input.skies) {
+    const own = glslUniformDecls(sky.glsl);
+    for (const d of own) declared.add(d.name);
+    const stageDecl = /* @__PURE__ */ new Set([...hostSets, ...own.map((d) => d.name)]);
+    const code = stripGlslComments(sky.glsl);
+    if (!off.has("uniform-type-conflict")) {
+      for (const d of own) {
+        const host = hostType.get(d.name);
+        if (host === void 0 || host === d.type) continue;
+        out.push({
+          file: sky.repoRel,
+          line: lineColAt(code, d.offset ?? 0).line,
+          rule: "uniform-type-conflict",
+          target: `fragment:${d.name}`,
+          detail: `(pack ${input.packId}) declares uniform ${d.name} as ${d.type}, but the host sky preamble declares ${host} ${d.name}`
+        });
+      }
+    }
+    for (const read of glslCustomReads(sky.glsl)) {
+      const line = lineColAt(code, read.offset).line;
+      if (!stageDecl.has(read.name)) {
+        if (off.has("glsl-uniform-undeclared")) continue;
+        out.push({
+          file: sky.repoRel,
+          line,
+          rule: "glsl-uniform-undeclared",
+          target: `fragment:${read.name}`,
+          detail: `pack sky reads ${read.name}, which neither the sky nor the host preamble declares`
+        });
+      } else if (!hostSets.has(read.name) && !off.has("glsl-uniform-unset")) {
+        out.push({
+          file: sky.repoRel,
+          line,
+          rule: "glsl-uniform-unset",
+          target: `fragment:${read.name}`,
+          detail: `pack sky declares ${read.name} but the host only sets ${[...hostSets].join(", ")}`
+        });
+      }
+    }
+  }
+  const manifest = input.manifest ? manifestVizUniforms(input.manifest.text, repoRoot, opts.host?.skyUniforms) : null;
+  for (const fe of input.frontend) {
+    const lex = lexTs(fe.text);
+    for (const hit of lex.masked.matchAll(/\bwriteUniform\s*\(\s*(?=["'])/g)) {
+      const lit = lex.strings.find((s) => s.start === hit.index + hit[0].length);
+      if (!lit || lit.kind !== "quote") continue;
+      const line = lineColAt(fe.text, lit.start).line;
+      if (manifest && !off.has("write-uniform-not-in-manifest") && !manifest.uniforms.includes(lit.text)) {
+        out.push({
+          file: fe.repoRel,
+          line,
+          rule: "write-uniform-not-in-manifest",
+          target: lit.text,
+          detail: manifest.source === "no-viz" ? `pack ${input.packId} calls writeUniform("${lit.text}"), but ${input.manifest.repoRel} has no viz contract (graphWalk: false + idle), so the host drops it` : `pack ${input.packId} calls writeUniform("${lit.text}"), but ${input.manifest.repoRel} viz.uniforms ${manifest.source === "list" ? `lists only [${manifest.uniforms.join(", ")}]` : "defaults exclude it"}, so the host drops the write`
+        });
+      }
+      if (off.has("uniform-set-undeclared")) continue;
+      if (input.skies.length > 0 && declared.has(lit.text)) continue;
+      out.push({
+        file: fe.repoRel,
+        line,
+        rule: "uniform-set-undeclared",
+        target: lit.text,
+        detail: input.skies.length === 0 ? `writeUniform("${lit.text}") but the pack ships no sky/*.glsl to bind it to` : `writeUniform("${lit.text}") but neither sky/*.glsl nor the host preamble declares it`
+      });
+    }
+  }
+  return sortViolations(dedupe(out));
+}
+function walkFiles(dirAbs, keep, rel = "") {
+  const out = [];
+  let ents;
+  try {
+    ents = fs4.readdirSync(path4.join(dirAbs, rel), { withFileTypes: true });
+  } catch {
+    return out;
+  }
+  for (const e of ents) {
+    const sub = rel ? `${rel}/${e.name}` : e.name;
+    if (e.isDirectory()) {
+      if (e.name === "node_modules" || e.name === "__tests__") continue;
+      out.push(...walkFiles(dirAbs, keep, sub));
+    } else if (e.isFile() && keep(sub)) out.push(sub);
+  }
+  return out.sort();
+}
+var isLintedTs = (rel) => rel.endsWith(".ts") && !rel.endsWith(".d.ts") && !/\.test\.ts$/.test(rel);
+function readPackSkyInput(packDirAbs, repoPrefix, packId) {
+  const skies = walkFiles(path4.join(packDirAbs, "sky"), (r) => r.endsWith(".glsl")).map((r) => ({
+    repoRel: `${repoPrefix}/sky/${r}`,
+    glsl: fs4.readFileSync(path4.join(packDirAbs, "sky", r), "utf8")
+  }));
+  const frontend = walkFiles(path4.join(packDirAbs, "frontend"), isLintedTs).map((r) => ({
+    repoRel: `${repoPrefix}/frontend/${r}`,
+    text: fs4.readFileSync(path4.join(packDirAbs, "frontend", r), "utf8")
+  }));
+  const ymlAbs = path4.join(packDirAbs, "plugin.yml");
+  const manifest = fs4.existsSync(ymlAbs) ? { repoRel: `${repoPrefix}/plugin.yml`, text: fs4.readFileSync(ymlAbs, "utf8") } : null;
+  return { packId, skies, frontend, manifest };
+}
+function lintInstalledPackUniforms(packDirAbs, repoRoot, packId, opts = {}) {
+  const home = path4.resolve(packDirAbs);
+  const prefix = `plugins/src/${packId}`;
+  const input = readPackSkyInput(home, prefix, packId);
+  const absOf = (repoRel) => path4.join(home, repoRel.slice(prefix.length + 1));
+  const texts = new Map(input.frontend.map((fe) => [absOf(fe.repoRel), fe.text]));
+  const inPack = (abs) => abs === home || abs.startsWith(home + path4.sep);
+  const ctx = {
+    repoRoot,
+    cache: /* @__PURE__ */ new Map(),
+    readFile: (abs) => {
+      const known = texts.get(abs);
+      if (known !== void 0) return known;
+      if (!inPack(path4.resolve(abs))) return null;
+      try {
+        return fs4.readFileSync(abs, "utf8");
+      } catch {
+        return null;
+      }
+    }
+  };
+  const lintOpts = { ...opts, host: opts.host ?? HOST_UNIFORM_CONTRACT };
+  const out = [];
+  for (const fe of input.frontend) out.push(...lintTsFile(ctx, absOf(fe.repoRel), fe.repoRel, lintOpts));
+  out.push(...lintPackUniforms(input, repoRoot, lintOpts));
+  return sortViolations(dedupe(out));
+}
+
 // plugins/sdk/pack-install-lint.ts
 var DYNAMIC_IMPORT_NONLITERAL = "dynamic_import_nonliteral";
+var GRAPHICS_CODE_ERROR = "graphics_code_error";
 var UNBUNDLED_SCRIPT_RE = /\.(?:js|mjs|cjs|jsx)$/;
 function logLine(v) {
   const loc = v.line != null ? `${v.file}:${v.line}` : v.file;
@@ -1019,7 +2046,7 @@ function unbundledScripts(packDirAbs) {
   const walk = (rel) => {
     let ents;
     try {
-      ents = fs4.readdirSync(path4.join(packDirAbs, rel), { withFileTypes: true });
+      ents = fs5.readdirSync(path5.join(packDirAbs, rel), { withFileTypes: true });
     } catch {
       return;
     }
@@ -1031,15 +2058,15 @@ function unbundledScripts(packDirAbs) {
   };
   walk("frontend");
   for (const entry of manifestFrontendEntries(packDirAbs)) {
-    if (fs4.existsSync(path4.join(packDirAbs, entry))) out.add(entry);
+    if (fs5.existsSync(path5.join(packDirAbs, entry))) out.add(entry);
   }
   return [...out].sort();
 }
 function unbundledImportBoundary(packDirAbs, repoRoot) {
-  const sdkRoot = path4.join(repoRoot, "plugins/sdk");
+  const sdkRoot = path5.join(repoRoot, "plugins/sdk");
   for (const rel of unbundledScripts(packDirAbs)) {
-    const abs = path4.join(packDirAbs, rel);
-    const text = fs4.readFileSync(abs, "utf8");
+    const abs = path5.join(packDirAbs, rel);
+    const text = fs5.readFileSync(abs, "utf8");
     for (const site of extractPackImports(text)) {
       if (site.kind === "unverified") continue;
       const r = resolvePackBundleImport({ specifier: site.specifier, importerFile: abs, packHome: packDirAbs, sdkRoot, repoRoot });
@@ -1050,7 +2077,7 @@ function unbundledImportBoundary(packDirAbs, repoRoot) {
 }
 function unbundledNonLiteralImport(packDirAbs) {
   for (const rel of unbundledScripts(packDirAbs)) {
-    const text = fs4.readFileSync(path4.join(packDirAbs, rel), "utf8");
+    const text = fs5.readFileSync(path5.join(packDirAbs, rel), "utf8");
     for (const site of extractPackImports(text)) {
       if (site.kind !== "unverified" || site.call !== "import") continue;
       return { file: rel, line: text.slice(0, site.index).split("\n").length, import: site.raw };
@@ -1059,10 +2086,15 @@ function unbundledNonLiteralImport(packDirAbs) {
   return null;
 }
 function runPackInstallLint(packDirAbs, repoRoot, opts = {}) {
-  const { blocks, warnings: warn } = scanPackInstallLint(packDirAbs, repoRoot);
+  const { blocks, warnings: warn } = scanPackInstallLint(packDirAbs, repoRoot, { uniforms: lintInstalledPackUniforms });
   const warnings = warn.map(logLine);
   if (blocks.length > 0) {
-    return { kind: "block", message: plainBlockSummary(blocks), details: blocks.map(logLine), warnings };
+    const message = plainBlockSummary(blocks);
+    const details = blocks.map(logLine);
+    if (blocks.every((v) => UNIFORM_BLOCKING_RULES.has(v.rule))) {
+      return { kind: "block", reason: GRAPHICS_CODE_ERROR, message, details, warnings };
+    }
+    return { kind: "block", message, details, warnings };
   }
   if (opts.unbundled) {
     const hit = unbundledImportBoundary(packDirAbs, repoRoot);
@@ -1083,6 +2115,7 @@ function runPackInstallLint(packDirAbs, repoRoot, opts = {}) {
 }
 export {
   DYNAMIC_IMPORT_NONLITERAL,
+  GRAPHICS_CODE_ERROR,
   runPackInstallLint,
   unbundledImportBoundary,
   unbundledNonLiteralImport
@@ -1095,11 +2128,13 @@ export const PACK_INSTALL_LINT_BUILD = {
     "plugins/sdk/pack-bundle-resolve.mjs",
     "plugins/sdk/pack-install-lint.ts",
     "plugins/sdk/pack-lint-hints.ts",
+    "plugins/sdk/pack-lint-host-uniforms.ts",
     "plugins/sdk/pack-lint-host.ts",
     "plugins/sdk/pack-lint-import.ts",
     "plugins/sdk/pack-lint-types.ts",
+    "plugins/sdk/pack-lint-uniforms.ts",
     "plugins/sdk/pack-lint.ts",
     "plugins/sdk/viz-zoto.ts"
   ],
-  "sha256": "f4a8f1faad39ecea93509376b4b5c949c25b4d9194d224b77587a6e07eff3343"
+  "sha256": "c7e8a78c5b2a88effea9b7aa29143eba5711370b7202507b279a1b6726f75abe"
 };

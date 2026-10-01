@@ -63,6 +63,14 @@ export function setSandboxReady(ready: boolean): void {
   for (const id of tiles.keys()) recomputeSandbox(id);
 }
 
+/** #233: one tile's sandbox went away while another tile's stays ready: drop only its writes. */
+export function clearSandboxWrote(tileId: string): void {
+  const row = tiles.get(tileId);
+  if (!row?.sandboxWrote) return;
+  row.sandboxWrote = false;
+  if (row.drive !== "host-direct") applyDrive(tileId, "none");
+}
+
 /** Sandbox iframe sent `ready` and this tile received a plugin write. */
 export function noteSandboxWrite(tileId: string): void {
   const row = tiles.get(tileId);
