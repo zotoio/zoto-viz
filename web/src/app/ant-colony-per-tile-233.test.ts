@@ -546,43 +546,62 @@ describe("#233 a pane dropped while its attach is in flight never boots", () => 
 
   type Baseline = { sizes: { live: number; ready: number }; listeners: number };
 
+  /** A second Backrooms pane, B: live and ready while A starts, A drops, and A's late attach settles. */
+  const PANE_B = `${BACKROOMS.id}!2`;
+
   function baseline(): Baseline {
-    syncVizTileScope(["main", DRIVEN, BACKROOMS.id]);
     return { sizes: sandboxSetSizesForTests(), listeners: messageListeners.size };
   }
 
+  /** B boots fully, and the layout puts both panes in scope (as main.ts does when panes join). */
+  async function bootPaneB(tiles: TileSandboxes<PluginSandbox>): Promise<void> {
+    void tiles.load(PANE_B, BACKROOMS);
+    await untilReady(tiles, PANE_B, BACKROOMS.id);
+    syncVizTileScope(["main", DRIVEN, BACKROOMS.id, PANE_B]);
+  }
+
   /**
-   * After the drop and the late attach / retry: nothing of the dropped pane is left running.
+   * B is the last real unload. The scope can only reset to ["main"] then if no sandbox of A's is
+   * still live, so first check that B holds a scope: the final check is not passing trivially.
+   */
+  function dropPaneBLast(tiles: TileSandboxes<PluginSandbox>): void {
+    expect.soft(vizTileBudgetRegistry.activeTileCount(), "tiles in scope while B is live (not [\"main\"])").toBeGreaterThan(1);
+    tiles.drop(PANE_B);
+  }
+
+  /**
+   * After A's drop, A's late attach / retry and B's drop: nothing of either pane is left running.
    * Soft: every check reports on its own, so one revert shows all that it breaks.
    */
   function expectGone(dropped: PluginSandbox, base: Baseline): void {
     expect.soft(dropped.readyPack, "readyPack of the dropped pane's sandbox").toBe("");
-    expect.soft(document.querySelectorAll("iframe"), "iframes left for the dropped pane").toHaveLength(0);
-    expect.soft(sandboxSetSizesForTests(), "live / ready sandboxes vs before the load").toEqual(base.sizes);
-    expect.soft(messageListeners.size, "window message listeners vs before the load").toBe(base.listeners);
+    expect.soft(document.querySelectorAll("iframe"), "iframes left after both panes drop").toHaveLength(0);
+    expect.soft(sandboxSetSizesForTests(), "live / ready sandboxes vs before both loads").toEqual(base.sizes);
+    expect.soft(messageListeners.size, "window message listeners vs before both loads").toBe(base.listeners);
     const probe = `probe-${probes++}`;
     const el = document.createElement("div");
     bindVizDriveElement(probe, el);
     noteSandboxWrite(probe); // lands as "sandbox" only while the global ready flag is up
     expect.soft(vizDriveFor(probe), "global sandbox ready").toBe("none");
-    expect.soft(vizTileBudgetRegistry.activeTileCount(), "tiles in scope (scope [\"main\"])").toBe(1);
+    expect.soft(vizTileBudgetRegistry.activeTileCount(), "tiles in scope after B, the last real unload (scope [\"main\"])").toBe(1);
   }
 
   it("(i) dropped during the pre-attach wait (the import): the late attach bails before loading", async () => {
     const tiles = paneTiles();
     const base = baseline();
+    await bootPaneB(tiles);
     const loading = tiles.load(BACKROOMS.id, BACKROOMS); // its attach now waits on the import
     const dropped = tiles.sandboxFor(BACKROOMS.id);
     const loads = vi.spyOn(dropped, "loadModule");
     tiles.drop(BACKROOMS.id);
-    await loading;
+    await loading; // the import resolves: a late attach would boot A now
     expect.soft(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
+    dropPaneBLast(tiles);
     expectGone(dropped, base);
   });
 
   it("(ii) dropped during the asset rebuild's retry wait: the retry never runs", async () => {
     const assets = await import("../plugins/pack-asset-frame");
-    vi.mocked(assets.openPackAssetFrame).mockRejectedValueOnce(new PackAssetTokenInvalidError(BACKROOMS.id));
     let entered = (): void => {};
     const sleeping = new Promise<void>((r) => { entered = r; });
     let wake = (): void => {};
@@ -593,14 +612,18 @@ describe("#233 a pane dropped while its attach is in flight never boots", () => 
     }));
     const tiles = paneTiles();
     const base = baseline();
+    await bootPaneB(tiles);
+    // A's first load hits an invalid token (B's boot is done, so the rejection is A's).
+    vi.mocked(assets.openPackAssetFrame).mockRejectedValueOnce(new PackAssetTokenInvalidError(BACKROOMS.id));
     const loading = tiles.load(BACKROOMS.id, BACKROOMS);
     const dropped = tiles.sandboxFor(BACKROOMS.id);
-    await sleeping; // the first load hit an invalid token; the rebuild waits to retry
+    await sleeping; // the rebuild waits to retry
     const loads = vi.spyOn(dropped, "loadModule");
     tiles.drop(BACKROOMS.id);
-    wake();
+    wake(); // the wait ends: a retry that was not stopped would boot A now
     await loading;
     expect.soft(loads, "loadModule on the dropped sandbox after the drop").toHaveBeenCalledTimes(0);
+    dropPaneBLast(tiles);
     expectGone(dropped, base);
   });
 });
