@@ -163,6 +163,20 @@ export class TileHealthMonitor {
     this.noteVizWrite();
   }
 
+  /**
+   * #242 N5: the tile's sandbox went (drop or restart). Both counts go together: a write count
+   * restarted from 0 against a kept last count would read as "not drawing".
+   */
+  forgetSandboxWrites(tileId: string): void {
+    this.sandboxWriteGenByTile.delete(tileId);
+    this.lastSandboxGenByTile.delete(tileId);
+  }
+
+  /** Test hook: the tile's sandbox write count and the count at its last check (undefined: none kept). */
+  sandboxWriteCounts(tileId: string): { gen: number | undefined; lastGen: number | undefined } {
+    return { gen: this.sandboxWriteGenByTile.get(tileId), lastGen: this.lastSandboxGenByTile.get(tileId) };
+  }
+
   setPackDrawingNothing(on: boolean): void {
     this.packDrawingNothing = on;
   }
@@ -490,7 +504,7 @@ export class TileHealthMonitor {
     this.graceUntil.delete(tileId);
     this.lastPackByTile.delete(tileId);
     this.liveBlankReads.delete(tileId);
-    this.lastSandboxGenByTile.delete(tileId);
+    this.forgetSandboxWrites(tileId);
     this.frozenByTile.delete(tileId);
     this.setLiveBlank(tileId, null);
     this.observers.get(tileId)?.disconnect();

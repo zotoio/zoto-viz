@@ -11,14 +11,18 @@ import { DEFAULT_DREAM, NetScene } from "../graph/scene";
 import { loadShippedPackSpec } from "../plugins/fixtures/host-idle-shipped-packs";
 import { PluginSandbox, sandboxSetSizesForTests, setPluginModuleSandboxUrlForTests } from "../plugins/host";
 import { applyPluginCatalog, type PluginView } from "../plugins/plugin";
+import { TileHealthMonitor, type TileHealthDeps } from "../plugins/tile-health-monitor";
 import { resetVizDriveState } from "../plugins/viz-drive";
+import { mockPartial } from "../../test-support/mock-partial";
 import { attachPaneSandbox, TileSandboxes } from "./tile-sandboxes";
 
 /**
  * #242 part 2 (follow-up to #233).
  * N3: a pane the mosaic removes unloads its own sandbox at once, through the mosaic's pane-drop hook
  * (main.ts: tileSandboxes.drop), not at the next present's throttled sync. No present runs here.
- * Revert: N3 the onPaneDrop call in Mosaic.dropPane.
+ * N5: tile-health's per-tile sandbox write counts go when the pane's sandbox goes (drop, restart)
+ * and on resetTile; a pane re-added under the same id is counted from scratch.
+ * Reverts: N3 the onPaneDrop call in Mosaic.dropPane; N5 the forgetSandboxWrites call in drop().
  */
 
 const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
@@ -28,7 +32,7 @@ const IDS = ["plugin:talkers", "plugin:load", "plugin:memory", "plugin:backrooms
 /** The pane that runs its own sandbox (not the wall's main pane). */
 const PANE = IDS[3];
 
-describe("#242 part 2: a removed pane's sandbox goes at once", () => {
+describe("#242 part 2: a removed pane's sandbox goes at once, and its write counts with it", () => {
   const made: PluginSandbox[] = [];
   let opened = 0;
   let packAssetFrame: typeof import("../plugins/pack-asset-frame");
@@ -168,9 +172,73 @@ describe("#242 part 2: a removed pane's sandbox goes at once", () => {
     expectPaneSandboxGone(tiles, own, base, listeners, "right after the wall goes off");
   });
 
-  it("wiring: main.ts drops a removed pane's sandbox from the mosaic", () => {
+  it("(N5) drop, restart and resetTile forget the pane's write counts; a re-added pane counts from scratch", async () => {
+    let mon: TileHealthMonitor | null = null;
+    const tiles = paneTiles({
+      attach: async () => {},
+      noteWrite: (id) => mon?.noteSandboxWrite(id),
+      forgetSandboxWrites: (id) => mon?.forgetSandboxWrites(id),
+    });
+    const deps: TileHealthDeps = {
+      host: mockPartial<RenderHost>({ software: true }),
+      mainScene: mockPartial<NetScene>({}),
+      mosaic: mockPartial<NonNullable<TileHealthDeps["mosaic"]>>({ on: true, tileIds: [PANE] }),
+      paneEl: () => null,
+      sceneFor: () => null,
+      packFor: () => BACKROOMS,
+      mayBeStatic: () => false,
+      awaitingApproval: () => false,
+      isVisible: () => true,
+      showErrors: () => false,
+      tabVisible: () => true,
+      onScreen: () => true,
+      onHeal: () => {},
+      packLive: () => true,
+    };
+    const health = new TileHealthMonitor(deps);
+    mon = health;
+    let at = 0;
+    /** One tile check (explicit times, 60 s apart): it keeps the write count it saw. */
+    const check = (): void => {
+      at += 60_000;
+      health.runChecks(1, at);
+    };
+    const writeAndCheck = (): void => {
+      health.noteSandboxWrite(PANE);
+      check();
+      health.noteSandboxWrite(PANE);
+    };
+    const none = { gen: undefined, lastGen: undefined };
+
+    await tiles.load(PANE, BACKROOMS);
+    writeAndCheck();
+    expect(health.sandboxWriteCounts(PANE), "counts while the pane's sandbox writes").toEqual({ gen: 2, lastGen: 1 });
+    tiles.drop(PANE);
+    expect.soft(health.sandboxWriteCounts(PANE), "counts after the pane drops").toEqual(none);
+
+    await tiles.load(PANE, BACKROOMS);
+    health.noteSandboxWrite(PANE);
+    expect.soft(health.sandboxWriteCounts(PANE), "a re-added pane's first write counts from scratch").toEqual({ gen: 1, lastGen: undefined });
+    check();
+    health.noteSandboxWrite(PANE);
+    check();
+    expect.soft(health.sandboxWriteCounts(PANE), "the re-added pane's counts at its next checks").toEqual({ gen: 2, lastGen: 2 });
+
+    await tiles.restart(PANE);
+    expect.soft(health.sandboxWriteCounts(PANE), "counts after the pane restarts").toEqual(none);
+
+    writeAndCheck();
+    health.resetTile(PANE);
+    expect.soft(health.sandboxWriteCounts(PANE), "counts after resetTile").toEqual(none);
+    tiles.drop(PANE);
+    health.dispose();
+  });
+
+  it("wiring: main.ts drops a removed pane's sandbox from the mosaic, and forgets its write counts", () => {
     const main = readFileSync(path.join(REPO, "web/src/app/main.ts"), "utf8");
     const mosaicCfg = main.slice(main.indexOf("mosaic = new Mosaic({"), main.indexOf("pickSuffix:", main.indexOf("mosaic = new Mosaic({")));
     expect(mosaicCfg).toContain("onPaneDrop: (id) => tileSandboxes.drop(id),");
+    const sandboxesCfg = main.slice(main.indexOf("const tileSandboxes = new TileSandboxes<PluginSandbox>({"), main.indexOf("function sharedUboPanes("));
+    expect(sandboxesCfg).toContain("forgetSandboxWrites: (tileId) => tileHealth?.forgetSandboxWrites(tileId),");
   });
 });

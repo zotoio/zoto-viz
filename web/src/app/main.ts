@@ -552,6 +552,7 @@ const tileSandboxes = new TileSandboxes<PluginSandbox>({
   afterReady: () => { void syncPluginSky(null, refreshPluginSignal.signal).catch(() => {}); },
   noticeHost: () => mosaic,
   noteWrite: (tileId) => tileHealth?.noteSandboxWrite(tileId),
+  forgetSandboxWrites: (tileId) => tileHealth?.forgetSandboxWrites(tileId),
 });
 /** #233: panes the shared sandbox's UBO reaches (a pane with its own sandbox draws its own). */
 function sharedUboPanes(): { tileIds: readonly string[]; graphScene: (id: string) => NetScene | null } | null {
