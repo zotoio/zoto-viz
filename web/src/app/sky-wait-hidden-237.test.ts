@@ -134,6 +134,36 @@ describe("#237: the sky-wait deadline counts visible time only", () => {
     expectCouldntStartWithRetry(pane, waits);
   });
 
+  it("(d) no leak: the visibility listener goes with the last wait, and dispose removes it and its timers", () => {
+    const added = vi.spyOn(document, "addEventListener");
+    const removed = vi.spyOn(document, "removeEventListener");
+    const visHandlers = (spy: typeof added) => spy.mock.calls.filter((c) => c[0] === "visibilitychange").map((c) => c[1]);
+
+    const { scene, waits } = boot();
+    waits.begin(KEY);
+    landWhenDrawn(waits, KEY, scene, SKY);
+    expect(visHandlers(added)).toHaveLength(1);
+    scene.draw(SKY);
+    expect(waits.state(KEY)).toBeNull();
+    expect(visHandlers(removed)).toEqual(visHandlers(added));
+    vi.advanceTimersByTime(1000); // the landed card's fade-out
+
+    const other = boot();
+    other.waits.begin(KEY);
+    other.waits.begin("plugin:koi-pond");
+    setVisibility("hidden");
+    setVisibility("visible");
+    expect(vi.getTimerCount()).toBeGreaterThan(0);
+    other.waits.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+    expect(visHandlers(removed)).toEqual(visHandlers(added));
+    setVisibility("hidden");
+    setVisibility("visible");
+    vi.advanceTimersByTime(SKY_WAIT_DEADLINE_MS * 2);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(other.waits.state(KEY)).toBeNull();
+  });
+
   it("(c) control, always visible: couldn't start with Retry at 45 s", () => {
     const { pane, waits, retries } = boot();
     waits.begin(KEY);
