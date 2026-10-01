@@ -152,7 +152,9 @@ describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger,
     expect(["auto", "scroll"], "solo box scrolls on y (#250)").toContain(styleOf(solo.line, "overflow-y"));
     expect(styleOf(solo.line, "touch-action"), "a finger pans it on y (pan-y or auto, never none)").toMatch(/^(auto|pan-y)$/);
     // The scrim and the line inherit the box's pointer: none of them opts back out.
-    for (const r of RULES.filter((x) => x.selectors.some((s) => s.startsWith(".tile-cant-draw::before")))) {
+    const scrims = RULES.filter((x) => x.selectors.some((s) => s.startsWith(".tile-cant-draw::before")));
+    expect(scrims, "style.css still has the .tile-cant-draw::before scrim rules").not.toHaveLength(0);
+    for (const r of scrims) {
       expect(r.decls.get("pointer-events")?.value ?? "", "scrim keeps the box's pointer").not.toBe("none");
     }
     expect(styleOf(solo.text, "pointer-events"), "text keeps the box's pointer").not.toBe("none");
