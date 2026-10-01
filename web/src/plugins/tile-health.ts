@@ -83,6 +83,15 @@ export function tileFeedsPaused(sources: Record<string, SourceLive> | undefined,
   return all.length > 0 && all.every((s) => s.paused === true);
 }
 
+/**
+ * #227: the tile's view state is cant-draw (its own shader failed, or the shared context is lost).
+ * Like couldn't-start, the tile already says why it is empty; health checks skip it until the
+ * state clears (its shader compiles, its pack is swapped or updated, or the context is back).
+ */
+export function tileCantDraw(state: { kind: string } | null | undefined): boolean {
+  return state?.kind === "cant-draw";
+}
+
 /** True when this 2 s check should count as EMPTY. */
 export function classifyTileEmpty(input: TileEmptyInput): EmptyReason | null {
   if (input.signals.contextLost) return "context-lost";
