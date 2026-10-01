@@ -238,6 +238,7 @@ import {
 } from "./main-viz-tile-lines";
 import { vizClockMs } from "../core/viz-clock";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
+import { TileSandboxes, ownsSandboxTile } from "./tile-sandboxes";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -531,6 +532,31 @@ let pluginSpecs: PluginView[] = [];
 let catalogReady = false;
 let settings!: Settings;
 const sandbox = new PluginSandbox();
+/** #233: a sandbox per mosaic pane showing a sandboxed pack; `sandbox` keeps solo and the driven tile. */
+const tileSandboxes = new TileSandboxes<PluginSandbox>({
+  main: sandbox,
+  create: () => new PluginSandbox(),
+  drivenTile: () => sandboxVizTileId(),
+  target: (id) => (mosaic?.on ? mosaic.graphScene(id) : null),
+  mayLoad: (spec) => tsPluginsAllowed() && !packNeedsConsent(spec),
+  attach: async (sb, spec, tileId) => {
+    const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
+    await runPackAssetProtectedLoad(tileId, spec.name ?? spec.id, mosaic, async () => {
+      await attachPluginFrontend(sb, spec, { ...sandboxPluginConfig(spec), ...hostTileConfig() });
+    });
+  },
+  // #226 per tile: the pane's sky installs once its own pack is ready.
+  afterReady: () => { void syncPluginSky(null, refreshPluginSignal.signal).catch(() => {}); },
+  noticeHost: () => mosaic,
+  // #227 follow-up: tileHealth.noteSandboxWrite(tileId) once the monitor counts writes per tile.
+  noteWrite: () => tileHealth?.noteSandboxWrite(),
+});
+/** #233: panes the shared sandbox's UBO reaches (a pane with its own sandbox draws its own). */
+function sharedUboPanes(): { tileIds: readonly string[]; graphScene: (id: string) => NetScene | null } | null {
+  const m = mosaic;
+  if (!m?.on) return null;
+  return { tileIds: tileSandboxes.sharedTiles(m.tileIds), graphScene: (id) => m.graphScene(id) };
+}
 const pluginSfx = new PluginSfx();
 let vizWriter: VizBufferWriter | null = null;
 let vizFrameClockMs: MonoMs = monoMs(0);
@@ -623,7 +649,7 @@ scene.afterLook = () => {
     );
     vizWriter.writeBuffer(0, drive.slot0);
     vizWriter.writeBuffer(1, drive.slot1);
-    broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
+    broadcastPluginUbo(scene, vizWriter.ubo, sharedUboPanes());
     return;
   }
   if (mode.pluginId !== "stereo-gram" || !vizWriter) {
@@ -650,7 +676,7 @@ scene.afterLook = () => {
   // The sky only draws; the scene is built here once per frame.
   const frame = buildStereoFrame({ timing, clock, act: drive[0]!, level: heard.level, bins: stereoBins, ai });
   for (let s = 0; s < STEREO_FRAME_SLOTS; s++) vizWriter.writeBuffer(1 + s, frame.subarray(s * 64, (s + 1) * 64));
-  broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
+  broadcastPluginUbo(scene, vizWriter.ubo, sharedUboPanes());
 };
 /** The mosaic tile the single sandbox drives ("main" outside the mosaic). */
 function sandboxVizTileId(): string {
@@ -671,6 +697,7 @@ function hostMeshCanPlace(packId: string): boolean {
 /** Mosaic pane showing a sandboxed pack that the single sandbox is not driving. */
 function mosaicPanePreviewOnly(tileId: string): boolean {
   if (!mosaic?.on || tileId === "main" || tileId === modeSel.value) return false;
+  if (tileSandboxes.wants(tileId, pluginSpecForMode(tileId))) return false;
   return pluginHasFrontend(pluginSpecForMode(tileId));
 }
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
@@ -683,7 +710,7 @@ function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
     vizBudget.reset();
     vizHud.resetSkipBaseline();
   }
-  if (writer && preserveUbo && !resetFrameTs) broadcastPluginUbo(scene, writer.ubo, mosaic?.on ? mosaic : null);
+  if (writer && preserveUbo && !resetFrameTs) broadcastPluginUbo(scene, writer.ubo, sharedUboPanes());
   refreshPluginDriveForMode(spec ?? activePluginSpec, modeSel.value);
   syncHostRenderGovernorForSpec(renderScaleGovernorHost, spec);
   void hostMeshBridge.mountPack(spec);
@@ -699,7 +726,7 @@ sandbox.handlers = {
   writeBuffer: (slot: number, data: number[]) => {
     tileHealth?.noteSandboxWrite();
     if (vizWriter?.writeBuffer(slot, data).ok) {
-      broadcastPluginUbo(scene, vizWriter.ubo, mosaic?.on ? mosaic : null);
+      broadcastPluginUbo(scene, vizWriter.ubo, sharedUboPanes());
       tryApplyHostMeshBridge(
         hostMeshBridge,
         activePluginSpec,
@@ -723,7 +750,7 @@ sandbox.handlers = {
     applyVizWriteBatch(vizWriter, batch, {
       onBuffer: () => {
         tileHealth?.noteSandboxWrite();
-        broadcastPluginUbo(scene, vizWriter!.ubo, mosaic?.on ? mosaic : null);
+        broadcastPluginUbo(scene, vizWriter!.ubo, sharedUboPanes());
       },
       onUniform: (name, value) => {
         tileHealth?.noteSandboxWrite();
@@ -809,6 +836,8 @@ const vizPresentHost: VizPresentDeliverHost = {
     lastVizFrame = frame;
     tileHealth?.noteVizFrameDelivered();
   },
+  paneSandboxesLive: () => tileSandboxes.size > 0,
+  deliverPaneFrame: (frame) => tileSandboxes.frame(frame),
 };
 
 function shownForVizDeliver(): StateMsg | null {
@@ -1568,8 +1597,10 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
     const tileSpec = (id: string): PluginView | null => (id === wall?.tile ? wall.spec : pluginSpecForMode(id));
     const wantSky = (m: Mosaic, id: string): boolean =>
       id === wall?.tile || mosaicPluginSkyPaneView(id, m.paneSky(id), lookForMode).wantPlugin;
+    // #233 / #226: a pane whose own sandbox is still booting gets its sky after that ready.
+    const skyTiles = mosaic.tileIds.filter((id) => !tileSandboxes.awaitingReady(id));
     try {
-      for (const id of mosaic.tileIds) {
+      for (const id of skyTiles) {
         const target = mosaic.graphScene(id);
         const pane = tileSpec(id);
         if (!target || !pane || target.pluginSkyDrawn === pane.id) continue;
@@ -1581,7 +1612,7 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
       // Each tile loads on its own and settles its own pane when its own load ends, so one held
       // sky (Backrooms first in the list) never keeps the other panes covered by the warming state.
       const m = mosaic;
-      await loadTilesSettlingEach(m.tileIds, signal, async (id) => {
+      await loadTilesSettlingEach(skyTiles, signal, async (id) => {
         const target = m.graphScene(id);
         if (!target) return;
         const pane = tileSpec(id);
@@ -1601,6 +1632,7 @@ async function syncPluginSky(spec: PluginView | null, signal: AbortSignal): Prom
 }
 
 function teardownMosaicPanelView(viewId: string): void {
+  tileSandboxes.drop(viewId);
   releasePanelView(viewId);
   dropMosaicTileWriter(viewId);
 }
@@ -2376,7 +2408,8 @@ mosaic = new Mosaic({
       settings.openView(id);
     },
   }),
-  pickSuffix: (modeId) => (pluginHasFrontend(pluginSpecForMode(modeId)) ? " (full view only)" : ""),
+  pickSuffix: (modeId) => (pluginHasFrontend(pluginSpecForMode(modeId)) && !ownsSandboxTile(modeId, sandboxVizTileId())
+    ? " (full view only)" : ""),
   wallSkyTile: () => wallViewSky()?.tile ?? null,
   paneDice: (id) => makePaneDiceButton({
     pane: id,
@@ -2397,14 +2430,14 @@ async function healTile(tileId: string, step: HealStep): Promise<void> {
   const spec = pluginSpecForMode(modeId);
   switch (step) {
     case "resend-frame":
-      if (lastVizFrame) sandbox.frame(lastVizFrame);
+      if (lastVizFrame) tileSandboxes.sandboxFor(tileId).frame(lastVizFrame);
       break;
     case "restart-pack": {
       const m = modeById(modeId);
       const sc = tileId === "main" ? scene : mosaic?.graphScene(tileId) ?? null;
       if (sc) setSceneMode(sc, m, optsFor(m));
       if (spec && modeSel.value === m.id) await loadTsPlugin(spec, refreshPluginSignal.signal);
-      else void syncPluginSky(spec, refreshPluginSignal.signal).catch(() => {});
+      else if (!(await tileSandboxes.restart(tileId))) void syncPluginSky(spec, refreshPluginSignal.signal).catch(() => {});
       sc?.refresh();
       break;
     }
@@ -2442,7 +2475,8 @@ tileHealth = createProductionTileHealthMonitor({
   },
   showErrors: () => tileHealErrorsOn,
   onHeal: (tileId, step) => healTile(tileId, step),
-  packLive: (id, packId) => (id === "main" || id === modeSel.value) && sandbox.readyPack === packId,
+  packLive: (id, packId) => ((id === "main" || id === modeSel.value) && sandbox.readyPack === packId)
+    || tileSandboxes.readyPackFor(id) === packId,
   previewOnly: (id) => mosaicPanePreviewOnly(id),
   skyStarting: (id) => tileSkyStarting(id),
   onLiveBlank: (id, packId, blank) => onLiveBlank(id, packId, blank),
@@ -2473,6 +2507,8 @@ addPresentListener(() => {
   const now = performance.now();
   if (now - previewCaptionAt < 500) return;
   previewCaptionAt = now;
+  const m = mosaic;
+  tileSandboxes.sync(m?.on ? m.tileIds.map((id) => ({ id, spec: pluginSpecForMode(id) })) : []);
   mosaic?.syncPreviewCaptions(mosaicPanePreviewOnly);
 });
 

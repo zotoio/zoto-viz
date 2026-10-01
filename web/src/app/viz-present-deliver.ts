@@ -57,6 +57,10 @@ export interface VizPresentDeliverHost {
   noteVizWrite?: () => void;
   /** Production tile-health: a viz frame was delivered to the sandbox. */
   onVizFrameDelivered?: (frame: VizDataFrame) => void;
+  /** #233: mosaic panes running their pack in a sandbox of their own. */
+  paneSandboxesLive?: () => boolean;
+  /** #233: the same delivered frame, once to each pane's own sandbox. */
+  deliverPaneFrame?: (frame: VizDataFrame) => void;
 }
 
 /** One viz budget deliver + sandbox frame (display cadence, not websocket cadence). */
@@ -74,7 +78,9 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
     ? (host.mosaic.focusedId || host.mosaic.mainMode || host.mosaic.tileIds[0] || "main")
     : "main";
   host.syncPanelPackSub(packPanelId, !!(packId && (active?.capabilities?.includes("viz.read") || packId)));
-  if (!(active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks)) {
+  // #233: only panes with their own sandbox want frames; the shared view's path stays idle.
+  const panesOnly = !(active?.capabilities?.includes("viz.read") || packId || mosaicDemoPacks);
+  if (panesOnly && !host.paneSandboxesLive?.()) {
     host.vizHud.syncStatusPanels([]);
     host.vizHud.clearStatus();
     paintPackInfoCaption(host.scene.viewEl, null);
@@ -84,7 +90,7 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
   host.syncVizBudgetTileScope();
 
   const vizWriter = host.getVizWriter();
-  if (!vizWriter && active) host.bindVizWriter(active);
+  if (!vizWriter && active && !panesOnly) host.bindVizWriter(active);
 
   const audio = host.scene.pulseNow.bass;
   const idle = active?.viz?.idle;
@@ -108,6 +114,8 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
       return mainVizBuildFrame(s, pt, a, idle, bind, active?.viz?.contract ?? 2);
     },
     onFrame: (f) => {
+      host.deliverPaneFrame?.(f);
+      if (panesOnly) return;
       host.onVizFrameDelivered?.(f);
       if (packId === "stereo-gram") f.spectrum = host.scene.heardSpectrum(STEREO_BINS).spectrum;
       const coalesceMosaic = !!(host.mosaic?.on && mosaicDemoPacks);
@@ -133,6 +141,12 @@ export function tickVizPresentDeliver(shown: StateMsg, host: VizPresentDeliverHo
     },
   });
   host.setVizFrameClockMs(delivered.nextClockMs);
+  if (panesOnly) {
+    host.vizHud.syncStatusPanels([]);
+    host.vizHud.clearStatus();
+    paintPackInfoCaption(host.scene.viewEl, null);
+    return;
+  }
 
   const frame = delivered.frame;
   if (host.mosaic?.on && scopeTileIds.length > 1) {
