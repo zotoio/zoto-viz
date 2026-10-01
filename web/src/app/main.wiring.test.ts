@@ -1,24 +1,8 @@
-import { readFileSync } from "node:fs";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { SERVER_RESTART_NOTICE } from "../core/http-copy";
-
-const here = path.dirname(fileURLToPath(import.meta.url));
-const indexHtml = readFileSync(path.join(here, "../../index.html"), "utf8");
-const bodyHtml = (indexHtml.match(/<body[^>]*>([\s\S]*)<\/body>/i)?.[1] ?? "").replace(
-  /<script[\s\S]*?<\/script>/gi,
-  "",
-);
-
-class MockWebSocket {
-  static instances: MockWebSocket[] = [];
-  constructor(_url: string) {
-    MockWebSocket.instances.push(this);
-  }
-  close() {}
-  addEventListener() {}
-}
+// #239: the page first, then main.ts, both while the file is collected (see main-entry-env.ts).
+import { MockWebSocket } from "../../test-support/main-entry-env";
+import "./main";
 
 async function settleMainBoot(): Promise<void> {
   await vi.waitFor(
@@ -43,10 +27,6 @@ describe("main entry wiring", () => {
 
   beforeEach(async () => {
     expect.hasAssertions();
-    document.body.innerHTML = bodyHtml;
-    vi.stubGlobal("WebSocket", MockWebSocket);
-    vi.resetModules();
-    await import("./main");
     await settleMainBoot();
   });
 
