@@ -376,7 +376,8 @@ describe("#185 a lint block tells the user in plain words (no rule ids, paths or
 
   it("every rule has a plain sentence; repeats collapse to one; unknown rules get the fallback", () => {
     for (const [rule, sentence] of Object.entries(PACK_LINT_PLAIN_SUMMARY)) {
-      expect(sentence, rule).toMatch(/^it .+\.$/);
+      // #171 (b) UX Pro: the uniform blocks' sentence is "its graphics code has an error …".
+      expect(sentence, rule).toMatch(/^its? .+\.$/);
       expectPlain(sentence);
     }
     expect(plainBlockSummary([{ rule: "sandbox-escape" }, { rule: "sandbox-escape" }, { rule: "sandbox-escape" }])).toBe(
