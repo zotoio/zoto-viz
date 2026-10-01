@@ -107,7 +107,7 @@ def test_a_fresh_install_that_does_not_build_says_so_and_is_not_a_block(caplog: 
     assert out.get("message") == FRESH, out
     assert out.get("reasonCode") == BUILD_FAILED_CODE, out
     assert out.get("error") == "pack_install_blocked", out
-    _plain(str(out.get("error")) + " " + str(out.get("message")))
+    _plain(str(out.get("message")))
     assert "Expected identifier" in caplog.text, "the raw build error is in the log"
 
 
@@ -137,7 +137,8 @@ def test_the_plugin_scan_rows_for_a_pack_that_does_not_build() -> None:
     assert len(rows) == 1, rows
     assert rows[0].get("message") == FRESH, rows
     assert rows[0].get("reasonCode") == BUILD_FAILED_CODE, rows
-    _plain(str(rows[0].get("error")) + " " + str(rows[0].get("message")))
+    _plain(str(rows[0].get("message")))
+    assert rows[0].get("error") == "pack_install_blocked", rows
 
     drop.unlink()
     _install_v1()
