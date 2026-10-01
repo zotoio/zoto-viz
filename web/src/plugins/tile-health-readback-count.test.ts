@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TileHealthMonitor, type TileHealthDeps } from "./tile-health-monitor";
 import { TILE_CHECK_MS, TILE_HEALTH_PATCHES, TilePatchSampler } from "./tile-health";
 import { LumaProbe } from "../graph/lumaProbe";
@@ -64,9 +64,13 @@ function monitorOver(tiles: string[]) {
 }
 
 describe("five-patch health sampler: readback count and allocation", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("600 frames with one sample due issue exactly 5 readbacks (heal timer, not per frame)", () => {
     const { mon, readPixels } = monitorOver(["main"]);
-    const base = performance.now() + TILE_CHECK_MS * 10; // past the first check interval
+    const base = TILE_CHECK_MS * 10; // fixed, past the first check interval
     for (let f = 0; f < 600; f++) mon.tick(base + f); // 600 ms of frames < one TILE_CHECK_MS
     expect(readPixels).toHaveBeenCalledTimes(TILE_HEALTH_PATCHES);
   });
@@ -74,7 +78,7 @@ describe("five-patch health sampler: readback count and allocation", () => {
   it("2x2 mosaic: at most 5 readbacks per tile per check window, one tile checked per stagger slot", () => {
     const tiles = ["a", "b", "c", "d"];
     const { mon, readPixels } = monitorOver(tiles);
-    const base = performance.now() + TILE_CHECK_MS * 10;
+    const base = TILE_CHECK_MS * 10;
     for (let f = 0; f < 600; f++) mon.tick(base + f * (TILE_CHECK_MS / 600)); // one full window
     // 4 stagger slots in one window → each tile sampled once → 4 × 5 reads, not 600 × anything.
     expect(readPixels.mock.calls.length).toBe(tiles.length * TILE_HEALTH_PATCHES);
@@ -84,12 +88,16 @@ describe("five-patch health sampler: readback count and allocation", () => {
     const { gl } = fakeGl();
     const probe = new LumaProbe(16, 60_000);
     const vp = { x: 0, y: 0, w: 400, h: 240 };
+    const base = TILE_CHECK_MS * 10;
+    // The probe stamps each harvest from the performance clock: pin that clock to the same fixed
+    // base, so the times passed here are the only time in the row (stale at base + 4000, fresh at base).
+    vi.spyOn(performance, "now").mockReturnValue(base);
     let first: Uint8Array | null = null;
     let samples = 0;
     for (let i = 0; i < 100; i++) {
       // Stale → queue five reads (null), then harvest them → the joined five-patch buffer.
-      expect(probe.sampleForHealth(gl, vp, performance.now() + 4000)).toBeNull();
-      const b = probe.sampleForHealth(gl, vp, performance.now());
+      expect(probe.sampleForHealth(gl, vp, base + 4000)).toBeNull();
+      const b = probe.sampleForHealth(gl, vp, base);
       expect(b).not.toBeNull();
       first ??= b;
       expect(b).toBe(first);
