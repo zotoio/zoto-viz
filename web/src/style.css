@@ -506,8 +506,10 @@ body.mosaic .gfx-wall-notice { top: 12px; }
    paint above the bar's z 5 (#248). So the solo line's box starts at the header's measured height
    (--bar-h, as .gfx-wall-notice does, #236) and scrolls inside itself: overflow clips at the box's top
    edge, so nothing in it can cross the bar on a short window. Safe centring keeps a too-tall line
-   reachable by scrolling instead of spilling past the top. Mosaic panes already sit under the bar. */
-body:not(.mosaic) #scene > .tile-cant-draw { top: var(--bar-h); overflow-y: auto; }
+   reachable by scrolling instead of spilling past the top. Mosaic panes already sit under the bar.
+   #251: the solo box takes the pointer so a wheel or a finger scrolls an overflowing line (pan-y; the
+   scrim and text inherit it). Presses on its empty part still bubble to #scene, the scene's input. */
+body:not(.mosaic) #scene > .tile-cant-draw { top: var(--bar-h); overflow-y: auto; pointer-events: auto; touch-action: pan-y; }
 body:not(.mosaic) #scene > .tile-cant-draw[data-reason="context-lost"] { justify-content: safe center; }
 /* #179 c: while a tile shows its couldn't-draw line, that tile's floating graph labels are hidden. */
 [data-cant-draw-surface] .label { visibility: hidden; }

@@ -1468,6 +1468,8 @@ export class NetScene implements HostedView, RenderScalePane {
     };
     const { signal } = this.listenerAbort;
     this.inputEl.addEventListener("wheel", (e) => {
+      // #251: over a couldn't-draw line that scrolls itself (solo), the wheel scrolls it: no camera, no preventDefault.
+      if (inScrollingCantDrawLine(e.target)) return void e.stopImmediatePropagation();
       e.preventDefault();
       e.stopImmediatePropagation();
       this.pinUserCamera();
@@ -5092,4 +5094,11 @@ export { fmtBytes };
 export function isOverlayControl(target: EventTarget | null): boolean {
   const el = target instanceof Element ? target : null;
   return !!el?.closest("button, a[href], input, select, textarea, [role=button]");
+}
+
+/** #251: the target is inside a tile's couldn't-draw line whose box scrolls on y (style.css: the solo line). */
+export function inScrollingCantDrawLine(target: EventTarget | null): boolean {
+  const line = target instanceof Element ? target.closest(".tile-cant-draw") : null;
+  const overflowY = line ? line.ownerDocument.defaultView?.getComputedStyle(line).overflowY : undefined;
+  return overflowY === "auto" || overflowY === "scroll";
 }

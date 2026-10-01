@@ -93,6 +93,9 @@ export function paintCantDrawSurface(tileId: string, viewName: CantDrawViewName,
   button.textContent = copy.button;
   if (copy.action) button.dataset.action = copy.action;
   button.onclick = () => pack.retry(tileId);
+  // #251: the press stays on Retry. The tile's orbit handler (on the hosted tile) would capture the
+  // pointer, and a captured pointerup moves the click off Retry (as pack-asset-pane-notice's Retry).
+  button.onpointerdown = (e) => e.stopPropagation();
   box.replaceChildren(text, button);
 }
 
