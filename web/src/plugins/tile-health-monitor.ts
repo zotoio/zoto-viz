@@ -82,6 +82,8 @@ export interface TileHealthDeps {
   onCantStart?: (tileId: string, packId: string) => boolean;
   /** Optional (#216): the tile shows couldn't-start. Not judged until Retry starts it again. */
   couldntStart?: (tileId: string) => boolean;
+  /** Optional (#227): the tile shows cant-draw. Not judged until that state clears. */
+  cantDraw?: (tileId: string) => boolean;
   /**
    * Optional (#230): the tile's feeds are paused. Like sky speed 0 (read off the tile's scene), the
    * picture then holds still on purpose, so an unchanged picture is not counted as stalled.
@@ -268,7 +270,8 @@ export class TileHealthMonitor {
       this.liveBlankReads.delete(tileId);
       this.setLiveBlank(tileId, null);
     }
-    if (this.deps.previewOnly?.(tileId) || this.deps.skyStarting?.(tileId) || this.deps.couldntStart?.(tileId)) {
+    if (this.deps.previewOnly?.(tileId) || this.deps.skyStarting?.(tileId) || this.deps.couldntStart?.(tileId)
+      || this.deps.cantDraw?.(tileId)) {
       this.resetProgress(tileId);
       this.setLiveBlank(tileId, null);
       return;
