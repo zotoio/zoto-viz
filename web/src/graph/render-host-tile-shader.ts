@@ -249,8 +249,10 @@ export class RenderHostTileShader {
       this.fallbackTick = null;
     }
     this.fallbackTileIds.clear();
-    this.gfxNotice.onContextLost();
+    // #245: the emit sets the tiles' couldn't-draw marker; it goes first so the wall notice (#236) sees
+    // a solo tile that already says the loss and is hidden in the same call that inserts it.
     this.emit({ type: "context-lost", tileIds: this.drawTileIds() });
+    this.gfxNotice.onContextLost();
   }
 
   onSharedContextRestored(): void {
