@@ -566,6 +566,8 @@ export class PluginSandbox {
       this.iframe = null;
     }
     if (fid) await closePackAssetFrameForTile(tile, fid);
+    // #233: stays in liveSandboxes: its tile (and notice) remains until unload() tears it down,
+    // and that unload is what resets the scope, which is what this path did before #233.
     this.dropReady();
     registerPackNavigationRemove(tile, () => {
       this.navigationHost?.closeTile?.(tile);

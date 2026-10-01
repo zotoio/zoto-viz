@@ -238,7 +238,7 @@ import {
 } from "./main-viz-tile-lines";
 import { vizClockMs } from "../core/viz-clock";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
-import { TileSandboxes, ownsSandboxTile } from "./tile-sandboxes";
+import { TileSandboxes } from "./tile-sandboxes";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -697,8 +697,8 @@ function hostMeshCanPlace(packId: string): boolean {
 /** Mosaic pane showing a sandboxed pack that the single sandbox is not driving. */
 function mosaicPanePreviewOnly(tileId: string): boolean {
   if (!mosaic?.on || tileId === "main" || tileId === modeSel.value) return false;
-  if (tileSandboxes.wants(tileId, pluginSpecForMode(tileId))) return false;
-  return pluginHasFrontend(pluginSpecForMode(tileId));
+  // #233: the label and the pane's own sandbox come from one answer (ownsSandboxTile).
+  return tileSandboxes.previewOnly(tileId, pluginSpecForMode(tileId));
 }
 function bindVizWriter(spec: PluginView | null, preserveUbo = false): void {
   const contract = vizContractFor(spec) ?? (spec?.capabilities?.some((c) => c === "viz.write")
@@ -2408,8 +2408,7 @@ mosaic = new Mosaic({
       settings.openView(id);
     },
   }),
-  pickSuffix: (modeId) => (pluginHasFrontend(pluginSpecForMode(modeId)) && !ownsSandboxTile(modeId, sandboxVizTileId())
-    ? " (full view only)" : ""),
+  pickSuffix: (modeId) => (tileSandboxes.previewOnly(modeId, pluginSpecForMode(modeId)) ? " (full view only)" : ""),
   wallSkyTile: () => wallViewSky()?.tile ?? null,
   paneDice: (id) => makePaneDiceButton({
     pane: id,

@@ -8,6 +8,8 @@ import {
   type MosaicNoticeHost,
 } from "../plugins/plugin-pack-feed";
 import { registerPackAssetRetry } from "../plugins/pack-asset-frame";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
+import { setViewState, showViewState, viewStateOf } from "./view-state";
 import {
   bindVizWriterCore,
   defaultVizContract,
@@ -17,13 +19,41 @@ import {
 } from "../plugins/viz-host";
 import { applyVizWriteBatch } from "../plugins/viz-write-batch";
 
+/** Host wires a pane's own sandbox does not carry yet (follow-up to #233). */
+export type PaneSandboxGap = "config-push" | "present-tick" | "graph-read";
+
 /**
- * #233: one sandbox per mosaic tile. main.ts's shared `sandbox` keeps the solo view ("main") and
- * the mosaic tile it drives (sandboxVizTileId); every other pane that shows a sandboxed pack boots
- * it in a sandbox of its own, with its own iframe, module, writer, frames, notice and Retry.
+ * What the pack declares that a pane sandbox can't serve yet. The signals are the ones the host
+ * itself gates on: `config.read` (PluginSandbox.setConfig and mayPushSandboxOnPluginFields only
+ * push to packs that declare it), `viz.presentTick` (PluginSandbox.deliverPresentTick) and
+ * `graph.read` (PluginSandbox.tick).
  */
-export function ownsSandboxTile(tileId: string, drivenTileId: string): boolean {
-  return tileId !== "main" && tileId !== drivenTileId;
+export function paneSandboxGaps(spec: PluginView): PaneSandboxGap[] {
+  const gaps: PaneSandboxGap[] = [];
+  if (spec.capabilities?.includes("config.read")) gaps.push("config-push");
+  if (spec.viz?.presentTick === true) gaps.push("present-tick");
+  if (spec.capabilities?.includes("graph.read")) gaps.push("graph-read");
+  return gaps;
+}
+
+/**
+ * #233: the one decision for a mosaic pane: run its pack in a sandbox of its own (no "Preview
+ * only" label) or stay on main.ts's shared `sandbox` with the label, unchanged from main. The shared sandbox
+ * keeps the solo view ("main") and the tile it drives (sandboxVizTileId). A pane owns one only for
+ * a frontend pack it may load (hash, TS plugins on, consent) that needs none of paneSandboxGaps.
+ */
+export function ownsSandboxTile(
+  tileId: string,
+  drivenTileId: string,
+  spec: PluginView | null | undefined,
+  mayLoad: boolean,
+): spec is PluginView {
+  return tileId !== "main"
+    && tileId !== drivenTileId
+    && !!spec?.hash
+    && pluginHasFrontend(spec)
+    && mayLoad
+    && paneSandboxGaps(spec).length === 0;
 }
 
 /** The PluginSandbox surface a tile's sandbox needs (tests pass a stand-in). */
@@ -54,6 +84,7 @@ export interface TileSandboxDeps<S extends TileSandboxLike> {
   attach: (sandbox: S, spec: PluginView, tileId: string) => Promise<void>;
   /** After the tile's pack is ready: its sky installs now (#226 order, per tile). */
   afterReady?: (tileId: string) => void;
+  /** Pack-feed notices (a pack-asset reconnect, no feed) on the pane. */
   noticeHost?: () => MosaicNoticeHost | null | undefined;
   /** A write from the tile's own sandbox (tile-health hook; per tile once #227 lands). */
   noteWrite?: (tileId: string) => void;
@@ -104,19 +135,21 @@ export class TileSandboxes<S extends TileSandboxLike> {
     return tileIds.filter((id) => !this.byTile.has(id));
   }
 
-  /** The pane wants a sandbox of its own for `spec`. */
-  wants(tileId: string, spec: PluginView | null): spec is PluginView {
-    return !!spec?.hash
-      && pluginHasFrontend(spec)
-      && ownsSandboxTile(tileId, this.deps.drivenTile())
-      && this.deps.mayLoad(spec);
+  /** ownsSandboxTile for this host: the same answer drives the label and the sandbox. */
+  owns(tileId: string, spec: PluginView | null | undefined): spec is PluginView {
+    return ownsSandboxTile(tileId, this.deps.drivenTile(), spec, !!spec && this.deps.mayLoad(spec));
   }
 
-  /** Match the tiles on screen: boot a sandbox for each pane that wants one, unload the rest. */
+  /** "Preview only" / "(full view only)": a frontend pack the pane does not run itself (from owns()). */
+  previewOnly(tileId: string, spec: PluginView | null | undefined): boolean {
+    return pluginHasFrontend(spec) && !this.owns(tileId, spec);
+  }
+
+  /** Match the tiles on screen: boot a sandbox for each pane that owns one, unload the rest. */
   sync(tiles: readonly { id: string; spec: PluginView | null }[]): void {
     const keep = new Set<string>();
     for (const { id, spec } of tiles) {
-      if (!this.wants(id, spec)) continue;
+      if (!this.owns(id, spec)) continue;
       keep.add(id);
       const e = this.byTile.get(id);
       if (e && e.spec.id === spec.id && e.spec.hash === spec.hash) continue;
@@ -130,7 +163,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
     for (const e of this.byTile.values()) e.sandbox.frame(frame);
   }
 
-  /** Unload the tile's own sandbox; other tiles keep theirs. */
+  /** Unload the tile's own sandbox; other tiles keep theirs. Every pane teardown goes through here or load(). */
   drop(tileId: string): void {
     const e = this.byTile.get(tileId);
     if (!e) return;
@@ -159,19 +192,32 @@ export class TileSandboxes<S extends TileSandboxLike> {
     this.byTile.set(tileId, entry);
     const label = spec.name ?? spec.id;
     registerPackAssetRetry(tileId, label, () => { void this.restart(tileId); });
+    const viewId = mosaicTileViewId(tileId);
     try {
       await this.deps.attach(sandbox, spec, tileId);
       if (this.byTile.get(tileId) !== entry) return;
+      // An aborted or navigation-stopped load resolves without ready; that tile shows its own notice.
+      if (sandbox.readyPack !== spec.id) return;
       entry.ready = true;
       markSandboxStartupOk(tileId);
+      if (viewStateOf(tileId)?.kind === "couldnt-start") setViewState(tileId, viewId, { kind: "ready" });
       applyPackFeedPaneNotice(this.deps.noticeHost?.(), tileId, label);
       this.deps.afterReady?.(tileId);
     } catch (e) {
       if (this.byTile.get(tileId) !== entry) return;
       console.warn("zoto-viz plugin runtime:", tileId, e);
       markSandboxStartupFailed(tileId);
-      applyPackFeedPaneNotice(this.deps.noticeHost?.(), tileId, label);
       sandbox.unload();
+      // The solo wording and its Retry, on this pane only. The tile keeps its (failed) own sandbox:
+      // it never falls back to the shared one without the label.
+      const log = e instanceof Error ? e.message : String(e);
+      showViewState(
+        tileId,
+        viewId,
+        label,
+        { kind: "couldnt-start", reason: "load-failed", packId: spec.id, log },
+        { onRetry: () => { void this.restart(tileId); } },
+      );
     }
   }
 
