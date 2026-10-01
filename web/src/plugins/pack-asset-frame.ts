@@ -162,6 +162,11 @@ export function registerPackAssetRetry(tileId: string, packName: string, run: ()
   retryHandlers.set(tileId, { packName, run });
 }
 
+/** #233: drop the tile's Retry handler, only while it is still `run` (a newer one stays). */
+export function unregisterPackAssetRetry(tileId: string, run: () => void): void {
+  if (retryHandlers.get(tileId)?.run === run) retryHandlers.delete(tileId);
+}
+
 export function invokePackAssetRetry(tileId: string): boolean {
   const row = retryHandlers.get(tileId);
   if (!row) return false;

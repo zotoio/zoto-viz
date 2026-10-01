@@ -227,6 +227,8 @@ export class RenderHost {
   /** `recreateContext` asked for this loss; restore as soon as its lost event has been handled. */
   private selfLossPending = false;
   private restoreTimer: ReturnType<typeof setTimeout> | null = null;
+  /** WEBGL_lose_context, held from while the context was alive (#216); null on a software host. */
+  private loseContextExt: WEBGL_lose_context | null = null;
   private restoreDelays: readonly number[] = CONTEXT_RESTORE_RETRY_MS;
   private restoreAttempts = 0;
   /**
@@ -279,6 +281,7 @@ export class RenderHost {
         this.renderer.setClearColor(0x000000, 0);
         this.canvas = this.renderer.domElement;
         this.refreshContextAntialias();
+        this.cacheLoseContextExt();
       } catch {
         this.software = true;
         this.canvas = document.createElement("canvas");
@@ -323,6 +326,7 @@ export class RenderHost {
       const frameTs = frameTsFromRaf(ts);
       this.drewThisFrame = false;
       if (!this.glContextLost) {
+        this.cacheLoseContextExt();
         for (const v of this.views) v.hostFrame(frameTs);
       }
       if (this.noticeWaitsForDraw && this.drewThisFrame && !this.glContextLost) {
@@ -485,7 +489,33 @@ export class RenderHost {
   /** True when this host can request a lost WebGL context back itself (#179). */
   private canAskForContextRestore(): boolean {
     if (this.software) return false;
+    if (this.loseContextExt) return true;
     return typeof (this.renderer as Partial<THREE.WebGLRenderer>).forceContextRestore === "function";
+  }
+
+  /**
+   * Keep the context's WEBGL_lose_context extension while the context is alive (#216). A lost
+   * context hands back null from `getExtension`, and three caches that null, so its
+   * `forceContextRestore()` can never ask for a context lost by the browser. Called at creation and
+   * on every live frame (a no-op once held); one extension object serves the canvas's context for
+   * good, restores included.
+   */
+  private cacheLoseContextExt(): void {
+    if (this.software || this.loseContextExt) return;
+    const gl = this.renderer.getContext() as WebGL2RenderingContext | null;
+    if (!gl || typeof gl.getExtension !== "function" || gl.isContextLost?.() === true) return;
+    const ext = gl.getExtension("WEBGL_lose_context");
+    if (ext && typeof ext.restoreContext === "function") this.loseContextExt = ext;
+  }
+
+  /** Ask the browser for the context back: the cached extension, else three's own path. */
+  private requestContextRestore(): void {
+    const ext = this.loseContextExt;
+    if (ext) {
+      ext.restoreContext();
+      return;
+    }
+    (this.renderer as THREE.WebGLRenderer).forceContextRestore();
   }
 
   private onGlContextRestored(): void {
@@ -521,7 +551,7 @@ export class RenderHost {
     if (this.disposed || this.software || !this.glContextLost) return;
     this.restoreAttempts += 1;
     try {
-      (this.renderer as THREE.WebGLRenderer).forceContextRestore();
+      this.requestContextRestore();
     } catch { /* extension missing */ }
     this.dirty = true;
     const next = this.restoreDelays[this.restoreAttempts];
