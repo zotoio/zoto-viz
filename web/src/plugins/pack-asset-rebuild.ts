@@ -37,7 +37,7 @@ export function isPackAsset403(err: unknown): boolean {
   return isPackAssetTokenInvalid(err);
 }
 
-let rebuildSleepImpl: (ms: number, signal: AbortSignal) => Promise<void> = (ms, signal) => new Promise((resolve, reject) => {
+const defaultRebuildSleep = (ms: number, signal: AbortSignal): Promise<void> => new Promise((resolve, reject) => {
   if (signal.aborted) {
     reject(new DOMException("aborted", "AbortError"));
     return;
@@ -48,6 +48,7 @@ let rebuildSleepImpl: (ms: number, signal: AbortSignal) => Promise<void> = (ms, 
     reject(new DOMException("aborted", "AbortError"));
   }, { once: true });
 });
+let rebuildSleepImpl: (ms: number, signal: AbortSignal) => Promise<void> = defaultRebuildSleep;
 
 export function setRebuildSleepForTests(
   fn: (ms: number, signal: AbortSignal) => Promise<void>,
@@ -55,18 +56,9 @@ export function setRebuildSleepForTests(
   rebuildSleepImpl = fn;
 }
 
+/** #242: back to the one real sleep above, so a row after a reset still runs its timer clear. */
 export function resetRebuildSleepForTests(): void {
-  rebuildSleepImpl = (ms, signal) => new Promise((resolve, reject) => {
-    if (signal.aborted) {
-      reject(new DOMException("aborted", "AbortError"));
-      return;
-    }
-    const timer = setTimeout(resolve, ms);
-    signal.addEventListener("abort", () => {
-      clearTimeout(timer);
-      reject(new DOMException("aborted", "AbortError"));
-    }, { once: true });
-  });
+  rebuildSleepImpl = defaultRebuildSleep;
 }
 
 function isAbort(err: unknown): boolean {

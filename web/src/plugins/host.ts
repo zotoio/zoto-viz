@@ -294,9 +294,13 @@ export class PluginSandbox {
     window.addEventListener("message", this.onWindowMessage);
   }
 
-  /** This sandbox is no longer ready: only its own tile's drive drops while another tile's runs. */
+  /**
+   * This sandbox is no longer ready: only its own tile's drive drops while another tile's runs.
+   * #242 (N4): a sandbox that never became ready leaves the drive alone. Its late unload (a
+   * restarted pane's old attach settling) must not clear the new sandbox's writes on that tile.
+   */
   private dropReady(): void {
-    readySandboxes.delete(this);
+    if (!readySandboxes.delete(this)) return;
     if (readySandboxes.size) clearSandboxWrote(this.activeTileId);
     else setSandboxReady(false);
   }

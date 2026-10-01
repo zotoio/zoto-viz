@@ -331,9 +331,7 @@ let current: PackLintViolation[] = [];
 
 describe("pack lint guardrails", () => {
   beforeAll(() => {
-    const t0 = performance.now();
     current = scanAllGuardrails(repoRoot);
-    console.info(`pack-lint full-tree scan: ${Math.round(performance.now() - t0)} ms`);
   }, FULL_TREE_SCAN_TIMEOUT_MS);
 
   it("write baseline when PACK_LINT_WRITE_BASELINE=1", () => {

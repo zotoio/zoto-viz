@@ -105,6 +105,8 @@ export interface TileSandboxDeps<S extends TileSandboxLike> {
   noticeHost?: () => MosaicNoticeHost | null | undefined;
   /** A write from the tile's own sandbox (tile-health counts it for that tile only). */
   noteWrite?: (tileId: string) => void;
+  /** #242 N5: the tile's sandbox went (drop or restart): tile-health forgets its write counts for it. */
+  forgetSandboxWrites?: (tileId: string) => void;
 }
 
 type TileEntry<S> = {
@@ -241,6 +243,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
     unregisterPackAssetRetry(tileId, e.retry);
     e.sandbox.unload();
     markSandboxUnloaded(tileId);
+    this.deps.forgetSandboxWrites?.(tileId);
   }
 
   /** Retry on this tile only. False when the tile has no sandbox of its own. */
@@ -256,6 +259,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
     if (prev) {
       prev.abort.abort();
       prev.sandbox.unload();
+      this.deps.forgetSandboxWrites?.(tileId);
     }
     const sandbox = this.deps.create();
     sandbox.setActiveTile(tileId);
