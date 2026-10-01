@@ -4,6 +4,8 @@ import { modeById } from "../core/modes";
 import { deliverVizPluginFrame } from "../app/viz-frame-tick";
 import { normalizeVizDemoPackId } from "../ui/viz-hud";
 import { PluginSandbox, setPluginModuleSandboxUrlForTests } from "./host";
+import { TileSandboxes, type TileSandboxLike } from "../app/tile-sandboxes";
+import type { PluginView } from "./plugin";
 import { VIZ_UBO, type VizDataFrame, type VizFrameBudgetStats } from "./viz-host";
 import type { VizZoto } from "../../../plugins/sdk/viz-zoto";
 
@@ -12,8 +14,9 @@ import type { VizZoto } from "../../../plugins/sdk/viz-zoto";
  * an already-grown colony or share one that grows at double speed. The pack keeps one module-level
  * colony and the host never calls antColonyTeardown, so these rows pin where a fresh colony comes
  * from today: every load boots the pack in a new sandbox iframe (a new module realm, so a new
- * colony), and one present posts one frame to the one sandbox however many tiles show Ant.
- * All three cases are green controls: the host already gives each load its own module instance.
+ * colony), and one present posts one frame to each tile's sandbox (#233: every Ant pane runs its
+ * own, so two tiles no longer share one). All three cases are green controls: the host already
+ * gives each load its own module instance.
  */
 
 const SLOT = VIZ_UBO.slotFloats;
@@ -157,12 +160,43 @@ describe("#231 two Ant tiles", () => {
   });
 
   /**
-   * One present (main.ts addPresentListener -> tickVizPresentDeliver) delivers one frame, and
-   * deliverVizPluginFrame posts it to the one sandbox once, with no demo-pack mirror for Ant.
+   * One present (main.ts addPresentListener -> tickVizPresentDeliver) delivers one frame:
+   * deliverVizPluginFrame posts it once to the shared sandbox (the driven view), with no
+   * demo-pack mirror for Ant, and since #233 deliverPaneFrame posts it once to each Ant pane's
+   * own sandbox (this row pinned one shared sandbox for both Ant tiles before #233).
    */
-  it("posts one frame per present to the one sandbox when two mosaic tiles show Ant", () => {
+  it("posts one frame per present to each Ant tile's own sandbox when two mosaic tiles show Ant", () => {
     expect(normalizeVizDemoPackId("ant-colony"), "Ant has no host-realm mirror").toBeNull();
     const sent: VizDataFrame[] = [];
+    const posts = new Map<string, number>();
+    const paneSandbox = (): TileSandboxLike => {
+      let tile = "";
+      return {
+        handlers: {},
+        readyPack: "",
+        setActiveTile: (id) => { tile = id; },
+        frame: () => { posts.set(tile, (posts.get(tile) ?? 0) + 1); },
+        unload: () => {},
+      };
+    };
+    const panes = new TileSandboxes<TileSandboxLike>({
+      main: paneSandbox(),
+      create: paneSandbox,
+      drivenTile: () => "topology",
+      target: () => null,
+      mayLoad: () => true,
+      attach: async () => {},
+    });
+    // Ant's real capabilities: config.read no longer keeps a pane off its own sandbox (#233).
+    const antSpec: PluginView = {
+      id: "ant-colony",
+      name: "Ant Colony",
+      version: 1,
+      runtime: "typescript",
+      hash: "h-ant",
+      capabilities: ["viz.read", "viz.write", "config.read"],
+    };
+    panes.sync([{ id: "topology", spec: null }, { id: "ant-colony", spec: antSpec }, { id: "ant-colony!2", spec: antSpec }]);
     const mode = modeById("ant-colony");
     const stats: VizFrameBudgetStats = { lastMs: 0, overBudget: 0, skipped: 0, total: 0 };
     for (let i = 0; i < N; i++) {
@@ -179,8 +213,11 @@ describe("#231 two Ant tiles", () => {
         optsFor: () => ({}),
         budgetStats: stats,
       });
+      panes.frame(lanFrame(i));
     }
-    expect(sent, `${N} presents with two Ant tiles`).toHaveLength(N);
+    expect(sent, `${N} presents: posts to the shared sandbox`).toHaveLength(N);
+    expect(posts.get("ant-colony"), `${N} presents: posts to Ant tile A's own sandbox`).toBe(N);
+    expect(posts.get("ant-colony!2"), `${N} presents: posts to Ant tile B's own sandbox`).toBe(N);
   });
 
   it("two module instances stepped N frames each match one tile stepped N frames", async () => {

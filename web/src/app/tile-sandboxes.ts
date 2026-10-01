@@ -1,5 +1,5 @@
 import type { PluginHostHandlers } from "../plugins/host";
-import { pluginHasFrontend, vizContractFor, type PluginView } from "../plugins/plugin";
+import { configStoreId, pluginHasFrontend, vizContractFor, type PluginView } from "../plugins/plugin";
 import {
   applyPackFeedPaneNotice,
   markSandboxStartupFailed,
@@ -19,18 +19,17 @@ import {
 } from "../plugins/viz-host";
 import { applyVizWriteBatch } from "../plugins/viz-write-batch";
 
-/** Host wires a pane's own sandbox does not carry yet (follow-up to #233). */
-export type PaneSandboxGap = "config-push" | "present-tick" | "graph-read";
+/** Host wires a pane's own sandbox does not carry yet (#235). */
+export type PaneSandboxGap = "present-tick" | "graph-read";
 
 /**
  * What the pack declares that a pane sandbox can't serve yet. The signals are the ones the host
- * itself gates on: `config.read` (PluginSandbox.setConfig and mayPushSandboxOnPluginFields only
- * push to packs that declare it), `viz.presentTick` (PluginSandbox.deliverPresentTick) and
- * `graph.read` (PluginSandbox.tick).
+ * itself gates on: `viz.presentTick` (PluginSandbox.deliverPresentTick) and `graph.read`
+ * (PluginSandbox.tick). Live config pushes (`config.read`) reach pane sandboxes since #233
+ * (TileSandboxes.pushConfig from the config batcher), so they are not a gap.
  */
 export function paneSandboxGaps(spec: PluginView): PaneSandboxGap[] {
   const gaps: PaneSandboxGap[] = [];
-  if (spec.capabilities?.includes("config.read")) gaps.push("config-push");
   if (spec.viz?.presentTick === true) gaps.push("present-tick");
   if (spec.capabilities?.includes("graph.read")) gaps.push("graph-read");
   return gaps;
@@ -63,6 +62,8 @@ export interface TileSandboxLike {
   setActiveTile(tileId: string): void;
   frame(frame: VizDataFrame): void;
   unload(): void;
+  /** Live config (PluginSandbox.setConfig: posts only to a pack that declares config.read). */
+  setConfig?(config: Record<string, string>): void;
 }
 
 /** The pane scene a tile's own writes land on. */
@@ -80,13 +81,15 @@ export interface TileSandboxDeps<S extends TileSandboxLike> {
   target: (tileId: string) => TileSandboxTarget | null;
   /** Packs this host may boot at all (TS plugins on, consent given). */
   mayLoad: (spec: PluginView) => boolean;
-  /** Boot `spec` in the tile's own sandbox (attachPluginFrontend in main.ts). */
-  attach: (sandbox: S, spec: PluginView, tileId: string) => Promise<void>;
+  /** Boot `spec` in the tile's own sandbox with `config` (attachPluginFrontend in main.ts). */
+  attach: (sandbox: S, spec: PluginView, tileId: string, config: Record<string, string>) => Promise<void>;
+  /** The pack's current config values (main.ts sandboxPluginConfig): what boots and gets pushed. */
+  configFor?: (spec: PluginView) => Record<string, string>;
   /** After the tile's pack is ready: its sky installs now (#226 order, per tile). */
   afterReady?: (tileId: string) => void;
   /** Pack-feed notices (a pack-asset reconnect, no feed) on the pane. */
   noticeHost?: () => MosaicNoticeHost | null | undefined;
-  /** A write from the tile's own sandbox (tile-health hook; per tile once #227 lands). */
+  /** A write from the tile's own sandbox (tile-health counts it for that tile only). */
   noteWrite?: (tileId: string) => void;
 }
 
@@ -95,6 +98,8 @@ type TileEntry<S> = {
   spec: PluginView;
   writer: VizBufferWriter | null;
   ready: boolean;
+  /** The config the pane booted with (JSON), to catch up once on ready if settings moved since. */
+  bootConfig: string;
 };
 
 export class TileSandboxes<S extends TileSandboxLike> {
@@ -145,6 +150,50 @@ export class TileSandboxes<S extends TileSandboxLike> {
     return pluginHasFrontend(spec) && !this.owns(tileId, spec);
   }
 
+  /** A pane sandbox runs this config store's pack and reads config (config.read). */
+  wantsConfig(storeId: string): boolean {
+    for (const e of this.byTile.values()) {
+      if (configStoreId(e.spec) === storeId && e.spec.capabilities?.includes("config.read")) return true;
+    }
+    return false;
+  }
+
+  /**
+   * One batched config post to every pane sandbox on `storeId` (through setConfig, which keeps the
+   * config.read check). The pane updates in place: no reload, no new frame. Returns the posts.
+   */
+  pushConfig(storeId: string, config: Record<string, string>): number {
+    let posts = 0;
+    for (const e of this.byTile.values()) {
+      // A pane still starting gets nothing now: on ready it catches up once (catchUpConfig).
+      if (!e.ready || configStoreId(e.spec) !== storeId || !e.sandbox.setConfig) continue;
+      e.sandbox.setConfig(config);
+      posts += 1;
+    }
+    return posts;
+  }
+
+  /**
+   * Tile-health's couldn't-start for a pane that runs its own sandbox: the solo wording ("<Pack>
+   * couldn't start.") on that pane, whose Retry restarts that pane's sandbox only. False when the
+   * tile has no sandbox of its own (main.ts then shows the shared pick's notice, as before).
+   */
+  showCouldntStart(tileId: string, log?: string): boolean {
+    const e = this.byTile.get(tileId);
+    if (!e) return false;
+    const cur = viewStateOf(tileId);
+    // The pack's sky failed to compile: the tile already says so (cant-draw, apply-mode's rule).
+    if (cur?.kind === "cant-draw" && cur.reason === "shader" && cur.packId === e.spec.id) return true;
+    showViewState(
+      tileId,
+      mosaicTileViewId(tileId),
+      e.spec.name ?? e.spec.id,
+      { kind: "couldnt-start", reason: "load-failed", packId: e.spec.id, ...(log ? { log } : {}) },
+      { onRetry: () => { void this.restart(tileId); } },
+    );
+    return true;
+  }
+
   /** Match the tiles on screen: boot a sandbox for each pane that owns one, unload the rest. */
   sync(tiles: readonly { id: string; spec: PluginView | null }[]): void {
     const keep = new Set<string>();
@@ -187,18 +236,20 @@ export class TileSandboxes<S extends TileSandboxLike> {
     sandbox.setActiveTile(tileId);
     const contract = vizContractFor(spec) ?? (spec.capabilities?.includes("viz.write") ? defaultVizContract() : undefined);
     const writer = bindVizWriterCore(null, contract).writer;
-    const entry: TileEntry<S> = { sandbox, spec, writer, ready: false };
+    const config = this.deps.configFor?.(spec) ?? {};
+    const entry: TileEntry<S> = { sandbox, spec, writer, ready: false, bootConfig: JSON.stringify(config) };
     sandbox.handlers = this.handlersFor(tileId, writer);
     this.byTile.set(tileId, entry);
     const label = spec.name ?? spec.id;
     registerPackAssetRetry(tileId, label, () => { void this.restart(tileId); });
     const viewId = mosaicTileViewId(tileId);
     try {
-      await this.deps.attach(sandbox, spec, tileId);
+      await this.deps.attach(sandbox, spec, tileId, config);
       if (this.byTile.get(tileId) !== entry) return;
       // An aborted or navigation-stopped load resolves without ready; that tile shows its own notice.
       if (sandbox.readyPack !== spec.id) return;
       entry.ready = true;
+      this.catchUpConfig(entry);
       markSandboxStartupOk(tileId);
       if (viewStateOf(tileId)?.kind === "couldnt-start") setViewState(tileId, viewId, { kind: "ready" });
       applyPackFeedPaneNotice(this.deps.noticeHost?.(), tileId, label);
@@ -210,15 +261,18 @@ export class TileSandboxes<S extends TileSandboxLike> {
       sandbox.unload();
       // The solo wording and its Retry, on this pane only. The tile keeps its (failed) own sandbox:
       // it never falls back to the shared one without the label.
-      const log = e instanceof Error ? e.message : String(e);
-      showViewState(
-        tileId,
-        viewId,
-        label,
-        { kind: "couldnt-start", reason: "load-failed", packId: spec.id, log },
-        { onRetry: () => { void this.restart(tileId); } },
-      );
+      this.showCouldntStart(tileId, e instanceof Error ? e.message : String(e));
     }
+  }
+
+  /**
+   * Settings that moved while the pane was starting: one apply of the current (merged) config, not
+   * a replay of each change. Nothing when it booted with the current values.
+   */
+  private catchUpConfig(e: TileEntry<S>): void {
+    if (!this.deps.configFor || !e.sandbox.setConfig || !e.spec.capabilities?.includes("config.read")) return;
+    const now = this.deps.configFor(e.spec);
+    if (JSON.stringify(now) !== e.bootConfig) e.sandbox.setConfig(now);
   }
 
   private handlersFor(tileId: string, writer: VizBufferWriter | null): PluginHostHandlers {
@@ -252,4 +306,19 @@ export class TileSandboxes<S extends TileSandboxLike> {
       },
     };
   }
+}
+
+/**
+ * #233: main.ts's config batcher onPost. The shared sandbox gets the post when it has `storeId`
+ * loaded (sandboxConfigPostMatchesLoaded, as before), and every pane sandbox on `storeId` gets the
+ * same one post. Returns the pane posts.
+ */
+export function postBatchedConfig<S extends TileSandboxLike>(
+  storeId: string,
+  config: Record<string, string>,
+  shared: { readonly loaded: boolean; setConfig(config: Record<string, string>): void },
+  panes: TileSandboxes<S>,
+): number {
+  if (shared.loaded) shared.setConfig(config);
+  return panes.pushConfig(storeId, config);
 }

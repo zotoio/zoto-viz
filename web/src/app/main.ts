@@ -239,7 +239,7 @@ import {
 } from "./main-viz-tile-lines";
 import { vizClockMs } from "../core/viz-clock";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
-import { TileSandboxes } from "./tile-sandboxes";
+import { postBatchedConfig, TileSandboxes } from "./tile-sandboxes";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -540,17 +540,17 @@ const tileSandboxes = new TileSandboxes<PluginSandbox>({
   drivenTile: () => sandboxVizTileId(),
   target: (id) => (mosaic?.on ? mosaic.graphScene(id) : null),
   mayLoad: (spec) => tsPluginsAllowed() && !packNeedsConsent(spec),
-  attach: async (sb, spec, tileId) => {
+  attach: async (sb, spec, tileId, config) => {
     const { runPackAssetProtectedLoad } = await import("../plugins/pack-asset-rebuild");
     await runPackAssetProtectedLoad(tileId, spec.name ?? spec.id, mosaic, async () => {
-      await attachPluginFrontend(sb, spec, { ...sandboxPluginConfig(spec), ...hostTileConfig() });
+      await attachPluginFrontend(sb, spec, { ...config, ...hostTileConfig() });
     });
   },
+  configFor: (spec) => sandboxPluginConfig(spec),
   // #226 per tile: the pane's sky installs once its own pack is ready.
   afterReady: () => { void syncPluginSky(null, refreshPluginSignal.signal).catch(() => {}); },
   noticeHost: () => mosaic,
-  // #227 follow-up: tileHealth.noteSandboxWrite(tileId) once the monitor counts writes per tile.
-  noteWrite: () => tileHealth?.noteSandboxWrite(),
+  noteWrite: (tileId) => tileHealth?.noteSandboxWrite(tileId),
 });
 /** #233: panes the shared sandbox's UBO reaches (a pane with its own sandbox draws its own). */
 function sharedUboPanes(): { tileIds: readonly string[]; graphScene: (id: string) => NetScene | null } | null {
@@ -684,6 +684,10 @@ function sandboxVizTileId(): string {
   if (!mosaic?.on) return "main";
   return mosaic.tileIds.includes(modeSel.value) ? modeSel.value : mosaicFocusSlot(mosaic) || "main";
 }
+/** #233: tile-health counts the shared sandbox's writes for the tile it drives. */
+function noteSharedSandboxWrite(): void {
+  tileHealth?.noteSandboxWrite(mosaic?.on ? sandboxVizTileId() : "main");
+}
 /** The scene on screen for that tile: in a mosaic each pane has its own NetScene. */
 function sandboxDrivenScene(): NetScene {
   const tile = sandboxVizTileId();
@@ -725,7 +729,7 @@ sandbox.handlers = {
   setStyle: (s: Record<string, unknown>) => scene.setPluginStyle(s),
   setNodeColor: (id: string, hex: number) => scene.setPluginNodeColor(id, hex),
   writeBuffer: (slot: number, data: number[]) => {
-    tileHealth?.noteSandboxWrite();
+    noteSharedSandboxWrite();
     if (vizWriter?.writeBuffer(slot, data).ok) {
       broadcastPluginUbo(scene, vizWriter.ubo, sharedUboPanes());
       tryApplyHostMeshBridge(
@@ -738,11 +742,11 @@ sandbox.handlers = {
     }
   },
   writeUniform: (name: string, value: import("../plugins/viz-host").VizUniformValue) => {
-    tileHealth?.noteSandboxWrite();
+    noteSharedSandboxWrite();
     if (vizWriter?.writeUniform(name, value).ok) scene.setPluginUniform(name, value);
   },
   writeParticles: (data: number[], stride?: number) => {
-    tileHealth?.noteSandboxWrite();
+    noteSharedSandboxWrite();
     vizWriter?.writeParticles(data, stride);
   },
   writeBatch: (batch: import("../plugins/viz-write-batch").VizWriteBatchPayload) => {
@@ -750,11 +754,11 @@ sandbox.handlers = {
     const contract = vizContractFor(activePluginSpec);
     applyVizWriteBatch(vizWriter, batch, {
       onBuffer: () => {
-        tileHealth?.noteSandboxWrite();
+        noteSharedSandboxWrite();
         broadcastPluginUbo(scene, vizWriter!.ubo, sharedUboPanes());
       },
       onUniform: (name, value) => {
-        tileHealth?.noteSandboxWrite();
+        noteSharedSandboxWrite();
         scene.setPluginUniform(name, value);
       },
     });
@@ -873,9 +877,14 @@ function sandboxPluginConfig(spec: PluginView): Record<string, string> {
 }
 
 const sandboxConfigBatcher = new SandboxConfigBatcher(
-  (storeId, config) => {
-    if (sandboxConfigPostMatchesLoaded(storeId, tsWatchStoreId)) sandbox.setConfig(config);
-  },
+  // #233: one batched post per store, to the shared sandbox (when it has the store loaded) and to
+  // each pane sandbox on that store.
+  (storeId, config) => postBatchedConfig(
+    storeId,
+    config,
+    { loaded: sandboxConfigPostMatchesLoaded(storeId, tsWatchStoreId), setConfig: (c) => sandbox.setConfig(c) },
+    tileSandboxes,
+  ),
   (cb) => requestAnimationFrame(cb),
   (id) => cancelAnimationFrame(id),
 );
@@ -916,7 +925,7 @@ function onPluginFields(flags: { skipSandboxPush?: boolean } = {}): void {
       tsWatchStoreId,
       tsWatchStoreId ? pluginSpecForStoreId(tsWatchStoreId) : null,
     );
-    if (mayPushSandboxOnPluginFields(loadedStore, spec)) {
+    if (mayPushSandboxOnPluginFields(loadedStore, spec) || tileSandboxes.wantsConfig(configStoreId(spec))) {
       scheduleSandboxSetConfig(configStoreId(spec), sandboxPluginConfig(spec));
     }
   }
@@ -2319,14 +2328,11 @@ function maybePushSandboxForStore(storeId: string, values: Record<string, string
     tsWatchStoreId,
     tsWatchStoreId ? pluginSpecForStoreId(tsWatchStoreId) : null,
   );
-  const pending = routePluginChangeSandboxPush(
-    loadedStore,
-    storeId,
-    spec,
-    packConfigValues(values),
-    scheduleSandboxSetConfig,
-  );
+  const config = packConfigValues(values);
+  const pending = routePluginChangeSandboxPush(loadedStore, storeId, spec, config, scheduleSandboxSetConfig);
   if (pending) pendingSandboxPush = pending;
+  // #233: pane sandboxes on this store get it now (the batcher merges it with the shared push).
+  if (tileSandboxes.wantsConfig(storeId)) scheduleSandboxSetConfig(storeId, config);
 }
 
 settings.onPluginChange = (storeId, values) => {
@@ -2481,6 +2487,8 @@ tileHealth = createProductionTileHealthMonitor({
   skyStarting: (id) => tileSkyStarting(id),
   onLiveBlank: (id, packId, blank) => onLiveBlank(id, packId, blank),
   onCantStart: (id) => {
+    // #233: a pane on its own sandbox shows its own notice; its Retry restarts that sandbox only.
+    if (tileSandboxes.showCouldntStart(id)) return true;
     const m = modeById(tileHealthModeId(id));
     const spec = pluginSpecForMode(m.id);
     if (!pluginHasFrontend(spec)) return false;

@@ -104,7 +104,8 @@ export class TileHealthMonitor {
   private vizDeliverGen = 0;
   private vizWriteGen = 0;
   private lastVizWriteGen = 0;
-  private sandboxWriteGen = 0;
+  /** #233: sandbox writes per tile (a pane's own sandbox writes for that pane only). */
+  private readonly sandboxWriteGenByTile = new Map<string, number>();
   private readonly lastPackByTile = new Map<string, string>();
   private readonly lastSandboxGenByTile = new Map<string, number>();
   private readonly liveBlankShown = new Map<string, string>();
@@ -153,9 +154,12 @@ export class TileHealthMonitor {
     this.packDrawingNothing = false;
   }
 
-  /** A write that came from the pack's sandbox frame (the pack itself is drawing). */
-  noteSandboxWrite(): void {
-    this.sandboxWriteGen++;
+  /**
+   * A write that came from `tileId`'s sandbox frame (the pack itself is drawing there). #233: kept
+   * per tile, so writes noted on one tile never make another count as drawing.
+   */
+  noteSandboxWrite(tileId = "main"): void {
+    this.sandboxWriteGenByTile.set(tileId, (this.sandboxWriteGenByTile.get(tileId) ?? 0) + 1);
     this.noteVizWrite();
   }
 
@@ -278,9 +282,10 @@ export class TileHealthMonitor {
     }
     let liveDrawing = false;
     if (this.deps.packLive?.(tileId, packId)) {
+      const gen = this.sandboxWriteGenByTile.get(tileId) ?? 0;
       const lastGen = this.lastSandboxGenByTile.get(tileId);
-      this.lastSandboxGenByTile.set(tileId, this.sandboxWriteGen);
-      liveDrawing = lastGen !== undefined && this.sandboxWriteGen > lastGen;
+      this.lastSandboxGenByTile.set(tileId, gen);
+      liveDrawing = lastGen !== undefined && gen > lastGen;
     } else {
       this.lastSandboxGenByTile.delete(tileId);
     }
