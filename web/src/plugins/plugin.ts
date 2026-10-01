@@ -921,7 +921,8 @@ export async function installPlugins(): Promise<PluginView[]> {
     syncBlockedCatalogFromErrors(data.errors as Record<string, unknown>[]);
     for (const e of data.errors) {
       const err = String(e.error || "");
-      const msg = e.message ?? (catalogErrorLooksBlocked(err) ? err : "");
+      const code = e.reasonCode;
+      const msg = e.message ?? (catalogErrorLooksBlocked(err, code) ? err : "");
       if (
         e.error === "pack_boundary"
         || e.error === "pack_sdk_contract"
@@ -930,8 +931,8 @@ export async function installPlugins(): Promise<PluginView[]> {
         || e.error === "pack_install_interrupted"
         || e.error === PACK_INSTALL_CHECK_UNAVAILABLE
         || e.reasonCode === PACK_UPDATE_REFUSED
-        || catalogErrorLooksBlocked(msg)
-        || catalogErrorLooksBlocked(err)
+        || catalogErrorLooksBlocked(msg, code)
+        || catalogErrorLooksBlocked(err, code)
       ) {
         queuePackInstallBlockedNotice({
           ok: false,

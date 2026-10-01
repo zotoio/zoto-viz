@@ -10,6 +10,7 @@ from typing import Any
 from .pack_block_copy import (
     BLOCK_FIX_TAIL,
     PACK_LINT_README,
+    REASON_PACK_BLOCKED,
     SENTENCE_BOUNDARY,
     block_message,
     upgrade_block_message,
@@ -35,6 +36,8 @@ class PackBundleBoundary:
             "hint": BLOCK_FIX_TAIL,
             # #185: diagnostics only (the log / pack author), never user text.
             "details": boundary_details(self),
+            # #240: the stable code callers branch on, never the message.
+            "reasonCode": REASON_PACK_BLOCKED,
         }
 
 
@@ -96,6 +99,9 @@ def boundary_from_compile(
 
 
 class PackBundleBoundaryError(ValueError):
+    #: #240: a block like PackBlockedError; callers branch on the code, never the message.
+    reason_code = REASON_PACK_BLOCKED
+
     def __init__(self, block: PackBundleBoundary) -> None:
         self.block = block
         logging.getLogger(__name__).warning("pack bundle boundary block (%s): %s", block.pack_id, boundary_details(block))
