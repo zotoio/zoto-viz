@@ -244,7 +244,7 @@ export function blockedViewSelectRow(
   if (!n) return null;
   return {
     value: PACK_BLOCKED_SELECT_VALUE,
-    label: `Blocked (${n})`,
+    label: `Unavailable (${n})`,
     hint: "",
     group: "blocked",
   };
