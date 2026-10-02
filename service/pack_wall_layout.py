@@ -6,12 +6,12 @@ from typing import Any
 
 import yaml
 
-ALLOWED_MOSAIC_SIZES: frozenset[str] = frozenset({"off", "4", "6", "8"})
+ALLOWED_MOSAIC_SIZES: frozenset[str] = frozenset({"off", "4", "6", "8", "16"})
 
 
 def wall_layout_mosaic_error(rel_path: str, value: str) -> str:
     return (
-        f'wall-layout.yml {rel_path}: look.mosaic must be one of off, 4, 6, 8 (got "{value}")'
+        f'wall-layout.yml {rel_path}: look.mosaic must be one of off, 4, 6, 8, 16 (got "{value}")'
     )
 
 

@@ -94,7 +94,7 @@ export const DICE_SOFT: Partial<Record<keyof DreamAnim, Partial<Bound>>> = {
   partSize: { max: 1.5 },
 };
 
-const MOSAIC_RANK: Record<string, number> = { off: 0, "4": 1, "6": 2, "8": 3 };
+const MOSAIC_RANK: Record<string, number> = { off: 0, "4": 1, "6": 2, "8": 3, "16": 4 };
 
 export function diceMosaic(cfg: DiceConfig = DEFAULT_DICE): MosaicSize[] {
   const cap = MOSAIC_RANK[cfg.mosaicMax] ?? MOSAIC_RANK["6"]!;

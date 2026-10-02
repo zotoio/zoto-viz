@@ -1,7 +1,7 @@
-export const ALLOWED_WALL_LAYOUT_MOSAIC = new Set(["off", "4", "6", "8"]);
+export const ALLOWED_WALL_LAYOUT_MOSAIC = new Set(["off", "4", "6", "8", "16"]);
 
 export function wallLayoutMosaicError(relPath: string, value: string): string {
-  return `wall-layout.yml ${relPath}: look.mosaic must be one of off, 4, 6, 8 (got "${value}")`;
+  return `wall-layout.yml ${relPath}: look.mosaic must be one of off, 4, 6, 8, 16 (got "${value}")`;
 }
 
 function validateLookMosaic(relPath: string, look: unknown): void {

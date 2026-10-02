@@ -107,7 +107,7 @@ GRAPH_LAYOUTS = (
     "heap", "trie", "hashmap", "matrix", "queue",
 )
 GRAPH_LINKS = ("auto", "arrows", "bundle", "both")
-MOSAIC_SIZES = ("off", "4", "6", "8")
+MOSAIC_SIZES = ("off", "4", "6", "8", "16")
 HERO_POS = ("off", "left", "center", "right")
 FOCUS_MODES = ("activity", "motion", "cloud", "selection")
 DICE_INCLUDE = (

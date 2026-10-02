@@ -153,13 +153,13 @@ describe("tile HUD rows (half-open window (now−300000, now] in ticks)", () => 
     }
   });
 
-  it("scheduler clamp (extra): nine tile ids scope to share 626", () => {
-    const nine = tileIdsForLayout(3, 3);
-    expect(nine.length).toBe(9);
-    syncVizTileScope(nine);
+  it("scheduler clamp (extra): seventeen tile ids scope to the 16-tile share", () => {
+    const seventeen = Array.from({ length: 17 }, (_, i) => `t${i}`);
+    syncVizTileScope(seventeen);
     expect(vizTileBudgetRegistry.activeTileCount()).toBe(VIZ_MAX_ACTIVE_TILES);
-    expect(tileShareTicks(9)).toBe(626);
-    expect(vizTileBudgetRegistry.getTile("t0").share).toBe(626);
+    expect(tileShareTicks(17)).toBe(313);
+    expect(vizTileBudgetRegistry.getTile("t0").share).toBe(313);
+    expect(tileShareTicks(8)).toBe(626);
   });
 });
 

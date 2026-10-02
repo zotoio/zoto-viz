@@ -9,32 +9,33 @@ describe("mosaic viz tile guard", () => {
     expect.hasAssertions();
   });
 
-  it("dreamAnimBootFromStorage refuses nine saved tile ids", () => {
-    const nine = ["a", "b", "c", "d", "e", "f", "g", "h", "i"];
+  it("dreamAnimBootFromStorage refuses seventeen saved tile ids", () => {
+    const seventeen = "abcdefghijklmnopq".split("");
     const loaded = { ...DEFAULT_DREAM, mosaic: "8" as const, mosaicTiles: [] };
-    const boot = dreamAnimBootFromStorage(loaded, nine);
+    const boot = dreamAnimBootFromStorage(loaded, seventeen);
     expect(boot.bootRefused).toBe(true);
     expect(boot.message).toBe(
-      "Couldn't load your saved wall layout. It has 9 tiles and the limit is 8, so the default view is showing.",
+      "Couldn't load your saved wall layout. It has 17 tiles and the limit is 16, so the default view is showing.",
     );
   });
 
-  it("applyDreamAnimWithTileLimit refuses nine tiles with formatted copy", () => {
+  it("applyDreamAnimWithTileLimit refuses seventeen tiles with formatted copy", () => {
+    const sixteen = "abcdefghijklmnop".split("");
     const current = {
       ...DEFAULT_DREAM,
       mosaic: "8" as const,
-      mosaicTiles: ["a", "b", "c", "d", "e", "f", "g", "h"],
+      mosaicTiles: sixteen,
     };
     const incoming = {
       ...current,
-      mosaicTiles: ["a", "b", "c", "d", "e", "f", "g", "h", "i"],
+      mosaicTiles: [...sixteen, "q"],
     };
-    expect(countMosaicTiles(incoming)).toBe(9);
+    expect(countMosaicTiles(incoming)).toBe(17);
     const out = applyDreamAnimWithTileLimit(incoming, current);
     expect(out.refused).toBe(true);
-    expect(out.message).toBe(mosaicWallLayoutRefusedMessage(9, VIZ_MAX_ACTIVE_TILES));
+    expect(out.message).toBe(mosaicWallLayoutRefusedMessage(17, VIZ_MAX_ACTIVE_TILES));
     expect(out.message).toBe(
-      "Couldn't load this wall layout. It has 9 tiles and the limit is 8, so your current wall is still showing.",
+      "Couldn't load this wall layout. It has 17 tiles and the limit is 16, so your current wall is still showing.",
     );
     expect(out.anim.mosaicTiles).toEqual(current.mosaicTiles);
     expect(out.anim.mosaic).toBe("8");

@@ -13,8 +13,8 @@ export const VIZ_HUD_WINDOW_TICKS = 300000;
 /** 60 Hz sim step in ticks. */
 export const VIZ_CLOCK_STEP_TICKS = 5000;
 
-/** Supported mosaic layouts: 1×1, 2×2, 2×3, 2×4 (at most 8 tiles). */
-export const VIZ_MAX_ACTIVE_TILES = 8;
+/** Supported mosaic layouts: 1×, 2×2, 2×3, 2×4, 4×4 (at most 16 tiles). */
+export const VIZ_MAX_ACTIVE_TILES = 16;
 
 export const VIZ_COST_TICKS_4MS = 1200;
 export const VIZ_COST_TICKS_10MS = 3000;

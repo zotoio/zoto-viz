@@ -1,4 +1,5 @@
 import { remapSavedViewId } from "../core/saved-view-id";
+import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import type { HeroPos, MosaicSize } from "./scene";
 import { allocateMosaicTileSlot, mosaicTileViewId } from "./mosaic-tile-id";
 
@@ -66,7 +67,7 @@ export function parseMosaicTiles(raw: unknown): string[] {
   if (!Array.isArray(raw)) return [];
   const out: string[] = [];
   const seen = new Set<string>();
-  for (const row of raw.slice(0, 8)) {
+  for (const row of raw.slice(0, VIZ_MAX_ACTIVE_TILES)) {
     if (typeof row !== "string" || !row.trim()) continue;
     const id = remapSavedViewId(row.trim().slice(0, 96));
     if (seen.has(id)) continue;

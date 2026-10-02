@@ -195,7 +195,7 @@ const SHAPES = new Set(FLOOR_SHAPES.map((o) => o.value));
 const AUDIO_DRIVES = new Set(["mic", "traffic", "node"]);
 const THEME_CYCLES = new Set(["off", "cadence", "audio"]);
 const EDGE_GLOWS = new Set(["off", "comet", "pulse"]);
-const MOSAICS = new Set(["off", "4", "6", "8"]);
+const MOSAICS = new Set(["off", "4", "6", "8", "16"]);
 const HEROS = new Set(["off", "left", "center", "right"]);
 const FOCUSES = new Set(["activity", "motion", "cloud", "selection"]);
 const GRAPH_LAYOUTS = new Set([
