@@ -13,6 +13,7 @@ import { soundAllowed } from "../audio/sound";
 import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
 import { isNasaStillUrl } from "../core/nasa-stills";
 import type { ProfileOperator } from "../core/profiles";
+import { speechRecognitionLang } from "./speech-lang";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
@@ -912,7 +913,7 @@ export class AgentPanel {
     this.stopRec();
     unlockSpeech();
     const rec = new SR();
-    rec.lang = "en-US";
+    rec.lang = speechRecognitionLang();
     rec.continuous = true;
     rec.interimResults = true;
     rec.maxAlternatives = 5;
@@ -983,7 +984,7 @@ export class AgentPanel {
     }
     await this.wakeStream.enable(stream);
     const rec = new SR();
-    rec.lang = "en-US";
+    rec.lang = speechRecognitionLang();
     rec.interimResults = true;
     rec.continuous = false;
     rec.onresult = (e) => {

@@ -5101,9 +5101,9 @@ export function isOverlayControl(target: EventTarget | null): boolean {
   return !!el?.closest("button, a[href], input, select, textarea, [role=button]");
 }
 
-/** #251: the target is inside a tile's couldn't-draw line whose box scrolls on y (style.css: the solo line). */
+/** #255: the solo line takes the wheel only when it actually overflows. A fitting line leaves the wheel to the camera. An overflowing line keeps it, including at the scroll ends. */
 export function inScrollingCantDrawLine(target: EventTarget | null): boolean {
-  const line = target instanceof Element ? target.closest(".tile-cant-draw") : null;
-  const overflowY = line ? line.ownerDocument.defaultView?.getComputedStyle(line).overflowY : undefined;
-  return overflowY === "auto" || overflowY === "scroll";
+  const line = target instanceof Element ? target.closest<HTMLElement>(".tile-cant-draw") : null;
+  if (!line) return false;
+  return line.scrollHeight > line.clientHeight;
 }

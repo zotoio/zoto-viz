@@ -56,6 +56,24 @@ export const PACK_UPDATE_REFUSED = "update_refused";
  */
 export const PACK_BLOCKED = "pack_blocked";
 
+/** #254: refusal kinds the surface used to detect by matching visible words. */
+export const PACK_INTERRUPTED = "pack_interrupted";
+export const PACK_COULDNT_START = "couldnt_start";
+export const PACK_BUNDLE_BOUNDARY = "pack_boundary";
+export const PACK_OLDER_SDK = "pack_sdk_contract";
+export const PACK_CHECK_FAILED = "install_unchecked";
+
+const PACK_REASON_CODES = new Set<string>([
+  PACK_BLOCKED,
+  PACK_UPDATE_REFUSED,
+  PACK_INSTALL_CHECK_UNAVAILABLE,
+  PACK_INTERRUPTED,
+  PACK_COULDNT_START,
+  PACK_BUNDLE_BOUNDARY,
+  PACK_OLDER_SDK,
+  PACK_CHECK_FAILED,
+]);
+
 /** Row `error` categories; anything else in `error` next to PACK_BLOCKED is the service's own words. */
 const PACK_REFUSAL_CATEGORIES = new Set<string>([
   "pack_boundary",
@@ -121,8 +139,8 @@ export function isPackInstallBlockedPayload(v: unknown): v is PackInstallBlocked
   const text = `${o.message ?? ""} ${o.error ?? ""}`;
   return (
     PACK_REFUSAL_CATEGORIES.has(String(o.error))
-    // #240: a block is known by its code, never by the words "was blocked".
-    || o.reasonCode === PACK_BLOCKED
+    // #240 / #254: a refusal is known by its code, never by the words.
+    || PACK_REASON_CODES.has(String(o.reasonCode))
     || text.includes("Couldn't safety-check")
     || text.includes("was interrupted")
     || text.includes("couldn't start")
@@ -229,7 +247,7 @@ export function consumePackInstallNotices(notices: readonly PackInstallNotice[] 
 /** `reasonCode` is the row's code (#240: PACK_BLOCKED makes it a block, whatever `error` says). */
 export function catalogErrorLooksBlocked(error: string, reasonCode?: string): boolean {
   return (
-    reasonCode === PACK_BLOCKED
+    (reasonCode != null && PACK_REASON_CODES.has(reasonCode))
     || error.includes("Couldn't safety-check")
     || error.includes("pack-bundle-boundary")
     || error.includes("Built for an older zoto-viz SDK")
