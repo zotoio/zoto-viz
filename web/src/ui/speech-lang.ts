@@ -2,7 +2,7 @@
 export const SPEECH_LANG_KEY = "zoto-viz.speechLang";
 
 export const SPEECH_LANGUAGES: { id: string; label: string }[] = [
-  { id: "", label: "Match browser" },
+  { id: "match", label: "Match browser" },
   { id: "en-US", label: "English (United States)" },
   { id: "en-AU", label: "English (Australia)" },
   { id: "en-GB", label: "English (United Kingdom)" },
@@ -30,7 +30,8 @@ export function saveSpeechLang(id: string): void {
 /** Match browser uses navigator.language. A stored tag is used as-is. */
 export function speechRecognitionLang(navigatorLanguage = typeof navigator !== "undefined" ? navigator.language : "en-US"): string {
   const saved = loadSpeechLang();
-  return saved || navigatorLanguage || "en-US";
+  if (!saved || saved === "match") return navigatorLanguage || "en-US";
+  return saved;
 }
 
 export function speechLangRejectedLine(language: string, fallback: string): string {
