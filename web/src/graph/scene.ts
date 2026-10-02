@@ -22,6 +22,7 @@ import { paintSoftwareFractal } from "./software-fractal";
 import { paintSoftwareFluid } from "./software-fluid";
 import { disposeOwnedWebGLRenderer, probeWebGL } from "./webgl";
 import type { MosaicNode } from "./mosaic-layout";
+import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import {
   L_BASE, L_DST, L_K, L_SRC, LINK_STRIDE, N_CHARGE, N_FIXED, N_FX, N_FY, N_FZ, N_KEY, N_RATE, N_RELAX, N_ROLE,
   N_SHELL_K, N_SHELL_R, N_SLOT, N_THETA, NODE_STRIDE, ROLES, roleIdx, type LayoutParams, type PositionsMsg,
@@ -845,7 +846,7 @@ export interface DreamAnim {
   audioPhysics: boolean;
 }
 
-export type MosaicSize = "off" | "4" | "6" | "8";
+export type MosaicSize = "off" | "4" | "6" | "8" | "16";
 export type EdgeGlow = "off" | "comet" | "pulse";
 export type HeroPos = "off" | "left" | "center" | "right";
 export type FocusMode = "activity" | "motion" | "cloud" | "selection";
@@ -889,6 +890,10 @@ export const MOSAIC_SIZES: { value: MosaicSize; label: string; hint: string }[] 
   { value: "4", label: "2×2", hint: "four tiles; with a center hero, two on each side" },
   { value: "6", label: "2×3", hint: "six tiles; with a center hero, four on the left and two on the right" },
   { value: "8", label: "2×4", hint: "eight tiles; with a center hero, four on each side" },
+  // #258: the 4×4 chip exists while the active-tile cap is 16. Reverting the cap drops it.
+  ...(VIZ_MAX_ACTIVE_TILES >= 16
+    ? [{ value: "16" as const, label: "4×4", hint: "sixteen tiles, four across and four down" }]
+    : []),
 ];
 
 export const HERO_POS: { value: HeroPos; label: string; hint: string }[] = [

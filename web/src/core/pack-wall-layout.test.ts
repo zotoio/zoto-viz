@@ -3,10 +3,13 @@ import { validateWallLayoutDoc, wallLayoutMosaicError } from "./pack-wall-layout
 
 describe("validateWallLayoutDoc", () => {
   it("rejects unknown mosaic with exact message", () => {
-    const msg = wallLayoutMosaicError("fixture tile_4x4.look", "16");
+    const msg = wallLayoutMosaicError("fixture tile_4x4.look", "32");
+    expect(() =>
+      validateWallLayoutDoc({ tile_4x4: { look: { mosaic: "32" } } }, "fixture"),
+    ).toThrow(msg);
     expect(() =>
       validateWallLayoutDoc({ tile_4x4: { look: { mosaic: "16" } } }, "fixture"),
-    ).toThrow(msg);
+    ).not.toThrow();
   });
 
   it("accepts mosaic 8", () => {

@@ -13,10 +13,18 @@ tile_2x2:
 
 tile_4x4:
   look:
-    mosaic: "8"
+    mosaic: "16"
     hero: center
     mosaicSharedTheme: true
     mosaicTiles:
+      - plugin:cores
+      - plugin:memory
+      - plugin:sockets
+      - plugin:gpu
+      - plugin:watch
+      - plugin:aquarium
+      - plugin:protocols
+      - plugin:talkers
       - plugin:cores
       - plugin:memory
       - plugin:sockets

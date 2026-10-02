@@ -25,7 +25,7 @@ def test_each_shipped_wall_layout_yaml(path: Path) -> None:
 
 def test_wall_layout_rejects_unknown_mosaic_with_exact_message() -> None:
     doc = yaml.safe_load(FIXTURE.read_text(encoding="utf-8"))
-    msg = wall_layout_mosaic_error("tests/fixtures/wall-layout/bad-mosaic-16.yml tile_4x4.look", "16")
+    msg = wall_layout_mosaic_error("tests/fixtures/wall-layout/bad-mosaic-16.yml tile_4x4.look", "32")
     err = ""
     raised = False
     try:

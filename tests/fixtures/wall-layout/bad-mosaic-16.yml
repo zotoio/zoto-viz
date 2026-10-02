@@ -1,4 +1,4 @@
 tile_4x4:
   look:
-    mosaic: "16"
+    mosaic: "32"
     hero: center
