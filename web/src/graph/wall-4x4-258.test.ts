@@ -1,5 +1,5 @@
 /**
- * #258: a 4×4 wall is 16 tiles. 2×4 and smaller stay as they are. Dice never rolls 4×4.
+ * A 4×4 wall is 16 tiles. 2×4 and smaller stay as they are. Dice never rolls 4×4.
  * A saved wall of 17 tiles is refused and storage is left alone.
  */
 import { readFileSync } from "node:fs";
@@ -13,7 +13,7 @@ import { allocateMosaicTileSlot } from "./mosaic-tile-id";
 import { dreamAnimBootFromStorage } from "./mosaic-viz-tile-guard";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 
-describe("#258 4×4 wall", () => {
+describe("4×4 wall", () => {
   beforeEach(() => {
     expect.hasAssertions();
     localStorage.clear();

@@ -1,5 +1,5 @@
 /**
- * #262: the first edit writes the v2 envelope and one legacy key.
+ * The first edit writes the v2 envelope and one legacy key.
  * v1 profiles and sessions upgrade to v2. A rewritten tile keeps its overrides.
  * A pack swap drops pack config and keeps look and the render floor.
  * A stored pack value beats an instance default.
@@ -22,7 +22,7 @@ class Mem implements SettingsStore {
   removeItem(k: string): void { this.map.delete(k); }
 }
 
-describe("#262 v2 settings write", () => {
+describe("v2 settings write", () => {
   beforeEach(() => {
     expect.hasAssertions();
     localStorage.clear();

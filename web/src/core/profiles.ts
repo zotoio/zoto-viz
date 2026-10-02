@@ -20,9 +20,9 @@ export const LEGACY_SHIPPED_ID = "netviz";
 export const USER_ID = "user";
 /** Legacy cycling profile id; new agent profiles are named after the Ollama model. */
 export const AI_ID = "ai";
-/** #262: the ProfileSettings schema this build writes. v0 is legacy, v1 and v2 are accepted. */
+/** The ProfileSettings schema this build writes. v0 is legacy, v1 and v2 are accepted. */
 export const PROFILE_SETTINGS_V = 2;
-/** #256: the profile bar's line for a profile saved by a newer build, which autosave leaves alone. */
+/** The profile bar's line for a profile saved by a newer build, which autosave leaves alone. */
 export const NEWER_PROFILE_NOTICE = "This profile was saved by a newer version of zoto-viz, so changes won't be saved to it. Use Save as to keep them in a new profile.";
 const AI_PREV_KEY = "zoto-viz.ai.prevProfile";
 
@@ -90,18 +90,18 @@ export interface ProfileSettings {
   pluginsSaved: boolean;
   arcadeSaved: boolean;
   modeOptionsSaved: boolean;
-  /** #256: schema version; always the current one once normalised. */
+  /** Schema version. Always the current one once normalised. */
   v: typeof PROFILE_SETTINGS_V;
   /**
-   * #256: the stored blob had no `v` (saved before versioning); its next autosave upgrades it.
+   * The stored blob had no `v` (saved before versioning); its next autosave upgrades it.
    * Load-time only, like `newer`: normalizeSettings sets both, and no saved blob carries them.
    */
   legacy?: boolean;
-  /** #256: the stored blob's `v` is newer than this build's, so autosave never writes over it. */
+  /** The stored blob's `v` is newer than this build's, so autosave never writes over it. */
   newer?: boolean;
 }
 
-/** #256: a profile blob as written to the server: current `v`, without the load-time markers. */
+/** A profile blob as written to the server: current `v`, without the load-time markers. */
 export function storedSettings(s: ProfileSettings): Omit<ProfileSettings, "legacy" | "newer"> {
   const out: ProfileSettings = { ...s, v: PROFILE_SETTINGS_V };
   delete out.legacy;
@@ -139,9 +139,9 @@ export interface SessionApply {
   profileId: string;
   dirty?: boolean;
   settings: unknown;
-  /** #256: profiles the page knew were saved by a newer build. */
+  /** Profiles the page knew were saved by a newer build. */
   newerIds?: string[];
-  /** #256: the snapshot's profile still had a legacy (v0) blob on the server. */
+  /** The snapshot's profile still had a legacy (v0) blob on the server. */
   legacy?: boolean;
 }
 
@@ -332,7 +332,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     : d.modeOptions;
   const arcade = s.arcade && typeof s.arcade === "object" ? s.arcade as Record<string, string> : {};
   const plugins = s.plugins && typeof s.plugins === "object" ? s.plugins as Record<string, Record<string, string>> : {};
-  // #256: the markers come from the stored `v` alone, never from a stored legacy / newer.
+  // The markers come from the stored `v` alone, never from a stored legacy / newer.
   const savedV = typeof s.v === "number" && Number.isInteger(s.v) && s.v >= 1 ? s.v : 0;
   return {
     theme: typeof s.theme === "string" ? s.theme : d.theme,
@@ -407,7 +407,7 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
 }
 
 /**
- * #257: a legacy blob's `vizGovernor: false` was the old default, written whether or not
+ * A legacy blob's `vizGovernor: false` was the old default, written whether or not
  * the user chose it. That applies as on. A current profile's false is the user's choice.
  */
 export function vizGovernorEnabledForSettings(s: ProfileSettings): boolean {
@@ -495,11 +495,11 @@ export class ProfileStore {
   private recoverTimer = 0;
   private recoverDelay = 2000;
   private recovering = false;
-  /** #256: profiles whose loaded blob a newer build saved; nothing here writes over them. */
+  /** Profiles whose loaded blob a newer build saved. Nothing here writes over them. */
   private readonly newer = new Set<string>();
-  /** #256: the loaded profile whose blob has no `v` yet (cleared once a write upgrades it). */
+  /** The loaded profile whose blob has no `v` yet (cleared once a write upgrades it). */
   private legacyId = "";
-  /** #256: the newer profile whose line the status span shows; set once per load of it. */
+  /** The newer profile whose line the status span shows. Set once per load of it. */
   private noticeId = "";
   private readonly host: ProfileHost;
   private readonly sel: { setOptions(o: { value: string; label: string; hint?: string }[]): void; value: string; el: HTMLElement };
@@ -519,7 +519,7 @@ export class ProfileStore {
     this.bar.hidden = true;
     this.status = document.createElement("span");
     this.status.className = "msg";
-    // #256: in the bar, empty, before any line is set, so the line is announced when it is.
+    // In the bar, empty, before any line is set, so the line is announced when it is.
     this.status.setAttribute("role", "status");
     const actions = document.createElement("span");
     actions.className = "actions";
@@ -546,17 +546,17 @@ export class ProfileStore {
     return this.available && !!this.current && !this.shipped && !this.newerProfile;
   }
 
-  /** #256: the current profile was saved by a newer version of zoto-viz. */
+  /** The current profile was saved by a newer version of zoto-viz. */
   get newerProfile(): boolean {
     return !!this.current && this.newer.has(this.current);
   }
 
-  /** #256: the current profile's stored blob predates `v`. */
+  /** The current profile's stored blob predates `v`. */
   get legacyProfile(): boolean {
     return !!this.current && this.legacyId === this.current;
   }
 
-  /** #256: every profile known to be newer, for the same-tab session snapshot. */
+  /** Every profile known to be newer, for the same-tab session snapshot. */
   newerIds(): string[] {
     return [...this.newer];
   }
@@ -754,7 +754,7 @@ export class ProfileStore {
     this.current = id;
     this.sel.value = id;
     const settings = normalizeSettings(live.settings);
-    // #256: the snapshot's settings were re-stamped to this build's v, so what the page learned from the server
+    // The snapshot's settings were re-stamped to this build's v, so what the page learned from the server
     // load rides beside them. A session apply runs once, at boot: the snapshot is its record.
     this.newer.clear();
     this.noticeId = "";
@@ -798,14 +798,14 @@ export class ProfileStore {
     const id = workingProfileId(this.defaultId, this.list.map((p) => p.id));
     const settings: ProfileSettings = { ...this.host.collect(), autosave: true };
     try {
-      // #275: the list can name a working profile this tab never loaded. One GET
+      // The list can name a working profile this tab never loaded. One GET
       // before the first write; a newer blob takes the keep-unsaved path below.
       if (this.list.some((p) => p.id === id) && !this.newer.has(id)) {
         const raw = await api<{ settings: unknown }>(`/api/profiles/${id}`);
         if (normalizeSettings(raw.settings).newer) this.newer.add(id);
       }
       if (this.newer.has(id)) {
-        // #256: a newer build saved the working profile; keep the edit here, unsaved.
+        // A newer build saved the working profile; keep the edit here, unsaved.
         this.dirty = true;
         this.syncChrome();
         return;
@@ -954,7 +954,7 @@ export class ProfileStore {
           id,
           label: model,
           model,
-          // #275: a newer blob is copied unchanged, so its v and unknown fields survive the rename.
+          // A newer blob is copied unchanged, so its v and unknown fields survive the rename.
           settings: loaded.newer ? raw.settings : storedSettings(loaded),
           make_default: this.defaultId === AI_ID,
         }),
@@ -1238,7 +1238,7 @@ export class ProfileStore {
     }
     if (this.newerProfile) {
       this.bar.hidden = false;
-      // #256: once per load of the profile; re-renders and reloads of it leave the line alone.
+      // Once per load of the profile. Re-renders and reloads of it leave the line alone.
       if (this.noticeId !== this.current) {
         this.status.textContent = NEWER_PROFILE_NOTICE;
         this.noticeId = this.current;
@@ -1251,7 +1251,7 @@ export class ProfileStore {
       return;
     }
     const workingId = workingProfileId(this.defaultId, this.list.map((p) => p.id));
-    // #275: the edit stays on the shipped profile, but the working profile is the newer one.
+    // The edit stays on the shipped profile, but the working profile is the newer one.
     const newerWorking = this.shipped && this.dirty && this.newer.has(workingId);
     if (!newerWorking) this.noticeId = "";
     this.saveBtn.hidden = false;

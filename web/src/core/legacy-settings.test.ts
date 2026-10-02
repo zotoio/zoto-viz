@@ -1,5 +1,5 @@
 /**
- * #260: the legacy reader builds a sparse v2 envelope and never writes storage.
+ * The legacy reader builds a sparse v2 envelope and never writes storage.
  * Values equal to today's defaults are inherit (omitted).
  */
 import { readFileSync } from "node:fs";
@@ -57,7 +57,7 @@ function legacyFixture(): Record<string, string> {
   return out;
 }
 
-describe("#260 legacy settings reader", () => {
+describe("legacy settings reader", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });

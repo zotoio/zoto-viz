@@ -3,16 +3,16 @@ import { normalizeSettings, type ProfileSettings } from "./profiles";
 export const SESSION_LIVE_KEY = "zoto-viz.session.live";
 
 export interface SessionLive {
-  /** #262: written as 2. A stored 1 is still read. */
+  /** Written as 2. A stored 1 is still read. */
   v: 1 | 2;
   profileId: string;
   dirty: boolean;
   settings: ProfileSettings;
   selected?: string | null;
   aiCycle?: boolean;
-  /** #256: profiles known to be newer; the settings above were re-stamped v: 1 and can't say. */
+  /** Profiles known to be newer. The settings above were re-stamped to this build's version and can't say. */
   newerIds?: string[];
-  /** #256: the profile's server blob is still legacy (v0). */
+  /** The profile's server blob is still legacy (v0). */
   legacy?: boolean;
 }
 

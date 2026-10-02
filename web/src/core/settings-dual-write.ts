@@ -1,5 +1,5 @@
 /**
- * #262: the sparse v2 envelope at `zoto-viz.settings`.
+ * The sparse v2 envelope at `zoto-viz.settings`.
  * The first read builds it from legacy keys and writes nothing.
  * The first user edit writes that envelope and dual-writes the one legacy key
  * for the Global or Pack value that changed.

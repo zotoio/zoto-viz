@@ -1,10 +1,10 @@
 /**
- * #256 rows 2 and 4, through main.ts's real collectSettings / applySettings. main.ts boots at
- * collection (main-entry-env, #239); each "boot" below runs its catalog boot (the test hook), which
+ * Rows 2 and 4, through main.ts's real collectSettings / applySettings. main.ts boots at
+ * collection (main-entry-env); each "boot" below runs its catalog boot (the test hook), which
  * applies the same-tab session snapshot (applySettings) and then writes it back from
  * collectSettings (persistLive), normalised by writeSessionLive. Two boots make one round trip:
  * collect -> normalise -> apply -> collect. The rows read that snapshot raw: readSessionLive
- * normalises it again, and the first normalise has already stamped v: 1, so only the raw blob
+ * normalises it again, and the first normalise has already stamped this build's v, so only the raw blob
  * shows what collect wrote (a collect with no v is stored as legacy). The seed carries no aiCycle,
  * which persistLive always writes, so its presence shows the boot did write the snapshot back.
  *
@@ -55,7 +55,7 @@ function arcadeKeys(): string[] {
   return keys.sort();
 }
 
-// #208: the booted page goes away the way a real one does, so its pagehide disposes the LiveFeed
+// The booted page goes away the way a real one does, so its pagehide disposes the LiveFeed
 // poll before happy-dom's teardown (main-entry-harness does the same).
 afterAll(() => {
   window.dispatchEvent(new PageTransitionEvent("pagehide", { persisted: false }));
@@ -84,7 +84,7 @@ function seed(settings: RawLive["settings"]): void {
   writeSessionLive({ profileId: "user", dirty: false, settings: { ...shippedSettings(), ...settings } });
 }
 
-describe("#256: main.ts collect / apply keep v: 1 and every arcade family", () => {
+describe("main.ts collect / apply keep this build's v and every arcade family", () => {
   beforeEach(() => {
     expect.hasAssertions();
     vi.stubGlobal("Worker", InertWorker);
@@ -96,7 +96,7 @@ describe("#256: main.ts collect / apply keep v: 1 and every arcade family", () =
     for (const k of arcadeKeys()) localStorage.removeItem(k);
   });
 
-  it("(2) round trip collect -> normalise -> apply -> collect is stable and keeps v: 1", async () => {
+  it("(2) round trip collect -> normalise -> apply -> collect is stable and keeps this build's v", async () => {
     seed({ dream: true, merge: true });
     const first = await boot();
     expect(first.settings?.v).toBe(2);
@@ -135,7 +135,7 @@ describe("#256: main.ts collect / apply keep v: 1 and every arcade family", () =
   });
 });
 
-// ---- #256b: same-tab reload, saved blobs, the line per boot ----
+// ---- same-tab reload, saved blobs, the line per boot ----
 
 const NEWER_LINE = "This profile was saved by a newer version of zoto-viz, so changes won't be saved to it. Use Save as to keep them in a new profile.";
 
@@ -217,7 +217,7 @@ function storedKeys(body: unknown): { v: unknown; keys: string[] } {
   return { v: "v" in settings ? settings.v : undefined, keys: Object.keys(settings) };
 }
 
-describe("#256b: main.ts keeps the version markers through a same-tab reload", () => {
+describe("main.ts keeps the version markers through a same-tab reload", () => {
   beforeEach(() => {
     expect.hasAssertions();
     vi.stubGlobal("Worker", InertWorker);
@@ -236,7 +236,7 @@ describe("#256b: main.ts keeps the version markers through a same-tab reload", (
     expect(first.newerIds).toEqual(["future"]);
     expect(line.sets()).toBe(1);
     expect(newerLines()).toBe(1);
-    // The reload's snapshot settings say v: 1; the markers beside them still say newer.
+    // The reload's snapshot settings say this build's v; the markers beside them still say newer.
     expect(first.settings?.v).toBe(2);
     reload(first);
     const second = await boot();
@@ -285,7 +285,7 @@ describe("#256b: main.ts keeps the version markers through a same-tab reload", (
     await editTick();
     expect(srv.puts).toHaveLength(1);
     expect(storedKeys(srv.puts[0]?.body).v).toBe(2);
-    // The next snapshot after that write: the server blob is v: 1 now.
+    // The next snapshot after that write: the server blob is this build's v now.
     await editTick();
     const after: RawLive = JSON.parse(sessionStorage.getItem(SESSION_LIVE_KEY) ?? "{}");
     expect(after.legacy).toBe(false);

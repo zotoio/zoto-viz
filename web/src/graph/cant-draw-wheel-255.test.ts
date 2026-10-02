@@ -1,4 +1,4 @@
-/** #255: a fitting couldn't-draw line leaves the wheel to the camera. An overflowing line keeps it. */
+/** A fitting couldn't-draw line leaves the wheel to the camera. An overflowing line keeps it. */
 import { describe, expect, it } from "vitest";
 import { inScrollingCantDrawLine } from "./scene";
 
@@ -11,7 +11,7 @@ function line(scrollHeight: number, clientHeight: number): HTMLElement {
   return el;
 }
 
-describe("#255 solo couldn't-draw wheel", () => {
+describe("solo couldn't-draw wheel", () => {
   it("a fitting line does not take the wheel, and an overflowing line does, even at the bottom", () => {
     const fit = line(40, 40);
     expect(inScrollingCantDrawLine(fit)).toBe(false);

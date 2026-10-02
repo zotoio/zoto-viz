@@ -1,5 +1,5 @@
 /**
- * #276: the view picker's group heading counts lint blocks, checks that couldn't run,
+ * The view picker's group heading counts lint blocks, checks that couldn't run,
  * and packs that didn't build. Only a lint block is a block, so the heading is
  * "Unavailable (n)". Each row keeps the line it already has.
  */
@@ -10,7 +10,7 @@ const LINT = "Probe was blocked because it loads code from outside its own folde
 const BUILT = "Star Sines couldn't be built, so it wasn't installed.";
 const CHECK = "Couldn't safety-check Marble, so it wasn't installed.";
 
-describe("#276 view picker: Unavailable (n), each row keeps its own line", () => {
+describe("view picker: Unavailable (n), each row keeps its own line", () => {
   beforeEach(() => {
     expect.hasAssertions();
     vi.resetModules();

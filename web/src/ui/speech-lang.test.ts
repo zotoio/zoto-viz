@@ -1,8 +1,8 @@
-/** #268: speech language reaches recognition and survives a reload. */
+/** Speech language reaches recognition and survives a reload. */
 import { afterEach, describe, expect, it } from "vitest";
 import { loadSpeechLang, saveSpeechLang, SPEECH_LANG_KEY, speechLangRejectedLine, speechRecognitionLang } from "./speech-lang";
 
-describe("#268 speech language", () => {
+describe("speech language", () => {
   afterEach(() => localStorage.clear());
 
   it("Match browser uses navigator.language, and a chosen language is stored", () => {

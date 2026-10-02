@@ -1,5 +1,5 @@
 /**
- * #261: arcade knob reads go through the scope resolver.
+ * Arcade knob reads go through the scope resolver.
  * A stored value sits on the arcade view. The caller's fallback is the built-in.
  * Missing storage still returns the fallback, same as `localStorage.getItem(key) ?? fallback`.
  */

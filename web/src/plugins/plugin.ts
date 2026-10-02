@@ -499,7 +499,7 @@ export function instanceDefaultValue(spec: PluginView, key: string): string | un
 }
 
 /**
- * #262: the user's pack value beats an instance default.
+ * The user's pack value beats an instance default.
  * A saved value on this instance still wins. The instance default sits on the
  * manifest, under the pack. The hint that instance defaults override the pack
  * is gone; a replacement line waits on UX Pro.

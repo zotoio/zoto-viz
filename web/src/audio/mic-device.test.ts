@@ -1,8 +1,8 @@
-/** #267: microphone device list, deviceId, missing-device announcement, policy off. */
+/** Microphone device list, deviceId, missing-device announcement, policy off. */
 import { afterEach, describe, expect, it } from "vitest";
 import { MIC_DEVICE_MISSING, micCaptureRequest, micDeviceChoices, missingMicDevice, saveMicDevice } from "./mic-device";
 
-describe("#267 microphone device", () => {
+describe("microphone device", () => {
   afterEach(() => localStorage.clear());
 
   it("lists System default plus inputs only after permission", () => {

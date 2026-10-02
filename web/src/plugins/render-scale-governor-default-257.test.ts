@@ -1,5 +1,5 @@
 /**
- * #257: the render governor is on by default. A legacy profile's `vizGovernor: false`
+ * The render governor is on by default. A legacy profile's `vizGovernor: false`
  * was the old default, so it applies as on. A current profile's false stays off.
  * `?vizGovernor=0` and `?vizGovernor=1` still override for one load.
  */
@@ -16,7 +16,7 @@ import type { RenderScaleGovernorHost } from "../app/render-scale-governor-wirin
 
 const HELP = "Lowers a view's render resolution when it can't keep up. On by default.";
 
-describe("#257 render governor on by default", () => {
+describe("render governor on by default", () => {
   beforeEach(() => {
     expect.hasAssertions();
     localStorage.clear();

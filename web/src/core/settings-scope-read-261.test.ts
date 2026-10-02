@@ -1,6 +1,6 @@
 /**
- * #261: wired reads go through the resolver and return the same values as before.
- * An instance default still beats a stored pack value. That flip is #262.
+ * Wired reads go through the resolver.
+ * A stored pack value beats an instance default. A value saved on that instance still wins.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { readArcadeKnob } from "./arcade-knob";
@@ -20,7 +20,7 @@ function wallIds(n: number): string[] {
   return out;
 }
 
-describe("#261 scope reads match today's results", () => {
+describe("scope reads", () => {
   beforeEach(() => {
     expect.hasAssertions();
     localStorage.clear();

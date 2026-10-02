@@ -2,7 +2,7 @@ const SETTINGS_KEY = "zoto-viz.vizGovernor";
 
 export function loadVizGovernorSetting(): boolean {
   try {
-    // #257: on unless the user stored an explicit off. A missing key is not a choice.
+    // On unless the user stored an explicit off. A missing key is not a choice.
     return localStorage.getItem(SETTINGS_KEY) !== "0";
   } catch {
     return true;
