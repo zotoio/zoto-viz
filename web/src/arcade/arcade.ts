@@ -11,6 +11,7 @@ import { CanvasChangeProbe } from "../graph/pane-change";
 import { observeResize } from "../core/resize";
 import { devicePxRatioNumber, layoutDevicePxRatio } from "../graph/render-host-device-px-ratio";
 import { ArcadeIdleFeed, arcadeBadgeName, arcadeDemoLabelText, mountArcadeDemoLabel, type ArcadeIdleShaper } from "./arcade-idle-feed";
+import { readArcadeKnob } from "../core/arcade-knob";
 
 /**
  * Shared machinery for the arcade views (NetPong's siblings: Invaders, Command, Frogger). Each is a standalone
@@ -240,7 +241,7 @@ export class DevicePicker {
   private msg: StateMsg | null = null;
 
   constructor(private readonly cfg: DevicePickerConfig, private readonly scene: NetScene) {
-    this.choice = localStorage.getItem(cfg.key) ?? "lan";
+    this.choice = readArcadeKnob(cfg.key, "lan");
     this.sel = new Select({
       id: cfg.id, caption: cfg.caption, title: cfg.title,
       options: this.baseOptions(),

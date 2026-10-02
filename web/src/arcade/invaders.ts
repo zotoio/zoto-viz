@@ -1,4 +1,5 @@
 import type { NetScene } from "../graph/scene";
+import { readArcadeKnob } from "../core/arcade-knob";
 import { Select } from "../ui/ui";
 import { categorize, hashColor, orgOf } from "../core/modes";
 import { rName } from "../core/redact";
@@ -77,7 +78,7 @@ export class InvadersView extends ArcadeView {
     this.speedSel = new Select({
       caption: "speed", title: "how fast shots and bombs travel",
       options: [{ value: "0.5", label: "slow" }, { value: "1", label: "normal" }, { value: "2", label: "fast" }],
-      value: localStorage.getItem(KEY_SPEED) ?? "1",
+      value: readArcadeKnob(KEY_SPEED, "1"),
       onChange: (v) => localStorage.setItem(KEY_SPEED, v),
     });
     this.controls = [this.picker.el, this.speedSel.el];

@@ -1,4 +1,5 @@
 import type { NetScene } from "../graph/scene";
+import { readArcadeKnob } from "../core/arcade-knob";
 import { Select } from "../ui/ui";
 import { CPU_RED, cpuHeat, hashColor } from "../core/modes";
 import { displayName, type Device, type Packet, type Role } from "../core/types";
@@ -82,25 +83,25 @@ export class CpuPongView extends ArcadeView {
     this.whoSel = new Select({
       caption: "who", title: "which processes to show",
       options: [{ value: "all", label: "everyone" }, { value: "mine", label: "this user" }, { value: "kernel", label: "kernel" }],
-      value: localStorage.getItem(KEY_WHO) ?? "all",
+      value: readArcadeKnob(KEY_WHO, "all"),
       onChange: (v) => { localStorage.setItem(KEY_WHO, v); this.resync(); },
     });
     this.minSel = new Select({
       caption: "at least", title: "drop processes below this CPU share (percent of one core)",
       options: [{ value: "0.5", label: "0.5%" }, { value: "1", label: "1%" }, { value: "5", label: "5%" }, { value: "10", label: "10%" }],
-      value: localStorage.getItem(KEY_MIN) ?? "0.5",
+      value: readArcadeKnob(KEY_MIN, "0.5"),
       onChange: (v) => { localStorage.setItem(KEY_MIN, v); this.resync(); },
     });
     this.groupSel = new Select({
       caption: "group", title: "one row per PID, or fold threads that share a name",
       options: [{ value: "each", label: "each process" }, { value: "name", label: "by name" }],
-      value: localStorage.getItem(KEY_GROUP) ?? "name",
+      value: readArcadeKnob(KEY_GROUP, "name"),
       onChange: (v) => { localStorage.setItem(KEY_GROUP, v); this.resync(); },
     });
     this.speedSel = new Select({
       caption: "speed", title: "how fast the balls cross the screen",
       options: [{ value: "0.5", label: "slow" }, { value: "1", label: "normal" }, { value: "2", label: "fast" }],
-      value: localStorage.getItem(KEY_SPEED) ?? "1",
+      value: readArcadeKnob(KEY_SPEED, "1"),
       onChange: (v) => localStorage.setItem(KEY_SPEED, v),
     });
     this.controls = [this.whoSel.el, this.minSel.el, this.groupSel.el, this.speedSel.el];

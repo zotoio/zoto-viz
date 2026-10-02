@@ -52,6 +52,7 @@ import type { BackdropKind } from "../graph/backdrop";
 import type { FloorShape } from "../graph/floor";
 import { KIND_COLOR, ROLE_COLOR, deviceKind, displayName } from "../core/types";
 import { apiFetch } from "../core/http";
+import { emptyScopeStore, resolve, type ScopeCtx } from "../core/settings-scope";
 import type { ManifestBlockedPlugin } from "./plugin-manifest-blocked";
 import {
   isUnavailableRow,
@@ -277,7 +278,7 @@ export interface PluginView {
   dataSource?: import("../remix/remix-types").DataSourceBlock;
 }
 
-const LOOK_ANIM_KEYS = [
+export const LOOK_ANIM_KEYS = [
   "backdrop", "skyOpacity", "skyBright", "skySpeed", "skyEase", "skyPhotoS", "skyAudio", "skyCycle",
   "bgColor", "bgOpacity", "bgAudio",
   "gridShape", "gridColor", "gridSize", "gridFollow", "gridOpacity", "gridBright", "gridAudio",
@@ -497,35 +498,44 @@ export function instanceDefaultValue(spec: PluginView, key: string): string | un
   return instanceDefaultFor(spec, key);
 }
 
+/**
+ * #261: one field through the resolver.
+ * Saved instance value and the instance default sit on the view, so they beat
+ * the user's pack value. That is today's order. #262 (Q3) moves the instance
+ * default below the pack so the user's choice wins.
+ */
+function readPluginField(spec: PluginView, key: string, fallback: string | undefined): string | undefined {
+  const storeId = configStoreId(spec);
+  const viewId = pluginViewId(spec.id, spec.instanceId);
+  const packId = spec.id;
+  const instance = !!(spec.instanceId && spec.instanceId !== spec.id);
+  const savedHere = localStorage.getItem(storeKey(storeId, key));
+  const instDef = instanceDefaultFor(spec, key);
+  const packSaved = instance ? localStorage.getItem(storeKey(packId, key)) : null;
+  const legacy = localStorage.getItem(`zoto-viz.mode.${viewId}.${key}`);
+  const store = emptyScopeStore();
+  const view: Record<string, string> = {};
+  if (instDef !== undefined) view[key] = instDef;
+  if (instance && savedHere !== null) view[key] = savedHere;
+  if (Object.keys(view).length) store.view[viewId] = view;
+  if (!instance && savedHere !== null) store.pack[packId] = { [key]: savedHere };
+  else if (packSaved !== null) store.pack[packId] = { [key]: packSaved };
+  if (legacy !== null) store.global[key] = legacy;
+  if (fallback !== undefined) store.builtin[key] = fallback;
+  const ctx: ScopeCtx = { packId, viewId, wallId: "default", tileId: viewId };
+  const got = resolve(store, key, ctx);
+  return got == null ? fallback : String(got);
+}
+
 export function loadPluginConfig(spec: PluginView, fields = spec.config): Record<string, string> {
   const out: Record<string, string> = {};
   const storeId = configStoreId(spec);
-  const viewId = pluginViewId(spec.id, spec.instanceId);
-  const metaKeys = [PRESET_BASE_META_KEY];
-  for (const mk of metaKeys) {
-    const saved = localStorage.getItem(storeKey(storeId, mk));
-    if (saved !== null) out[mk] = saved;
+  for (const mk of [PRESET_BASE_META_KEY]) {
+    const saved = readPluginField(spec, mk, undefined);
+    if (saved !== undefined && localStorage.getItem(storeKey(storeId, mk)) !== null) out[mk] = saved;
   }
   for (const f of fields ?? []) {
-    const saved = localStorage.getItem(storeKey(storeId, f.key));
-    if (saved !== null) {
-      out[f.key] = saved;
-      continue;
-    }
-    const instDef = instanceDefaultFor(spec, f.key);
-    if (instDef !== undefined) {
-      out[f.key] = instDef;
-      continue;
-    }
-    const pack = spec.instanceId && spec.instanceId !== spec.id
-      ? localStorage.getItem(storeKey(spec.id, f.key))
-      : null;
-    if (pack !== null) {
-      out[f.key] = pack;
-      continue;
-    }
-    const legacy = localStorage.getItem(`zoto-viz.mode.${viewId}.${f.key}`);
-    out[f.key] = legacy !== null ? legacy : fieldDefault(f);
+    out[f.key] = readPluginField(spec, f.key, fieldDefault(f)) ?? fieldDefault(f);
   }
   return out;
 }
