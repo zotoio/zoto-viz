@@ -35,6 +35,7 @@ const TILE_RETRY = ".tile-cant-draw__retry";
  */
 export class GfxWallNotice {
   private el: HTMLDivElement | null = null;
+  private polite: HTMLDivElement | null = null;
   private tileWatch: MutationObserver | null = null;
   private shown = false;
   private restoreTimer: ReturnType<typeof setTimeout> | null = null;
@@ -66,6 +67,7 @@ export class GfxWallNotice {
     el.textContent = GFX_INTERRUPTED_NOTICE;
     this.wall.appendChild(el);
     this.el = el;
+    this.ensurePolite();
     this.watchTiles();
     this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
   }
@@ -78,8 +80,12 @@ export class GfxWallNotice {
 
   /** Every visible tile already says the loss itself (#236 solo, #246 all-pack mosaic): the wall notice would be a second one. */
   private tilesSayLoss(): boolean {
-    const tiles = this.tiles().filter((t) => !t.hidden);
+    const tiles = this.visibleTiles();
     return tiles.length > 0 && tiles.every((t) => t.getAttribute(TILE_SURFACE_ATTR) === TILE_SAYS_LOSS);
+  }
+
+  private visibleTiles(): HTMLElement[] {
+    return this.tiles().filter((t) => !t.hidden);
   }
 
   /** The first visible tile's own Retry, in board order (#246). */
@@ -99,6 +105,41 @@ export class GfxWallNotice {
     return this.wall.contains(active) && !active.matches(TILE_RETRY);
   }
 
+  /**
+   * #272: Reload takes focus only from body, or from a tile that is already hidden.
+   * The header, a menu, settings and chat sit outside the wall, so they stay put.
+   */
+  private mayTakeReloadFocus(): boolean {
+    const active = document.activeElement;
+    if (!active || active === document.body) return true;
+    if (!(active instanceof HTMLElement) || !this.wall.contains(active)) return false;
+    const tile = active.closest<HTMLElement>(".mosaic-pane, #scene");
+    return !!tile && tile.hidden;
+  }
+
+  /** #272: the Reload sentence, once per time the board leaves all-failed while Reload is up. */
+  private announceReload(): void {
+    const p = this.ensurePolite();
+    if (p.textContent === GFX_NO_RESTORE_NOTICE) return;
+    p.textContent = GFX_NO_RESTORE_NOTICE;
+  }
+
+  private ensurePolite(): HTMLDivElement {
+    if (this.polite?.isConnected) return this.polite;
+    const p = document.createElement("div");
+    p.className = "gfx-wall-notice__polite";
+    p.setAttribute("role", "status");
+    p.setAttribute("aria-live", "polite");
+    this.wall.appendChild(p);
+    this.polite = p;
+    return p;
+  }
+
+  private dropPolite(): void {
+    this.polite?.remove();
+    this.polite = null;
+  }
+
   /** Hide or show the notice to match the tiles now; focus goes to Reload when it comes back with one. */
   private syncToTiles(): void {
     const el = this.el;
@@ -112,8 +153,17 @@ export class GfxWallNotice {
       this.wall.tabIndex = -1;
       this.wall.focus();
     }
+    const noneVisible = this.tiles().length > 0 && this.visibleTiles().length === 0;
+    // #272: leaving all-failed while Reload is offered. A board with no visible tile does not move focus.
+    const showReload = !hide && el.hidden && this.reloadOffered && !noneVisible;
+    const takeReload = showReload && this.mayTakeReloadFocus();
     el.hidden = hide;
-    if (!hide) el.querySelector<HTMLButtonElement>(".gfx-wall-reload")?.focus();
+    if (hide) {
+      if (this.polite) this.polite.textContent = "";
+    } else if (showReload) {
+      if (takeReload) el.querySelector<HTMLButtonElement>(".gfx-wall-reload")?.focus();
+      this.announceReload();
+    }
   }
 
   /** While the notice is up, follow the tiles' surface marker and the wall's tiles coming and going. */
@@ -121,7 +171,13 @@ export class GfxWallNotice {
     this.syncToTiles();
     if (this.tileWatch || typeof MutationObserver === "undefined") return;
     this.tileWatch = new MutationObserver(() => this.syncToTiles());
-    this.tileWatch.observe(this.wall, { subtree: true, childList: true, attributes: true, attributeFilter: [TILE_SURFACE_ATTR] });
+    // #272: `hidden` is read by tilesSayLoss, so a pane hiding or showing has to re-check.
+    this.tileWatch.observe(this.wall, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: [TILE_SURFACE_ATTR, "hidden"],
+    });
   }
 
   private unwatchTiles(): void {
@@ -138,6 +194,7 @@ export class GfxWallNotice {
     const focusOnReload = btn !== null && document.activeElement === btn;
     const hadLateReload = this.reloadOffered;
     this.unwatchTiles();
+    this.dropPolite();
     this.el?.remove();
     this.el = null;
     this.shown = false;
@@ -171,6 +228,7 @@ export class GfxWallNotice {
       this.restoreTimer = null;
     }
     this.unwatchTiles();
+    this.dropPolite();
     this.el?.remove();
     this.el = null;
     this.shown = false;
