@@ -87,7 +87,7 @@ export interface VizHudTick {
   renderScale?: number | null;
   /** rAF present-to-present interval (last + rolling p95), from {@link presentFrameStats}. */
   present?: { last: number; p95: number };
-  /** Host adaptive render-scale governor (off unless enabled in settings or `?vizGovernor=1`). */
+  /** Host adaptive render-scale governor (on by default; `?vizGovernor=0` forces off for one load). */
   governorEnabled?: boolean;
 }
 

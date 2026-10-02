@@ -110,8 +110,8 @@ export function vizHudGovernorTickFields(
 export function createVizGovernorToggle(host: RenderScaleGovernorHost): Toggle {
   return new Toggle({
     id: "viz-governor",
-    label: "render governor",
-    title: "Adaptive render.scale governor (off by default). Also ?vizGovernor=1 on the URL for a one-off local GPU run.",
+    label: "Render governor",
+    title: "Lowers a view's render resolution when it can't keep up. On by default.",
     checked: loadVizGovernorSetting(),
     onChange: (on) => applyHostRenderScaleGovernor(on, host),
   });

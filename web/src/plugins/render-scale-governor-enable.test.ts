@@ -15,9 +15,11 @@ describe("resolveVizGovernorEnabled", () => {
     refreshHostRenderScaleGovernorEnabled("");
   });
 
-  it("is off by default", () => {
+  it("is on unless storage is an explicit 0", () => {
+    expect(resolveVizGovernorEnabled("")).toBe(true);
+    expect(hostRenderScaleGovernorEnabled()).toBe(true);
+    setVizGovernorSetting(false);
     expect(resolveVizGovernorEnabled("")).toBe(false);
-    expect(hostRenderScaleGovernorEnabled()).toBe(false);
   });
 
   it("enables from settings or ?vizGovernor=1", () => {

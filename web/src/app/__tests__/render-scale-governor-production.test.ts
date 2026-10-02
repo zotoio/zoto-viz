@@ -132,6 +132,7 @@ describe("render-scale governor production wiring", () => {
 
   it("flag off: no enabled governor ticks and no render-scale commits over 600 frames", () => {
     const { scene, host } = mountScene();
+    setVizGovernorSetting(false);
     refreshHostRenderScaleGovernorEnabled("");
     expect(hostRenderScaleGovernorEnabled()).toBe(false);
     runFrames(host, scene, FRAMES, OVER_MS);

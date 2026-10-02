@@ -153,12 +153,14 @@ render:
 
 When `render.scale` is absent the host keeps today’s behaviour at scale **1.0**.
 
-The adaptive governor is **off by default** until it is tuned on real GPU hardware.
-With it off, every pack renders at scale **1.0** and `uRenderScale` reads **1.0**
-even when `render.scale` is declared in YAML. Opt in without rebuilding:
+The adaptive governor is **on by default**. A profile saved before schema
+version 1 with `vizGovernor: false` never recorded a choice, so it is on too.
+A current profile that stores false stays off. With the governor off, every
+pack renders at scale **1.0** and `uRenderScale` reads **1.0** even when
+`render.scale` is declared in YAML.
 
-- Settings → Privacy → **render governor**, or
-- URL query `?vizGovernor=1` (use `?vizGovernor=0` to force off for one load).
+- Settings → Privacy → **Render governor**. The help text is "Lowers a view's render resolution when it can't keep up. On by default."
+- URL query `?vizGovernor=1` forces on for one load. `?vizGovernor=0` forces off for one load.
 
 Hysteresis thresholds live in one place in the web host:
 `RENDER_SCALE_GOVERNOR_TUNING` in `web/src/plugins/render-scale-governor.ts`
