@@ -114,7 +114,7 @@ export class GfxWallNotice {
     if (!active || active === document.body) return true;
     if (!(active instanceof HTMLElement) || !this.wall.contains(active)) return false;
     const tile = active.closest<HTMLElement>(".mosaic-pane, #scene");
-    return !!tile && tile.hidden;
+    return tile !== null && tile.hidden === true;
   }
 
   /** #272: the Reload sentence, once per time the board leaves all-failed while Reload is up. */
