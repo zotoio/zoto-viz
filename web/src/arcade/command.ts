@@ -1,4 +1,5 @@
 import type { NetScene } from "../graph/scene";
+import { readArcadeKnob } from "../core/arcade-knob";
 import { Select } from "../ui/ui";
 import { categorize, hashColor } from "../core/modes";
 import { rIp } from "../core/redact";
@@ -85,13 +86,13 @@ export class CommandView extends ArcadeView {
         { value: "internet", label: "internet", hint: "peers off the local network" },
         { value: "lan", label: "LAN", hint: "peers on the local segment" },
       ],
-      value: localStorage.getItem(KEY_FROM) ?? "any",
+      value: readArcadeKnob(KEY_FROM, "any"),
       onChange: (v) => { localStorage.setItem(KEY_FROM, v); this.resync(); },
     });
     this.speedSel = new Select({
       caption: "speed", title: "how fast missiles fall",
       options: [{ value: "0.5", label: "slow" }, { value: "1", label: "normal" }, { value: "2", label: "fast" }],
-      value: localStorage.getItem(KEY_SPEED) ?? "1",
+      value: readArcadeKnob(KEY_SPEED, "1"),
       onChange: (v) => localStorage.setItem(KEY_SPEED, v),
     });
     this.controls = [this.picker.el, this.fromSel.el, this.speedSel.el];

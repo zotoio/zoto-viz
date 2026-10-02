@@ -1,4 +1,5 @@
 import type { NetScene } from "../graph/scene";
+import { readArcadeKnob } from "../core/arcade-knob";
 import { ArcadeIdleFeed, arcadeBadgeName, arcadeDemoLabelText, arcadeHudRate, mountArcadeDemoLabel } from "./arcade-idle-feed";
 import { shapePongIdle, type PongRow } from "./arcade-idle-shapers";
 import { Select, TextField, type SelectOption } from "../ui/ui";
@@ -247,10 +248,10 @@ export class PongView {
       localStorage.removeItem(KEY_TARGET);
     }
     this.srcExplicit = localStorage.getItem(KEY_SOURCE) !== null;
-    this.srcChoice = localStorage.getItem(KEY_SOURCE) ?? "gateway";
-    this.tgtChoice = localStorage.getItem(KEY_TARGET) ?? "any";
-    this.srcPattern = localStorage.getItem(KEY_SOURCE_PATTERN) ?? "";
-    this.pattern = localStorage.getItem(KEY_PATTERN) ?? "";
+    this.srcChoice = readArcadeKnob(KEY_SOURCE, "gateway");
+    this.tgtChoice = readArcadeKnob(KEY_TARGET, "any");
+    this.srcPattern = readArcadeKnob(KEY_SOURCE_PATTERN, "");
+    this.pattern = readArcadeKnob(KEY_PATTERN, "");
     this.srcMatcher = compileMatcher(this.srcPattern);
     this.matcher = compileMatcher(this.pattern);
 
@@ -292,7 +293,7 @@ export class PongView {
       caption: "speed",
       title: "how fast the balls cross the screen",
       options: [{ value: "0.5", label: "slow" }, { value: "1", label: "normal" }, { value: "2", label: "fast" }],
-      value: localStorage.getItem(KEY_SPEED) ?? "1",
+      value: readArcadeKnob(KEY_SPEED, "1"),
       onChange: (v) => localStorage.setItem(KEY_SPEED, v),
     });
     this.controls = [this.sourceSel.el, this.srcPatternField.el, this.targetSel.el, this.patternField.el, this.speedSel.el];

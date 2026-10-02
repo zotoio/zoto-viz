@@ -29,6 +29,10 @@ import {
 import { mosaicTileViewId } from "./mosaic-tile-id";
 import { applyPackCoalesceLayout } from "./mosaic-pack-coalesce";
 import type { PluginView } from "../plugins/plugin";
+import { LOOK_ANIM_KEYS } from "../plugins/plugin";
+import { parsePluginId } from "../plugins/instances";
+import { guardReadableAnim } from "./readable";
+import { emptyScopeStore, resolve, sharedViewId, type ScopeBag, type ScopeCtx } from "../core/settings-scope";
 
 export { centerSplit } from "./mosaic-layout";
 export { mosaicPaneIdsWithViewChange } from "./mosaic-layout";
@@ -119,12 +123,43 @@ export function mosaicAnimForTile(
   tileSky?: BackdropKind,
   pinLook = true,
 ): DreamAnim {
-  const look = lookForTile(id);
-  const merged = pinLook ? mergeLook(wall, look) : { ...wall };
+  const look = pinLook ? lookForTile(id) : undefined;
   const authored = authoredTileSky(id);
-  if (authored) return { ...merged, backdrop: authored };
-  if (tileSky) return { ...merged, backdrop: tileSky };
-  return merged;
+  const viewId = sharedViewId(id);
+  const ctx: ScopeCtx = {
+    packId: parsePluginId(viewId) ?? "",
+    viewId,
+    wallId: "default",
+    tileId: id,
+  };
+  const store = emptyScopeStore();
+  const wallBag: ScopeBag = {};
+  for (const key of LOOK_ANIM_KEYS) {
+    const v = wall[key];
+    if (v !== undefined) wallBag[key] = v as ScopeBag[string];
+  }
+  store.wall.default = wallBag;
+  // Tile scope beats the wall. A pack look pin on backdrop beats a per-tile sky.
+  if (tileSky || look || authored) {
+    store.separated = [id];
+    const tileBag: ScopeBag = {};
+    if (look) {
+      for (const key of LOOK_ANIM_KEYS) {
+        const v = look[key];
+        if (v !== undefined) tileBag[key] = v as ScopeBag[string];
+      }
+    }
+    if (authored) tileBag.backdrop = authored;
+    else if (tileSky) tileBag.backdrop = tileSky;
+    store.tile[id] = tileBag;
+  }
+  const merged: DreamAnim = { ...wall };
+  const out = merged as unknown as Record<string, unknown>;
+  for (const key of LOOK_ANIM_KEYS) {
+    const got = resolve(store, key, ctx);
+    if (got !== undefined) out[key] = got;
+  }
+  return guardReadableAnim(merged);
 }
 
 /** A wall may run one full-device force layout. Further slots are stage-only or sliced graphs. */
@@ -1285,8 +1320,20 @@ export class Mosaic {
   }
 
   private animFor(id: string, wall: DreamAnim, pinLook = true): DreamAnim {
-    const a = mosaicAnimForTile(wall, id, this.tileSkies.get(id), pinLook);
-    return this.cfg.wallSkyTile?.() === id ? { ...a, backdrop: "plugin" } : a;
+    const base = mosaicAnimForTile(wall, id, this.tileSkies.get(id), pinLook);
+    if (this.cfg.wallSkyTile?.() !== id) return base;
+    const viewId = sharedViewId(id);
+    const store = emptyScopeStore();
+    store.separated = [id];
+    store.tile[id] = { backdrop: "plugin" };
+    store.wall.default = { backdrop: base.backdrop };
+    const backdrop = resolve(store, "backdrop", {
+      packId: parsePluginId(viewId) ?? "",
+      viewId,
+      wallId: "default",
+      tileId: id,
+    });
+    return { ...base, backdrop: (typeof backdrop === "string" ? backdrop : "plugin") as BackdropKind };
   }
 
   /** One sky is off unless it was turned on. Distinct host skies are the default. */
