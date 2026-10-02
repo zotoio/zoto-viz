@@ -2413,7 +2413,7 @@ mosaic = new Mosaic({
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
     title: "this pane's view settings",
-    ariaLabel: "this pane settings",
+    ariaLabel: `Settings for tile ${Math.max(1, (mosaic?.tileIds.indexOf(id) ?? 0) + 1)}: ${id.replace(/^plugin:/, "")}`,
     pane: id,
     onClick: () => {
       mosaic?.focus(id);

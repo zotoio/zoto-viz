@@ -3,6 +3,7 @@ import type { SourceKind, SourceLive, SourceRow } from "../core/sources";
 import { displayName, type Device, usefulName } from "../core/types";
 import { applyFloatRect, bindFloatPanel, readFloatRect } from "./float-drag";
 import { ColorField, GroupedChips, pinFlyout, Slider, TextField, Toggle, unpinFlyout } from "./ui";
+import { SettingsScopePanel, type ScopeEntry } from "./settings-scope-panel";
 import { MAGNET_FIELDS } from "../graph/physics";
 import type { PluginField } from "../core/modes";
 import type { RemixPairing } from "../remix/remix-types";
@@ -374,6 +375,23 @@ export class Settings {
     return btn;
   }
 
+  private scopePanel: SettingsScopePanel | null = null;
+
+  /** #263: header cog opens Global, the view cog opens View, a tile cog opens Tile. */
+  mountScope(entry: ScopeEntry, opts: { tileIndex?: number; packName?: string; viewName?: string } = {}): SettingsScopePanel {
+    const pane = this.pane("view");
+    this.scopePanel?.el.remove();
+    this.scopePanel = new SettingsScopePanel({
+      entry,
+      tileIndex: opts.tileIndex,
+      packName: opts.packName,
+      viewName: opts.viewName,
+      wallName: "default",
+    });
+    pane.prepend(this.scopePanel.el);
+    return this.scopePanel;
+  }
+
   /** This view for the wall, or for one mosaic / camera pane when `focusId` is set. */
   openView(focusId?: string): void {
     const want = focusId ?? "";
@@ -383,6 +401,7 @@ export class Settings {
     }
     this.viewDrawerReturnFocus = this.resolveViewDrawerReturnFocus();
     this.viewFocusId = want;
+    this.mountScope(want ? "tile" : "view", { viewName: want || undefined, tileIndex: want ? 1 : undefined });
     this.open("view");
     this.animUi?.syncTiles();
   }
@@ -2697,6 +2716,7 @@ export class Settings {
   }
 
   open(pane?: string): void {
+    if (!pane) this.mountScope("global");
     if (pane) this.showPane(pane);
     this.pop.hidden = false;
     this.el.classList.add("open");
