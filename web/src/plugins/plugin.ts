@@ -499,10 +499,10 @@ export function instanceDefaultValue(spec: PluginView, key: string): string | un
 }
 
 /**
- * #261: one field through the resolver.
- * Saved instance value and the instance default sit on the view, so they beat
- * the user's pack value. That is today's order. #262 (Q3) moves the instance
- * default below the pack so the user's choice wins.
+ * #262: the user's pack value beats an instance default.
+ * A saved value on this instance still wins. The instance default sits on the
+ * manifest, under the pack. The hint that instance defaults override the pack
+ * is gone; a replacement line waits on UX Pro.
  */
 function readPluginField(spec: PluginView, key: string, fallback: string | undefined): string | undefined {
   const storeId = configStoreId(spec);
@@ -515,11 +515,11 @@ function readPluginField(spec: PluginView, key: string, fallback: string | undef
   const legacy = localStorage.getItem(`zoto-viz.mode.${viewId}.${key}`);
   const store = emptyScopeStore();
   const view: Record<string, string> = {};
-  if (instDef !== undefined) view[key] = instDef;
   if (instance && savedHere !== null) view[key] = savedHere;
   if (Object.keys(view).length) store.view[viewId] = view;
   if (!instance && savedHere !== null) store.pack[packId] = { [key]: savedHere };
   else if (packSaved !== null) store.pack[packId] = { [key]: packSaved };
+  if (instDef !== undefined) store.manifest[packId] = { [key]: instDef };
   if (legacy !== null) store.global[key] = legacy;
   if (fallback !== undefined) store.builtin[key] = fallback;
   const ctx: ScopeCtx = { packId, viewId, wallId: "default", tileId: viewId };

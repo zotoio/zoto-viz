@@ -329,7 +329,7 @@ describe("instance defaults", () => {
     const row = expandPluginInstances(spec).find((s) => s.instanceId === "pond-1")!;
     expect(loadPluginConfig(row, row.config).slot).toBe("Koi Pond 1");
     writePluginConfig("koi-pond", { slot: "pack-wide" });
-    expect(loadPluginConfig(row, row.config).slot).toBe("Koi Pond 1");
+    expect(loadPluginConfig(row, row.config).slot).toBe("pack-wide");
   });
 });
 
