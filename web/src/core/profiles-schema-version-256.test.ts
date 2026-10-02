@@ -10,7 +10,7 @@
  * /api/profiles server and counts the writes to the profile; autosave's debounce runs on fake timers.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { normalizeSettings, ProfileStore, SHIPPED_ID, shippedSettings, USER_ID, type ProfileSettings } from "./profiles";
+import { normalizeSettings, ProfileStore, SHIPPED_ID, shippedSettings, storedSettings, USER_ID, type ProfileSettings } from "./profiles";
 
 const NEWER_LINE = "This profile was saved by a newer version of zoto-viz, so changes won't be saved to it. Use Save as to keep them in a new profile.";
 
@@ -427,5 +427,156 @@ describe("#256b: nothing writes over a newer profile; the line is announced once
     other.focus();
     await s.store.select("future");
     expect(document.activeElement).toBe(other);
+  });
+});
+
+// ---- #275: two write paths can still lose a newer build's profile ----
+
+/** How many times the status span is assigned the #256 line. */
+function countNewerLineSets(span: HTMLElement): { n: () => number } {
+  let n = 0;
+  let proto: object | null = span;
+  let desc: PropertyDescriptor | undefined;
+  while (proto && !desc) {
+    proto = Object.getPrototypeOf(proto);
+    desc = proto ? Object.getOwnPropertyDescriptor(proto, "textContent") : undefined;
+  }
+  Object.defineProperty(span, "textContent", {
+    configurable: true,
+    get() { return desc?.get?.call(span); },
+    set(v: string) {
+      if (v === NEWER_LINE) n += 1;
+      desc?.set?.call(span, v);
+    },
+  });
+  return { n: () => n };
+}
+
+/**
+ * profilesServer that keeps POST / DELETE, so a renamed profile's next GET is the body that was written.
+ */
+function rememberingServer(blobs: Record<string, unknown>, defaultId: string, models: Record<string, string> = {}) {
+  const held = { ...blobs };
+  const named = { ...models };
+  const sent: Sent[] = [];
+  const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } });
+  const listBody = () => ({
+    default: defaultId,
+    fresh: false,
+    file: "/home/test/.zoto-viz/profiles.yml",
+    profiles: [
+      { id: SHIPPED_ID, label: "zoto viz", shipped: true },
+      ...[...new Set([USER_ID, ...Object.keys(held)])].map((id) => ({
+        id,
+        label: named[id] ?? id,
+        shipped: false,
+        ...(named[id] ? { model: named[id] } : {}),
+      })),
+    ],
+  });
+  const fetchFn: typeof fetch = async (input, init) => {
+    const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    const path = url.split("?")[0] ?? url;
+    const method = (init?.method ?? "GET").toUpperCase();
+    const body: unknown = typeof init?.body === "string" ? JSON.parse(init.body) : null;
+    sent.push({ method, path, body });
+    if (path === "/api/session") return json({ csrf: "test-csrf", aiControl: false, pluginService: false, typesafeConfigured: false });
+    if (path === "/api/profiles" && method === "GET") return json(listBody());
+    if (path === "/api/profiles/global") return json({});
+    if (path === "/api/profiles" && method === "POST" && body && typeof body === "object" && "id" in body) {
+      const posted = body as { id: string; settings?: unknown; model?: string };
+      held[posted.id] = posted.settings;
+      if (posted.model) named[posted.id] = posted.model;
+      return json({});
+    }
+    const id = path.startsWith("/api/profiles/") ? path.slice("/api/profiles/".length) : "";
+    if (method === "DELETE" && id) {
+      delete held[id];
+      delete named[id];
+      return json({ default: defaultId });
+    }
+    if (method === "GET" && id in held) return json({ settings: held[id] });
+    if (method === "PUT" && id && body && typeof body === "object" && "settings" in body) {
+      held[id] = (body as { settings: unknown }).settings;
+      return json({});
+    }
+    return json({});
+  };
+  vi.stubGlobal("fetch", fetchFn);
+  const writesTo = (id: string) => sent.filter((c) => c.method !== "GET" && c.path === `/api/profiles/${id}`);
+  const postOf = (id: string) => sent.find((c) => c.method === "POST" && c.path === "/api/profiles" && !!c.body && typeof c.body === "object" && "id" in c.body && c.body.id === id);
+  return { sent, writesTo, postOf };
+}
+
+describe("#275: two write paths keep a newer profile", () => {
+  beforeEach(() => {
+    expect.hasAssertions();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+    document.body.replaceChildren();
+  });
+
+  it("(a) moving ai onto the model id keeps a v: 99 blob, and the next edit writes nothing", async () => {
+    vi.useFakeTimers();
+    const blob = v99();
+    const srv = rememberingServer({ ai: blob }, "ai");
+    const s = store();
+    await s.store.boot();
+    await s.store.activateAiCycle(shippedSettings(), { model: "gemma4", online: true });
+    const post = srv.postOf("gemma4");
+    const settings = post?.body && typeof post.body === "object" && "settings" in post.body ? post.body.settings : null;
+    expect(settings).toEqual(blob);
+    expect(s.store.current).toBe("gemma4");
+    expect(s.store.newerProfile).toBe(true);
+    await editTick(s.store);
+    expect(srv.writesTo("gemma4")).toHaveLength(0);
+
+    document.body.replaceChildren();
+    const current = v1();
+    const ok = rememberingServer({ ai: current }, "ai");
+    const b = store();
+    await b.store.boot();
+    await b.store.activateAiCycle(shippedSettings(), { model: "gemma4", online: true });
+    const moved = ok.postOf("gemma4");
+    const movedSettings = moved?.body && typeof moved.body === "object" && "settings" in moved.body ? moved.body.settings : null;
+    expect(movedSettings).toEqual(JSON.parse(JSON.stringify(storedSettings(normalizeSettings(current)))));
+    expect(b.store.newerProfile).toBe(false);
+    await editTick(b.store);
+    expect(ok.writesTo("gemma4").filter((c) => c.method === "PUT")).toHaveLength(1);
+  });
+
+  it("(b) the first edit on the shipped profile does not adopt a newer user this tab never loaded", async () => {
+    vi.useFakeTimers();
+    const srv = profilesServer({ [USER_ID]: v99() }, SHIPPED_ID);
+    const s = store();
+    const span = s.bar.querySelector('[role="status"]');
+    if (!(span instanceof HTMLElement)) throw new Error("no role=status span");
+    const line = countNewerLineSets(span);
+    await s.store.boot();
+    expect(s.store.current).toBe(SHIPPED_ID);
+    expect(srv.getsOf(USER_ID)).toBe(0);
+    expect(line.n()).toBe(0);
+    await editTick(s.store);
+    await editTick(s.store);
+    expect(srv.getsOf(USER_ID)).toBe(1);
+    expect(srv.writesTo(USER_ID)).toHaveLength(0);
+    expect(s.store.current).toBe(SHIPPED_ID);
+    expect(s.store.dirty).toBe(true);
+    expect(buttonIn(s.bar, "Save as…").hidden).toBe(false);
+    expect(line.n()).toBe(1);
+    expect(span.textContent).toBe(NEWER_LINE);
+
+    document.body.replaceChildren();
+    const ok = profilesServer({ [USER_ID]: v1() }, SHIPPED_ID);
+    const b = store();
+    await b.store.boot();
+    expect(ok.getsOf(USER_ID)).toBe(0);
+    await editTick(b.store);
+    const userCalls = ok.sent.filter((c) => c.path === `/api/profiles/${USER_ID}`);
+    expect(userCalls.map((c) => c.method)).toEqual(["GET", "PUT"]);
+    expect(b.store.current).toBe(USER_ID);
   });
 });

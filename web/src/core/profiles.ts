@@ -789,6 +789,12 @@ export class ProfileStore {
     const id = workingProfileId(this.defaultId, this.list.map((p) => p.id));
     const settings: ProfileSettings = { ...this.host.collect(), autosave: true };
     try {
+      // #275: the list can name a working profile this tab never loaded. One GET
+      // before the first write; a newer blob takes the keep-unsaved path below.
+      if (this.list.some((p) => p.id === id) && !this.newer.has(id)) {
+        const raw = await api<{ settings: unknown }>(`/api/profiles/${id}`);
+        if (normalizeSettings(raw.settings).newer) this.newer.add(id);
+      }
       if (this.newer.has(id)) {
         // #256: a newer build saved the working profile; keep the edit here, unsaved.
         this.dirty = true;
@@ -932,17 +938,20 @@ export class ProfileStore {
     await this.flushPending();
     if (!has(id) && has(AI_ID) && id !== AI_ID) {
       const raw = await api<{ settings: unknown }>(`/api/profiles/${AI_ID}`);
+      const loaded = normalizeSettings(raw.settings);
       await api("/api/profiles", {
         method: "POST",
         body: JSON.stringify({
           id,
           label: model,
           model,
-          settings: storedSettings(normalizeSettings(raw.settings)),
+          // #275: a newer blob is copied unchanged, so its v and unknown fields survive the rename.
+          settings: loaded.newer ? raw.settings : storedSettings(loaded),
           make_default: this.defaultId === AI_ID,
         }),
       });
       await api(`/api/profiles/${AI_ID}`, { method: "DELETE" });
+      if (loaded.newer) this.newer.add(id);
       this.ingest(await api<ProfileList>("/api/profiles"));
       await this.load(id);
       return "live";
@@ -1232,7 +1241,10 @@ export class ProfileStore {
       if (refocus) this.saveAsBtn.focus();
       return;
     }
-    this.noticeId = "";
+    const workingId = workingProfileId(this.defaultId, this.list.map((p) => p.id));
+    // #275: the edit stays on the shipped profile, but the working profile is the newer one.
+    const newerWorking = this.shipped && this.dirty && this.newer.has(workingId);
+    if (!newerWorking) this.noticeId = "";
     this.saveBtn.hidden = false;
     this.discardBtn.hidden = false;
     if (!this.dirty) {
@@ -1242,7 +1254,14 @@ export class ProfileStore {
     }
     this.bar.hidden = false;
     if (this.shipped) {
-      this.status.textContent = `Shipped “${SHIPPED_LABEL}” cannot be edited. Save as a new profile to keep these settings (it becomes the startup default).`;
+      if (newerWorking) {
+        if (this.noticeId !== workingId) {
+          this.status.textContent = NEWER_PROFILE_NOTICE;
+          this.noticeId = workingId;
+        }
+      } else {
+        this.status.textContent = `Shipped “${SHIPPED_LABEL}” cannot be edited. Save as a new profile to keep these settings (it becomes the startup default).`;
+      }
       this.saveBtn.hidden = true;
       this.saveAsBtn.hidden = false;
     } else {
