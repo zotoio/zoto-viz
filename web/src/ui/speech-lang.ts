@@ -1,4 +1,4 @@
-/** #268: speech recognition language. Stored globally, not in a profile. */
+/** Speech recognition language. Stored globally, not in a profile. */
 export const SPEECH_LANG_KEY = "zoto-viz.speechLang";
 
 export const SPEECH_LANGUAGES: { id: string; label: string }[] = [

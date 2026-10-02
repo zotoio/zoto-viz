@@ -1,4 +1,4 @@
-/** #267: microphone device is global and never stored on a profile. */
+/** Microphone device is global and never stored on a profile. */
 export const MIC_DEVICE_KEY = "zoto-viz.micDevice";
 
 export type MicInput = { deviceId: string; label: string };

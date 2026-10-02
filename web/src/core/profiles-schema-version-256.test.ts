@@ -1,9 +1,10 @@
 /**
- * #256: ProfileSettings carries a schema version. `collectSettings()` writes `v: 1`;
- * `normalizeSettings()` takes a blob with no `v` as legacy (v0) and returns `v: 1` with
- * `legacy: true`, so the next autosave upgrades it and #257 can tell an untouched legacy
- * default from a stored value. A blob with a `v` this build doesn't know (newer) loads for what it
- * understands, but autosave never writes over it, and the profile bar says so once.
+ * ProfileSettings carries a schema version. This build writes `v: 2`.
+ * `normalizeSettings()` takes a blob with no `v` as legacy (v0) and accepts `v: 1` and `v: 2`,
+ * returning `v: 2`. A missing `v` is `legacy: true`, so the next autosave upgrades it and an
+ * untouched legacy default stays distinct from a stored value. A blob with a `v` this build
+ * doesn't know (newer) loads for what it understands, but autosave never writes over it, and
+ * the profile bar says so once.
  *
  * Rows 1, 3 and 5 here; rows 2 and 4 drive main.ts's real collect / apply
  * (app/main-profile-settings-v-256.test.ts). Row 3 runs the real ProfileStore over a fake
@@ -86,7 +87,7 @@ function store(): { store: ProfileStore; applied: ProfileSettings[]; bar: HTMLEl
 const newerLines = () => [...document.body.querySelectorAll("*")]
   .filter((n) => n.childElementCount === 0 && n.textContent === NEWER_LINE).length;
 
-describe("#256: ProfileSettings schema version", () => {
+describe("ProfileSettings schema version", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });
@@ -175,7 +176,7 @@ describe("#256: ProfileSettings schema version", () => {
   });
 });
 
-// ---- #256b: the gaps closed before QE, and UX Pro's sign-off (A-C) ----
+// ---- the gaps closed before QE, and UX Pro's sign-off (A-C) ----
 
 type Sent = { method: string; path: string; body: unknown };
 
@@ -251,7 +252,7 @@ async function editTick(s: ProfileStore): Promise<void> {
   await vi.runOnlyPendingTimersAsync();
 }
 
-describe("#256b: nothing writes over a newer profile; the line is announced once per load", () => {
+describe("nothing writes over a newer profile; the line is announced once per load", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });
@@ -430,9 +431,9 @@ describe("#256b: nothing writes over a newer profile; the line is announced once
   });
 });
 
-// ---- #275: two write paths can still lose a newer build's profile ----
+// ---- two write paths can still lose a newer build's profile ----
 
-/** How many times the status span is assigned the #256 line. */
+/** How many times the status span is assigned the newer-profile line. */
 function countNewerLineSets(span: HTMLElement): { n: () => number } {
   let n = 0;
   let proto: object | null = span;
@@ -508,7 +509,7 @@ function rememberingServer(blobs: Record<string, unknown>, defaultId: string, mo
   return { sent, writesTo, postOf };
 }
 
-describe("#275: two write paths keep a newer profile", () => {
+describe("two write paths keep a newer profile", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });

@@ -377,7 +377,7 @@ export class Settings {
 
   private scopePanel: SettingsScopePanel | null = null;
 
-  /** #263: header cog opens Global, the view cog opens View, a tile cog opens Tile. */
+  /** Header cog opens Global, the view cog opens View, a tile cog opens Tile. */
   mountScope(entry: ScopeEntry, opts: { tileIndex?: number; packName?: string; viewName?: string } = {}): SettingsScopePanel {
     const pane = this.pane("view");
     this.scopePanel?.el.remove();

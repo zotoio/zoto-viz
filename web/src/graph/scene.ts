@@ -890,7 +890,7 @@ export const MOSAIC_SIZES: { value: MosaicSize; label: string; hint: string }[] 
   { value: "4", label: "2×2", hint: "four tiles; with a center hero, two on each side" },
   { value: "6", label: "2×3", hint: "six tiles; with a center hero, four on the left and two on the right" },
   { value: "8", label: "2×4", hint: "eight tiles; with a center hero, four on each side" },
-  // #258: the 4×4 chip exists while the active-tile cap is 16. Reverting the cap drops it.
+  // The 4×4 chip exists while the active-tile cap is 16. Reverting the cap drops it.
   ...(VIZ_MAX_ACTIVE_TILES >= 16
     ? [{ value: "16" as const, label: "4×4", hint: "sixteen tiles, four across and four down" }]
     : []),
@@ -5101,7 +5101,7 @@ export function isOverlayControl(target: EventTarget | null): boolean {
   return !!el?.closest("button, a[href], input, select, textarea, [role=button]");
 }
 
-/** #255: the solo line takes the wheel only when it actually overflows. A fitting line leaves the wheel to the camera. An overflowing line keeps it, including at the scroll ends. */
+/** The solo line takes the wheel only when it actually overflows. A fitting line leaves the wheel to the camera. An overflowing line keeps it, including at the scroll ends. */
 export function inScrollingCantDrawLine(target: EventTarget | null): boolean {
   const line = target instanceof Element ? target.closest<HTMLElement>(".tile-cant-draw") : null;
   if (!line) return false;

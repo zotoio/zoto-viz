@@ -1,5 +1,5 @@
 /**
- * #259: the scope resolver is pure. Nothing in the app reads it yet.
+ * The scope resolver is pure.
  * Precedence: tile, wall, view, user pack, manifest, global, built-in.
  */
 import { beforeEach, describe, expect, it } from "vitest";
@@ -42,7 +42,7 @@ function put(store: ScopeStore, level: (typeof LEVELS)[number]["level"], value: 
   return wrote.store;
 }
 
-describe("#259 settings scope resolver", () => {
+describe("settings scope resolver", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });

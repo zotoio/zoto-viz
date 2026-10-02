@@ -56,7 +56,7 @@ export const PACK_UPDATE_REFUSED = "update_refused";
  */
 export const PACK_BLOCKED = "pack_blocked";
 
-/** #254: refusal kinds the surface used to detect by matching visible words. */
+/** Refusal kinds the surface used to detect by matching visible words. */
 export const PACK_INTERRUPTED = "pack_interrupted";
 export const PACK_COULDNT_START = "couldnt_start";
 export const PACK_BUNDLE_BOUNDARY = "pack_boundary";
@@ -139,7 +139,7 @@ export function isPackInstallBlockedPayload(v: unknown): v is PackInstallBlocked
   const text = `${o.message ?? ""} ${o.error ?? ""}`;
   return (
     PACK_REFUSAL_CATEGORIES.has(String(o.error))
-    // #240 / #254: a refusal is known by its code, never by the words.
+    // A refusal is known by its code, never by the words.
     || PACK_REASON_CODES.has(String(o.reasonCode))
     || text.includes("Couldn't safety-check")
     || text.includes("was interrupted")

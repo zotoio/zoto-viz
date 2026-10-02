@@ -10,7 +10,7 @@ export type GfxWallNoticeOpts = {
   onReloadOffered?: () => void;
 };
 
-/** The marker a tile's own surface sets while it says a lost context itself (#216, cant-draw-surface). */
+/** The marker a tile's own surface sets while it says a lost context itself (cant-draw-surface). */
 const TILE_SURFACE_ATTR = "data-cant-draw-surface";
 const TILE_SAYS_LOSS = "context-lost";
 /** A tile's own Retry on its couldn't-draw line (cant-draw-surface). */
@@ -19,14 +19,14 @@ const TILE_RETRY = ".tile-cant-draw__retry";
 /**
  * Single wall-level status when the shared WebGL context is lost.
  *
- * #236: a solo tile that already says the loss itself (a pack tile, #216: its own "couldn't draw"
+ * A solo tile that already says the loss itself (a pack tile: its own "couldn't draw"
  * line with Retry, marked `data-cant-draw-surface="context-lost"`) gets no second notice from the
  * wall: the wall notice stays in the DOM, keeps its state, and is `hidden` (out of the accessibility
  * tree, so the loss is announced once, by the tile). It follows the marker while the notice is up
  * (set, cleared or changed): a tile that stops saying it (e.g. switched to a non-pack view) gets the
  * wall notice back. A "shader" marker or a non-pack tile keeps the wall notice as before.
  *
- * #246: the same holds for a mosaic when every visible pane says the loss itself (an all-pack board):
+ * The same holds for a mosaic when every visible pane says the loss itself (an all-pack board):
  * the wall notice is `hidden`, and each pane keeps its own line and Retry. A mixed mosaic (any pane
  * not saying it) keeps the wall notice. Focus goes to the first tile's Retry once, when the board
  * becomes all-failed, and only if focus is on nothing (body) or inside the board on something that
@@ -61,7 +61,7 @@ export class GfxWallNotice {
     this.shown = true;
     const el = document.createElement("div");
     el.className = "gfx-wall-notice";
-    // #236: announced at once (role=alert); focus moves to its action when it has one (Reload).
+    // Announced at once (role=alert); focus moves to its action when it has one (Reload).
     el.setAttribute("role", "alert");
     el.tabIndex = -1;
     el.textContent = GFX_INTERRUPTED_NOTICE;
@@ -78,7 +78,7 @@ export class GfxWallNotice {
     return panes.length ? panes : [...this.wall.querySelectorAll<HTMLElement>(":scope > #scene")];
   }
 
-  /** Every visible tile already says the loss itself (#236 solo, #246 all-pack mosaic): the wall notice would be a second one. */
+  /** Every visible tile already says the loss itself (solo or an all-pack mosaic): the wall notice would be a second one. */
   private tilesSayLoss(): boolean {
     const tiles = this.visibleTiles();
     return tiles.length > 0 && tiles.every((t) => t.getAttribute(TILE_SURFACE_ATTR) === TILE_SAYS_LOSS);
@@ -88,7 +88,7 @@ export class GfxWallNotice {
     return this.tiles().filter((t) => !t.hidden);
   }
 
-  /** The first visible tile's own Retry, in board order (#246). */
+  /** The first visible tile's own Retry, in board order. */
   private firstTileRetry(): HTMLButtonElement | null {
     for (const tile of this.tiles()) {
       if (tile.hidden) continue;
@@ -98,7 +98,7 @@ export class GfxWallNotice {
     return null;
   }
 
-  /** #246: focus may move to a tile's Retry only from nothing (body) or from inside the board, off a Retry. */
+  /** Focus may move to a tile's Retry only from nothing (body) or from inside the board, off a Retry. */
   private mayTakeFocus(): boolean {
     const active = document.activeElement;
     if (!active || active === document.body) return true;
@@ -106,7 +106,7 @@ export class GfxWallNotice {
   }
 
   /**
-   * #272: Reload takes focus only from body, or from a tile that is already hidden.
+   * Reload takes focus only from body, or from a tile that is already hidden.
    * The header, a menu, settings and chat sit outside the wall, so they stay put.
    */
   private mayTakeReloadFocus(): boolean {
@@ -117,7 +117,7 @@ export class GfxWallNotice {
     return tile !== null && tile.hidden === true;
   }
 
-  /** #272: the Reload sentence, once per time the board leaves all-failed while Reload is up. */
+  /** The Reload sentence, once per time the board leaves all-failed while Reload is up. */
   private announceReload(): void {
     const p = this.ensurePolite();
     if (p.textContent === GFX_NO_RESTORE_NOTICE) return;
@@ -146,7 +146,7 @@ export class GfxWallNotice {
     if (!el) return;
     const hide = this.tilesSayLoss();
     if (el.hidden === hide) return;
-    // The board just became all-failed (#246): the only moment focus may go to a tile's Retry.
+    // The board just became all-failed: the only moment focus may go to a tile's Retry.
     const retry = hide && this.mayTakeFocus() ? this.firstTileRetry() : null;
     if (retry) retry.focus();
     else if (hide && el.contains(document.activeElement)) {
@@ -154,7 +154,7 @@ export class GfxWallNotice {
       this.wall.focus();
     }
     const noneVisible = this.tiles().length > 0 && this.visibleTiles().length === 0;
-    // #272: leaving all-failed while Reload is offered. A board with no visible tile does not move focus.
+    // Leaving all-failed while Reload is offered. A board with no visible tile does not move focus.
     const showReload = !hide && el.hidden && this.reloadOffered && !noneVisible;
     const takeReload = showReload && this.mayTakeReloadFocus();
     el.hidden = hide;
@@ -171,7 +171,7 @@ export class GfxWallNotice {
     this.syncToTiles();
     if (this.tileWatch || typeof MutationObserver === "undefined") return;
     this.tileWatch = new MutationObserver(() => this.syncToTiles());
-    // #272: `hidden` is read by tilesSayLoss, so a pane hiding or showing has to re-check.
+    // `hidden` is read by tilesSayLoss, so a pane hiding or showing has to re-check.
     this.tileWatch.observe(this.wall, {
       subtree: true,
       childList: true,
@@ -210,7 +210,7 @@ export class GfxWallNotice {
     if (!this.el) return;
     if (this.restoreTimer) clearTimeout(this.restoreTimer);
     this.reloadOffered = false;
-    // #236: Reload had focus and is about to go: hand focus to the wall, as a restore does, not to <body>.
+    // Reload had focus and is about to go: hand focus to the wall, as a restore does, not to <body>.
     const focusOnReload = this.el.contains(document.activeElement);
     this.el.textContent = GFX_INTERRUPTED_NOTICE;
     if (focusOnReload) {

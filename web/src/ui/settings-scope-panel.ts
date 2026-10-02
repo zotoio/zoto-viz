@@ -1,5 +1,5 @@
 /**
- * #263: the scope control, breadcrumb, field status, and reset for This view.
+ * The scope control, breadcrumb, field status, and reset for This view.
  * An edit writes only the level on screen.
  */
 import { emptyScopeStore, separateTile, setAt, resetAt, resolve, type ScopeStore, type WriteLevel } from "../core/settings-scope";

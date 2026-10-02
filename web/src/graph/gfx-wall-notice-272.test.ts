@@ -1,5 +1,5 @@
 /**
- * #272: follow-ups to #246 that did not hold the land.
+ * Follow-ups that did not hold: hiding a pane, a board with nothing visible, and where Reload may take focus.
  *
  * - `hidden` is in the tile observer's attributeFilter, so hiding a pane re-checks.
  * - A board with no visible tile keeps the wall notice and does not move focus.
@@ -94,7 +94,7 @@ function board(n: number): Board {
 
 const shown = (wall: HTMLElement) => wall.querySelectorAll(SHOWN).length;
 
-describe("#272 wall notice follow-ups", () => {
+describe("wall notice follow-ups", () => {
   let notice: GfxWallNotice | null = null;
 
   afterEach(() => {

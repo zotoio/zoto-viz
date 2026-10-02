@@ -1,4 +1,4 @@
-/** #263: scope control, breadcrumb, field status, reset, tile names, one announcement, keyboard. */
+/** Scope control, breadcrumb, field status, reset, tile names, one announcement, keyboard. */
 import { describe, expect, it } from "vitest";
 import { emptyScopeStore, resolve } from "../core/settings-scope";
 import {
@@ -9,7 +9,7 @@ import {
   settingsForTileLabel,
 } from "./settings-scope-panel";
 
-describe("#263 settings scope panel", () => {
+describe("settings scope panel", () => {
   it("each entry point opens on its default level", () => {
     expect(defaultScopeLevel("global")).toBe("global");
     expect(defaultScopeLevel("view")).toBe("view");

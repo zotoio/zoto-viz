@@ -1,5 +1,5 @@
 /**
- * #260: read today's legacy keys into a sparse v2 envelope. In memory only.
+ * Read today's legacy keys into a sparse v2 envelope. In memory only.
  * A stored value equal to its default is inherit, so it is left out. That is
  * slightly lossy if a default changes later: the old "I saved the default" and
  * "I never touched it" look the same.
@@ -84,7 +84,7 @@ export type LegacyReadStore = {
 export type LegacySources = {
   local: LegacyReadStore;
   session?: { getItem(key: string): string | null } | null;
-  /** A profiles.yml settings blob. No `v` means pre-#256. */
+  /** A profiles.yml settings blob. No `v` means it was saved before versioning. */
   profile?: unknown;
 };
 

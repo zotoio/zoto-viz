@@ -1,5 +1,5 @@
 /**
- * #259: settings scope resolver. Pure and unwired.
+ * Settings scope resolver.
  * Precedence is tile, wall, view, the user's pack override, the pack manifest,
  * global, then the built-in default. A closer level wins.
  */
