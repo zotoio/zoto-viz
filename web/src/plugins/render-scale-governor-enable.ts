@@ -2,9 +2,10 @@ const SETTINGS_KEY = "zoto-viz.vizGovernor";
 
 export function loadVizGovernorSetting(): boolean {
   try {
-    return localStorage.getItem(SETTINGS_KEY) === "1";
+    // #257: on unless the user stored an explicit off. A missing key is not a choice.
+    return localStorage.getItem(SETTINGS_KEY) !== "0";
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -13,7 +14,7 @@ export function setVizGovernorSetting(on: boolean): void {
 }
 
 /**
- * Host render-scale governor enablement. Off by default until tuned on real GPU hardware.
+ * Host render-scale governor enablement. On by default.
  * Settings persist; `?vizGovernor=1` or `?vizGovernor=0` overrides for one load.
  */
 export function resolveVizGovernorEnabled(

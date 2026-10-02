@@ -51,7 +51,7 @@ export interface ProfileSettings {
   redact: boolean;
   /** Auto-grant plugin consent for shipped src and local zips (not contrib zips). */
   autoconsent: boolean;
-  /** Host adaptive render.scale governor (off by default; also `?vizGovernor=1`). */
+  /** Host adaptive render.scale governor (on by default; `?vizGovernor=0` forces off for one load). */
   vizGovernor: boolean;
   filters: { allowNames: string; blockNames: string; allowNets: string; blockNets: string };
   anim: DreamAnim;
@@ -193,7 +193,7 @@ export function shippedSettings(): ProfileSettings {
     merge: false,
     redact: false,
     autoconsent: false,
-    vizGovernor: false,
+    vizGovernor: true,
     filters: { allowNames: "", blockNames: "", allowNets: "", blockNets: "" },
     anim: { ...DEFAULT_DREAM },
     feed: { ...DEFAULT_FEED },
@@ -404,6 +404,15 @@ export function normalizeSettings(raw: unknown): ProfileSettings {
     legacy: savedV === 0,
     newer: savedV > PROFILE_SETTINGS_V,
   };
+}
+
+/**
+ * #257: a legacy blob's `vizGovernor: false` was the old default, written whether or not
+ * the user chose it. That applies as on. A current profile's false is the user's choice.
+ */
+export function vizGovernorEnabledForSettings(s: ProfileSettings): boolean {
+  if (s.legacy && s.vizGovernor === false) return true;
+  return s.vizGovernor === true;
 }
 
 function bool(v: unknown, fallback: boolean): boolean {

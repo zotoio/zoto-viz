@@ -69,7 +69,7 @@ import {
   flashModeLoadFailed,
   initModeSwitchStatusStrip,
 } from "./mode-switch-message";
-import { PROFILE_SETTINGS_V, ProfileStore, aiCycleSettings, homeAiActive, quiet, SHIPPED_ID, type ProfileSettings } from "../core/profiles";
+import { PROFILE_SETTINGS_V, ProfileStore, aiCycleSettings, homeAiActive, quiet, SHIPPED_ID, vizGovernorEnabledForSettings, type ProfileSettings } from "../core/profiles";
 import {
   loadVizGovernorSetting,
   setVizGovernorSetting,
@@ -3276,8 +3276,9 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
   // carries mic: "auto" by default, so restoring it here switched a declined mic back on and
   // brought the allow sheet back on each profile or view load.
   settings.setSoundOn(!!s.sound);
-  applyHostRenderScaleGovernor(s.vizGovernor === true, renderScaleGovernorHost);
-  vizGovernorToggle.checked = s.vizGovernor === true;
+  const govOn = vizGovernorEnabledForSettings(s);
+  applyHostRenderScaleGovernor(govOn, renderScaleGovernorHost);
+  vizGovernorToggle.checked = govOn;
   if (activeArcade) {
     arcade[activeArcade].view.stop();
     arcade[activeArcade].el.hidden = true;

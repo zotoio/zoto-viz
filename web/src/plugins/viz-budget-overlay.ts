@@ -7,7 +7,7 @@ export interface VizBudgetOverlayModel {
   lastMs: number | null;
   p95Ms: number | null;
   renderScale: number | null;
-  /** Host adaptive governor (off by default until enabled in settings or `?vizGovernor=1`). */
+  /** Host adaptive governor (on by default; `?vizGovernor=0` forces off for one load). */
   governorEnabled: boolean;
 }
 
