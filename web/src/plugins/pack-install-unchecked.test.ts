@@ -56,6 +56,6 @@ describe("#200 unchecked fresh install: one blocked pack", () => {
     await installPlugins();
     expect(takePackInstallBlockedNotice(), "catalog notice").toBe(want);
     expect(blockedCatalogEntries().map((e) => e.message), "Blocked menu entry").toEqual([want]);
-    expect(viewSelectOptions().some((o) => o.label === "Blocked (1)"), "Blocked (1) in the view menu").toBe(true);
+    expect(viewSelectOptions().some((o) => o.label === "Unavailable (1)"), "Unavailable (1) in the view menu").toBe(true);
   });
 });

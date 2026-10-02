@@ -33,15 +33,15 @@ describe("pack install blocked surface", () => {
 
     await installPlugins();
     expect(takePackInstallBlockedNotice()).toBe(blocked);
-    expect(viewSelectOptions().some((o) => o.label === "Blocked (1)")).toBe(true);
+    expect(viewSelectOptions().some((o) => o.label === "Unavailable (1)")).toBe(true);
 
     await installPlugins();
     expect(takePackInstallBlockedNotice()).toBeNull();
-    expect(viewSelectOptions().some((o) => o.label === "Blocked (1)")).toBe(true);
+    expect(viewSelectOptions().some((o) => o.label === "Unavailable (1)")).toBe(true);
 
     await installPlugins();
     expect(takePackInstallBlockedNotice()).toBeNull();
-    expect(viewSelectOptions().some((o) => o.label === "Blocked (1)")).toBe(true);
+    expect(viewSelectOptions().some((o) => o.label === "Unavailable (1)")).toBe(true);
 
     globalThis.fetch = orig;
   });
@@ -63,7 +63,7 @@ describe("pack install blocked surface", () => {
       zipDir: "/data/plugins/local",
       message: "Evil was blocked because it loads code from outside its own folder. Nothing was updated, so version 3 is still installed. If you made this pack, run pack lint to see what to fix.",
     }]);
-    expect(row?.label).toBe("Blocked (1)");
+    expect(row?.label).toBe("Unavailable (1)");
     const text = formatBlockedCatalogNotice([{
       error: "pack_boundary",
       zipPath: "/data/plugins/local/evil.zip",
@@ -98,7 +98,7 @@ describe("pack install blocked surface", () => {
 
     await installPlugins();
     expect(takePackInstallBlockedNotice()).toBe(blocked);
-    expect(viewSelectOptions().some((o) => o.label === "Blocked (1)")).toBe(true);
+    expect(viewSelectOptions().some((o) => o.label === "Unavailable (1)")).toBe(true);
     globalThis.fetch = orig;
   });
 
