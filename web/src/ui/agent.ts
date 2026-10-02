@@ -13,7 +13,7 @@ import { soundAllowed } from "../audio/sound";
 import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
 import { isNasaStillUrl } from "../core/nasa-stills";
 import type { ProfileOperator } from "../core/profiles";
-import { speechRecognitionLang } from "./speech-lang";
+import { loadSpeechLang, saveSpeechLang, SPEECH_LANGUAGES, speechRecognitionLang } from "./speech-lang";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
@@ -363,8 +363,16 @@ export class AgentPanel {
 
     this.cursorHelp = renderAuthSetup(AUTH_SETUPS.cursor);
     this.ttsHelp = renderAuthSetup(AUTH_SETUPS.elevenlabs);
+    const speechLang = new Select({
+      caption: "Speech language",
+      title: "Used for voice commands and the watchword.",
+      options: SPEECH_LANGUAGES.map((l) => ({ value: l.id, label: l.label })),
+      value: loadSpeechLang() || "match",
+      onChange: (id) => saveSpeechLang(id === "match" ? "" : id),
+    });
     this.el.append(
       this.statusEl,
+      speechLang.el,
       this.temperRail.el,
       this.oddsStrip.el,
       this.backendSel.el, this.modelSel.el, this.warnEl, this.cursorKey.el, this.cursorHelp,
