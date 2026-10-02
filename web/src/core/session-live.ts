@@ -3,7 +3,8 @@ import { normalizeSettings, type ProfileSettings } from "./profiles";
 export const SESSION_LIVE_KEY = "zoto-viz.session.live";
 
 export interface SessionLive {
-  v: 1;
+  /** #262: written as 2. A stored 1 is still read. */
+  v: 1 | 2;
   profileId: string;
   dirty: boolean;
   settings: ProfileSettings;
@@ -21,9 +22,9 @@ export function readSessionLive(store: Pick<Storage, "getItem"> | null = default
     const raw = store.getItem(SESSION_LIVE_KEY);
     if (!raw) return null;
     const j = JSON.parse(raw) as Partial<SessionLive>;
-    if (j.v !== 1 || !j.settings || typeof j.settings !== "object") return null;
+    if ((j.v !== 1 && j.v !== 2) || !j.settings || typeof j.settings !== "object") return null;
     return {
-      v: 1,
+      v: 2,
       profileId: typeof j.profileId === "string" ? j.profileId : "",
       dirty: j.dirty === true,
       settings: normalizeSettings(j.settings),
@@ -40,7 +41,7 @@ export function readSessionLive(store: Pick<Storage, "getItem"> | null = default
 export function writeSessionLive(live: Omit<SessionLive, "v">, store: Pick<Storage, "setItem"> | null = defaultStore()): void {
   if (!store) return;
   try {
-    store.setItem(SESSION_LIVE_KEY, JSON.stringify({ v: 1 as const, ...live, settings: normalizeSettings(live.settings) }));
+    store.setItem(SESSION_LIVE_KEY, JSON.stringify({ v: 2 as const, ...live, settings: normalizeSettings(live.settings) }));
   } catch {
     /* quota / private mode */
   }

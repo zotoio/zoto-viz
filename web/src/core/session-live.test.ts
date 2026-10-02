@@ -25,7 +25,7 @@ describe("session live snapshot", () => {
     expect(readSessionLive()).toBeNull();
     sessionStorage.setItem(SESSION_LIVE_KEY, "{");
     expect(readSessionLive()).toBeNull();
-    sessionStorage.setItem(SESSION_LIVE_KEY, JSON.stringify({ v: 2, settings: {} }));
+    sessionStorage.setItem(SESSION_LIVE_KEY, JSON.stringify({ v: 3, settings: {} }));
     expect(readSessionLive()).toBeNull();
   });
 });

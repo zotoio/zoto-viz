@@ -20,8 +20,8 @@ export const LEGACY_SHIPPED_ID = "netviz";
 export const USER_ID = "user";
 /** Legacy cycling profile id; new agent profiles are named after the Ollama model. */
 export const AI_ID = "ai";
-/** #256: the ProfileSettings schema this build reads and writes. A blob with no `v` is v0 (legacy). */
-export const PROFILE_SETTINGS_V = 1;
+/** #262: the ProfileSettings schema this build writes. v0 is legacy, v1 and v2 are accepted. */
+export const PROFILE_SETTINGS_V = 2;
 /** #256: the profile bar's line for a profile saved by a newer build, which autosave leaves alone. */
 export const NEWER_PROFILE_NOTICE = "This profile was saved by a newer version of zoto-viz, so changes won't be saved to it. Use Save as to keep them in a new profile.";
 const AI_PREV_KEY = "zoto-viz.ai.prevProfile";
@@ -754,7 +754,7 @@ export class ProfileStore {
     this.current = id;
     this.sel.value = id;
     const settings = normalizeSettings(live.settings);
-    // #256: the snapshot's settings were re-stamped v: 1, so what the page learned from the server
+    // #256: the snapshot's settings were re-stamped to this build's v, so what the page learned from the server
     // load rides beside them. A session apply runs once, at boot: the snapshot is its record.
     this.newer.clear();
     this.noticeId = "";

@@ -102,13 +102,13 @@ describe("#256: ProfileSettings schema version", () => {
     delete blob.v;
     expect("v" in blob).toBe(false);
     const out = normalizeSettings(blob);
-    expect(out.v).toBe(1);
+    expect(out.v).toBe(2);
     expect(out.legacy).toBe(true);
     expect(out.newer).toBe(false);
     expect(withoutVersion({ ...out })).toEqual(withoutVersion(blob));
     // A current blob is not legacy, and normalises to the same fields.
     const current = normalizeSettings({ ...blob, v: 1 });
-    expect(current.v).toBe(1);
+    expect(current.v).toBe(2);
     expect(current.legacy).toBe(false);
     expect(withoutVersion({ ...current })).toEqual(withoutVersion({ ...out }));
   });
@@ -153,13 +153,13 @@ describe("#256: ProfileSettings schema version", () => {
   it("(5) the shipped zoto-viz profile loads with and without v", async () => {
     const shipped = shippedSettings();
     const withV = normalizeSettings(shipped);
-    expect(withV.v).toBe(1);
+    expect(withV.v).toBe(2);
     expect(withV.legacy).toBe(false);
     expect(withV).toEqual(shipped);
     const bare: Record<string, unknown> = { ...shipped };
     delete bare.v;
     const noV = normalizeSettings(bare);
-    expect(noV.v).toBe(1);
+    expect(noV.v).toBe(2);
     expect(noV.legacy).toBe(true);
     expect(withoutVersion({ ...noV })).toEqual(withoutVersion({ ...shipped }));
 
@@ -170,7 +170,7 @@ describe("#256: ProfileSettings schema version", () => {
     await s.store.boot();
     expect(s.store.current).toBe(SHIPPED_ID);
     expect(s.applied).toHaveLength(1);
-    expect(s.applied[0]?.v).toBe(1);
+    expect(s.applied[0]?.v).toBe(2);
     expect(newerLines()).toBe(0);
   });
 });
@@ -271,7 +271,7 @@ describe("#256b: nothing writes over a newer profile; the line is announced once
     await vi.waitFor(() => expect(ok.writesTo("mine")).toHaveLength(1));
     // What the host collects here (shippedSettings) carries the markers; the PUT doesn't.
     expect(a.store.newerProfile).toBe(false);
-    expect(stored(ok.writesTo("mine")[0])).toEqual({ v: 1, markers: [] });
+    expect(stored(ok.writesTo("mine")[0])).toEqual({ v: 2, markers: [] });
     document.body.replaceChildren();
 
     const srv = profilesServer({ future: v99() }, "future");
@@ -292,7 +292,7 @@ describe("#256b: nothing writes over a newer profile; the line is announced once
     await a.store.boot();
     await a.store.writeAi(normalizeSettings(v1()), "gemma4");
     expect(ok.writesTo("gemma4")).toHaveLength(1);
-    expect(stored(ok.writesTo("gemma4")[0])).toEqual({ v: 1, markers: [] });
+    expect(stored(ok.writesTo("gemma4")[0])).toEqual({ v: 2, markers: [] });
     document.body.replaceChildren();
 
     const srv = profilesServer({ gemma4: v99(), [USER_ID]: v1() }, "gemma4", { gemma4: "gemma4" });

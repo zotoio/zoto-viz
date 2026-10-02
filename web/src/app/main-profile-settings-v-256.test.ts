@@ -99,7 +99,7 @@ describe("#256: main.ts collect / apply keep v: 1 and every arcade family", () =
   it("(2) round trip collect -> normalise -> apply -> collect is stable and keeps v: 1", async () => {
     seed({ dream: true, merge: true });
     const first = await boot();
-    expect(first.settings?.v).toBe(1);
+    expect(first.settings?.v).toBe(2);
     // collectSettings itself wrote v: a collect without it is stored as legacy.
     expect(first.settings?.legacy).toBe(false);
     expect(first.settings?.newer).toBe(false);
@@ -108,7 +108,7 @@ describe("#256: main.ts collect / apply keep v: 1 and every arcade family", () =
     // Apply what collect wrote, and collect again (persistLive drops the aiCycle marker in).
     seed(first.settings);
     const second = await boot();
-    expect(second.settings?.v).toBe(1);
+    expect(second.settings?.v).toBe(2);
     expect(second.settings?.legacy).toBe(false);
     expect(second.settings).toEqual(first.settings);
   });
@@ -237,7 +237,7 @@ describe("#256b: main.ts keeps the version markers through a same-tab reload", (
     expect(line.sets()).toBe(1);
     expect(newerLines()).toBe(1);
     // The reload's snapshot settings say v: 1; the markers beside them still say newer.
-    expect(first.settings?.v).toBe(1);
+    expect(first.settings?.v).toBe(2);
     reload(first);
     const second = await boot();
     expect(second.newerIds).toEqual(["future"]);
@@ -263,7 +263,7 @@ describe("#256b: main.ts keeps the version markers through a same-tab reload", (
     expect(srv.puts).toHaveLength(3);
     for (const put of srv.puts) {
       const stored = storedKeys(put.body);
-      expect(stored.v).toBe(1);
+      expect(stored.v).toBe(2);
       expect(stored.keys).not.toContain("legacy");
       expect(stored.keys).not.toContain("newer");
     }
@@ -284,7 +284,7 @@ describe("#256b: main.ts keeps the version markers through a same-tab reload", (
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     await editTick();
     expect(srv.puts).toHaveLength(1);
-    expect(storedKeys(srv.puts[0]?.body).v).toBe(1);
+    expect(storedKeys(srv.puts[0]?.body).v).toBe(2);
     // The next snapshot after that write: the server blob is v: 1 now.
     await editTick();
     const after: RawLive = JSON.parse(sessionStorage.getItem(SESSION_LIVE_KEY) ?? "{}");
