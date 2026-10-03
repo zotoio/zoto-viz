@@ -7,7 +7,6 @@ import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
 import { makePaneDiceButton, mountDiceSplit, morphCopy, Select, Toggle } from "../ui/ui";
-import { loadMicDevice, MIC_DEVICE_HINT, micDeviceChoices, saveMicDevice } from "../audio/mic-device";
 import { Settings, makeViewCogButton } from "../ui/settings";
 import {
   activateRemixPairing,
@@ -2762,14 +2761,7 @@ const autoconsentToggle = new Toggle({
   },
 });
 const vizGovernorToggle = createVizGovernorToggle(renderScaleGovernorHost);
-const micDeviceSel = new Select({
-  caption: "Microphone",
-  title: MIC_DEVICE_HINT,
-  options: micDeviceChoices([], false),
-  value: loadMicDevice() || "",
-  onChange: (id) => saveMicDevice(id),
-});
-const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle, vizGovernorToggle, micDeviceSel]);
+const privSec = settings.addSection("Privacy", [redactToggle, autoconsentToggle, vizGovernorToggle]);
 $("settingsBox").appendChild(settings.el);
 settings.attachViewCog($("modeBox"), () => bindThisView(modeSel.value));
 agent.mountSettings(settings.agentHost());

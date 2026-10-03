@@ -1,9 +1,14 @@
 /** Speech language reaches recognition and survives a reload. */
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { loadSpeechLang, saveSpeechLang, SPEECH_LANG_KEY, speechLangRejectedLine, speechRecognitionLang } from "./speech-lang";
+import { armSpeechRecognition, loadSpeechLang, saveSpeechLang, SPEECH_LANG_KEY, speechRecognitionLang } from "./speech-lang";
 
 describe("speech language", () => {
-  afterEach(() => localStorage.clear());
+  afterEach(() => {
+    localStorage.clear();
+    saveSpeechLang("");
+  });
 
   it("Match browser uses navigator.language, and a chosen language is stored", () => {
     expect(speechRecognitionLang("en-AU")).toBe("en-AU");
@@ -13,7 +18,23 @@ describe("speech language", () => {
     expect(localStorage.getItem(SPEECH_LANG_KEY)).toBe("de-DE");
   });
 
-  it("a rejected language announces once", () => {
-    expect(speechLangRejectedLine("de-DE", "en-AU")).toBe("Deutsch isn't available for speech here. Using English (Australia).");
+  it("a rejected language falls back and announces once, on both recognition sites", () => {
+    saveSpeechLang("de-DE");
+    const lines: string[] = [];
+    const rec = { lang: "", onerror: null as ((e: { error: string }) => void) | null };
+    armSpeechRecognition(rec, (line) => lines.push(line), "en-AU");
+    expect(rec.lang).toBe("de-DE");
+    rec.onerror?.({ error: "language-not-supported" });
+    expect(lines).toEqual(["Deutsch isn't available for speech here. Using English (Australia)."]);
+    expect(rec.lang).toBe("en-AU");
+    expect(speechRecognitionLang("en-AU")).toBe("en-AU");
+    rec.onerror?.({ error: "language-not-supported" });
+    expect(lines).toHaveLength(1);
+
+    const src = readFileSync(resolve(import.meta.dirname, "./agent.ts"), "utf8");
+    const wake = src.slice(src.indexOf("private attachWakeRec"), src.indexOf("private stopWake"));
+    const hold = src.slice(src.indexOf("private async armHold"), src.indexOf("private stopHold"));
+    expect(wake).toContain("this.armSpeechLang(");
+    expect(hold).toContain("this.armSpeechLang(");
   });
 });

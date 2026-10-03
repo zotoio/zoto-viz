@@ -8,12 +8,13 @@ import { playPcmStream } from "../audio/tts";
 import { WakeStream } from "../audio/wake-stream";
 import { includeView, VIEW_KEY, type ViewCapture } from "./capture";
 import { askUserMedia, clearMediaDismiss } from "./media-ask";
+import { captureMic } from "../audio/mic-device";
 import { micCaptureAllowed } from "../audio/want";
 import { soundAllowed } from "../audio/sound";
 import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
 import { isNasaStillUrl } from "../core/nasa-stills";
 import type { ProfileOperator } from "../core/profiles";
-import { loadSpeechLang, saveSpeechLang, SPEECH_LANGUAGES, speechRecognitionLang } from "./speech-lang";
+import { armSpeechRecognition, loadSpeechLang, saveSpeechLang, SPEECH_LANGUAGES, speechRecognitionLang } from "./speech-lang";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
@@ -120,6 +121,7 @@ export class AgentPanel {
   private readonly led: HTMLSpanElement;
   private readonly input: HTMLTextAreaElement;
   private readonly statusEl: HTMLDivElement;
+  private speechNote: HTMLDivElement | null = null;
   private rec: SpeechRec | null = null;
   private wakeStream = new WakeStream();
   private wakeOn = localStorage.getItem(LISTEN_KEY) !== "0";
@@ -368,11 +370,19 @@ export class AgentPanel {
       title: "Used for voice commands and the watchword.",
       options: SPEECH_LANGUAGES.map((l) => ({ value: l.id, label: l.label })),
       value: loadSpeechLang() || "match",
-      onChange: (id) => saveSpeechLang(id === "match" ? "" : id),
+      onChange: (id) => {
+        saveSpeechLang(id === "match" ? "" : id);
+        if (this.rec) this.rec.lang = speechRecognitionLang();
+      },
     });
+    this.speechNote = document.createElement("div");
+    this.speechNote.className = "sec-hint";
+    this.speechNote.setAttribute("role", "status");
+    this.speechNote.setAttribute("aria-live", "polite");
     this.el.append(
       this.statusEl,
       speechLang.el,
+      this.speechNote,
       this.temperRail.el,
       this.oddsStrip.el,
       this.backendSel.el, this.modelSel.el, this.warnEl, this.cursorKey.el, this.cursorHelp,
@@ -882,7 +892,7 @@ export class AgentPanel {
     }
     this.wakePending = true;
     try {
-      const stream = await askUserMedia({ audio: true, video: false }, "watchword listening");
+      const stream = await captureMic(micCaptureAllowed(), (c) => askUserMedia(c, "watchword listening"));
       if (!stream || !micCaptureAllowed() || !this.wakeOn) {
         if (stream) for (const t of stream.getTracks()) t.stop();
         this.wakeStream.disable();
@@ -916,6 +926,13 @@ export class AgentPanel {
     }
   }
 
+  /** Stored language, or the browser language after one refusal. */
+  private armSpeechLang(rec: SpeechRec): void {
+    armSpeechRecognition(rec, (line) => {
+      if (this.speechNote) this.speechNote.textContent = line;
+    }, navigator.language);
+  }
+
   private attachWakeRec(SR: new () => SpeechRec): void {
     window.clearTimeout(this.restart);
     this.stopRec();
@@ -941,6 +958,7 @@ export class AgentPanel {
         this.restart = window.setTimeout(() => this.startWake(), 250);
       }
     };
+    this.armSpeechLang(rec);
     try {
       rec.start();
       this.rec = rec;
@@ -981,7 +999,7 @@ export class AgentPanel {
     const SR = this.speechEngine();
     if (!SR) { this.append("agent", "this browser has no speech recognition"); this.holdTalk = false; return; }
     clearMediaDismiss("mic");
-    const stream = await askUserMedia({ audio: true, video: false }, "hold to talk");
+    const stream = await captureMic(micCaptureAllowed(), (c) => askUserMedia(c, "hold to talk"));
     if (!stream || !this.holdTalk || !micCaptureAllowed()) {
       if (stream) for (const t of stream.getTracks()) t.stop();
       this.holdTalk = false;
@@ -1000,6 +1018,7 @@ export class AgentPanel {
       if (t) this.draftBox().value = t;
     };
     rec.onend = () => { this.rec = null; };
+    this.armSpeechLang(rec);
     try { rec.start(); this.rec = rec; } catch { this.holdTalk = false; }
   }
 

@@ -6,7 +6,8 @@
 
 import { askUserMedia } from "../ui/media-ask";
 import { queryMicPermissionState } from "./mic-permission";
-import { micCaptureRequest } from "./mic-device";
+import { captureMic } from "./mic-device";
+import { micCaptureAllowed } from "./want";
 
 /**
  * Log-spaced 0–1 bands from an analyser byte spectrum (dB, low frequency first).
@@ -69,10 +70,11 @@ export class AudioPulse {
     this.awaitingClick = false;
     this.starting = true;
     try {
-      const audio = micCaptureRequest(true);
-      const stream = fromUserGesture
-        ? await navigator.mediaDevices.getUserMedia({ audio, video: false }).catch(() => null)
-        : await askUserMedia({ audio, video: false }, "pulse microphone");
+      const stream = await captureMic(micCaptureAllowed(), (constraints) => (
+        fromUserGesture
+          ? navigator.mediaDevices.getUserMedia(constraints).catch(() => null)
+          : askUserMedia(constraints, "pulse microphone")
+      ));
       if (!stream) return;
       if (!this.wanted) {
         for (const t of stream.getTracks()) t.stop();
