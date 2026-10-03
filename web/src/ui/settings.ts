@@ -2,7 +2,7 @@ import { apiFetch } from "../core/http";
 import type { SourceKind, SourceLive, SourceRow } from "../core/sources";
 import { displayName, type Device, usefulName } from "../core/types";
 import { applyFloatRect, bindFloatPanel, readFloatRect } from "./float-drag";
-import { ColorField, GroupedChips, pinFlyout, Slider, TextField, Toggle, unpinFlyout } from "./ui";
+import { ColorField, GroupedChips, pinFlyout, Select, Slider, TextField, Toggle, unpinFlyout } from "./ui";
 import { SettingsScopePanel, type ScopeEntry } from "./settings-scope-panel";
 import { MAGNET_FIELDS } from "../graph/physics";
 import type { PluginField } from "../core/modes";
@@ -22,6 +22,15 @@ import { liveCam } from "../camera/livecam";
 import { type CamPolicy } from "../camera/want";
 import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
+import { queryMicPermissionState } from "../audio/mic-permission";
+import {
+  listAudioInputs,
+  loadMicDevice,
+  MIC_DEVICE_HINT,
+  micDeviceChoices,
+  saveMicDevice,
+  settleMicChoice,
+} from "../audio/mic-device";
 import { liveSound } from "../audio/sound";
 import { fillPluginFields, syncPackScopeNote } from "../plugins/plugin-ui";
 import { loadPluginConfig, viewSelectOptions, fillViewSelect, type PluginLook, type PluginView } from "../plugins/plugin";
@@ -216,7 +225,7 @@ export class Settings {
     extras?: HTMLElement[];
   } | null = null;
   private pluginSettingsAnnouncer: HTMLDivElement | null = null;
-  private deviceUi: { cam: Toggle; mic: Toggle; sound: Toggle } | null = null;
+  private deviceUi: { cam: Toggle; mic: Toggle; sound: Toggle; micDevice: Select; micNote: HTMLElement } | null = null;
   private audioUi: { src: HTMLSpanElement; level: HTMLElement; bass: HTMLElement } | null = null;
   private pulseNow: () => { level: number; bass: number; listening?: boolean } = () => ({ level: 0, bass: 0 });
   private meterRaf = 0;
@@ -547,9 +556,37 @@ export class Settings {
     const row = document.createElement("div");
     row.className = "sec-controls";
     row.append(cam.el, mic.el, sound.el);
-    sec.append(row);
-    this.deviceUi = { cam, mic, sound };
+    const micDevice = new Select({
+      caption: "Microphone",
+      title: MIC_DEVICE_HINT,
+      options: micDeviceChoices([], false),
+      value: loadMicDevice() || "",
+      onChange: (id) => saveMicDevice(id),
+    });
+    micDevice.disabled = liveMic.micPolicy !== "auto";
+    const micNote = document.createElement("div");
+    micNote.className = "sec-hint";
+    micNote.setAttribute("role", "status");
+    micNote.setAttribute("aria-live", "polite");
+    sec.append(row, micDevice.el, micNote);
+    this.deviceUi = { cam, mic, sound, micDevice, micNote };
     this.pane("privacy").appendChild(sec);
+    micDevice.el.addEventListener("pointerdown", () => { void this.refreshMicDevices(); }, true);
+    void this.refreshMicDevices();
+  }
+
+  /** Refresh names only when the browser already allowed the mic. Opening the list does not prompt. */
+  private async refreshMicDevices(): Promise<void> {
+    const ui = this.deviceUi;
+    if (!ui) return;
+    const permitted = await queryMicPermissionState() === "granted";
+    const enumerate = navigator.mediaDevices?.enumerateDevices?.bind(navigator.mediaDevices);
+    const inputs = await listAudioInputs(enumerate, permitted);
+    const settled = settleMicChoice(inputs, permitted);
+    ui.micDevice.setOptions(settled.choices);
+    ui.micDevice.value = settled.value;
+    ui.micDevice.disabled = liveMic.micPolicy !== "auto";
+    if (settled.announce) ui.micNote.textContent = settled.announce;
   }
 
   private buildViewPane(): void {
@@ -574,14 +611,20 @@ export class Settings {
     // on every settings apply.
     // It must not touch the Not now latch either: that is how Not now came back on every reload.
     if (p === liveMic.micPolicy) {
-      if (this.deviceUi) this.deviceUi.mic.checked = p === "auto";
+      if (this.deviceUi) {
+        this.deviceUi.mic.checked = p === "auto";
+        this.deviceUi.micDevice.disabled = p !== "auto";
+      }
       document.body.classList.toggle("mic-off", p === "off");
       return;
     }
     if (p === "auto") clearMediaDismiss("mic");
     else dropMediaAsk("mic");
     liveMic.setPolicy(p);
-    if (this.deviceUi) this.deviceUi.mic.checked = p === "auto";
+    if (this.deviceUi) {
+      this.deviceUi.mic.checked = p === "auto";
+      this.deviceUi.micDevice.disabled = p !== "auto";
+    }
     document.body.classList.toggle("mic-off", p === "off");
     this.onMicPolicy?.(p);
     this.cfg.onChange();

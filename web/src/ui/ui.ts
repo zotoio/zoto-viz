@@ -73,6 +73,7 @@ export class Select {
   private options: SelectOption[] = [];
   private items: HTMLLIElement[] = [];
   private current = "";
+  private controlDisabled = false;
   private active = -1;
   private filter = "";
   private banner: string | null = null;
@@ -128,6 +129,14 @@ export class Select {
     });
   }
 
+  get disabled(): boolean { return this.controlDisabled; }
+  set disabled(v: boolean) {
+    this.controlDisabled = v;
+    this.btn.disabled = v;
+    this.el.classList.toggle("disabled", v);
+    this.el.setAttribute("aria-disabled", v ? "true" : "false");
+    if (v) this.close();
+  }
   get value(): string { return this.current; }
   setCaption(text: string): void {
     this.capEl.textContent = text;
@@ -274,7 +283,7 @@ export class Select {
   get isOpen(): boolean { return !this.menu.hidden; }
 
   open(): void {
-    if (this.isOpen) return;
+    if (this.controlDisabled || this.isOpen) return;
     if (openSelect && openSelect !== this) openSelect.close();
     openSelect = this;
     this.filter = "";
