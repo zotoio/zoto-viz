@@ -9,6 +9,7 @@ import { usesFullDeviceTable } from "./layout-budget";
 import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
 import { cycleSkyPool, type BackdropKind } from "./backdrop";
+import { hostSkyForFailedTile } from "./tile-sky-fallback";
 import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
@@ -1001,9 +1002,10 @@ export class Mosaic {
 
   private fallbackHostSky(id: string): void {
     // A pack-sky pane waits on the theme background; a built-in here is the "matrix on Backrooms" bug.
-    if (lookForTile(id)?.backdrop === "plugin") return;
     const used = [...this.tileSkies.values()].filter((k) => k !== "plugin");
-    const sky = nextHostSky(used, cycleSkyPool(), this.cfg.sync().anim.backdrop);
+    const next = nextHostSky(used, cycleSkyPool(), this.cfg.sync().anim.backdrop);
+    const sky = hostSkyForFailedTile(lookForTile(id)?.backdrop, this.recoveredSkies.get(id) ?? next);
+    if (!sky) return;
     this.recoveredSkies.set(id, sky);
     this.tileSkies.set(id, sky);
     const target = this.graphScene(id);

@@ -31,6 +31,18 @@ describe("compileMatcher", () => {
 });
 
 describe("Settings panes", () => {
+  it("Escape returns focus to the cog that opened This view", () => {
+    const s = new Settings({ storePrefix: "zoto-esc-cog", onChange: () => {} });
+    document.body.append(s.el);
+    const cog = document.createElement("button");
+    cog.className = "mosaic-pane-cog";
+    document.body.append(cog);
+    cog.focus();
+    s.openView("plugin:koi-pond");
+    s.el.querySelector(".settings-pop")!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect(document.activeElement).toBe(cog);
+  });
+
   it("puts Network and System on Graph, host filters on Privacy, and plugin copy on This view", () => {
     const s = new Settings({ storePrefix: "zoto-viz-test", onChange: () => {} });
     const labels = [...s.el.querySelectorAll(".s-nav-btn")].map((b) => b.textContent);

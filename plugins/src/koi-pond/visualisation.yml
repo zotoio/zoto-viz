@@ -23,7 +23,7 @@ config:
       - [storm_ripples, Storm Ripples]
       - [festival_lanterns, Festival Lanterns]
     default: zen_garden
-    hint: Applies to all Koi Pond tiles. Preset sets water, lotus, and motion baselines for every tile on the wall.
+    hint: Preset sets water, lotus, and motion baselines for every tile on the wall.
   - key: randomise
     label: randomise settings
     type: boolean

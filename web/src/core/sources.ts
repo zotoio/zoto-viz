@@ -64,6 +64,8 @@ export interface SourceLive {
   error?: string;
   pending?: boolean;
   paused?: boolean;
+  demo?: boolean;
+  needsConsent?: string;
 }
 
 export interface SourceHeadline {

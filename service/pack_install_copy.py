@@ -24,6 +24,10 @@ REASON_UPDATE_REFUSED = "update_refused"
 #: Carried as ``reasonCode`` next to ``error: pack_install_check_unavailable``; the message is the shared
 #: copy table's ``install_unchecked``.
 REASON_INSTALL_UNCHECKED = "install_unchecked"
+#: The check ran and failed (for example esbuild). The pack was not blocked.
+#: Callers branch on this code. The sentence is the existing safety-check refusal, which
+#: does not say the pack was blocked and does not mention pack lint.
+REASON_PACK_CHECK_FAILED = "pack_check_failed"
 
 # UX Pro — zip install rejection copy (literal pins in tests; revert rows blank these).
 ZIP_UX_CORRUPT_TAIL = "The file isn't a valid pack or is damaged."

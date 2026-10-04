@@ -3,7 +3,7 @@ import type { SourceKind, SourceLive, SourceRow } from "../core/sources";
 import { displayName, type Device, usefulName } from "../core/types";
 import { applyFloatRect, bindFloatPanel, readFloatRect } from "./float-drag";
 import { ColorField, GroupedChips, pinFlyout, Select, Slider, TextField, Toggle, unpinFlyout } from "./ui";
-import { SettingsScopePanel, type ScopeEntry } from "./settings-scope-panel";
+import { fieldStatusText, SettingsScopePanel, type ScopeEntry } from "./settings-scope-panel";
 import { MAGNET_FIELDS } from "../graph/physics";
 import type { PluginField } from "../core/modes";
 import type { RemixPairing } from "../remix/remix-types";
@@ -22,6 +22,8 @@ import { liveCam } from "../camera/livecam";
 import { type CamPolicy } from "../camera/want";
 import { clearMediaDismiss, dropMediaAsk } from "./media-ask";
 import { liveMic, type MicPolicy } from "../audio/want";
+import { loadDiceScope, saveDiceScope, type DiceScope } from "../core/dice-agent-scope";
+import { deleteWallConfirm, sourceConsentPrompt } from "../core/scope-copy";
 import { queryMicPermissionState } from "../audio/mic-permission";
 import {
   listAudioInputs,
@@ -65,6 +67,7 @@ import { makeViewCogButton, VIEW_COG_SVG } from "./view-cog";
 const PANES: { id: string; label: string }[] = [
   { id: "appearance", label: "Appearance" },
   { id: "view", label: "This view" },
+  { id: "wall", label: "Wall" },
   { id: "graph", label: "Graph" },
   { id: "physics", label: "Physics" },
   { id: "motion", label: "Motion" },
@@ -298,6 +301,7 @@ export class Settings {
       b.textContent = p.label;
       b.setAttribute("aria-current", p.id === this.activePane ? "page" : "false");
       b.addEventListener("click", () => this.showPane(p.id));
+      if (p.id === "wall") b.hidden = true;
       this.navBtns.set(p.id, b);
       this.nav.appendChild(b);
     }
@@ -339,6 +343,8 @@ export class Settings {
     if (split.chatOn) this.chat.on = true;
     this.dice = loadDice(cfg.storePrefix);
     this.buildDevices();
+    this.buildReducedMotion();
+    this.buildWallPicker();
     this.buildFilters();
     this.buildViewPane();
     this.buildDice();
@@ -348,7 +354,12 @@ export class Settings {
     document.body.classList.toggle("sound-off", !liveSound.soundOn);
 
     this.btn.addEventListener("click", () => (this.isOpen ? this.close() : this.open()));
-    this.pop.addEventListener("keydown", (e) => { if (e.key === "Escape") { this.close(); this.btn.focus(); } });
+    this.pop.addEventListener("keydown", (e) => {
+      if (e.key !== "Escape") return;
+      const back = this.viewDrawerReturnFocus ?? this.btn;
+      this.close();
+      back.focus();
+    });
     this.rebuild();
   }
 
@@ -712,6 +723,19 @@ export class Settings {
       pluginSettingsAnnouncer: this.ensurePluginSettingsAnnouncer(),
     });
     this.attachViewMosaic();
+    this.paintScopeFields();
+  }
+
+  /** Each field says whether it is set here, and its control points at that text. */
+  private paintScopeFields(): void {
+    const panel = this.scopePanel;
+    if (!panel) return;
+    for (const row of this.pane("view").querySelectorAll<HTMLElement>("[data-field-key]")) {
+      const key = row.dataset.fieldKey || "field";
+      const setHere = row.classList.contains("field-dirty");
+      const status = fieldStatusText({ setHere, fromLevel: "Global", fromValue: "default" });
+      panel.attachField(row, key, status, `Reset ${key} to Global value, default`);
+    }
   }
 
   private ensurePluginSettingsAnnouncer(): HTMLDivElement {
@@ -727,6 +751,18 @@ export class Settings {
       pane.insertBefore(this.pluginSettingsAnnouncer, this.viewHost);
     }
     return this.pluginSettingsAnnouncer;
+  }
+
+  /** The Wall section becomes its own tab while a mosaic is on. */
+  private syncWallTab(): void {
+    const on = this.anim.mosaic !== "off";
+    const btn = this.navBtns.get("wall");
+    if (btn) btn.hidden = !on;
+    const sec = this.viewMosaicSec;
+    if (!sec) return;
+    if (on) this.pane("wall").append(sec);
+    else this.attachViewMosaic();
+    if (!on && this.activePane === "wall") this.showPane("view");
   }
 
   private attachViewMosaic(): void {
@@ -830,6 +866,103 @@ export class Settings {
   get chatSettings(): ChatConfig { return this.chat; }
   get diceSettings(): DiceConfig { return this.dice; }
 
+  private buildWallPicker(): void {
+    const sec = document.createElement("section");
+    sec.className = "sec";
+    const title = document.createElement("div");
+    title.className = "sec-title";
+    title.textContent = "Named wall";
+    const name = document.createElement("input");
+    name.className = "wall-name";
+    name.placeholder = "Name";
+    name.setAttribute("aria-label", "Wall name");
+    const save = document.createElement("button");
+    save.type = "button";
+    save.textContent = "Save wall as…";
+    const renameBtn = document.createElement("button");
+    renameBtn.type = "button";
+    renameBtn.textContent = "Rename";
+    const del = document.createElement("button");
+    del.type = "button";
+    del.textContent = "Delete";
+    let active = "default";
+    const post = (body: unknown, method = "POST", id = "") => apiFetch(id ? `/api/walls/${id}` : "/api/walls", {
+      method,
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+    }).then(async (r) => {
+      const data = await r.json().catch(() => ({})) as { active?: string };
+      if (data.active) active = data.active;
+    });
+    save.addEventListener("click", () => {
+      const label = name.value.trim();
+      if (!label) return;
+      void post({ name: label, layout: { mosaic: this.anim.mosaic } });
+    });
+    renameBtn.addEventListener("click", () => {
+      const label = name.value.trim();
+      if (!label) return;
+      void post({ name: label }, "PUT", active);
+    });
+    del.addEventListener("click", () => {
+      const label = name.value.trim() || "Default";
+      if (!window.confirm(deleteWallConfirm(label))) return;
+      void apiFetch(`/api/walls/${active}`, { method: "DELETE" });
+    });
+    sec.append(title, name, save, renameBtn, del);
+    this.pane("wall").prepend(sec);
+  }
+
+  private buildReducedMotion(): void {
+    const sec = document.createElement("section");
+    sec.className = "sec";
+    const title = document.createElement("div");
+    title.className = "sec-title";
+    title.textContent = "Reduced motion";
+    let saved = "";
+    try { saved = localStorage.getItem("zoto-viz.reducedMotion") ?? ""; } catch { /* private mode */ }
+    const value = saved === "on" || saved === "off" ? saved : "match";
+    const sel = new Select({
+      caption: "Reduced motion",
+      title: "Match system follows the operating system. On and Off stay as chosen.",
+      options: [
+        { value: "match", label: "Match system" },
+        { value: "on", label: "On" },
+        { value: "off", label: "Off" },
+      ],
+      value,
+      onChange: (id) => {
+        try {
+          if (id === "match") localStorage.removeItem("zoto-viz.reducedMotion");
+          else localStorage.setItem("zoto-viz.reducedMotion", id);
+        } catch { /* private mode */ }
+      },
+    });
+    sec.append(title, sel.el);
+    this.pane("appearance").append(sec);
+  }
+
+  private async refreshGrantedHosts(host: HTMLElement): Promise<void> {
+    const r = await apiFetch("/api/source-consent");
+    if (!r.ok) return;
+    const data = await r.json().catch(() => ({})) as { hosts?: string[] };
+    host.replaceChildren();
+    for (const name of data.hosts ?? []) {
+      const row = document.createElement("div");
+      const label = document.createElement("span");
+      label.textContent = name;
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.textContent = "Remove";
+      remove.addEventListener("click", () => {
+        void apiFetch(`/api/source-consent/${encodeURIComponent(name)}`, { method: "DELETE" })
+          .then(() => this.refreshGrantedHosts(host));
+      });
+      row.append(label, remove);
+      host.append(row);
+    }
+  }
+
   private buildDice(): void {
     const host = this.pane("dice");
     const repeatSec = document.createElement("section");
@@ -856,7 +989,17 @@ export class Settings {
       format: (v) => `${v} min`,
       onInput: (v) => { this.dice.periodMin = v; this.persistDice(); },
     });
-    repeatList.append(on.el, period.el);
+    const diceScope = new Select({
+      caption: "Dice changes",
+      title: "This session only restores the saved look on reload. Save to this wall keeps the roll on this wall.",
+      options: [
+        { value: "session", label: "This session only" },
+        { value: "wall", label: "Save to this wall" },
+      ],
+      value: loadDiceScope(),
+      onChange: (id) => saveDiceScope(id as DiceScope),
+    });
+    repeatList.append(on.el, period.el, diceScope.el);
     repeatSec.appendChild(repeatList);
 
     const includeSec = document.createElement("section");
@@ -1183,6 +1326,7 @@ export class Settings {
       resetLayout();
       this.persistAnim();
       this.animUi?.syncTiles();
+      this.syncWallTab();
     });
     const hero = chips(HERO_POS, this.anim.hero, (v) => {
       this.anim.hero = v;
@@ -1231,6 +1375,7 @@ export class Settings {
       checked: !!this.anim.mosaicSharedTheme,
       onChange: (on) => { this.anim.mosaicSharedTheme = on; this.persistAnim(); },
     });
+    let uniqueSkies: Toggle | null = null;
     const sharedSky = new Toggle({
       label: "one sky",
       title: "Use the wall sky image on every pane that does not need its own. A plugin sky or an authored backdrop stays on that view.",
@@ -1238,6 +1383,17 @@ export class Settings {
       onChange: (on) => {
         this.anim.mosaicUniqueSkies = !on;
         this.anim.mosaicSkies = {};
+        if (uniqueSkies) uniqueSkies.checked = !on;
+        this.persistAnim();
+      },
+    });
+    uniqueSkies = new Toggle({
+      label: "unique skies",
+      title: "Each tile keeps its own sky. A sky that fails to draw falls back to the recovered host sky, so the tile does not go black.",
+      checked: this.anim.mosaicUniqueSkies !== false,
+      onChange: (on) => {
+        this.anim.mosaicUniqueSkies = on;
+        sharedSky.checked = !on;
         this.persistAnim();
       },
     });
@@ -1255,6 +1411,7 @@ export class Settings {
       labeled("tiles", tilePicker),
       sharedTheme.el,
       sharedSky.el,
+      uniqueSkies.el,
       mosaicHint,
       mosaicBtns,
     );
@@ -1266,6 +1423,7 @@ export class Settings {
     viewMosaic.append(mosaicTitle, mosaicBits);
     this.viewMosaicSec = viewMosaic;
     this.attachViewMosaic();
+    this.syncWallTab();
     const labels = new Slider({
       label: "labels", title: "label size and font-weight",
       min: 50, max: 200, step: 5, value: Math.round(this.anim.labelWeight * 100),
@@ -1780,7 +1938,13 @@ export class Settings {
     });
     const libraryHost = document.createElement("div");
     libraryHost.className = "source-list";
-    sec.append(auth, include.el, libraryHost, list, form, inst, instList);
+    const hosts = document.createElement("div");
+    hosts.className = "source-consent-hosts";
+    const hostsTitle = document.createElement("div");
+    hostsTitle.className = "sec-title";
+    hostsTitle.textContent = "Granted hosts";
+    sec.append(auth, include.el, libraryHost, list, form, inst, instList, hostsTitle, hosts);
+    void this.refreshGrantedHosts(hosts);
     void this.mountSourceLibrary(libraryHost);
     const remixHost = document.createElement("div");
     this.remixPickerHost = remixHost;
@@ -1932,6 +2096,25 @@ export class Settings {
           : status.ok === false ? (status.error || "error")
           : status.items ? `${status.items.length} items`
           : "ok";
+        if (status?.needsConsent) {
+          const ask = document.createElement("p");
+          ask.textContent = sourceConsentPrompt(row.label || row.id, status.needsConsent);
+          const allow = document.createElement("button");
+          allow.type = "button";
+          allow.textContent = "Allow";
+          const later = document.createElement("button");
+          later.type = "button";
+          later.textContent = "Not now";
+          const hostName = status.needsConsent;
+          allow.addEventListener("click", () => {
+            void apiFetch("/api/source-consent", {
+              method: "POST",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ host: hostName }),
+            }).then(() => this.refreshSources());
+          });
+          el.append(ask, allow, later);
+        }
         const on = new Toggle({
           label: row.label || row.id,
           title: `${row.type} · ${row.url || row.path || ""} · ${hint}`,

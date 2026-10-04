@@ -53,6 +53,19 @@ describe("settings scope panel", () => {
     expect(panel.polite.textContent).toBe("Editing Global. Changes apply everywhere.");
   });
 
+  it("a field status is text the control describes, and the pack sentence sits beside the control", () => {
+    const panel = new SettingsScopePanel({ entry: "tile", tileIndex: 3, packName: "Koi Pond" });
+    expect(panel.el.textContent).toContain("Applies to all Koi Pond tiles");
+    expect(panel.el.textContent).toContain("Separate this tile");
+    const row = document.createElement("div");
+    row.innerHTML = `<button type="button">preset</button>`;
+    panel.attachField(row, "preset", "Set here", "Reset preset to Global value, zen");
+    const btn = row.querySelector("button")!;
+    expect(btn.getAttribute("aria-describedby")).toBe(row.querySelector(".settings-scope-status")?.id);
+    expect(row.querySelector(".settings-scope-status")?.textContent).toBe("Set here");
+    expect(row.querySelector(".settings-scope-reset")?.getAttribute("aria-label")).toBe("Reset preset to Global value, zen");
+  });
+
   it("arrow, Home and End move the scope control", () => {
     const panel = new SettingsScopePanel({ entry: "tile", tileIndex: 3, packName: "Koi Pond", viewName: "Night" });
     const tabs = panel.el.querySelector<HTMLElement>('[role="tablist"]')!;

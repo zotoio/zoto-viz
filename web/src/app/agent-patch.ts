@@ -1,5 +1,6 @@
 import type { ProfileSettings } from "../core/profiles";
-import { mergeAgentPatch, pickAgentSettings, stripMosaicLayout } from "../ui/capture";
+import { mergeAgentPatch, pickAgentSettings } from "../ui/capture";
+import { agentAnimForScope } from "../core/dice-agent-scope";
 import { livePatchIsConsentOnly } from "./plugin-consent-live";
 
 /** Everything `applyAgentPatch` touches in the page, injected so the flow is testable. */
@@ -47,7 +48,7 @@ export function createApplyAgentPatch(host: AgentPatchHost): (patch: Record<stri
     }
     if (p.temper != null || p.weather) host.syncTemper({ temper: p.temper, weather: p.weather });
     const lockLayout = !host.aiMosaicLayoutOn();
-    if (lockLayout && p.anim) p.anim = stripMosaicLayout(p.anim);
+    if (p.anim) p.anim = agentAnimForScope(p.anim, !lockLayout);
     const cur = host.collectSettings();
     const wall = host.mosaicTiles();
     if (lockLayout && wall && p.mode && !wall.tileIds.includes(p.mode)) {
