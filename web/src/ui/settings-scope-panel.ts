@@ -3,6 +3,7 @@
  * An edit writes only the level on screen.
  */
 import { emptyScopeStore, separateTile, setAt, resetAt, resolve, type ScopeStore, type WriteLevel } from "../core/settings-scope";
+import { SEPARATE_TILE, TILE_OWN_SETTINGS, shareWithPack } from "../core/scope-copy";
 
 export type ScopeEntry = "global" | "view" | "tile";
 
@@ -117,6 +118,60 @@ export class SettingsScopePanel {
     this.polite.setAttribute("role", "status");
     this.polite.setAttribute("aria-live", "polite");
     this.el.append(tabs, crumbs, this.polite);
+    if (opts.packName) {
+      const note = document.createElement("p");
+      note.className = "settings-scope-pack";
+      note.textContent = `Applies to all ${opts.packName} tiles`;
+      this.el.append(note);
+    }
+    if (opts.entry === "tile") {
+      const separate = document.createElement("button");
+      separate.type = "button";
+      separate.className = "settings-scope-separate";
+      separate.textContent = SEPARATE_TILE;
+      const share = document.createElement("button");
+      share.type = "button";
+      share.className = "settings-scope-share";
+      share.hidden = true;
+      share.textContent = shareWithPack(opts.packName || "this pack");
+      const own = document.createElement("p");
+      own.className = "settings-scope-own";
+      own.hidden = true;
+      own.textContent = TILE_OWN_SETTINGS;
+      separate.addEventListener("click", () => {
+        this.separated = true;
+        separate.hidden = true;
+        share.hidden = false;
+        own.hidden = false;
+      });
+      this.el.append(separate, own, share);
+    }
+  }
+
+  private separated = false;
+
+  /** Status text next to a field, named for assistive tech, and a reset that deletes the override. */
+  attachField(row: HTMLElement, field: string, status: string, resetLabel: string): void {
+    const id = `scope-status-${field}`;
+    let note = row.querySelector<HTMLElement>(".settings-scope-status");
+    if (!note) {
+      note = document.createElement("span");
+      note.className = "settings-scope-status";
+      note.id = id;
+      row.append(note);
+    }
+    note.textContent = status;
+    const control = row.querySelector<HTMLElement>("input,select,button,textarea") ?? row;
+    control.setAttribute("aria-describedby", note.id);
+    let reset = row.querySelector<HTMLButtonElement>(".settings-scope-reset");
+    if (!reset) {
+      reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "settings-scope-reset";
+      row.append(reset);
+    }
+    reset.textContent = "Reset";
+    reset.setAttribute("aria-label", resetLabel);
   }
 
   private tabs(): HTMLButtonElement[] {

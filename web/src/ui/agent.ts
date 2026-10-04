@@ -15,6 +15,8 @@ import { AUTH_SETUPS, renderAuthSetup } from "../core/auth-setup";
 import { isNasaStillUrl } from "../core/nasa-stills";
 import type { ProfileOperator } from "../core/profiles";
 import { armSpeechRecognition, loadSpeechLang, saveSpeechLang, SPEECH_LANGUAGES, speechRecognitionLang } from "./speech-lang";
+import { agentChangeLine } from "../core/scope-copy";
+import { loadAgentScope, saveAgentScope, type AgentScope } from "../core/dice-agent-scope";
 
 const CONTROL_KEY = "zoto-viz.aiControl";
 export const CYCLE_KEY = "zoto-viz.aiCycle";
@@ -365,6 +367,17 @@ export class AgentPanel {
 
     this.cursorHelp = renderAuthSetup(AUTH_SETUPS.cursor);
     this.ttsHelp = renderAuthSetup(AUTH_SETUPS.elevenlabs);
+    const agentScope = new Select({
+      caption: "Agent changes",
+      title: "This session only, Save to this view, or Save everywhere.",
+      options: [
+        { value: "session", label: "This session only" },
+        { value: "view", label: "Save to this view" },
+        { value: "global", label: "Save everywhere" },
+      ],
+      value: loadAgentScope(),
+      onChange: (id) => saveAgentScope(id as AgentScope),
+    });
     const speechLang = new Select({
       caption: "Speech language",
       title: "Used for voice commands and the watchword.",
@@ -382,6 +395,7 @@ export class AgentPanel {
     this.el.append(
       this.statusEl,
       speechLang.el,
+      agentScope.el,
       this.speechNote,
       this.temperRail.el,
       this.oddsStrip.el,
@@ -926,6 +940,10 @@ export class AgentPanel {
     }
   }
 
+  private agentScope(): AgentScope {
+    return loadAgentScope();
+  }
+
   /** Stored language, or the browser language after one refusal. */
   private armSpeechLang(rec: SpeechRec): void {
     armSpeechRecognition(rec, (line) => {
@@ -1204,7 +1222,11 @@ export class AgentPanel {
       const settingsPatch = extractSettings(reply);
       if (settingsPatch) {
         if (!this.controlOn) this.append("agent", "AI Control is off — settings were not applied");
-        else await this.onApplySettings?.(settingsPatch);
+        else {
+          const field = Object.keys(settingsPatch)[0];
+          if (field) this.append("agent", agentChangeLine(field, this.agentScope()));
+          await this.onApplySettings?.({ ...settingsPatch, scope: this.agentScope() });
+        }
       }
       const look = extractAgentLook(reply);
       if (look) {

@@ -90,7 +90,8 @@ describe("koi-pond shipped pack", () => {
     expect(FRONT).toContain("KoiPondSim");
     expect(FRONT).not.toMatch(/\bparent\s*\.\s*document\b/);
     expect(FRONT).not.toMatch(/host\.onFrame\s*=\s*\([^)]*\)\s*=>\s*\{[\s\S]*?getConfig/);
-    expect(VIS).toContain("Applies to all Koi Pond tiles");
+    expect(VIS).not.toContain("Applies to all Koi Pond tiles");
+    expect(VIS).toContain("Preset sets water, lotus, and motion baselines");
     expect(VIS).toContain("moonlit_lotus");
     expect(MAPPING).toContain("pond-wide");
   });

@@ -1122,6 +1122,16 @@ async def fetch_one(row: dict[str, Any]) -> dict[str, Any]:
 
 async def _fetch_live(row: dict[str, Any]) -> dict[str, Any]:
     kind = row["type"]
+    if kind in ("rss", "http"):
+        from . import source_consent
+        host = source_consent.host_of(row)
+        if host and not source_consent.allowed(host):
+            if not _serve_sample(row, "waiting for consent"):
+                _record(row, ok=True, payload={"items": [], "demo": True, "needsConsent": host})
+                _live[row["id"]]["feed"] = False
+            else:
+                _live[row["id"]]["needsConsent"] = host
+            return _live[row["id"]]
     try:
         if kind == "file":
             path = check_file(str(row.get("path") or ""))

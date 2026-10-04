@@ -28,6 +28,11 @@ export type ScopeStore = {
   tile: Record<string, ScopeBag>;
   /** Tile ids that no longer share the view. */
   separated: string[];
+  /**
+   * Session-only values. Read above the tile. Never written to a profile or a wall.
+   * A reload starts without this bag.
+   */
+  session?: ScopeBag;
   /** Pack id → floor for `render.scale.min`. A lower override cannot go under it. */
   floor: Record<string, number>;
 };
@@ -55,6 +60,7 @@ export function emptyScopeStore(): ScopeStore {
     tile: {},
     separated: [],
     floor: {},
+    session: {},
   };
 }
 
@@ -93,6 +99,7 @@ function readBag(map: Record<string, ScopeBag>, id: string): ScopeBag | undefine
 export function resolve(store: ScopeStore, key: string, ctx: ScopeCtx): ScopeValue | undefined {
   const separated = store.separated.includes(ctx.tileId);
   const chain: (ScopeBag | undefined)[] = [
+    store.session,
     separated ? readBag(store.tile, ctx.tileId) : undefined,
     readBag(store.wall, ctx.wallId),
     readBag(store.view, ctx.viewId),
@@ -162,6 +169,64 @@ export function resetAt(store: ScopeStore, level: WriteLevel, key: string, ctx: 
 export function separateTile(store: ScopeStore, tileId: string): ScopeStore {
   if (store.separated.includes(tileId)) return store;
   return { ...store, separated: [...store.separated, tileId] };
+}
+
+/** Drop a separated tile's own bag so it shares the view again. */
+export function shareTile(store: ScopeStore, tileId: string): { store: ScopeStore; dropped: string[] } {
+  const dropped = Object.keys(store.tile[tileId] ?? {});
+  const tile = { ...store.tile };
+  delete tile[tileId];
+  return {
+    dropped,
+    store: { ...store, tile, separated: store.separated.filter((id) => id !== tileId) },
+  };
+}
+
+export function writeSession(store: ScopeStore, key: string, value: ScopeValue): ScopeStore {
+  return { ...store, session: { ...store.session, [key]: value } };
+}
+
+export function clearSession(store: ScopeStore): ScopeStore {
+  return { ...store, session: {} };
+}
+
+export type FieldOrigin = {
+  level: "session" | ScopeLevel;
+  value: ScopeValue;
+};
+
+/** Which bag actually supplied `key`. Session wins, then the usual chain. */
+export function fieldOrigin(store: ScopeStore, key: string, ctx: ScopeCtx): FieldOrigin | null {
+  const separated = store.separated.includes(ctx.tileId);
+  const chain: { level: FieldOrigin["level"]; bag?: ScopeBag }[] = [
+    { level: "session", bag: store.session },
+    { level: "tile", bag: separated ? readBag(store.tile, ctx.tileId) : undefined },
+    { level: "wall", bag: readBag(store.wall, ctx.wallId) },
+    { level: "view", bag: readBag(store.view, ctx.viewId) },
+    { level: "pack", bag: readBag(store.pack, ctx.packId) },
+    { level: "manifest", bag: readBag(store.manifest, ctx.packId) },
+    { level: "global", bag: store.global },
+    { level: "builtin", bag: store.builtin },
+  ];
+  for (const row of chain) {
+    if (row.bag && Object.prototype.hasOwnProperty.call(row.bag, key)) {
+      return { level: row.level, value: row.bag[key] as ScopeValue };
+    }
+  }
+  return null;
+}
+
+export type OverrideHit = { level: "view" | "wall" | "tile"; id: string };
+
+export function overridesOf(store: ScopeStore, key: string): OverrideHit[] {
+  const hits: OverrideHit[] = [];
+  for (const level of ["view", "wall", "tile"] as const) {
+    const map = store[level];
+    for (const [id, row] of Object.entries(map)) {
+      if (Object.prototype.hasOwnProperty.call(row, key)) hits.push({ level, id });
+    }
+  }
+  return hits;
 }
 
 export type ClearedOverride = { level: "view" | "wall" | "tile"; id: string; key: string };

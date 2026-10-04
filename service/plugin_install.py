@@ -30,6 +30,7 @@ from .pack_zip_blocks import record_zip_block, row_for_start_failure, zip_block_
 from .pack_install_blocked_store import record_blocked_zip
 from .pack_install_copy import (
     REASON_INSTALL_UNCHECKED,
+    REASON_PACK_CHECK_FAILED,
     REASON_PACK_INSTALL_BLOCKED,
     REASON_UPDATE_REFUSED,
     upgrade_rollback_user_message,
@@ -39,7 +40,6 @@ from .pack_zip_install_ux import installed_runtime_version
 from .pack_block_copy import (
     BLOCK_FIX_TAIL,
     SENTENCE_BOUNDARY,
-    SENTENCE_CHECKS_FAILED,
     SENTENCE_SDK_OLDER,
     REASON_PACK_BLOCKED,
     PackBlockedError,
@@ -174,6 +174,16 @@ def drain_install_notices() -> list[dict[str, str]]:
 
 def queue_install_notice(message: str, *, error: str = "pack_install") -> None:
     _pending_notices.append({"error": error, "message": message})
+
+
+def upgrade_failure_from_check(exc: BaseException, name: str, old_version: str | int | None) -> tuple[str, str]:
+    """A real block keeps its code. A check that itself failed does not say the pack was blocked."""
+    if isinstance(exc, PackBlockedError):
+        return (
+            format_v2_blocked_message(name, old_version, exc.sentence, tail=exc.tail, reason=exc.reason),
+            REASON_PACK_BLOCKED,
+        )
+    return format_update_refused_message(name, old_version), REASON_PACK_CHECK_FAILED
 
 
 def format_v2_blocked_message(
@@ -600,22 +610,16 @@ def _install_staged_to_runtime_locked(
             raise
         except ValueError as e:
             if upgrade:
-                reason = ""
-                if isinstance(e, PackBlockedError):
-                    sentence, tail, reason = e.sentence, e.tail, e.reason
-                else:
-                    # Not a plain-words block (esbuild error, bad manifest): keep the raw text in the log.
-                    _LOG.warning("pack upgrade blocked for %s: %s", pid, e)
-                    sentence, tail = SENTENCE_CHECKS_FAILED, BLOCK_FIX_TAIL
+                if not isinstance(e, PackBlockedError):
+                    _LOG.warning("pack upgrade check failed for %s: %s", pid, e)
+                message, code = upgrade_failure_from_check(e, name, installed_runtime_version(runtime))
                 raise InstallV2BlockedError(
-                    format_v2_blocked_message(name, installed_runtime_version(runtime), sentence, tail=tail, reason=reason),
-                    # #240: block copy, so the block's code rides with it (callers branch on it).
+                    message,
                     payload={
-                        "error": "pack_install_blocked",
+                        "error": "pack_install_blocked" if code == REASON_PACK_BLOCKED else code,
                         "upgrade_blocked": "true",
                         "zip": rel,
-                        "sentence": sentence,
-                        "reasonCode": REASON_PACK_BLOCKED,
+                        "reasonCode": code,
                     },
                 ) from e
             raise

@@ -62,7 +62,9 @@ from . import profiles
 from . import repo_sync
 from . import rf
 from . import sdm
+from . import source_consent
 from . import sources
+from . import walls
 from . import idle
 from . import plugin_catalog
 from . import sysconfig
@@ -1856,6 +1858,7 @@ async def local_drop_watch_loop(app: web.Application) -> None:
 async def sources_poll_loop(app: web.Application) -> None:
     """Refresh due RSS / HTTP / file sources without blocking the 1 Hz snapshot."""
     sources.ensure()
+    source_consent.seed_from_rows(sources.ensure())
     while True:
         try:
             await sources.poll()
@@ -2244,6 +2247,13 @@ def make_app(
     app.router.add_delete("/api/sources/nasa-api-key", nasa_api.api_nasa_key)
     app.router.add_get("/api/sources/image", sources.api_image)
     app.router.add_get("/api/sources/library", sources.api_source_library)
+    app.router.add_get("/api/walls", walls.api_list)
+    app.router.add_post("/api/walls", walls.api_save)
+    app.router.add_put("/api/walls/{id}", walls.api_one)
+    app.router.add_delete("/api/walls/{id}", walls.api_one)
+    app.router.add_get("/api/source-consent", source_consent.api_list)
+    app.router.add_post("/api/source-consent", source_consent.api_allow)
+    app.router.add_delete("/api/source-consent/{host}", source_consent.api_remove)
     app.router.add_get("/api/sources", sources.api_sources)
     app.router.add_put("/api/sources", sources.api_sources)
     app.router.add_post("/api/sources", sources.api_sources)
