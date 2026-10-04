@@ -7,10 +7,15 @@
  * - one tile's shader failed: that tile alone is `cant-draw` / `shader`, until its shader compiles
  *   or its pack is swapped or cleared.
  * The graph layer only emits; this is the one place those events become view state.
+ * #273: a lost context's tile ids go through `viewStateTileKey`, so the main scene's tile "main" lands on
+ * the mosaic pane holding `#scene` (its line, Retry and state), as every other pane's does.
  */
 
 import type { TileDrawEvent } from "../graph/render-host";
-import { assertNever, enterCantDrawShader, enterContextLost, leaveCantDrawShader, leaveContextLost } from "./view-state";
+import { assertNever, enterCantDrawShader, enterContextLost, leaveCantDrawShader, leaveContextLost, viewStateTileKey } from "./view-state";
+
+/** The tiles an event names, as view-state keys, once each. */
+const keys = (ids: readonly string[]): string[] => [...new Set(ids.map(viewStateTileKey))];
 
 export type TileDrawSource = { onDrawEvent(fn: (e: TileDrawEvent) => void): () => void };
 
@@ -20,19 +25,19 @@ export function bindCantDrawViewState(host: TileDrawSource): () => void {
   return host.onDrawEvent((e) => {
     switch (e.type) {
       case "context-lost":
-        for (const id of e.tileIds) {
+        for (const id of keys(e.tileIds)) {
           lost.add(id);
           enterContextLost(id);
         }
         return;
       case "reload-offered":
-        for (const id of new Set([...lost, ...e.tileIds])) {
+        for (const id of new Set([...lost, ...keys(e.tileIds)])) {
           lost.add(id);
           enterContextLost(id, { reload: true });
         }
         return;
       case "context-drawn":
-        for (const id of new Set([...lost, ...e.tileIds])) leaveContextLost(id);
+        for (const id of new Set([...lost, ...keys(e.tileIds)])) leaveContextLost(id);
         lost.clear();
         return;
       case "shader-failed":
