@@ -99,8 +99,10 @@ function emptyEnvelope(): SettingsEnvelope {
   };
 }
 
-function dreamDefault(key: string): unknown {
-  return (DEFAULT_DREAM as unknown as Record<string, unknown>)[key];
+/** The anim default persistAnim would store for `key`, or undefined when the key is not on the dream. */
+export function dreamDefault(key: string): unknown {
+  if (!Object.hasOwn(DEFAULT_DREAM, key)) return undefined;
+  return DEFAULT_DREAM[key as keyof typeof DEFAULT_DREAM];
 }
 
 /** How persistAnim would store a default, or null when the host omits the key. */

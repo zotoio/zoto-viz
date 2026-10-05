@@ -7,7 +7,7 @@
  * - one tile's shader failed: that tile alone is `cant-draw` / `shader`, until its shader compiles
  *   or its pack is swapped or cleared.
  * The graph layer only emits; this is the one place those events become view state.
- * #273: a lost context's tile ids go through `viewStateTileKey`, so the main scene's tile "main" lands on
+ * A lost context's tile ids go through `viewStateTileKey`, so the main scene's tile "main" lands on
  * the mosaic pane holding `#scene` (its line, Retry and state), as every other pane's does.
  */
 

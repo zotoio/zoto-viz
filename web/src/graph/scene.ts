@@ -1473,7 +1473,7 @@ export class NetScene implements HostedView, RenderScalePane {
     };
     const { signal } = this.listenerAbort;
     this.inputEl.addEventListener("wheel", (e) => {
-      // #251: over a couldn't-draw line that scrolls itself (solo), the wheel scrolls it: no camera, no preventDefault.
+      // A solo couldn't-draw line that scrolls and overflows takes the wheel: no camera, no preventDefault.
       if (inScrollingCantDrawLine(e.target)) return void e.stopImmediatePropagation();
       e.preventDefault();
       e.stopImmediatePropagation();
@@ -5101,9 +5101,15 @@ export function isOverlayControl(target: EventTarget | null): boolean {
   return !!el?.closest("button, a[href], input, select, textarea, [role=button]");
 }
 
-/** The solo line takes the wheel only when it actually overflows. A fitting line leaves the wheel to the camera. An overflowing line keeps it, including at the scroll ends. */
+/**
+ * The solo line takes the wheel only when it is the scrolling box and the text does not fit.
+ * Mosaic lines are not that box (overflow stays visible), and a solo line that fits leaves the
+ * wheel to the camera. An overflowing solo line keeps it, including at the scroll ends.
+ */
 export function inScrollingCantDrawLine(target: EventTarget | null): boolean {
   const line = target instanceof Element ? target.closest<HTMLElement>(".tile-cant-draw") : null;
   if (!line) return false;
+  const oy = getComputedStyle(line).overflowY;
+  if (oy !== "auto" && oy !== "scroll") return false;
   return line.scrollHeight > line.clientHeight;
 }

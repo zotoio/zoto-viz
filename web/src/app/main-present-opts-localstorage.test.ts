@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ViewMode } from "../core/modes";
 import {
-  MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME_6520B01,
+  MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME,
   buildPresentOptsFor,
   invokePresentLoopOptsForSites,
 } from "./main-present-opts-localstorage";
 import type { PluginView } from "../plugins/plugin";
 
-describe("present-loop optsFor localStorage (main @6520b01)", () => {
+describe("present-loop optsFor localStorage", () => {
   beforeEach(() => {
     expect.hasAssertions();
   });
@@ -17,7 +17,7 @@ describe("present-loop optsFor localStorage (main @6520b01)", () => {
     vi.restoreAllMocks();
   });
 
-  it("W4: steady frame getItem count matches main@6520b01 (packet-tunnel)", () => {
+  it("W4: a steady packet-tunnel frame reads preset, knobs, and the view prompt twice", () => {
     const mode: ViewMode = {
       id: "plugin:packet-tunnel",
       label: "Packet Tunnel",
@@ -51,7 +51,6 @@ describe("present-loop optsFor localStorage (main @6520b01)", () => {
       return o;
     };
     invokePresentLoopOptsForSites(optsFor, mode, "packet-tunnel");
-    expect(count).toBe(MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME_6520B01);
-    expect(count).toBe(MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME_6520B01);
+    expect(count).toBe(MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME);
   });
 });

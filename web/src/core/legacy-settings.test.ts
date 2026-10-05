@@ -5,11 +5,11 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { beforeEach, describe, expect, it } from "vitest";
-import { DEFAULT_DREAM } from "../graph/scene";
 import { DEFAULT_THEME } from "./themes";
 import {
   ANIM_STORAGE_KEYS,
   ARCADE_FAMILIES,
+  dreamDefault,
   encodeAnimStorage,
   readLegacyEnvelope,
   rereadLegacyEnvelope,
@@ -34,7 +34,7 @@ function memory(entries: Record<string, string>): LegacyReadStore & { setItem():
 function legacyFixture(): Record<string, string> {
   const out: Record<string, string> = {};
   for (const key of ANIM_STORAGE_KEYS) {
-    const sample = (DEFAULT_DREAM as unknown as Record<string, unknown>)[key];
+    const sample = dreamDefault(key);
     const encoded = encodeAnimStorage(key, sample);
     if (encoded != null) out[`zoto-viz.anim.${key}`] = encoded;
   }

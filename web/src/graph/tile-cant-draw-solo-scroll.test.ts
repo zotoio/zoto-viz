@@ -1,5 +1,5 @@
 /**
- * #251: since #250 a solo tile's (#scene, body without .mosaic) "couldn't draw." line sits in a box
+ * Since the solo bar, a solo tile's (#scene, body without .mosaic) "couldn't draw." line sits in a box
  * that starts at --bar-h and scrolls inside itself. That box was pointer-events: none, so a mouse
  * wheel or a finger could not scroll it when the line overflowed (only Tab, by focusing Retry).
  * UX Pro: "when the solo couldn't-draw line overflows, mouse wheel and touch scroll it, and Retry can
@@ -11,7 +11,7 @@
  * orbit handler, whose pointer capture would move the click off Retry. A press on the empty part of
  * the box still bubbles to #scene, as it did when it passed through. Mosaic panes keep their line.
  *
- * Row (a) reads the page's own style.css the way tile-cant-draw-solo-bar-250 does (rules cascaded by
+ * Row (a) reads the page's own style.css the way the solo bar row does (rules cascaded by
  * specificity and order onto a skeleton of the real DOM); row (b) drives the real NetScene listeners
  * on a hosted #scene with style.css in the document. No clocks.
  */
@@ -134,10 +134,16 @@ function page(mosaic: boolean, withCss = false): Page {
   return { wall, tile, line, text, retry, retried };
 }
 
+/** jsdom does not layout, so the overflow check has to be told whether the line's text fits. */
+function setLineFit(line: HTMLElement, overflows: boolean): void {
+  Object.defineProperty(line, "clientHeight", { configurable: true, value: 48 });
+  Object.defineProperty(line, "scrollHeight", { configurable: true, value: overflows ? 96 : 48 });
+}
+
 const wheel = () => new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 120 });
 const press = () => new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 1, pointerType: "mouse" });
 
-describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger, and Retry takes a click", () => {
+describe("the solo couldn't-draw line scrolls with the wheel and a finger, and Retry takes a click", () => {
   afterEach(() => {
     resetViewStatesForTests();
     setViewStateTileResolver(null);
@@ -149,7 +155,7 @@ describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger,
   it("(a) style.css: the solo box takes the pointer, scrolls on y and lets touch pan it; a mosaic pane's line is as before", () => {
     const solo = page(false);
     expect(styleOf(solo.line, "pointer-events"), "solo box takes the wheel and touch").toBe("auto");
-    expect(["auto", "scroll"], "solo box scrolls on y (#250)").toContain(styleOf(solo.line, "overflow-y"));
+    expect(["auto", "scroll"], "solo box scrolls on y").toContain(styleOf(solo.line, "overflow-y"));
     expect(styleOf(solo.line, "touch-action"), "a finger pans it on y (pan-y or auto, never none)").toMatch(/^(auto|pan-y)$/);
     // The scrim and the line inherit the box's pointer: none of them opts back out.
     const scrims = RULES.filter((x) => x.selectors.some((s) => s.startsWith(".tile-cant-draw::before")));
@@ -158,7 +164,7 @@ describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger,
       expect(r.decls.get("pointer-events")?.value ?? "", "scrim keeps the box's pointer").not.toBe("none");
     }
     expect(styleOf(solo.text, "pointer-events"), "text keeps the box's pointer").not.toBe("none");
-    // Retry: still takes the pointer, above the panels (#248), inside the scrolling box (#250).
+    // Retry: still takes the pointer, above the panels, inside the scrolling box.
     expect(styleOf(solo.retry, "pointer-events")).toBe("auto");
     expect(styleOf(solo.retry, "z-index")).toBe("7");
     expect(solo.retry.parentElement).toBe(solo.line);
@@ -186,12 +192,20 @@ describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger,
     p.tile.addEventListener("pointerdown", camera);
     try {
       expect(getComputedStyle(p.line).overflowY, "jsdom applies the solo cascade").toBe("auto");
+      setLineFit(p.line, true);
       for (const target of [p.line, p.text, p.retry]) {
         const ev = wheel();
         target.dispatchEvent(ev);
         expect(ev.defaultPrevented, `wheel over ${target.className}: left to scroll the line`).toBe(false);
       }
-      expect(camera, "no camera wheel over the line").not.toHaveBeenCalled();
+      expect(camera, "no camera wheel over the overflowing line").not.toHaveBeenCalled();
+      // A line that fits is not a scroller. The scene handler takes the wheel (preventDefault)
+      // and stops it, so this bubble listener still does not run.
+      setLineFit(p.line, false);
+      const fitting = wheel();
+      p.line.dispatchEvent(fitting);
+      expect(fitting.defaultPrevented, "wheel over a fitting line: camera").toBe(true);
+      expect(camera, "scene handler stops the wheel before the bubble listener").not.toHaveBeenCalled();
       // Elsewhere on the tile the camera still has the wheel.
       const bare = wheel();
       p.tile.dispatchEvent(bare);
@@ -224,6 +238,8 @@ describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger,
     p.tile.addEventListener("pointerdown", camera);
     try {
       expect(getComputedStyle(p.line).overflowY, "a mosaic line does not scroll itself").not.toMatch(/^(auto|scroll)$/);
+      // Taller than the box, and still the camera's: only the scrolling solo line takes the wheel.
+      setLineFit(p.line, true);
       // Retry: no drag, no capture, and the click counts.
       p.retry.dispatchEvent(press());
       expect(captured, "mosaic Retry press: no pointer capture on the pane").toEqual([]);

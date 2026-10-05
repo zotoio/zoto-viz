@@ -228,7 +228,7 @@ export function setViewStateTileResolver(fn: ((tileId: string) => HTMLElement | 
 }
 
 /**
- * #273: the view-state key for a tile id the render host reports. The main scene draws as tile
+ * The view-state key for a tile id the render host reports. The main scene draws as tile
  * "main", but on a mosaic `#scene` sits inside a pane, and that pane's id is the tile everywhere
  * else (its sky wait, card, notices and state; main.ts keys it by the pane id): the pane holding
  * `#scene` counts as a tile like any other. On the solo wall "main" stays "main".
