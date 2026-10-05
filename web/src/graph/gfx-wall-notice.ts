@@ -73,7 +73,7 @@ export class GfxWallNotice {
   }
 
   /**
-   * The wall's tiles: its mosaic panes, or with none, the solo scene. #273: panes sit inside
+   * The wall's tiles: its mosaic panes, or with none, the solo scene. Panes sit inside
    * `.mosaic-split`s (Mosaic.placeTree), not on the wall itself, and one of them holds `#scene`.
    * Document order is board order: a split's first side is its left / top one.
    */

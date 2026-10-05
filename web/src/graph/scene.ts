@@ -1473,7 +1473,7 @@ export class NetScene implements HostedView, RenderScalePane {
     };
     const { signal } = this.listenerAbort;
     this.inputEl.addEventListener("wheel", (e) => {
-      // #251: a solo couldn't-draw line that scrolls and overflows takes the wheel: no camera, no preventDefault.
+      // A solo couldn't-draw line that scrolls and overflows takes the wheel: no camera, no preventDefault.
       if (inScrollingCantDrawLine(e.target)) return void e.stopImmediatePropagation();
       e.preventDefault();
       e.stopImmediatePropagation();

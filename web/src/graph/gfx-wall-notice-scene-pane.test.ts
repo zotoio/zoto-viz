@@ -1,11 +1,11 @@
 /**
- * #273: on a real mosaic the pane that holds `#scene` (the main pane) counts as a tile like any
+ * On a real mosaic the pane that holds `#scene` (the main pane) counts as a tile like any
  * other. The main scene draws on the host as tile "main", but on a mosaic `#scene` sits inside a
  * pane and that pane's id is its tile (its card, its notices, its view state). On a lost context
  * the pane shows its own couldn't-draw line and Retry (when its view is a pack) and stops reporting
  * ready. When every pane, `#scene`'s included, says the loss itself, the wall notice hides and focus
- * goes to the first Retry in visual order (#246's stays-put rule unchanged); the failure is
- * announced once. #246's rows built boards from bare mosaic panes only, which is the case they missed.
+ * goes to the first Retry in visual order (the stays-put rule unchanged); the failure is
+ * announced once. The earlier rows built boards from bare mosaic panes only, which is the case they missed.
  *
  * The rows run the real path: a RenderHost over a fake GL context, the lost event dispatched on its
  * canvas, bindCantDrawViewState + bindCantDrawSurface painting the tiles. The board is laid out as
@@ -204,7 +204,7 @@ function expectPaneSaysLoss(b: Board, id: string): void {
   expect(b.retry(id)?.textContent, `${id} Retry`).toBe("Retry");
 }
 
-describe("#273: the pane holding #scene counts as a tile on a lost context", () => {
+describe("the pane holding #scene counts as a tile on a lost context", () => {
   let boards: Board[] = [];
   const make = (...args: Parameters<typeof board>): Board => {
     const b = board(...args);
