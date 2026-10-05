@@ -3,13 +3,16 @@
  * A stored pack value beats an instance default. A value saved on that instance still wins.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { mockPartial } from "../../test-support/mock-partial";
 import { readArcadeKnob } from "./arcade-knob";
 import { optsForMode } from "../app/mode-opts";
-import { DEFAULT_DREAM, type DreamAnim } from "../graph/scene";
+import { DEFAULT_DREAM, type DreamAnim, type NetScene } from "../graph/scene";
 import { Mosaic, mosaicAnimForTile } from "../graph/mosaic";
 import { applyPluginCatalog, loadPluginConfig, type PluginView } from "../plugins/plugin";
 import { expandPluginInstances } from "../plugins/instances";
 import type { ViewMode } from "../core/modes";
+import type { Theme } from "./themes";
+import type { BackdropKind } from "../graph/backdrop";
 
 const PIN = "plugin:pin-pack";
 
@@ -38,17 +41,18 @@ describe("scope reads", () => {
   });
 
   it("(1) 1×, 2×2 and 2×4, a !2 tile, an instance row and an arcade knob", () => {
-    const wall = { ...DEFAULT_DREAM, backdrop: "grid" as const };
-    const table: { size: number; tileSky?: string }[] = [
+    const wallSky: BackdropKind = "space";
+    const wall = { ...DEFAULT_DREAM, backdrop: wallSky };
+    const table: { size: number; tileSky?: BackdropKind }[] = [
       { size: 1 },
       { size: 4, tileSky: "matrix" },
       { size: 8, tileSky: "matrix" },
     ];
     for (const row of table) {
       for (const id of wallIds(row.size)) {
-        const anim = mosaicAnimForTile(wall, id, row.tileSky as DreamAnim["backdrop"]);
+        const anim = mosaicAnimForTile(wall, id, row.tileSky);
         const pinned = id.startsWith(PIN);
-        expect(anim.backdrop, `${row.size} ${id}`).toBe(pinned ? "nebula" : row.tileSky ?? "grid");
+        expect(anim.backdrop, `${row.size} ${id}`).toBe(pinned ? "nebula" : row.tileSky ?? wallSky);
         expect(anim.edgeGlow, `${row.size} ${id} pin`).toBe(pinned ? "pulse" : wall.edgeGlow);
       }
     }
@@ -84,13 +88,13 @@ describe("scope reads", () => {
     const mosaic = new Mosaic({
       wall,
       sceneEl: document.createElement("div"),
-      main: {
-        currentMode: { id: PIN },
+      main: mockPartial<NetScene>({
+        currentMode: mockPartial<ViewMode>({ id: PIN }),
         setCompactLabels: () => {},
         relayout: () => {},
         setMode: () => {},
         setAnim: (a: DreamAnim) => { seen.push(a); },
-      } as never,
+      }),
       arcade: {},
       optsFor: () => ({}),
       onFocus: () => {},
@@ -98,16 +102,16 @@ describe("scope reads", () => {
       onLayout: () => {},
       onCloseLast: () => {},
       sync: () => ({
-        theme: { id: "midnight" } as never,
+        theme: mockPartial<Theme>({ id: "midnight" }),
         filters: {},
-        anim: { ...DEFAULT_DREAM, backdrop: "grid" },
+        anim: { ...DEFAULT_DREAM, backdrop: "space" },
         dreaming: false,
         nodeFilter: () => true,
         lastMsg: null,
         aliasMap: new Map(),
       }),
     });
-    mosaic.applyLooks({ ...DEFAULT_DREAM, backdrop: "grid" });
+    mosaic.applyLooks({ ...DEFAULT_DREAM, backdrop: "space" });
     expect(seen[0]?.backdrop).toBe("nebula");
     expect(seen[0]?.edgeGlow).toBe("pulse");
   });

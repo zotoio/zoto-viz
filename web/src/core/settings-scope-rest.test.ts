@@ -145,11 +145,11 @@ describe("dice and agent scope", () => {
   });
 
   it("the layout lock blocks agent layout changes in all three modes", () => {
-    const anim = { mosaic: "8", backdrop: "grid" } as Partial<DreamAnim>;
+    const anim: Partial<DreamAnim> = { mosaic: "8", backdrop: "matrix" };
     for (const _scope of ["session", "view", "global"] as const) {
       const next = agentAnimForScope(anim, false);
       expect(next?.mosaic).toBeUndefined();
-      expect(next?.backdrop).toBe("grid");
+      expect(next?.backdrop).toBe("matrix");
       expect(agentAnimForScope(anim, true)?.mosaic).toBe("8");
     }
   });

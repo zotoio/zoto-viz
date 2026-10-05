@@ -134,6 +134,12 @@ function page(mosaic: boolean, withCss = false): Page {
   return { wall, tile, line, text, retry, retried };
 }
 
+/** jsdom does not layout, so the overflow check has to be told whether the line's text fits. */
+function setLineFit(line: HTMLElement, overflows: boolean): void {
+  Object.defineProperty(line, "clientHeight", { configurable: true, value: 48 });
+  Object.defineProperty(line, "scrollHeight", { configurable: true, value: overflows ? 96 : 48 });
+}
+
 const wheel = () => new WheelEvent("wheel", { bubbles: true, cancelable: true, deltaY: 120 });
 const press = () => new PointerEvent("pointerdown", { bubbles: true, cancelable: true, button: 0, pointerId: 1, pointerType: "mouse" });
 
@@ -186,12 +192,20 @@ describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger,
     p.tile.addEventListener("pointerdown", camera);
     try {
       expect(getComputedStyle(p.line).overflowY, "jsdom applies the solo cascade").toBe("auto");
+      setLineFit(p.line, true);
       for (const target of [p.line, p.text, p.retry]) {
         const ev = wheel();
         target.dispatchEvent(ev);
         expect(ev.defaultPrevented, `wheel over ${target.className}: left to scroll the line`).toBe(false);
       }
-      expect(camera, "no camera wheel over the line").not.toHaveBeenCalled();
+      expect(camera, "no camera wheel over the overflowing line").not.toHaveBeenCalled();
+      // A line that fits is not a scroller. The scene handler takes the wheel (preventDefault)
+      // and stops it, so this bubble listener still does not run.
+      setLineFit(p.line, false);
+      const fitting = wheel();
+      p.line.dispatchEvent(fitting);
+      expect(fitting.defaultPrevented, "wheel over a fitting line: camera").toBe(true);
+      expect(camera, "scene handler stops the wheel before the bubble listener").not.toHaveBeenCalled();
       // Elsewhere on the tile the camera still has the wheel.
       const bare = wheel();
       p.tile.dispatchEvent(bare);
@@ -224,6 +238,8 @@ describe("#251: the solo couldn't-draw line scrolls with the wheel and a finger,
     p.tile.addEventListener("pointerdown", camera);
     try {
       expect(getComputedStyle(p.line).overflowY, "a mosaic line does not scroll itself").not.toMatch(/^(auto|scroll)$/);
+      // Taller than the box, and still the camera's: only the scrolling solo line takes the wheel.
+      setLineFit(p.line, true);
       // Retry: no drag, no capture, and the click counts.
       p.retry.dispatchEvent(press());
       expect(captured, "mosaic Retry press: no pointer capture on the pane").toEqual([]);

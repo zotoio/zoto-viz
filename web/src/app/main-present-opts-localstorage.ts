@@ -47,5 +47,9 @@ export function invokePresentLoopOptsForSites(
   }
 }
 
-/** Pinned at main `6520b01` for plugin steady present (2× optsFor; 5 knob keys × 2 store reads each). */
-export const MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME_6520B01 = 22;
+/**
+ * Steady present frame for the packet-tunnel pin.
+ * optsFor runs twice (source bind, then the pack). Each run reads `__presetBase`, the four
+ * knobs, and the view prompt. Each key is read from the pack store and the legacy mode key.
+ */
+export const MAIN_PRESENT_OPTS_LOCALSTORAGE_GETS_PER_FRAME = 2 * (1 + 4 + 1) * 2;

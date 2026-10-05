@@ -2,6 +2,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { mockPartial } from "../../test-support/mock-partial";
 import { liveMic } from "./want";
 import { Settings } from "../ui/settings";
 import {
@@ -61,7 +62,7 @@ describe("microphone device", () => {
   });
 
   it("names inputs only after permission, and opening the list does not call getUserMedia", async () => {
-    const getUserMedia = vi.fn(async () => ({ getTracks: () => [] }) as unknown as MediaStream);
+    const getUserMedia = vi.fn(async () => mockPartial<MediaStream>({ getTracks: () => [] }));
     const enumerateDevices = vi.fn(async () => [
       { kind: "audioinput", deviceId: "a", label: "Built-in" },
       { kind: "audioinput", deviceId: "b", label: "USB" },
