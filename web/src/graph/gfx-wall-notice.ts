@@ -72,9 +72,13 @@ export class GfxWallNotice {
     this.restoreTimer = setTimeout(() => this.onRestoreTimeout(), 10_000);
   }
 
-  /** The wall's tiles: its mosaic panes, or with none, the solo scene. */
+  /**
+   * The wall's tiles: its mosaic panes, or with none, the solo scene. #273: panes sit inside
+   * `.mosaic-split`s (Mosaic.placeTree), not on the wall itself, and one of them holds `#scene`.
+   * Document order is board order: a split's first side is its left / top one.
+   */
   private tiles(): HTMLElement[] {
-    const panes = [...this.wall.querySelectorAll<HTMLElement>(":scope > .mosaic-pane")];
+    const panes = [...this.wall.querySelectorAll<HTMLElement>(".mosaic-pane")];
     return panes.length ? panes : [...this.wall.querySelectorAll<HTMLElement>(":scope > #scene")];
   }
 
@@ -120,6 +124,9 @@ export class GfxWallNotice {
   /** The Reload sentence, once per time the board leaves all-failed while Reload is up. */
   private announceReload(): void {
     const p = this.ensurePolite();
+    // Hidden while the tiles say the loss themselves. Show it before the sentence, so the
+    // live region is in the tree when the text is written.
+    p.hidden = false;
     if (p.textContent === GFX_NO_RESTORE_NOTICE) return;
     p.textContent = GFX_NO_RESTORE_NOTICE;
   }
@@ -159,7 +166,11 @@ export class GfxWallNotice {
     const takeReload = showReload && this.mayTakeReloadFocus();
     el.hidden = hide;
     if (hide) {
-      if (this.polite) this.polite.textContent = "";
+      // The tiles announced the loss. Leave the empty polite region out of the tree, or it is a third announcement.
+      if (this.polite) {
+        this.polite.textContent = "";
+        this.polite.hidden = true;
+      }
     } else if (showReload) {
       if (takeReload) el.querySelector<HTMLButtonElement>(".gfx-wall-reload")?.focus();
       this.announceReload();
