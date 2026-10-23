@@ -10,6 +10,11 @@ on:
       - unlabeled
       - ready_for_review
 
+# Cost controls (2026-10-23): PR-only; a newer event on the same PR cancels the older run.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
   issues: read
@@ -19,6 +24,7 @@ jobs:
   pack-boundary:
     if: github.event_name == 'pull_request_target'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
