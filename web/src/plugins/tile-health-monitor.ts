@@ -103,7 +103,8 @@ export class TileHealthMonitor {
   private lastTick = 0;
   private vizDeliverGen = 0;
   private vizWriteGen = 0;
-  private lastVizWriteGen = 0;
+  /** The write count each tile saw at its previous check: "drawing nothing" means none since then. */
+  private readonly vizWriteGenAtCheck = new Map<string, number>();
   /** #233: sandbox writes per tile (a pane's own sandbox writes for that pane only). */
   private readonly sandboxWriteGenByTile = new Map<string, number>();
   private readonly lastPackByTile = new Map<string, string>();
@@ -140,13 +141,13 @@ export class TileHealthMonitor {
   /** Start / extend load grace after view bind, dropdown change, or source change. */
   noteGrace(tileId: string, now = performance.now()): void {
     this.graceUntil.set(tileId, graceUntilFrom(now));
+    this.vizWriteGenAtCheck.delete(tileId);
     this.resetProgress(tileId);
     this.ensureObserver(tileId);
   }
 
   noteVizFrameDelivered(): void {
     this.vizDeliverGen++;
-    this.lastVizWriteGen = this.vizWriteGen;
   }
 
   noteVizWrite(): void {
@@ -415,8 +416,13 @@ export class TileHealthMonitor {
     const spec = this.deps.packFor(tileId);
     const packId = spec?.id ?? tileId;
     const dataArriving = this.vizDeliverGen > 0;
+    // Sandbox writes answer a delivered frame asynchronously, so compare against the last check,
+    // not the last delivery: a slow sandbox is mid-reply at almost every check.
+    const writesAtLastCheck = this.vizWriteGenAtCheck.get(tileId);
+    this.vizWriteGenAtCheck.set(tileId, this.vizWriteGen);
     const drawingNothing = this.packDrawingNothing
-      || (dataArriving && this.vizWriteGen === this.lastVizWriteGen && !!spec?.capabilities?.includes("viz.read"));
+      || (dataArriving && writesAtLastCheck !== undefined && this.vizWriteGen === writesAtLastCheck
+        && !!spec?.capabilities?.includes("viz.read"));
     const outcome = stepTileHealth(
       prev,
       now,

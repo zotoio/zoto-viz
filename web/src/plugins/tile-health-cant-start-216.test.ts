@@ -89,7 +89,7 @@ function harness() {
     h.couldntStart = false;
     mon.noteGrace("main", now);
   };
-  return { h, mon, run, retry };
+  return { h, mon, run, retry, scene };
 }
 
 describe("#216: drawing nothing after resend-frame shows couldn't-start and stays on the pack", () => {
@@ -125,5 +125,19 @@ describe("#216: drawing nothing after resend-frame shows couldn't-start and stay
     expect(h.events.filter((e) => e === CANT_START).length, "couldn't-start twice in total").toBe(2);
     expect(h.events.filter((e) => /:(restart-pack|recreate-context|demo-snapshot|fallback-pack)$/.test(e)), "never a later ladder step").toEqual([]);
     expect(h.mode, "never switched to plugin:topology").toBe(RCS_MODE);
+  });
+});
+
+describe("a pack whose writes answer each frame late is drawing, not drawing nothing", () => {
+  it("every check lands between a delivered frame and its write: no heal, no couldn't-start", () => {
+    const { h, mon, scene } = harness();
+    for (let t = 0; t < 120_000; t += STEP_MS) {
+      (scene as { pictureSerial: number }).pictureSerial++;
+      mon.noteVizFrameDelivered();
+      mon.tick(t);
+      mon.noteSandboxWrite();
+    }
+    mon.dispose();
+    expect(h.events, "a slow sandbox still writes every frame").toEqual([]);
   });
 });

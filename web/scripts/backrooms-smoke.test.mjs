@@ -7,7 +7,7 @@
 import assert from "node:assert/strict";
 import { PNG } from "pngjs";
 import { chromium } from "playwright";
-import { seedSmokeProfile, smokeProfileSettings } from "./smoke-profile-util.mjs";
+import { screenshotBox, seedSmokeProfile, smokeProfileSettings } from "./smoke-profile-util.mjs";
 
 const base = process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/";
 const PRESENT_FRAMES = 30;
@@ -208,9 +208,7 @@ async function run() {
   assert.equal(pageWebgl.length, 0, `expected zero page WebGL: console lines, got ${JSON.stringify(pageWebgl)}`);
   assert.equal(sandboxWebgl.length, 0, `expected zero sandbox WebGL: console lines, got ${JSON.stringify(sandboxWebgl)}`);
 
-  const stage = page.locator("#scene");
-  await stage.waitFor({ state: "visible", timeout: 30_000 });
-  const pngBuffer = await stage.screenshot({ type: "png" });
+  const pngBuffer = await screenshotBox(page, page.locator("#scene"));
   const png = PNG.sync.read(pngBuffer);
   const avg = averageCenterBlock(png.data, png.width, png.height);
   assert.ok(!isNearBlack(avg), `stage screenshot center is near-black ${JSON.stringify(avg)}`);

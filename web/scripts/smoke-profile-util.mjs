@@ -43,3 +43,15 @@ export async function seedSmokeProfile(base, settings) {
   const def = await fetch(`${root}api/profiles/default`, { method: "PUT", headers, body: JSON.stringify({ id: USER_ID }) });
   assert.ok(def.ok, `default profile ${def.status}`);
 }
+
+/**
+ * PNG of one element's box. A locator screenshot first waits for the element to hold still across
+ * animation frames, and a software-GL headless run can go longer than the timeout between frames;
+ * a page screenshot clipped to the box does not wait for that.
+ */
+export async function screenshotBox(page, locator, timeout = 120_000) {
+  await locator.waitFor({ state: "visible", timeout });
+  const box = await locator.boundingBox({ timeout });
+  assert.ok(box && box.width > 0 && box.height > 0, `no box to screenshot: ${JSON.stringify(box)}`);
+  return page.screenshot({ type: "png", clip: box, timeout });
+}

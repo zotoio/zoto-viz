@@ -3007,17 +3007,19 @@ async function bootCatalogFromSession(): Promise<void> {
       }
     }
     const restored = profiles ? await profiles.boot(live) : false;
-    await agent.syncStatus();
-    if (!agent.savedBackend() && agent.cursorReady()) {
-      agent.useBackend("cursor");
-      touch();
-    }
     quiet(() => {
       applyMode(modeSel.value, {}, { channel: "automatic", auto: "profile-restore" });
       applyViewLook();
       if (restored && live) applyTheme(live.settings.theme, false, false);
     });
     if (restored && live?.selected) scene.selectIp(live.selected);
+    // AI status can take seconds (Ollama probe, Cursor model list); the view must not wait on it.
+    document.body.classList.remove("view-booting");
+    await agent.syncStatus();
+    if (!agent.savedBackend() && agent.cursorReady()) {
+      agent.useBackend("cursor");
+      touch();
+    }
     if (restored) agent.setCycleChecked(!!live?.aiCycle);
     else if (agent.cycleOn) await setAiCycle(true);
     liveReady = true;
