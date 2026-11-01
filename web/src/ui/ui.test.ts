@@ -2,6 +2,21 @@ import { describe, expect, it } from "vitest";
 import { ColorField, GroupedChips, group, makePaneDiceButton, morphCopy, mountDiceSplit, pinFlyout, Select, Slider, TextField, Toggle, unpinFlyout } from "./ui";
 
 describe("Select", () => {
+  it("keeps a value with no row when unlistedLabel names it; other unknown values fall back to the first row", () => {
+    const s = new Select({
+      caption: "view",
+      options: [{ value: "a", label: "A" }, { value: "b", label: "B" }],
+      unlistedLabel: (v) => (v === "hidden" ? "Hidden view" : null),
+    });
+    s.value = "hidden";
+    expect(s.value).toBe("hidden");
+    expect(s.el.querySelector(".val .txt")?.textContent).toBe("Hidden view");
+    s.setOptions([{ value: "a", label: "A" }, { value: "c", label: "C" }]);
+    expect(s.value, "a picker refresh keeps it").toBe("hidden");
+    s.value = "nope";
+    expect(s.value).toBe("a");
+  });
+
   it("creates a labelled control and opens", () => {
     const s = new Select({ caption: "view", options: [{ value: "a", label: "A" }, { value: "b", label: "B", hint: "h", swatch: "#abc" }] });
     expect(s.el.querySelector(".cap")?.textContent).toBe("view");

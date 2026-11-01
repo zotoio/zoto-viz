@@ -17,6 +17,8 @@ const NEAR_BLACK_TOL = 12;
 /** Corridor fluoro yellow (sRGB) with tolerance — not exact pixel match. */
 const CORRIDOR_YELLOW = { r: 188, g: 168, b: 78 };
 const CORRIDOR_TOL = { r: 75, g: 75, b: 60 };
+/** Corridor walls and ceiling fill most of the frame; a near-black or failed sky has none. */
+const CORRIDOR_MIN_SHARE = 0.25;
 
 function installFirstLoadProfile() {
   localStorage.clear();
@@ -103,6 +105,16 @@ function inCorridorYellowBand(avg) {
     && avg.r > avg.b + 12
     && avg.g > avg.b + 8
   );
+}
+
+/** Share of the stage's pixels inside the corridor yellow band. */
+function corridorShare(data) {
+  let hit = 0;
+  const n = data.length / 4;
+  for (let i = 0; i < data.length; i += 4) {
+    if (inCorridorYellowBand({ r: data[i], g: data[i + 1], b: data[i + 2] })) hit++;
+  }
+  return hit / n;
 }
 
 function isNearBlack(avg) {
@@ -210,15 +222,18 @@ async function run() {
 
   const pngBuffer = await screenshotBox(page, page.locator("#scene"));
   const png = PNG.sync.read(pngBuffer);
-  const avg = averageCenterBlock(png.data, png.width, png.height);
-  assert.ok(!isNearBlack(avg), `stage screenshot center is near-black ${JSON.stringify(avg)}`);
+  const avg = averageCenterBlock(png.data, png.width, png.height, Math.min(png.width, png.height));
+  assert.ok(!isNearBlack(avg), `stage screenshot is near-black ${JSON.stringify(avg)}`);
+  // The entity's chase is not pinned and can stand in front of any one spot, so judge the share of
+  // the stage that is corridor yellow rather than a single centre block.
+  const yellow = corridorShare(png.data);
   assert.ok(
-    inCorridorYellowBand(avg),
-    `expected corridor yellow band around ${JSON.stringify(CORRIDOR_YELLOW)} ± ${JSON.stringify(CORRIDOR_TOL)}, got ${JSON.stringify(avg)}`,
+    yellow >= CORRIDOR_MIN_SHARE,
+    `expected >= ${CORRIDOR_MIN_SHARE * 100}% of the stage in the corridor yellow band around ${JSON.stringify(CORRIDOR_YELLOW)} ± ${JSON.stringify(CORRIDOR_TOL)}, got ${(yellow * 100).toFixed(1)}% (centre avg ${JSON.stringify(avg)})`,
   );
 
   await browser.close();
-  console.log("backrooms-smoke: ok", JSON.stringify({ avg, presented: smoke.presented, boot: smoke.boot }));
+  console.log("backrooms-smoke: ok", JSON.stringify({ avg, yellow, presented: smoke.presented, boot: smoke.boot }));
 }
 
 run().catch((err) => {

@@ -27,6 +27,8 @@ export const LIVE_BLANK_READS = 3;
 export const LIVE_BLANK_SPACING_MS = 10_000;
 
 export const TILE_HEAL_ERRORS_KEY = "zoto-viz.tileHealErrors";
+/** Presented frames with no pack write (on top of a whole check window) before a tile is drawing nothing. */
+export const TILE_SILENT_PRESENTS = 10;
 
 export function readTileHealErrors(store: Pick<Storage, "getItem"> = localStorage): boolean {
   return store.getItem(TILE_HEAL_ERRORS_KEY) === "1";
@@ -103,8 +105,10 @@ export class TileHealthMonitor {
   private lastTick = 0;
   private vizDeliverGen = 0;
   private vizWriteGen = 0;
-  /** The write count each tile saw at its previous check: "drawing nothing" means none since then. */
-  private readonly vizWriteGenAtCheck = new Map<string, number>();
+  /** Presented frames seen by tick(); one per vsync the page drew. */
+  private presents = 0;
+  /** Per tile: the write count, time and present count when it last saw a write (or was first checked). */
+  private readonly writeBaseline = new Map<string, { gen: number; at: number; presents: number }>();
   /** #233: sandbox writes per tile (a pane's own sandbox writes for that pane only). */
   private readonly sandboxWriteGenByTile = new Map<string, number>();
   private readonly lastPackByTile = new Map<string, string>();
@@ -141,7 +145,7 @@ export class TileHealthMonitor {
   /** Start / extend load grace after view bind, dropdown change, or source change. */
   noteGrace(tileId: string, now = performance.now()): void {
     this.graceUntil.set(tileId, graceUntilFrom(now));
-    this.vizWriteGenAtCheck.delete(tileId);
+    this.writeBaseline.delete(tileId);
     this.resetProgress(tileId);
     this.ensureObserver(tileId);
   }
@@ -196,6 +200,7 @@ export class TileHealthMonitor {
 
   /** Call from rAF or present listener (~every frame); runs at most one tile check per interval. */
   tick(now = performance.now()): void {
+    this.presents++;
     if (!(this.deps.tabVisible?.() ?? this.tabVisible)) return;
     const tiles = this.eligibleTiles();
     if (!tiles.length) return;
@@ -416,13 +421,18 @@ export class TileHealthMonitor {
     const spec = this.deps.packFor(tileId);
     const packId = spec?.id ?? tileId;
     const dataArriving = this.vizDeliverGen > 0;
-    // Sandbox writes answer a delivered frame asynchronously, so compare against the last check,
-    // not the last delivery: a slow sandbox is mid-reply at almost every check.
-    const writesAtLastCheck = this.vizWriteGenAtCheck.get(tileId);
-    this.vizWriteGenAtCheck.set(tileId, this.vizWriteGen);
+    // Sandbox writes answer a delivered frame asynchronously, so a tile is drawing nothing only after
+    // a whole check window AND several presented frames with no write: on a page drawing a frame
+    // every few seconds (software GL, a loaded kiosk) one window is shorter than one reply.
+    const base = this.writeBaseline.get(tileId);
+    let silent = false;
+    if (!base || base.gen !== this.vizWriteGen) {
+      this.writeBaseline.set(tileId, { gen: this.vizWriteGen, at: now, presents: this.presents });
+    } else {
+      silent = now - base.at >= TILE_CHECK_MS && this.presents - base.presents >= TILE_SILENT_PRESENTS;
+    }
     const drawingNothing = this.packDrawingNothing
-      || (dataArriving && writesAtLastCheck !== undefined && this.vizWriteGen === writesAtLastCheck
-        && !!spec?.capabilities?.includes("viz.read"));
+      || (dataArriving && silent && !!spec?.capabilities?.includes("viz.read"));
     const outcome = stepTileHealth(
       prev,
       now,

@@ -141,3 +141,18 @@ describe("a pack whose writes answer each frame late is drawing, not drawing not
     expect(h.events, "a slow sandbox still writes every frame").toEqual([]);
   });
 });
+
+describe("a page presenting a frame every few seconds does not judge its pack drawing nothing", () => {
+  it("3 s between presents, the sandbox answers every third frame: no heal, no couldn't-start", () => {
+    const { h, mon, scene } = harness();
+    let f = 0;
+    for (let t = 0; t < 300_000; t += 3_000, f++) {
+      (scene as { pictureSerial: number }).pictureSerial++;
+      mon.noteVizFrameDelivered();
+      mon.tick(t);
+      if (f % 3 === 2) mon.noteSandboxWrite();
+    }
+    mon.dispose();
+    expect(h.events, "a starved sandbox still writes").toEqual([]);
+  });
+});
