@@ -14,8 +14,16 @@ _REPO = Path(__file__).resolve().parents[1]
 
 
 def load_dotenv(path: Path | None = None) -> None:
-    """Load KEY=VALUE pairs from `.env` when not already set in the process env."""
-    env_file = path or (_REPO / ".env")
+    """Load KEY=VALUE pairs when not already set in the process env.
+
+    With no path: repo `.env.local` then `.env`. The first file to set a key wins, so local
+    overrides the shared file and the shell env overrides both.
+    """
+    if path is None:
+        load_dotenv(_REPO / ".env.local")
+        load_dotenv(_REPO / ".env")
+        return
+    env_file = path
     if not env_file.is_file():
         return
     for line in env_file.read_text().splitlines():

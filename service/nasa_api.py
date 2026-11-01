@@ -25,9 +25,10 @@ def host_env_file() -> Path:
 
 
 def load_dotenv() -> None:
-    """Load NASA_API_KEY from repo ``.env`` then ``~/.zoto-viz/host.env`` (shell env wins)."""
+    """Load NASA_API_KEY from repo ``.env.local``, ``.env``, then ``~/.zoto-viz/host.env`` (shell env wins)."""
     from . import typesafe_proxy
 
+    typesafe_proxy.load_dotenv(_REPO_ENV.with_name(".env.local"))
     typesafe_proxy.load_dotenv(_REPO_ENV)
     typesafe_proxy.load_dotenv(_HOST_ENV)
 

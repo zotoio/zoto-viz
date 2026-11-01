@@ -10,6 +10,45 @@ import {
   shaderPackForId,
 } from "./shader-pack-fallback";
 
+type ProgramDiagnostics = {
+  runnable?: boolean;
+  programLog?: string;
+  vertexShader?: { log?: string };
+  fragmentShader?: { log?: string };
+};
+type CompiledProgram = { program?: unknown; diagnostics?: ProgramDiagnostics; getUniforms?(): unknown };
+
+/** The program three built for `material` on its last compile (null when unknown, e.g. a stub renderer). */
+function programOf(rd: THREE.WebGLRenderer, material: THREE.Material): CompiledProgram | null {
+  const props = (rd as unknown as { properties?: { get?(m: object): { currentProgram?: CompiledProgram } } }).properties;
+  try {
+    return props?.get?.(material)?.currentProgram ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Why the sky failed, or null when it compiled. Judged on `material`'s own program when three can
+ * say which that is; otherwise (no material, or a renderer without `properties`) any shader error
+ * in the compile counts, as before.
+ */
+function skyCompileFailure(
+  rd: THREE.WebGLRenderer,
+  material: THREE.Material | undefined,
+  errors: ReadonlyArray<{ program: unknown; msg: string }>,
+): string | null {
+  const own = material ? programOf(rd, material) : null;
+  if (!own) return errors[0]?.msg ?? null;
+  const mine = errors.find((e) => e.program === own.program);
+  if (mine) return mine.msg;
+  const d = own.diagnostics;
+  if (d?.runnable === false) {
+    return (d.fragmentShader?.log || d.vertexShader?.log || d.programLog || "shader failed").trim() || "shader failed";
+  }
+  return null;
+}
+
 class TileShaderSlot {
   readonly latch = new TileShaderLatch();
   fallback: TileShaderFallback | null = null;
@@ -154,9 +193,10 @@ export class RenderHostTileShader {
     scene: THREE.Scene,
     camera: THREE.Camera,
     log: (msg: string) => void = () => {},
+    material?: THREE.Material,
   ): string | null {
     if (this.host.glContextLost) return null;
-    const ok = this.compilePluginSky(tileId, scene, camera, log);
+    const ok = this.compilePluginSky(tileId, scene, camera, log, material);
     if (!ok) {
       // A context lost mid-compile is not a shader failure: the tile is re-probed after the
       // restore instead of being marked dead behind the simple-view fallback (#179).
@@ -168,11 +208,19 @@ export class RenderHostTileShader {
     return null;
   }
 
+  /**
+   * Compile the tile's scene and judge the sky. With `material` (the sky being installed) only that
+   * material's program counts: three calls `onShaderError` once per program, on first use, so a
+   * broken sky compiled before comes back from the program cache with no callback (its
+   * `diagnostics.runnable` still says so), and another material's failure in the same scene (a
+   * stale sky still on the sphere) must not be pinned on this pack.
+   */
   compilePluginSky(
     tileId: string,
     scene: THREE.Scene,
     camera: THREE.Camera,
     log: (msg: string) => void = () => {},
+    material?: THREE.Material,
   ): boolean {
     if (this.host.software) return true;
     if (this.host.glContextLost) return false;
@@ -190,6 +238,7 @@ export class RenderHostTileShader {
     const prevOn = rd.debug.onShaderError;
     rd.debug.checkShaderErrors = true;
     let lostDuringCompile = false;
+    const errors: Array<{ program: unknown; msg: string }> = [];
     rd.debug.onShaderError = (gl, program, _vs, fs) => {
       // Empty logs from a context that just died say nothing about the shader.
       if (typeof gl.isContextLost === "function" && gl.isContextLost()) {
@@ -201,14 +250,21 @@ export class RenderHostTileShader {
         || gl.getProgramInfoLog(program)
         || "shader failed"
       ).trim();
-      slot.failLog = msg || "shader failed";
-      latch.fail(slot.failLog, log);
+      errors.push({ program, msg: msg || "shader failed" });
     };
     try {
       rd.compile(scene, camera);
+      // compile() only links; three checks a program (onShaderError, diagnostics) on its first use,
+      // so a sky that has never been drawn would pass unjudged. Use it now, while the hook is ours.
+      if (material) programOf(rd, material)?.getUniforms?.();
     } finally {
       rd.debug.checkShaderErrors = prevCheck;
       rd.debug.onShaderError = prevOn;
+    }
+    const failMsg = skyCompileFailure(rd, material, errors);
+    if (failMsg !== null) {
+      slot.failLog = failMsg;
+      latch.fail(failMsg, log);
     }
     if (latch.dead) return false;
     if (lostDuringCompile || this.contextLostNow()) return false;

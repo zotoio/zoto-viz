@@ -10,6 +10,15 @@ from aiohttp.test_utils import TestClient, TestServer
 from service import typesafe_proxy
 
 
+def test_load_dotenv_default_prefers_env_local(tmp_path) -> None:
+    (tmp_path / ".env.local").write_text("TYPESAFE_API_KEY=from-local\n")
+    (tmp_path / ".env").write_text("TYPESAFE_API_KEY=from-env\nOTHER=from-env\n")
+    with patch.object(typesafe_proxy, "_REPO", tmp_path), patch.dict(os.environ, {}, clear=True):
+        typesafe_proxy.load_dotenv()
+        assert os.environ["TYPESAFE_API_KEY"] == "from-local"
+        assert os.environ["OTHER"] == "from-env"
+
+
 def test_load_dotenv_reads_repo_env(tmp_path) -> None:
     env = tmp_path / ".env"
     env.write_text("# comment\nTYPESAFE_API_KEY=from-file\nEXISTING=from-file\n")
