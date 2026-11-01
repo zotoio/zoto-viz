@@ -17,6 +17,7 @@ import { FZ_SLOT, packFractalDrive, resetFractalDrive } from "./drive";
 import { IDLE_POINTER } from "./interaction";
 import { fractalPresetConfig } from "./config-mutation";
 import { fractalTypeIndex, parseFractalOptions } from "./options";
+import { classifyLoop, loopCatalogue, loopMismatch } from "../../../sdk/fractal-misiurewicz";
 
 describe("fractal cruise", () => {
   it("finds the period-2 nucleus and renormalizes a window that contains it", () => {
@@ -113,6 +114,34 @@ describe("fractal cruise", () => {
     const fast = packFractalDrive(0, 1 / 60, 0, 1.6, { ...cfg, paletteCycle: "3.5" }, IDLE_POINTER);
     expect(fast.slot0[FZ_SLOT.paletteCycle]).toBeCloseTo(3.5, 5);
     expect(fast.slot0[FZ_SLOT.mandelCx]).not.toBe(0);
+  });
+
+  it("loop points are seamless: the view after a jump matches the view before it", () => {
+    // c = -2: preperiod 1, period 1, multiplier 4. Exactly self-similar, so the jump is invisible.
+    const tip = classifyLoop(-2, 0);
+    expect(tip?.mag).toBeCloseTo(4, 6);
+    expect(loopMismatch(tip!, 0.03, 0.7)).toBe(0);
+    const cat = loopCatalogue();
+    expect(cat.length).toBeGreaterThan(20);
+    for (const p of cat.slice(0, 10)) expect(loopMismatch(p, p.sTop, 0), `(${p.x}, ${p.y})`).toBeLessThanOrEqual(0.04);
+  });
+
+  it("planar journey zooms forever without leaving float range, and travels between loop points", () => {
+    for (const preset of ["mandel-deep", "mandel-terrain"]) {
+      resetFractalDrive();
+      const cfg = { preset, ...fractalPresetConfig(preset) };
+      let minScale = Infinity;
+      const centres = new Set<string>();
+      let s0: number[] = [];
+      for (let f = 0; f < 60 * 180; f++) {
+        s0 = packFractalDrive(f / 60, 1 / 60, 0, 1.6, cfg, IDLE_POINTER).slot0;
+        minScale = Math.min(minScale, s0[FZ_SLOT.mandelScale]!);
+        if (f % 60 === 0) centres.add(`${s0[FZ_SLOT.mandelCx]!.toFixed(4)},${s0[FZ_SLOT.mandelCy]!.toFixed(4)}`);
+      }
+      expect(minScale, preset).toBeGreaterThan(1e-4);
+      expect(s0[FZ_SLOT.generation]!, `${preset} loops`).toBeGreaterThanOrEqual(15);
+      expect(centres.size, `${preset} visits`).toBeGreaterThan(3);
+    }
   });
 
   it("#180: after resetFractalDrive the canyon camera is outside the surface on frames 1..10", () => {

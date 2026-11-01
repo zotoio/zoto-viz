@@ -1,8 +1,8 @@
 id: fractal-zoom
 name: Fractal Zoom
 version: 1
-hint: Infinite GPU raymarch. 3D flies a close branching canyon; 2D deep-zooms the boundary.
-description: Stage-only procedural fractal flight. The 3D autopilot stays a short distance off the surface, scores several headings, and commits to a fork when the corridor splits. 2D zoom is exponential and does not stop at a precision wall — past float range the view renormalizes into the next minibrot and keeps full detail, turning into a filament when the boundary branches. Palette cycle speed is a colour slider (0 holds the colours). Renders vivid demo imagery on empty boards (golden host idle). Uses only the real
+hint: Infinite GPU raymarch. Mandelbrot 3D opens on the whole set as a lit landscape and dives into its edge forever; 2D deep-zooms the boundary.
+description: Stage-only procedural fractal flight. The default Mandelbrot 3D raises the full Mandelbrot set into terrain (the set is a flat mesa, filaments are ridges, colour bands are escape time), holds on the whole set, then flies down into the boundary and keeps zooming, renormalizing into the next minibrot past float range. The other 3D types' autopilot stays a short distance off the surface, scores several headings, and commits to a fork when the corridor splits. 2D zoom is exponential and does not stop at a precision wall — past float range the view renormalizes into the next minibrot and keeps full detail, turning into a filament when the boundary branches. Palette cycle speed is a colour slider (0 holds the colours). Renders vivid demo imagery on empty boards (golden host idle). Uses only the real
   viz.read frame (talkers, packets, sys.failed, headlines, demo) — does not map them to sky regions; no failure tint (honest stage-only look).
   Respects prefers-reduced-motion by defaulting to slow or paused zoom.
 capabilities:
@@ -29,8 +29,10 @@ config:
 - key: preset
   label: preset
   type: select
-  default: bulb-classic
+  default: mandel-terrain
   values:
+  - - mandel-terrain
+    - Mandelbrot Terrain
   - - bulb-classic
     - Classic Dive
   - - box-abyss
@@ -87,8 +89,10 @@ config:
 - key: fractalType
   label: fractal type
   type: select
-  default: mandel2d
+  default: mandel3d
   values:
+  - - mandel3d
+    - Mandelbrot 3D terrain
   - - mandelbulb
     - Mandelbulb
   - - mandelbox
@@ -210,24 +214,20 @@ config:
 - key: palette
   label: palette
   type: select
-  default: deep
+  default: classic
   values:
-  - - cosmic
-    - cosmic
+  - - classic
+    - classic (navy, blue, white, gold)
+  - - topo
+    - topographic (sea, sand, rock, snow)
   - - ember
-    - ember
+    - ember (black, crimson, orange, gold)
   - - ice
-    - ice
-  - - acid
-    - acid
+    - ice (midnight, steel, cyan, white)
   - - mono
-    - mono
-  - - sunset
-    - sunset
-  - - deep
-    - deep
+    - mono (charcoal to silver)
   - - neon
-    - neon
+    - neon (rainbow)
   section: Colour
 - key: paletteCycle
   label: palette cycle speed
@@ -331,9 +331,10 @@ config:
   label: Mandelbox scale
   type: number
   default: 2.1
-  min: 1.2
+  min: -3
   max: 3.5
   step: 0.05
+  hint: Negative (about -1.5) grows towers and arches over its surface; positive is a blockier box. Both are flown along the outside. Values between -1 and 1 are clamped away.
   section: Fractal
 - key: fold
   label: Mandelbox fold
