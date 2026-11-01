@@ -374,10 +374,43 @@ export function blobMeshPlacement(id: string, t: number, sites?: ReadonlyMap<str
 }
 
 /**
+ * Time constant (s) for a drawn radius to follow its plan. Rates arrive about once a second, so
+ * without it every blob snaps to a new size once a second and stands still in between.
+ */
+export const BLOB_MESH_RADIUS_EASE_S = 0.35;
+/** Frame gaps at or past this (s), or a clock that did not advance, snap radii to the plan. */
+export const BLOB_MESH_RADIUS_EASE_MAX_GAP_S = 2;
+
+type BlobMeshRadiusEase = { t: number; r: Map<string, number> };
+/** Drawn radii per site map, so each tile eases on its own without the callers carrying more state. */
+const radiusEase = new WeakMap<BlobMeshSiteMap, BlobMeshRadiusEase>();
+
+/**
+ * Radii the tile draws this frame: each device's last drawn radius moved toward its plan radius.
+ * A device new to the tile grows from 0, so every eased frame sits between two frames that each
+ * fit the coverage budget and the pair reach (both are convex in the radii).
+ */
+function easeBlobMeshRadii(ids: readonly string[], plan: readonly number[], t: number, sites: BlobMeshSiteMap): number[] {
+  const prev = radiusEase.get(sites);
+  const dt = prev ? t - prev.t : 0;
+  const k = prev && dt > 0 && dt < BLOB_MESH_RADIUS_EASE_MAX_GAP_S ? 1 - Math.exp(-dt / BLOB_MESH_RADIUS_EASE_S) : 1;
+  const r = new Map<string, number>();
+  const radii = ids.map((id, j) => {
+    const from = k < 1 ? (prev!.r.get(id) ?? 0) : plan[j]!;
+    const next = from + (plan[j]! - from) * k;
+    r.set(id, next);
+    return next;
+  });
+  radiusEase.set(sites, { t, r });
+  return radii;
+}
+
+/**
  * Slot 0 (x, y, radius, hue per drawn device) plus the plan it came from. `sites` is the caller's
  * site map (kept across frames per tile: the pack frontend and the host mirror each keep one); it
  * is settled for this frame's busiest 4 drawn devices (rate order, ties by input order) before
- * placing. Without one, a fresh map (no history) is used.
+ * placing, and carries the tile's drawn radii, which ease toward `plan.radii`. Without one, a fresh
+ * map (no history) is used and the radii are the plan's.
  */
 export function packBlobMeshSlots(
   talkers: readonly BlobMeshTalker[],
@@ -388,11 +421,12 @@ export function packBlobMeshSlots(
   const plan = planBlobMesh(rates);
   const ranked = [...plan.shownIdx].sort((a, b) => (Math.max(0, rates[b]!) - Math.max(0, rates[a]!)) || a - b);
   settleBlobMeshSites(sites, ranked.slice(0, BLOB_MESH_SITES.length).map((i) => talkers[i]!.id));
+  const radii = easeBlobMeshRadii(plan.shownIdx.map((ti) => talkers[ti]!.id), plan.radii, t, sites);
   const slot0: number[] = [];
   plan.shownIdx.forEach((ti, j) => {
     const d = talkers[ti]!;
     const [x, y] = blobMeshPlacement(d.id, t, sites);
-    slot0.push(x, y, plan.radii[j]!, blobMeshRoleHue(d.role));
+    slot0.push(x, y, radii[j]!, blobMeshRoleHue(d.role));
   });
   return { slot0, plan, sites };
 }
