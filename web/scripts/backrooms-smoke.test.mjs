@@ -144,7 +144,9 @@ async function run() {
   const browser = await chromium.launch({ headless: true });
   const webglConsole = [];
   const ctx = await browser.newContext({
-    viewport: { width: 1280, height: 800 },
+    // Software GL on a CI runner raymarches the corridor per pixel; at 1280x800 the page's main
+    // thread stalls for minutes between frames. The smoke checks that it draws, not at what size.
+    viewport: { width: 800, height: 500 },
     storageState: { cookies: [], origins: [] },
   });
   await ctx.addInitScript(installFirstLoadProfile);
