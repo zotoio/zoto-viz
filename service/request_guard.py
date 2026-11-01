@@ -290,6 +290,12 @@ def _host_invalid_response() -> web.Response:
     return resp
 
 
+def _audit_http(reason: str, request: web.Request, status: int, route: str | None = None) -> None:
+    from . import signals
+
+    signals.http_denied(reason, request.method, route if route is not None else (request.path or "/"), status)
+
+
 def _path_reject_response() -> web.Response:
     resp = web.Response(status=400, text=PATH_REJECT_BODY, content_type="text/plain")
     attach_frame_embed_policy(resp)
@@ -390,6 +396,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
     port = int(request.app.get("request_guard_port") or 7020)
     hosts = _host_header_values(request)
     if not hosts or len(hosts) != 1:
+        _audit_http("host", request, 400)
         return _host_invalid_response()
 
     raw_host = hosts[0].strip()
@@ -397,10 +404,12 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
     key = normalize_host_header_key(raw_host, port, tls=tls)
     if key is None:
         _log.warning("rejected Host header (format): %s", escape_log_host(raw_host))
+        _audit_http("host", request, 400)
         return _host_invalid_response()
 
     if not await _lookup_allowed(request.app, key):
         _log.warning("rejected Host header: %s", escape_log_host(raw_host))
+        _audit_http("host", request, 400)
         return _host_reject_response()
 
     scheme = request.scheme or "http"
@@ -409,6 +418,7 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
     raw_path = getattr(request, "raw_path", None) or request.path or "/"
     _norm_path, path_err = decode_request_path(raw_path)
     if path_err:
+        _audit_http("path", request, 400, route="-")
         return _path_reject_response()
 
     try:

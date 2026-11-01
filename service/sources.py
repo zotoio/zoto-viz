@@ -233,12 +233,12 @@ def _is_relative_to(path: Path, root: Path) -> bool:
 
 
 def check_file(path: str) -> Path:
-    """Resolve a local file the operator may publish. Raises ValueError."""
+    """Resolve a local file the operator may publish. Only ``~/.zoto-viz`` is allowed."""
     raw = (path or "").strip()
     if not raw or len(raw) > 500:
         raise ValueError("path required")
     resolved = Path(raw).expanduser().resolve()
-    roots = [paths.user_dir().resolve(), Path.home().resolve()]
+    roots = [paths.user_dir().resolve()]
     if not any(_is_relative_to(resolved, root) for root in roots):
         raise ValueError("path not allowed")
     if not resolved.is_file():

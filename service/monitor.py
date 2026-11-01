@@ -432,6 +432,7 @@ class State:
         self.cert_tried: set[str] = set()
         self.packets = 0
         self.bytes = 0
+        self.last_packet_wall = 0.0
         self._rate_buckets: dict[int, list[int]] = defaultdict(lambda: [0, 0])  # sec -> [pkts, bytes]
         self._flow_buckets: dict[str, dict[int, int]] = defaultdict(dict)       # flow -> sec -> bytes
         self._flow_ab: dict[str, dict[int, int]] = defaultdict(dict)            # flow -> sec -> bytes a→b
@@ -683,6 +684,7 @@ class State:
             t = float(f[0]); size = int(f[1])
         except (ValueError, IndexError):
             return
+        self.last_packet_wall = time.time()
         eth_src, eth_dst = f[2].lower(), f[3].lower()
         src = f[4] or f[6]
         dst = f[5] or f[7]
@@ -1500,6 +1502,9 @@ async def capture_loop(state: State, bpf: str, wifi_keys: Path) -> None:
             # anything else escaping the reader would end this task silently while tshark blocks on a full pipe
             log(f"capture: reader failed after {n} packets ({e!r}); restarting tshark")
             await _kill_group(proc)
+            restart_reason = "reader"
+        else:
+            restart_reason = "exit"
         restarted_by_watcher = recycled or (watcher.done() and not watcher.cancelled())
         watcher.cancel()
         err = (await proc.stderr.read()).decode(errors="replace").strip() if proc.stderr else ""
@@ -1515,7 +1520,11 @@ async def capture_loop(state: State, bpf: str, wifi_keys: Path) -> None:
             low = reason.lower()
             if any(s in low for s in ("password is required", "a terminal is required", "permission denied", "you do not have permission")):
                 log("capture: dumpcap needs the wireshark group (sudo usermod -aG wireshark $USER, then log out)")
+                restart_reason = "permission"
             backoff = 2 if time.time() - t0 > 60 else min(backoff * 2, 60)
+        from . import signals
+
+        signals.capture_restart(restart_reason, rc)
         await asyncio.sleep(backoff)
 
 
@@ -1933,8 +1942,11 @@ async def plugin_watch_loop(app: web.Application) -> None:
 
 
 async def broadcast_loop(app: web.Application) -> None:
+    from . import signals
+
     state: State = app["state"]
     while True:
+        signals.observe_capture(state)
         clients: set[web.WebSocketResponse] = app["clients"]
         if clients:
             msg = json.dumps({"type": "state", **publish_state(state)})
@@ -1960,13 +1972,17 @@ async def ws_handler(request: web.Request) -> web.WebSocketResponse:
 async def api_session(request: web.Request) -> web.Response:
     from . import nasa_api
     from . import typesafe_proxy
-    return web.json_response({
-        "csrf": request.app.get("csrf") or "",
+    lan = access.lan_write(request)
+    body: dict[str, Any] = {
         "aiControl": agent.ai_control_on(),
         "pluginService": plugins.python_enabled(),
         "insecureLan": bool(request.app.get("insecure_lan")),
+        "operatorAuth": lan,
         "typesafeConfigured": typesafe_proxy.api_key_configured(),
-    })
+    }
+    if not lan:
+        body["csrf"] = request.app.get("csrf") or ""
+    return web.json_response(body)
 
 
 async def api_state(request: web.Request) -> web.Response:
@@ -2154,6 +2170,7 @@ def make_app(
     port: int = 7020,
     allowed_hosts: list[str] | None = None,
     insecure_lan: bool = False,
+    operator_token: str = "",
     setup_request_guard: bool = True,
 ) -> web.Application:
     from . import pack_asset_frames
@@ -2171,6 +2188,7 @@ def make_app(
     app["csrf"] = access.new_token()
     app["pack_asset_secret"] = access.new_pack_asset_secret()
     app["insecure_lan"] = insecure_lan
+    app["operator_token"] = operator_token
     app.router.add_get("/", index)
     app.router.add_get("/ws", ws_handler)
     app.router.add_get("/api/session", api_session)
@@ -2293,7 +2311,7 @@ def main() -> None:
     p.add_argument("--bind", default=None,
                    help="listen address (default: sys-config.yml bind, else 127.0.0.1)")
     p.add_argument("--insecure-lan", action="store_true",
-                   help="allow --bind on a non-loopback address (no password; anyone who can reach the port can read captures and trigger scans)")
+                   help="allow --bind on a non-loopback address (reads are open; writes and POST /mcp need the operator token)")
     p.add_argument("--port", type=int, default=None, help="listen port (default: sys-config.yml port, else 7020)")
     p.add_argument(
         "--inhibit-screensaver",
@@ -2337,8 +2355,13 @@ def main() -> None:
         log("plugin src migrated: " + ", ".join(migrated["copied"]))
     plugins.seed()
     log(f"UI: http://{listen['bind']}:{listen['port']}/   WS: /ws   JSON: /api/state, /api/logs, /api/traffic?ip=…, /api/payload, /api/rf/watch, /api/profiles")
+    operator_token = ""
     if listen["insecure_lan"]:
-        log("WARNING: insecure-lan: the UI is reachable beyond loopback with no password")
+        from . import operator_auth
+
+        operator_token, created = operator_auth.load_or_create()
+        operator_auth.announce(created=created)
+        log("WARNING: insecure-lan: reads are open beyond loopback. Writes and POST /mcp need the operator token.")
     hold = idle.ScreensaverHold()
     if listen["inhibit_screensaver"]:
         for line in hold.start():
@@ -2362,6 +2385,7 @@ def main() -> None:
             port=int(listen["port"]),
             allowed_hosts=extra_hosts,
             insecure_lan=listen["insecure_lan"],
+            operator_token=operator_token,
         )
         web.run_app(app, host=listen["bind"], port=listen["port"], **run_app_kwargs())
     finally:

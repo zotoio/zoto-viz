@@ -1,6 +1,6 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { SERVER_RESTART_NOTICE } from "./http-copy";
-import { apiFetch, bootSession, csrfToken, noteCsrf } from "./http";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { OPERATOR_TOKEN_PROMPT, SERVER_RESTART_NOTICE } from "./http-copy";
+import { apiFetch, bootSession, csrfToken, noteCsrf, setOperatorTokenForTests } from "./http";
 
 describe("apiFetch CSRF", () => {
   const orig = globalThis.fetch;
@@ -125,6 +125,44 @@ describe("apiFetch CSRF", () => {
   it("ignores missing csrf headers on mocks", () => {
     noteCsrf({ headers: undefined } as never);
     expect(csrfToken()).toBeTypeOf("string");
+  });
+
+  it("asks for the LAN operator token and sends it on the retry", async () => {
+    setOperatorTokenForTests("");
+    const seen: string[] = [];
+    const prompt = vi.fn(() => "lan-token");
+    window.prompt = prompt as unknown as typeof window.prompt;
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      const path = String(url);
+      const h = new Headers(init?.headers);
+      seen.push(`${path}:${h.get("Authorization") || ""}`);
+      if (path.includes("/api/session")) {
+        return {
+          ok: true,
+          status: 200,
+          headers: new Headers(),
+          json: async () => ({ operatorAuth: true, aiControl: false, pluginService: false }),
+        } as Response;
+      }
+      if (h.get("Authorization") !== "Bearer lan-token") {
+        return {
+          ok: false,
+          status: 401,
+          headers: new Headers(),
+          clone() { return this; },
+          json: async () => ({ error: "operator bearer required" }),
+        } as Response;
+      }
+      return { ok: true, status: 200, headers: new Headers(), json: async () => ({}) } as Response;
+    }) as typeof fetch;
+    await bootSession();
+    expect(prompt).toHaveBeenCalledWith(OPERATOR_TOKEN_PROMPT);
+    setOperatorTokenForTests("");
+    const r = await apiFetch("/api/profiles/user", { method: "PUT" });
+    expect(r.ok).toBe(true);
+    expect(seen.some((line) => line.endsWith("Bearer lan-token"))).toBe(true);
+    setOperatorTokenForTests("");
+    delete (window as { prompt?: unknown }).prompt;
   });
 
   it("treats a non-ok session as empty", async () => {

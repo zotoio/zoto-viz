@@ -50,7 +50,7 @@ pnpm start            # backend :7020 + Vite :5173  (pnpm stop / pnpm restart)
 
 `pnpm start:backend`, `pnpm start:frontend`, `pnpm stop:backend`, `pnpm restart:frontend` (and `:both`) target one side. Logs: `.run/backend.log`, `.run/frontend.log`. A Cursor stop hook restarts the backend when `service/*.py` is newer than the running monitor.
 
-User data: `~/.zoto-viz/` (migrated from `~/.z-netviz` if present). Loopback only; `--bind 0.0.0.0` needs `--insecure-lan`. The live monitor inhibits screensaver/idle sleep by default (`--no-inhibit-screensaver` or `ZOTO_VIZ_HEADLESS=1` to disable).
+User data: `~/.zoto-viz/` (migrated from `~/.z-netviz` if present). Loopback only; `--bind 0.0.0.0` needs `--insecure-lan`. LAN reads stay open. LAN writes and `POST /mcp` need the operator token in `~/.zoto-viz/operator.token`. The live monitor inhibits screensaver/idle sleep by default (`--no-inhibit-screensaver` or `ZOTO_VIZ_HEADLESS=1` to disable).
 
 ```bash
 zoto-viz install          # also writes sys-config.yml + systemd override (ZOTO_VIZ_REPO_ROOT)

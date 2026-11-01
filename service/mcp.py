@@ -2,7 +2,8 @@
 
 POST /mcp — JSON-RPC initialize / tools/list / tools/call.
 GET  /mcp — short discovery payload.
-CSRF is skipped; Host must still be loopback.
+CSRF is skipped on loopback. A non-loopback Host (insecure_lan) must send
+Authorization: Bearer with the operator token. The token is not on GET responses.
 
 Live tools (list_features, get_settings, set_settings, list_plugins, set_plugin,
 set_view, set_agent, roll_dice) patch the open UI over the 1 Hz WebSocket ``live``
@@ -1316,7 +1317,9 @@ def handle_rpc(msg: dict[str, Any], app: web.Application | None = None) -> dict[
                 "list_memories / add_memory / delete_memory curate chat memories. "
                 "list_profiles / apply_profile load a saved look. get_sdm / list_cameras / set_sdm "
                 "manage Nest Device Access (secrets in ~/.zoto-viz/sdm.yml). get_logs reads the "
-                "monitor log ring. Camera and microphone are operator-only."
+                "monitor log ring. Camera and microphone are operator-only. "
+                "On a non-loopback Host, POST /mcp requires Authorization: Bearer with the operator token. "
+                "That token is not included in GET responses."
             ),
         })
     if method == "ping":
@@ -1326,7 +1329,17 @@ def handle_rpc(msg: dict[str, Any], app: web.Application | None = None) -> dict[
     if method == "tools/call":
         name = str(params.get("name") or "")
         arguments = params.get("arguments") if isinstance(params.get("arguments"), dict) else {}
-        return _ok(rid, call_tool(name, arguments, app=app))
+        started = time.perf_counter()
+        result = call_tool(name, arguments, app=app)
+        known = {str(tool.get("name") or "") for tool in active_tools()}
+        from . import signals
+
+        signals.mcp_tool(
+            name if name in known else "other",
+            "error" if result.get("isError") else "ok",
+            (time.perf_counter() - started) * 1000,
+        )
+        return _ok(rid, result)
     if method.startswith("notifications/"):
         return None
     return _err(rid, -32601, f"unknown method {method}")
@@ -1339,6 +1352,8 @@ async def api_mcp(req: web.Request) -> web.StreamResponse:
     insecure = flag is True
     if not insecure and not access.is_loopback_name(host):
         return web.json_response({"error": "forbidden host"}, status=403)
+    if access.lan_write(req) and req.method in access.MUTATE and not access.bearer_ok(req):
+        return access.deny_request(req, "bearer", "operator bearer required", 401)
     if req.method == "GET":
         return web.json_response({
             "ok": True,

@@ -172,8 +172,10 @@ Examples: `plugins/src/lan-pulse/`, `plugins/src/pulse-ts/`, `plugins/src/doom/`
 
 ## MCP
 
-The monitor exposes an MCP server at `POST /mcp` (Streamable HTTP JSON,
-CSRF skipped). Host must be loopback unless `insecure_lan` is on. Tools:
+The monitor exposes an MCP server at `POST /mcp` (Streamable HTTP JSON).
+CSRF is skipped on loopback. Host must be loopback unless `insecure_lan` is on;
+then `POST /mcp` needs `Authorization: Bearer` with the operator token from
+`~/.zoto-viz/operator.token` (or `ZOTO_VIZ_OPERATOR_TOKEN`). GETs do not return that token. Tools:
 
 | Tool | Role |
 | --- | --- |
@@ -231,7 +233,7 @@ the current view).
 
 Write-safety guards (the tool writes into gitignored `plugins/<id>.zip`):
 
-1. **Host gate** — Host must be loopback unless `insecure_lan` is on; hosted MCP is not on the roadmap.
+1. **Host gate** — Host must be loopback unless `insecure_lan` is on. Non-loopback `POST /mcp` needs the operator bearer. Hosted MCP is not on the roadmap.
 2. **Unique id** — never write a second plugin under an id that src, a contrib
    zip, or the local drop zone already uses. Remint and return `remintedFrom`.
    `overwrite` / `force` update that zip in place; they still never write into

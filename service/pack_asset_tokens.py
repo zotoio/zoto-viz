@@ -90,9 +90,11 @@ def verify_pack_asset_token(
 
 
 def session_id_from_request(request) -> str:
-    """Browser session key: CSRF header or cookie only (tokens are not app-wide bearer secrets)."""
+    """Browser session key: CSRF header or cookie. LAN writes use a hash of the operator token."""
     from . import access
 
+    if access.lan_write(request) and access.bearer_ok(request):
+        return access.operator_session_id(str(request.app.get("operator_token") or ""))
     header = request.headers.get(access.HEADER, "").strip()
     if header:
         return header

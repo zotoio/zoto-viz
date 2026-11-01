@@ -1,8 +1,10 @@
 /** Same-origin fetches that carry the CSRF header minted by GET /api/session. */
 
-import { SERVER_RESTART_NOTICE, SESSION_RETRY_FAILED_NOTICE } from "./http-copy";
+import { OPERATOR_TOKEN_PROMPT, SERVER_RESTART_NOTICE, SESSION_RETRY_FAILED_NOTICE } from "./http-copy";
 
 let csrf = "";
+let operator = "";
+const OPERATOR_STORAGE = "zoto-viz-operator";
 
 let sessionRefreshInFlight: Promise<void> | null = null;
 let restartNoticeEmitted = false;
@@ -27,6 +29,37 @@ export function setCsrfTokenForTests(token: string): void {
   csrf = token;
 }
 
+/** Vitest: seed or clear the LAN operator bearer. */
+export function setOperatorTokenForTests(token: string): void {
+  writeOperator(token);
+}
+
+function readOperator(): string {
+  if (operator) return operator;
+  try {
+    return sessionStorage.getItem(OPERATOR_STORAGE) || "";
+  } catch {
+    return "";
+  }
+}
+
+function writeOperator(token: string): void {
+  operator = token;
+  try {
+    if (token) sessionStorage.setItem(OPERATOR_STORAGE, token);
+    else sessionStorage.removeItem(OPERATOR_STORAGE);
+  } catch {
+    /* private mode or a non-browser test */
+  }
+}
+
+async function promptOperator(): Promise<void> {
+  if (readOperator()) return;
+  if (typeof window === "undefined" || typeof window.prompt !== "function") return;
+  const entered = window.prompt(OPERATOR_TOKEN_PROMPT);
+  if (entered && entered.trim()) writeOperator(entered.trim());
+}
+
 const testPackTokens = new Map<string, string>();
 
 /** Vitest: bypass POST /api/pack-assets/token for a pack id. */
@@ -49,6 +82,8 @@ async function send(path: string, init: RequestInit): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
   if (method !== "GET" && method !== "HEAD" && !csrf) await bootSession();
   if (csrf && method !== "GET" && method !== "HEAD") headers.set("X-Zoto-Viz-Csrf", csrf);
+  const bearer = readOperator();
+  if (bearer) headers.set("Authorization", `Bearer ${bearer}`);
   const r = await fetch(path, { ...init, headers, credentials: "same-origin" });
   noteCsrf(r);
   return r;
@@ -107,6 +142,14 @@ async function refreshSessionAfterStaleToken(): Promise<void> {
 export async function apiFetch(path: string, init: RequestInit = {}): Promise<Response> {
   const method = (init.method || "GET").toUpperCase();
   let r = await send(path, init);
+  if (method !== "GET" && method !== "HEAD" && r.status === 401) {
+    const err = await r.clone().json().catch(() => ({})) as { error?: string };
+    if (err.error === "operator bearer required") {
+      writeOperator("");
+      await promptOperator();
+      if (readOperator()) r = await send(path, init);
+    }
+  }
   if (method !== "GET" && method !== "HEAD" && r.status === 403) {
     const err = await r.clone().json().catch(() => ({})) as { error?: string };
     if (err.error === "csrf required") {
@@ -181,8 +224,10 @@ export async function bootSession(): Promise<{
       aiControl?: boolean;
       pluginService?: boolean;
       typesafeConfigured?: boolean;
+      operatorAuth?: boolean;
     };
     if (typeof data.csrf === "string" && data.csrf) csrf = data.csrf;
+    if (data.operatorAuth) await promptOperator();
     const typesafeConfigured = typeof data.typesafeConfigured === "boolean"
       ? data.typesafeConfigured
       : await fetchTypeSafeConfiguredFallback();

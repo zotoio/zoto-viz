@@ -57,7 +57,11 @@ def test_wildcard_bind_rejects_unlisted_hosts(bind: str) -> None:
                 status, body = await _get_status(ip, port, h)
                 assert status == 200
                 data = json.loads(body)
-                assert "csrf" in data
+                if h.startswith("viz.example.lan"):
+                    assert data.get("csrf", "") == ""
+                    assert data.get("operatorAuth") is True
+                else:
+                    assert data.get("csrf")
 
     asyncio.run(run())
 

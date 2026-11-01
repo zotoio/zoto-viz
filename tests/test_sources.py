@@ -129,6 +129,10 @@ def test_file_guard_and_snapshot(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     assert live["text"].startswith("line one")
     with pytest.raises(ValueError):
         sources.check_file("/etc/passwd")
+    outside = tmp_path / "notes.txt"
+    outside.write_text("secret", encoding="utf-8")
+    with pytest.raises(ValueError, match="not allowed"):
+        sources.check_file(str(outside))
 
 
 def test_parse_kmsg_and_journal_shape() -> None:

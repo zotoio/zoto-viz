@@ -161,14 +161,12 @@ def public_snapshot(live: dict[str, dict[str, Any]]) -> dict[str, dict[str, Any]
 
 
 def _deny_settings_mutate(request: web.Request) -> web.Response | None:
-    """Origin + CSRF for PUT/DELETE — same contract as other Settings writes."""
+    """Origin plus loopback CSRF or LAN operator bearer — same contract as other Settings writes."""
     if request.method not in access.MUTATE:
         return None
     if not access.origin_ok(request):
-        return access._deny("forbidden origin")
-    if not access.csrf_ok(request):
-        return access._deny("csrf required")
-    return None
+        return access.deny_request(request, "origin", "forbidden origin")
+    return access.authorize_mutate(request)
 
 
 async def api_nasa_key(request: web.Request) -> web.Response:

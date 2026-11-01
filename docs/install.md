@@ -90,7 +90,7 @@ pnpm start            # backend :7020 + Vite :5173
 
 Windows (manual): install Python 3.12 (Add to PATH), Node.js 22 LTS, and Wireshark with Npcap. Then `python zoto-viz install --no-system`.
 
-The monitor binds **127.0.0.1** by default. Set `bind` / `port` / `insecure_lan` in `~/.zoto-viz/sys-config.yml` (or pass `--bind` + `--insecure-lan`) to listen on a LAN address — no password; anyone who can reach the port can read captures and trigger scans.
+The monitor binds **127.0.0.1** by default. Set `bind` / `port` / `insecure_lan` in `~/.zoto-viz/sys-config.yml` (or pass `--bind` + `--insecure-lan`) to listen on a LAN address. Reads stay open. Writes and `POST /mcp` need `Authorization: Bearer` with the token in `~/.zoto-viz/operator.token` (or `ZOTO_VIZ_OPERATOR_TOKEN`). The token is not returned on GET.
 
 **Screensaver / idle inhibit** is **on by default** for the live monitor so kiosk
 displays stay awake. Disable with `--no-inhibit-screensaver`, `inhibit_screensaver: false`

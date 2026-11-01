@@ -39,7 +39,7 @@ HEADER = (
     "# Written on zoto-viz install / first monitor start; existing keys are kept.\n"
     "# bind: 127.0.0.1                 # 0.0.0.0 or a LAN IP to listen beyond loopback\n"
     "# port: 7020\n"
-    "# insecure_lan: false             # required when bind is not loopback (no password)\n"
+    "# insecure_lan: false             # required when bind is not loopback (reads open; writes need operator token)\n"
     "# inhibit_screensaver: true       # hold idle/sleep so the display does not blank (default on)\n"
     "# viz_frame_links: true           # emit viz frame v2 links[] + talkers[].failed (default on)\n"
     "# viz_frame_links_max: 64         # cap directional link rows per frame (1..256)\n"
@@ -509,7 +509,7 @@ def write_systemd_override(
 def describe(cfg: dict[str, Any]) -> list[str]:
     ssids = ", ".join(_ssids(cfg.get("ssids"))) or "(none yet)"
     opts = listen_opts(cfg)
-    lan = "yes (no password)" if opts["insecure_lan"] else "loopback"
+    lan = "yes (operator token)" if opts["insecure_lan"] else "loopback"
     saver = "inhibit" if opts["inhibit_screensaver"] else "allow"
     return [
         f"root           {cfg.get('root') or '—'}",

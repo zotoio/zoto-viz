@@ -1,11 +1,16 @@
 """Loopback Host/Origin checks, CSRF for mutating HTTP, and a mutate access log.
 
 DNS rebinding is blocked by requiring a loopback Host (unless --insecure-lan). Browsers
-that send Origin must also use a loopback origin. PUT/POST/DELETE need X-Zoto-Viz-Csrf matching the process token
-(minted at start). The matching cookie is set for browsers but is not required.
+that send Origin must also use a loopback origin. On loopback, PUT/POST/DELETE need
+X-Zoto-Viz-Csrf matching the process token (minted at start). The matching cookie is set
+for browsers but is not required. POST /mcp skips CSRF on loopback.
+
+A non-loopback Host (insecure_lan) does not receive that token. Writes and POST /mcp
+need Authorization: Bearer with the operator token instead.
 """
 from __future__ import annotations
 
+import hashlib
 import hmac
 import json
 import ipaddress
@@ -87,6 +92,9 @@ def pack_asset_session_ids(request: web.Request) -> list[str]:
         add(cookie)
     if app_csrf:
         add(app_csrf)
+    operator = str(request.app.get("operator_token") or "")
+    if operator and request.app.get("insecure_lan") is True:
+        add(operator_session_id(operator))
     return out
 
 
@@ -336,6 +344,60 @@ def csrf_ok(request: web.Request) -> bool:
     return hmac.compare_digest(header, token)
 
 
+def lan_write(request: web.Request) -> bool:
+    """True for a non-loopback client when the server opted into LAN bind."""
+    if request.app.get("insecure_lan") is not True:
+        return False
+    return not is_loopback_name(header_hostname(request.headers.get("Host", "")))
+
+
+def bearer_ok(request: web.Request) -> bool:
+    expected = str(request.app.get("operator_token") or "")
+    if not expected:
+        return False
+    header = request.headers.get("Authorization", "")
+    if len(header) < 7 or header[:7].lower() != "bearer ":
+        return False
+    presented = header[7:].strip()
+    if not presented:
+        return False
+    return hmac.compare_digest(presented, expected)
+
+
+def operator_session_id(token: str) -> str:
+    """Stable pack-asset session key. Not the bearer, and not placed on GET responses."""
+    return hashlib.sha256(b"zoto-viz-operator-session:" + token.encode("utf-8")).hexdigest()
+
+
+def _audit_route(request: web.Request) -> str:
+    safe = _pack_path_redacted(request.path or "")
+    if safe is not None:
+        return safe
+    return request.path or "/"
+
+
+def deny_request(request: web.Request, reason: str, message: str, status: int = 403) -> web.Response:
+    from . import signals
+
+    signals.http_denied(reason, request.method, _audit_route(request), status)
+    return _deny(message, status)
+
+
+def authorize_mutate(request: web.Request) -> web.Response | None:
+    """Credential check for PUT/POST/DELETE/PATCH. Origin is enforced separately."""
+    if request.method not in MUTATE:
+        return None
+    if lan_write(request):
+        if bearer_ok(request):
+            return None
+        return deny_request(request, "bearer", "operator bearer required", 401)
+    if request.path.rstrip("/") == "/mcp":
+        return None
+    if csrf_ok(request):
+        return None
+    return deny_request(request, "csrf", "csrf required")
+
+
 def _deny(msg: str, status: int = 403) -> web.Response:
     resp = web.json_response({"error": msg}, status=status)
     attach_pack_asset_json_headers(resp)
@@ -382,11 +444,12 @@ def log_pack_asset_4xx(request: web.Request, resp: web.StreamResponse) -> None:
 @web.middleware
 async def middleware(request: web.Request, handler):  # noqa: ANN001
     if not origin_ok(request):
-        denied = _deny("forbidden origin")
+        denied = deny_request(request, "origin", "forbidden origin")
         log_pack_asset_4xx(request, denied)
         return denied
-    if request.method in MUTATE and request.path.rstrip("/") != "/mcp" and not csrf_ok(request):
-        return _deny("csrf required")
+    denied = authorize_mutate(request)
+    if denied is not None:
+        return denied
     resp = await handler(request)
     origin_raw = request.headers.get("Origin", "").strip()
     if origin_raw == "null" and sandbox_null_origin_allowed(request):
@@ -394,7 +457,8 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
     if parse_pack_assets_path(request.path or ""):
         attach_sandbox_referrer_policy(resp)
         log_pack_asset_4xx(request, resp)
-    attach_csrf(request, resp)
+    if not lan_write(request):
+        attach_csrf(request, resp)
     if request.method in MUTATE:
         sat = read_sandbox_asset_token(request)
         safe = redact_request_path(request.path or "", sat) if sat else request.path

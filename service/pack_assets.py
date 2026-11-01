@@ -339,8 +339,9 @@ async def _sandbox_html(request: web.Request, token: str) -> web.Response:
 async def api_pack_asset_register_frame(request: web.Request) -> web.Response:
     from . import pack_asset_frames, pack_asset_tokens
 
-    if not access.csrf_ok(request):
-        return access._deny("csrf required")
+    denied = access.authorize_mutate(request)
+    if denied is not None:
+        return denied
     try:
         body = await request.json()
     except Exception:
@@ -356,8 +357,9 @@ async def api_pack_asset_register_frame(request: web.Request) -> web.Response:
 async def api_pack_asset_unregister_frame(request: web.Request) -> web.Response:
     from . import pack_asset_frames, pack_asset_tokens
 
-    if not access.csrf_ok(request):
-        return access._deny("csrf required")
+    denied = access.authorize_mutate(request)
+    if denied is not None:
+        return denied
     frame_id = (request.match_info.get("frame_id") or "").strip()
     if not frame_id:
         return web.json_response({"error": "missing frame"}, status=400)
@@ -370,8 +372,9 @@ async def api_pack_asset_token(request: web.Request) -> web.Response:
     """Mint a frame-bound asset token (frame must be registered for this session)."""
     from . import pack_asset_frames, pack_asset_tokens
 
-    if not access.csrf_ok(request):
-        return access._deny("csrf required")
+    denied = access.authorize_mutate(request)
+    if denied is not None:
+        return denied
     pack_id = (request.match_info.get("pack_id") or "").strip()
     if not _pack_id_ok(pack_id):
         return web.json_response({"error": "unknown pack"}, status=404)

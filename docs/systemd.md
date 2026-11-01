@@ -17,7 +17,7 @@ The unit’s `ZOTO_VIZ_ROOT=%h/zoto-viz` is a placeholder. Install writes the dr
 # ~/.zoto-viz/sys-config.yml — LAN kiosk
 bind: 0.0.0.0
 port: 7020
-insecure_lan: true          # no password; anyone on the network can use the UI
+insecure_lan: true          # reads open on the LAN; writes need ~/.zoto-viz/operator.token
 inhibit_screensaver: true   # systemd-inhibit idle:sleep (+ xset when DISPLAY is set)
 ```
 
