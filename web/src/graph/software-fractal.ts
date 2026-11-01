@@ -14,7 +14,8 @@ import {
   stepCanyon,
   windowScale,
 } from "../../../plugins/sdk/fractal-cruise";
-import { FZ_SLOT } from "../../../plugins/sdk/fractal-slot";
+import { FZ_BAND_K, FZ_SLOT } from "../../../plugins/sdk/fractal-slot";
+import { fractalGradient } from "../../../plugins/sdk/fractal-palette";
 
 export interface SoftRect {
   x: number;
@@ -32,41 +33,18 @@ function smooth(e0: number, e1: number, x: number): number {
   return t * t * (3 - 2 * t);
 }
 
-/** Same cosine palettes as the sky shader. */
+/** Same gradient palettes as the sky shader. */
 export function fractalPalette(t: number, pal: number, hue: number, sat: number): [number, number, number] {
-  let r = 0.12;
-  let g = 0.18;
-  let b = 0.42;
-  const lay = (er: number, eg: number, eb: number, a: number, c: number) => {
-    const k = smooth(a, c, pal);
-    r = mix(r, er, k);
-    g = mix(g, eg, k);
-    b = mix(b, eb, k);
-  };
-  lay(0.9, 0.25, 0.08, 0.5, 1.5);
-  lay(0.95, 0.45, 0.12, 1.5, 2.5);
-  lay(0.2, 0.95, 0.55, 2.5, 3.5);
-  lay(0.95, 0.2, 0.75, 3.5, 4.5);
-  lay(0.55, 0.85, 1.0, 4.5, 5.5);
-  lay(1.0, 0.35, 0.15, 5.5, 6.5);
-  lay(0.15, 0.75, 0.95, 6.5, 7.5);
-  const h = hue * Math.PI * 2;
-  const gray = (r + g + b) / 3;
-  r = mix(gray, r, sat);
-  g = mix(gray, g, sat);
-  b = mix(gray, b, sat);
-  const tone = (ch: number, phase: number) => 0.5 + 0.5 * Math.cos(Math.PI * 2 * (ch + t + phase + h));
-  return [tone(r, 0), tone(g, 0.33), tone(b, 0.67)];
+  return fractalGradient(t, pal, hue, sat);
 }
 
-function sampleColor(sample: EscapeSample, iterCap: number, spin: number, pal: number, hue: number, sat: number): [number, number, number] {
+function sampleColor(sample: EscapeSample, iterShift: number, spin: number, pal: number, hue: number, sat: number): [number, number, number] {
   if (!sample.escaped) {
     const trap = Math.log(sample.trap + 1);
     return fractalPalette(spin + trap * 0.22, pal, hue, sat).map((c) => c * 0.62) as [number, number, number];
   }
-  const esc = sample.n / Math.max(8, iterCap);
-  const col = fractalPalette(spin + esc * 2.5, pal, hue, sat);
-  const gain = 0.35 + Math.min(1.4, esc * 1.4);
+  const col = fractalPalette(spin + (sample.n + iterShift) * FZ_BAND_K, pal, hue, sat);
+  const gain = 0.45 + 0.9 * (1 - Math.exp(-sample.n * 0.03));
   return [col[0] * gain, col[1] * gain, col[2] * gain];
 }
 
@@ -152,7 +130,7 @@ export function paintSoftwareFractal(
     hue = slot(0, FZ_SLOT.hue);
     sat = slot(0, FZ_SLOT.sat);
     iterCap = Math.max(16, Math.round(slot(0, FZ_SLOT.maxIterN) * 96));
-    julia = typ >= 6.5;
+    julia = typ >= 6.5 && typ < 7.5;
     jx = slot(0, FZ_SLOT.juliaCr);
     jy = slot(0, FZ_SLOT.juliaCi);
   } else {
@@ -186,6 +164,12 @@ export function paintSoftwareFractal(
   const orbitLen = mark > 0.5 ? slot(0, FZ_SLOT.orbitLen) : 0;
   const orbit = orbitLen > 8 ? readOrbit(slot, orbitLen) : [];
   const usePerturb = orbit.length > 8 && scale < 0.02;
+  const refDx = mark > 0.5 ? slot(0, FZ_SLOT.refDx) : 0;
+  const refDy = mark > 0.5 ? slot(0, FZ_SLOT.refDy) : 0;
+  const rot = mark > 0.5 ? slot(0, FZ_SLOT.viewRot) : 0;
+  const iterShift = mark > 0.5 ? slot(0, FZ_SLOT.iterShift) : 0;
+  const rotC = Math.cos(rot);
+  const rotS = Math.sin(rot);
   const bgR = mark > 0.5 ? slot(0, FZ_SLOT.bgR) : 0.02;
   const bgG = mark > 0.5 ? slot(0, FZ_SLOT.bgG) : 0.04;
   const bgB = mark > 0.5 ? slot(0, FZ_SLOT.bgB) : 0.09;
@@ -199,12 +183,12 @@ export function paintSoftwareFractal(
       const uvy = (0.5 - (y + 0.5) / ph) * 2 * 0.9;
       for (let x = 0; x < pw; x++) {
         const uvx = ((x + 0.5) / pw - 0.5) * 2 * aspect * 0.9;
-        const dcx = uvx * scale;
-        const dcy = uvy * scale;
+        const dcx = (uvx * rotC - uvy * rotS) * scale;
+        const dcy = (uvx * rotS + uvy * rotC) * scale;
         const sample = usePerturb
-          ? perturbPixel(orbit, dcx, dcy, julia)
+          ? perturbPixel(orbit, dcx - refDx * scale, dcy - refDy * scale, julia)
           : escape2(cx + dcx, cy + dcy, Math.min(64, iterCap), juliaC);
-        const col = sampleColor(sample, iterCap, spin, pal, hue, sat);
+        const col = sampleColor(sample, iterShift, spin, pal, hue, sat);
         const o = (y * pw + x) * 4;
         data[o] = Math.max(0, Math.min(255, (col[0] * 0.92 + bgR * 0.08) * 255));
         data[o + 1] = Math.max(0, Math.min(255, (col[1] * 0.92 + bgG * 0.08) * 255));

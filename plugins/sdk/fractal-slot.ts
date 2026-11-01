@@ -52,6 +52,20 @@ export const FZ_SLOT = {
   nearDist: 47,
   orbitLen: 48,
   generation: 49,
+  /** Perturbation reference point relative to mandelCx/Cy, in window units (multiply by mandelScale). */
+  refDx: 50,
+  refDy: 51,
+  /** Planar view rotation (radians): window point q maps to c = centre + scale * e^(i*viewRot) * q. */
+  viewRot: 52,
+  /**
+   * Escape-count offset the loop jumps accumulate (mod FZ_BAND_WRAP): a jump out by |lambda| lowers
+   * every pixel's count by the cycle period, so colour bands add this back and do not step.
+   */
+  iterShift: 53,
 } as const;
 
-export const FZ_SLOT0_FLOATS = 50;
+export const FZ_SLOT0_FLOATS = 54;
+
+/** Colour band per escape iteration (sky shader `FZ_BAND_K`). FZ_BAND_WRAP * FZ_BAND_K is a whole palette period (2). */
+export const FZ_BAND_K = 0.07;
+export const FZ_BAND_WRAP = 200;

@@ -420,26 +420,52 @@ function bulbDe(x: number, y: number, z: number, power: number): number {
   return (0.5 * Math.log(Math.max(r, 1e-4)) * r) / Math.max(dr, 1e-4);
 }
 
+/** Scales between -1 and 1 collapse the set; keep |s| >= 1.2. Matches `boxScale` in the sky shader. */
+function boxScale(s: number): number {
+  return s < 0 ? Math.min(s, -1.2) : Math.max(s, 1.2);
+}
+
+/**
+ * Positive s: half-extent 2(s+1)/(s-1). Negative s: solid core whose towers reach ~3.65 at the corners.
+ * Shrink either to ~1.15 so the canyon basin flies the outer surface. Matches `boxK` in the sky shader.
+ */
+function boxK(s: number): number {
+  return (s < 0 ? 3.65 : (2 * (s + 1)) / (s - 1)) / 1.15;
+}
+
 function boxDe(x: number, y: number, z: number, scale: number, fold: number): number {
+  const s = boxScale(scale);
+  const k = boxK(s);
+  return boxDeUnit(x * k, y * k, z * k, s, fold) / k;
+}
+
+/** Mandelbox with box fold limit 0.5 + fold; dr tracks the running scale. Mirrors `mandelboxUnit` in the sky shader. */
+function boxDeUnit(x: number, y: number, z: number, scale: number, fold: number): number {
   let zx = x;
   let zy = y;
   let zz = z;
+  let dr = 1;
   const s = scale;
+  const lim = 0.5 + fold;
   for (let i = 0; i < 16; i++) {
-    zx = Math.min(1, Math.max(-1, zx)) * 2 - zx;
-    zy = Math.min(1, Math.max(-1, zy)) * 2 - zy;
-    zz = Math.min(1, Math.max(-1, zz)) * 2 - zz;
+    zx = Math.min(lim, Math.max(-lim, zx)) * 2 - zx;
+    zy = Math.min(lim, Math.max(-lim, zy)) * 2 - zy;
+    zz = Math.min(lim, Math.max(-lim, zz)) * 2 - zz;
     const r2 = zx * zx + zy * zy + zz * zz;
     if (r2 < 0.25) {
       zx *= 4; zy *= 4; zz *= 4;
+      dr *= 4;
     } else if (r2 < 1) {
       zx /= r2; zy /= r2; zz /= r2;
+      dr /= r2;
     }
     zx = zx * s + x;
     zy = zy * s + y;
     zz = zz * s + z;
+    dr = dr * Math.abs(s) + 1;
+    if (zx * zx + zy * zy + zz * zz > 1e4) break;
   }
-  return (Math.hypot(zx, zy, zz) - 1) * fold;
+  return Math.hypot(zx, zy, zz) / Math.abs(dr);
 }
 
 function mengerDe(x: number, y: number, z: number): number {
@@ -459,23 +485,20 @@ function mengerDe(x: number, y: number, z: number): number {
   return d;
 }
 
+/** Sierpinski tetrahedron IFS. Mirrors `sierpinski` in the sky shader. */
 function sierpDe(x: number, y: number, z: number): number {
-  let s = 1;
-  let d = 1e9;
   let px = x;
   let py = y;
   let pz = z;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < 12; i++) {
     if (px + py < 0) { const t = px; px = -py; py = -t; }
     if (px + pz < 0) { const t = px; px = -pz; pz = -t; }
     if (py + pz < 0) { const t = py; py = -pz; pz = -t; }
     px = px * 2 - 1;
     py = py * 2 - 1;
     pz = pz * 2 - 1;
-    s *= 2;
-    d = Math.min(d, (Math.hypot(px, py, pz) - 0.35) / s);
   }
-  return d;
+  return Math.hypot(px, py, pz) * 2 ** -12;
 }
 
 function julia4De(x: number, y: number, z: number, p: DeParams): number {
@@ -498,20 +521,27 @@ function julia4De(x: number, y: number, z: number, p: DeParams): number {
   return (0.5 * Math.log(Math.max(r, 1e-4)) * r) / Math.max(dr, 1e-4);
 }
 
+/** Kaleidoscopic IFS: polar mirror into `sym` sectors, then octahedral folds, scale 3 about (1,1,0). Mirrors `kaleido` in the sky shader. */
 function kaleidoDe(x: number, y: number, z: number, sym: number): number {
-  let a = Math.atan2(y, x);
+  const sector = 6.28318 / Math.max(sym, 3);
+  const a0 = Math.atan2(y, x);
+  const a = Math.abs((((a0 % sector) + sector) % sector) - sector * 0.5);
   const r = Math.hypot(x, y);
-  const sector = (Math.PI * 2) / Math.max(sym, 3);
-  a = ((a % sector) + sector) % sector - sector * 0.5;
-  const qx = Math.cos(a) * r;
-  const qy = Math.sin(a) * r;
-  const px = Math.abs(qx) - 0.35;
-  const py = Math.abs(qy) - 0.35;
-  const pz = Math.abs(z) - 0.2;
-  const ox = Math.max(px, 0);
-  const oy = Math.max(py, 0);
-  const oz = Math.max(pz, 0);
-  return Math.hypot(ox, oy, oz) + Math.min(Math.max(px, py, pz), 0) - 0.08;
+  let px = Math.cos(a) * r;
+  let py = Math.sin(a) * r;
+  let pz = z;
+  for (let i = 0; i < 8; i++) {
+    px = Math.abs(px);
+    py = Math.abs(py);
+    pz = Math.abs(pz);
+    if (px < py) { const t = px; px = py; py = t; }
+    if (px < pz) { const t = px; px = pz; pz = t; }
+    if (py < pz) { const t = py; py = pz; pz = t; }
+    px = px * 3 - 2;
+    py = py * 3 - 2;
+    pz = pz * 3;
+  }
+  return Math.hypot(px, py, pz) * 3 ** -8;
 }
 
 export interface Canyon3 {
@@ -633,8 +663,9 @@ export function stepCanyon(c: Canyon3, dt: number, kind: number, params: DeParam
   const fx = c.fx + vx * dt;
   const fy = c.fy + vy * dt;
   const fz = c.fz + vz * dt;
-  const eye = 0.12;
-  const lift = clearance * 1.15;
+  // Far enough back that the view shows structure rather than one wall (the eye stays under 0.35).
+  const eye = 0.24;
+  const lift = clearance * 2.6;
   const cx = fx - slide * eye + nx * lift;
   const cy = fy - slideY * eye + ny * lift;
   const cz = fz - slideZ * eye + nz * lift;

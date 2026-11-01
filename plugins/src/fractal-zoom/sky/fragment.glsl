@@ -17,24 +17,55 @@ float fz0(float fi) {
   return fzAt(fi);
 }
 
+// Planar view rotation: loop jumps rotate by arg(lambda) so the frame after a jump matches the one before.
+vec2 viewRotate(vec2 q) {
+  float a = fz0(52.0);
+  float c = cos(a);
+  float s = sin(a);
+  return vec2(q.x * c - q.y * s, q.x * s + q.y * c);
+}
+
+// Colour coordinate, linear in escape count so a loop jump (which lowers every count by the cycle
+// period) is cancelled exactly by the accumulated shift in slot 53. FZ_BAND_K in fractal-slot.ts.
+const float FZ_BAND_K = 0.07;
+float bandOf(float n) {
+  return (n + fz0(53.0)) * FZ_BAND_K;
+}
+
 vec2 orbitAt(float i) {
   float f = 64.0 + i * 2.0;
   return vec2(fzAt(f), fzAt(f + 1.0));
 }
 
+// Gradient palettes: classic, topo, ember, ice, mono (5 stops each); 5 = neon cosine rainbow.
+// Must match plugins/sdk/fractal-palette.ts.
+const vec3 PAL_STOPS[25] = vec3[25](
+  vec3(0.0, 0.03, 0.12), vec3(0.05, 0.25, 0.75), vec3(0.92, 0.96, 1.0), vec3(1.0, 0.75, 0.2), vec3(0.65, 0.25, 0.02),
+  vec3(0.03, 0.12, 0.3), vec3(0.2, 0.45, 0.65), vec3(0.82, 0.74, 0.52), vec3(0.45, 0.32, 0.22), vec3(0.95, 0.96, 1.0),
+  vec3(0.02, 0.0, 0.0), vec3(0.45, 0.02, 0.04), vec3(0.85, 0.18, 0.03), vec3(1.0, 0.55, 0.1), vec3(1.0, 0.9, 0.6),
+  vec3(0.01, 0.02, 0.06), vec3(0.1, 0.2, 0.38), vec3(0.3, 0.55, 0.75), vec3(0.55, 0.88, 0.95), vec3(0.95, 0.98, 1.0),
+  vec3(0.03, 0.03, 0.04), vec3(0.2, 0.2, 0.22), vec3(0.45, 0.45, 0.48), vec3(0.72, 0.72, 0.75), vec3(0.92, 0.92, 0.94)
+);
+
+// Mirrored gradient (period 2 in t, no seam), then hue rotation about the grey axis and saturation.
 vec3 palette(float t, float pal, float hue, float sat) {
-  vec3 col = vec3(0.12, 0.18, 0.42);
-  if (pal > 0.5) col = mix(col, vec3(0.9, 0.25, 0.08), smoothstep(0.5, 1.5, pal));
-  if (pal > 1.5) col = mix(col, vec3(0.95, 0.45, 0.12), smoothstep(1.5, 2.5, pal));
-  if (pal > 2.5) col = mix(col, vec3(0.2, 0.95, 0.55), smoothstep(2.5, 3.5, pal));
-  if (pal > 3.5) col = mix(col, vec3(0.95, 0.2, 0.75), smoothstep(3.5, 4.5, pal));
-  if (pal > 4.5) col = mix(col, vec3(0.55, 0.85, 1.0), smoothstep(4.5, 5.5, pal));
-  if (pal > 5.5) col = mix(col, vec3(1.0, 0.35, 0.15), smoothstep(5.5, 6.5, pal));
-  if (pal > 6.5) col = mix(col, vec3(0.15, 0.75, 0.95), smoothstep(6.5, 7.5, pal));
+  int p = int(clamp(floor(pal + 0.5), 0.0, 5.0));
+  vec3 col;
+  if (p == 5) {
+    col = 0.5 + 0.5 * cos(6.28318 * (t + vec3(0.0, 0.33, 0.67)));
+  } else {
+    float u = abs(fract(t * 0.5) * 2.0 - 1.0) * 4.0;
+    int i = int(min(floor(u), 3.0));
+    float f = u - float(i);
+    f = f * f * (3.0 - 2.0 * f);
+    col = mix(PAL_STOPS[p * 5 + i], PAL_STOPS[p * 5 + i + 1], f);
+    if (p == 4) col *= mix(vec3(1.0), uAccent * 1.4, 0.25);
+  }
   float h = hue * 6.28318;
   vec3 k = vec3(0.57735);
-  col = mix(dot(col, k) * k, col, sat);
-  return 0.5 + 0.5 * cos(6.28318 * (col + t + vec3(0.0, 0.33, 0.67) + h));
+  col = col * cos(h) + cross(k, col) * sin(h) + k * dot(k, col) * (1.0 - cos(h));
+  col = mix(vec3(dot(col, vec3(0.299, 0.587, 0.114))), col, sat);
+  return clamp(col, 0.0, 1.5);
 }
 
 float mandelbulb(vec3 p, float power) {
@@ -56,18 +87,43 @@ float mandelbulb(vec3 p, float power) {
   return 0.5 * log(r) * r / dr;
 }
 
-float mandelbox(vec3 p, float s, float f) {
+// Box fold limit is 0.5 + fold (default 1.05, the classic Mandelbox is 1.0). dr tracks the running scale.
+// Scales between -1 and 1 collapse the set; keep |s| >= 1.2.
+float boxScale(float s) {
+  return s < 0.0 ? min(s, -1.2) : max(s, 1.2);
+}
+
+// Positive s: half-extent 2(s+1)/(s-1). Negative s: solid core whose towers reach ~3.65 at the corners.
+// Shrink either to ~1.15 so the canyon basin (radius 1.35) flies the outer surface. Matches boxK in fractal-cruise.ts.
+float boxK(float s) {
+  return (s < 0.0 ? 3.65 : 2.0 * (s + 1.0) / (s - 1.0)) / 1.15;
+}
+
+float mandelboxUnit(vec3 p, float s, float f) {
   vec3 z = p;
-  float scale = s;
-  float fold = f;
-  for (int i = 0; i < 32; i++) {
-    z = clamp(z, -1.0, 1.0) * 2.0 - z;
+  float dr = 1.0;
+  float lim = 0.5 + f;
+  for (int i = 0; i < 16; i++) {
+    z = clamp(z, -lim, lim) * 2.0 - z;
     float r2 = dot(z, z);
-    if (r2 < 0.25) z *= 4.0;
-    else if (r2 < 1.0) z /= r2;
-    z = z * scale + p;
+    if (r2 < 0.25) {
+      z *= 4.0;
+      dr *= 4.0;
+    } else if (r2 < 1.0) {
+      z /= r2;
+      dr /= r2;
+    }
+    z = z * s + p;
+    dr = dr * abs(s) + 1.0;
+    if (dot(z, z) > 1e4) break;
   }
-  return (length(z) - 1.0) * fold;
+  return length(z) / abs(dr);
+}
+
+float mandelbox(vec3 p, float s, float f) {
+  float sc = boxScale(s);
+  float k = boxK(sc);
+  return mandelboxUnit(p * k, sc, f) / k;
 }
 
 float menger(vec3 p) {
@@ -88,18 +144,16 @@ float menger(vec3 p) {
   return d;
 }
 
+// Sierpinski tetrahedron IFS (vertices (1,1,1) and its three sign flips): fold, scale 2 about a vertex.
 float sierpinski(vec3 p) {
-  float s = 1.0;
-  float d = 1e9;
-  for (int i = 0; i < 8; i++) {
-    if (p.x + p.y < 0.0) p.xy = -p.yx;
-    if (p.x + p.z < 0.0) p.xz = -p.zx;
-    if (p.y + p.z < 0.0) p.yz = -p.zy;
-    p = p * 2.0 - 1.0;
-    s *= 2.0;
-    d = min(d, (length(p) - 0.35) / s);
+  vec3 z = p;
+  for (int i = 0; i < 12; i++) {
+    if (z.x + z.y < 0.0) z.xy = -z.yx;
+    if (z.x + z.z < 0.0) z.xz = -z.zx;
+    if (z.y + z.z < 0.0) z.yz = -z.zy;
+    z = z * 2.0 - 1.0;
   }
-  return d;
+  return length(z) * exp2(-12.0);
 }
 
 float julia4d(vec3 p, vec4 c) {
@@ -115,15 +169,21 @@ float julia4d(vec3 p, vec4 c) {
   return 0.5 * log(r) * r / dr;
 }
 
+// Kaleidoscopic IFS: mirror into one of `sym` polar sectors, then octahedral folds and scale 3 about
+// the (1,1,0) vertex — 12 copies at 1/3, a cuboctahedral fractal (dimension ~2.26, not space-filling).
 float kaleido(vec3 p, float sym) {
-  float a = atan(p.y, p.x);
-  float r = length(p.xy);
   float sector = 6.28318 / max(sym, 3.0);
-  a = mod(a, sector) - sector * 0.5;
-  vec2 q = vec2(cos(a), sin(a)) * r;
-  p.xy = q;
-  p = abs(p) - vec3(0.35, 0.35, 0.2);
-  return length(max(p, 0.0)) + min(max(p.x, max(p.y, p.z)), 0.0) - 0.08;
+  float a = abs(mod(atan(p.y, p.x), sector) - sector * 0.5);
+  p.xy = vec2(cos(a), sin(a)) * length(p.xy);
+  vec3 z = p;
+  for (int i = 0; i < 8; i++) {
+    z = abs(z);
+    if (z.x < z.y) z.xy = z.yx;
+    if (z.x < z.z) z.xz = z.zx;
+    if (z.y < z.z) z.yz = z.zy;
+    z = z * 3.0 - vec3(2.0, 2.0, 0.0);
+  }
+  return length(z) * pow(3.0, -8.0);
 }
 
 float mapDE(vec3 p, float typ, float powr, float sc, float fold, vec4 jc, float sym) {
@@ -160,9 +220,9 @@ vec3 mandel2d(vec2 z0, vec2 c, int maxIter) {
   return vec3(m, trap, escaped);
 }
 
-vec3 shadePerturb(vec2 uv, float julia, float scale, float iterCap, float spin, float hue, float sat) {
+vec3 shadePerturb(vec2 uv, float julia, float scale, float spin, float hue, float sat) {
   float len = fz0(48.0);
-  vec2 dc = uv * scale;
+  vec2 dc = (uv - vec2(fz0(50.0), fz0(51.0))) * scale;
   vec2 dn = julia > 0.5 ? dc : vec2(0.0);
   float m = 0.0;
   float trap = 1e9;
@@ -182,23 +242,181 @@ vec3 shadePerturb(vec2 uv, float julia, float scale, float iterCap, float spin, 
     if (julia < 0.5) dn += dc;
   }
   if (escaped < 0.5) return palette(spin + log(trap + 1.0) * 0.22, fz0(20.0), hue, sat) * 0.62;
-  float esc = m / max(8.0, iterCap);
-  return palette(spin + esc * 2.5, fz0(20.0), hue, sat) * (0.35 + esc * 1.4);
+  return palette(spin + bandOf(m), fz0(20.0), hue, sat) * (0.45 + 0.9 * (1.0 - exp(-m * 0.03)));
 }
 
 vec3 color2d(vec2 uv, float typ, vec2 center, float scale, float maxIterN, float tpal, float pcyc, float hue, float sat, vec4 jc) {
   float spin = tpal + pcyc * uTime * 0.22;
   float iterCap = max(8.0, maxIterN * 96.0);
   if (fz0(48.0) > 8.0 && scale < 0.02) {
-    return shadePerturb(uv, typ < 6.5 ? 0.0 : 1.0, scale, iterCap, spin, hue, sat);
+    return shadePerturb(uv, typ < 6.5 ? 0.0 : 1.0, scale, spin, hue, sat);
   }
   vec2 pix = center + uv * scale;
   vec3 m = typ < 6.5
     ? mandel2d(vec2(0.0), pix, int(iterCap))
     : mandel2d(pix, vec2(jc.x, jc.y), int(iterCap));
   if (m.z < 0.5) return palette(spin + log(m.y + 1.0) * 0.22, fz0(20.0), hue, sat) * 0.62;
-  float esc = m.x / iterCap;
-  return palette(spin + esc * 2.5, fz0(20.0), hue, sat) * (0.35 + esc * 1.4);
+  return palette(spin + bandOf(m.x), fz0(20.0), hue, sat) * (0.45 + 0.9 * (1.0 - exp(-m.x * 0.03)));
+}
+
+// Mandelbrot terrain: the plane is window-relative (q = (c - centre) / scale), so the landscape
+// rescales with the dive. Height falls off with the distance estimate in window units; the
+// interior is a flat mesa at TERRAIN_H and filaments rise as ridges.
+const float TERRAIN_H = 0.34;
+
+// x: smooth escape count, y: distance to the set in window units (-1 inside), z: orbit trap.
+vec3 msetIterate(vec2 q, vec2 center, float scale, float cap, float useP) {
+  float trap = 1e9;
+  if (useP > 0.5) {
+    float len = min(fz0(48.0), max(cap, 24.0));
+    vec2 dc = (q - vec2(fz0(50.0), fz0(51.0))) * scale;
+    vec2 dn = vec2(0.0);
+    vec2 der = vec2(0.0);
+    for (int i = 0; i < 160; i++) {
+      if (float(i) >= len) break;
+      vec2 Z = orbitAt(float(i));
+      vec2 z = Z + dn;
+      float m2 = dot(z, z);
+      trap = min(trap, m2);
+      if (m2 > 64.0 && i > 0) {
+        float r = sqrt(m2);
+        float de = 0.5 * r * log(r) / max(length(der), 1e-30);
+        return vec3(float(i) + 1.0 - log2(log2(m2)), de / scale, trap);
+      }
+      der = 2.0 * cmul(z, der) + vec2(1.0, 0.0);
+      dn = 2.0 * cmul(Z, dn) + cmul(dn, dn) + dc;
+    }
+    return vec3(len, -1.0, trap);
+  }
+  vec2 c = center + q * scale;
+  vec2 z = vec2(0.0);
+  vec2 der = vec2(0.0);
+  int n = int(cap);
+  for (int i = 0; i < 96; i++) {
+    if (i >= n) break;
+    der = 2.0 * cmul(z, der) + vec2(1.0, 0.0);
+    z = cmul(z, z) + c;
+    float m2 = dot(z, z);
+    trap = min(trap, m2);
+    if (m2 > 1024.0) {
+      float r = sqrt(m2);
+      float de = 0.5 * r * log(r) / max(length(der), 1e-30);
+      return vec3(float(i) + 2.0 - log2(log2(m2)), de / scale, trap);
+    }
+  }
+  return vec3(cap, -1.0, trap);
+}
+
+// As msetIterate, but `lod` < `cap` trims far samples. Running out of `lod` is not proof of the
+// interior, so those points read as boundary (y = 0) rather than turning distant ground into mesa.
+vec3 msetSample(vec2 q, vec2 center, float scale, float cap, float lod, float useP) {
+  vec3 s = msetIterate(q, center, scale, min(cap, lod), useP);
+  if (s.y < 0.0 && lod < cap) s.y = 0.0;
+  return s;
+}
+
+// Exponential falloff in window units keeps ridges thin and valleys deep at every zoom; the sharp
+// second term peaks the filaments themselves.
+float terrainHeight(vec3 s) {
+  if (s.y < 0.0) return TERRAIN_H;
+  return TERRAIN_H * (0.7 * exp(-14.0 * s.y) + 0.3 * exp(-70.0 * s.y));
+}
+
+
+// World (x, z) to window plane; imaginary axis points away from the opening camera.
+vec2 terrainQ(vec3 p) {
+  return viewRotate(vec2(p.x, -p.z));
+}
+
+vec3 terrainSky(vec3 rd, vec3 bg, float spin, float pal, float hue, float sat, float glow) {
+  float up = clamp(rd.y, -0.2, 1.0);
+  vec3 horizon = mix(bg, palette(spin + 0.15, pal, hue, sat) * 0.35, 0.35 + glow * 0.3);
+  return mix(horizon, bg * 0.6, smoothstep(0.0, 0.55, up));
+}
+
+vec3 terrainScene(vec3 rdView, vec3 bg, float tpal, float pcyc, float hue, float sat, float glow, float fogAmt, float aoAmt, float maxStepsN) {
+  vec2 center = vec2(fz0(38.0), fz0(39.0));
+  float scale = max(1e-30, fz0(40.0));
+  float useP = (fz0(48.0) > 8.0 && scale < 0.02) ? 1.0 : 0.0;
+  // Perturbation runs to the reference orbit length (up to 160), past the 96-iteration direct loop.
+  float cap = useP > 0.5 ? fz0(48.0) : max(16.0, fz0(12.0) * 96.0);
+  float pal = fz0(20.0);
+  float spin = tpal + pcyc * uTime * 0.22;
+
+  vec3 ro = vec3(fz0(0.0), fz0(1.0), fz0(2.0));
+  vec3 fwd = normalize(vec3(fz0(44.0), fz0(45.0), fz0(46.0)) - ro);
+  vec3 rt = normalize(cross(fwd, vec3(0.0, 1.0, 0.0)));
+  vec3 up = cross(rt, fwd);
+  vec2 uv = rdView.xy / max(-rdView.z, 0.18);
+  // Wider than the host lens (about 64 degrees across) so the opening shot holds the whole set.
+  vec3 rd = normalize(fwd + (rt * uv.x + up * uv.y) * 1.2);
+
+  vec3 sky = terrainSky(rd, bg, spin, pal, hue, sat, glow);
+  if (rd.y > -1e-4 && ro.y >= TERRAIN_H) return sky;
+
+  float t = ro.y > TERRAIN_H ? (ro.y - TERRAIN_H) / -rd.y : 0.0;
+  float tGround = rd.y < -1e-4 ? ro.y / -rd.y : 1e9;
+  float tEnd = min(tGround, 16.0);
+  float tPrev = t;
+  float hit = 0.0;
+  int steps = int(min(48.0, max(12.0, maxStepsN * 48.0)));
+  for (int i = 0; i < 48; i++) {
+    if (i >= steps || t > tEnd) break;
+    vec3 p = ro + rd * t;
+    // Far samples need fewer iterations; they are a few pixels wide and fogged.
+    float lod = max(32.0, cap * clamp(4.5 / max(t, 0.1), 0.6, 1.0));
+    float gap = p.y - terrainHeight(msetSample(terrainQ(p), center, scale, cap, lod, useP));
+    if (gap < 0.0) {
+      hit = 1.0;
+      break;
+    }
+    tPrev = t;
+    t += max(gap * 0.5, 0.004 + t * 0.014);
+  }
+  if (hit < 0.5) {
+    if (tGround > 16.0) return sky;
+    t = min(t, tGround);
+    hit = 1.0;
+  } else {
+    float a = tPrev;
+    float b = t;
+    for (int k = 0; k < 5; k++) {
+      float m = 0.5 * (a + b);
+      vec3 pm = ro + rd * m;
+      if (pm.y < terrainHeight(msetSample(terrainQ(pm), center, scale, cap, cap, useP))) b = m;
+      else a = m;
+    }
+    t = b;
+  }
+
+  vec3 p = ro + rd * t;
+  vec3 s0 = msetSample(terrainQ(p), center, scale, cap, cap, useP);
+  float h0 = terrainHeight(s0);
+  float e = max(0.0015, t * 0.003);
+  float hx = terrainHeight(msetSample(terrainQ(p + vec3(e, 0.0, 0.0)), center, scale, cap, cap, useP));
+  float hz = terrainHeight(msetSample(terrainQ(p + vec3(0.0, 0.0, e)), center, scale, cap, cap, useP));
+  vec3 n = normalize(vec3(h0 - hx, e, h0 - hz));
+
+  vec3 base;
+  float rim = 0.0;
+  if (s0.y < 0.0) {
+    // The set: a dark mesa with a faint orbit-trap texture.
+    base = vec3(0.025, 0.03, 0.045) + palette(spin + log(s0.z + 1.0) * 0.35, pal, hue, sat) * 0.1;
+  } else {
+    base = palette(spin + bandOf(s0.x), pal, hue, sat) * (0.55 + 0.6 * clamp(h0 / TERRAIN_H, 0.0, 1.0));
+    rim = exp(-s0.y * 40.0);
+  }
+  vec3 l = normalize(vec3(-0.45, 0.8, 0.35));
+  float diff = max(dot(n, l), 0.0);
+  float valley = 0.35 + 0.65 * clamp(h0 / TERRAIN_H, 0.0, 1.0);
+  float amb = mix(0.42, 0.42 * valley, aoAmt);
+  float spec = pow(max(dot(reflect(-l, n), -rd), 0.0), 24.0) * (0.15 + glow * 0.5);
+  vec3 col = base * (amb + diff * 0.9) + spec * vec3(0.8, 0.9, 1.0);
+  // Glowing rim along the mesa edge, from the warm end of the gradient.
+  col += palette(1.75, pal, hue, sat) * rim * (0.3 + glow * 0.9);
+  // Far terrain is sampled coarser than a pixel and sparkles; fog it out before it reads as noise.
+  float fog = 1.0 - exp(-t * (0.09 + fogAmt * 0.22));
+  return mix(col, sky, clamp(fog, 0.0, 1.0));
 }
 
 void main() {
@@ -262,6 +480,13 @@ void main() {
   sat = mark > 0.5 ? sat : 1.1;
   bg = mark > 0.5 ? bg : vec3(0.03, 0.05, 0.12);
 
+  if (mark > 0.5 && typ > 7.5) {
+    vec3 tc = terrainScene(rdView, bg, tpal, pcyc, hue, sat, glow, fogAmt, aoAmt, maxStepsN);
+    tc += uAudio * fz0(35.0) * 0.12;
+    fragColor = vec4(tc * uBright, uOpacity);
+    return;
+  }
+
   if (mark < 0.5 || typ >= 6.0) {
     float win;
     vec2 center;
@@ -279,7 +504,7 @@ void main() {
       iterN = max(0.35, maxIterN);
       useTyp = typ;
     }
-    vec3 col = color2d(uv, useTyp, center, win, iterN, tpal, pcyc, hue, max(sat, 0.85), jc);
+    vec3 col = color2d(viewRotate(uv), useTyp, center, win, iterN, tpal, pcyc, hue, max(sat, 0.85), jc);
     col = mix(bg, col, 0.94) + glow * 0.2;
     fragColor = vec4(col * uBright, uOpacity);
     return;
@@ -308,7 +533,17 @@ void main() {
       vec3 lp = ro + vec3(2.0, 3.0, -2.0);
       vec3 l = normalize(lp - p);
       float diff = max(dot(n, l), 0.0);
-      float ao = 1.0 - aoAmt * 0.35;
+      // Distance-field occlusion: how far the field falls short of the step along the normal, so crevices darken.
+      float occ = 0.0;
+      float w = 1.0;
+      for (int k = 1; k <= 4; k++) {
+        float h = 0.018 * float(k) * max(stand, 0.05) / 0.28;
+        occ += w * max(0.0, h - mapDE(p + n * h, typ, powr, sc, fold, jc, sym)) / h;
+        w *= 0.55;
+      }
+      float ao = clamp(1.0 - aoAmt * occ * 0.75, 0.05, 1.0);
+      // March cost is a second crevice cue: rays that grazed many surfaces before hitting land in folds.
+      float cost = float(i) / float(max(steps, 1));
       float sh = 1.0;
       if (shAmt > 0.01) {
         float sd = 0.01;
@@ -319,8 +554,8 @@ void main() {
         }
         sh = mix(1.0, clamp(sh, 0.0, 1.0), shAmt);
       }
-      col = mapCol(p, typ, trapOn, tpal, pcyc, hue, sat) * (0.38 + diff * sh * ao);
-      col += glow * pow(max(dot(reflect(-l, n), -rd), 0.0), 6.0) * vec3(0.6, 0.75, 1.0);
+      col = mapCol(p, typ, trapOn, tpal, pcyc, hue, sat) * (0.16 + diff * sh) * ao * (1.0 - 0.6 * cost);
+      col += glow * 0.6 * ao * pow(max(dot(reflect(-l, n), -rd), 0.0), 12.0) * vec3(0.6, 0.75, 1.0);
       break;
     }
     t += d;
@@ -329,7 +564,8 @@ void main() {
   float mist = exp(-t * 0.22) * (0.45 + glow * 0.55);
   float aura = exp(-clamp(closest, 0.0, 4.0) * 5.5) * (0.55 + glow);
   col = mix(bg, col, hit);
-  col += mapCol(ro + rd * min(t, 6.0), typ, trapOn, tpal, pcyc, hue, sat) * (mist * (1.0 - hit) + aura);
+  // Mist and the near-miss aura light empty space only; on a hit they would wash the surface out.
+  col += mapCol(ro + rd * min(t, 6.0), typ, trapOn, tpal, pcyc, hue, sat) * (mist + aura) * (1.0 - hit);
   col = mix(col, bg, fogAmt * clamp(t / 14.0, 0.0, 1.0));
   if (dof > 0.5) col = mix(col, bg, 0.08);
   col += uAudio * fz0(35.0) * 0.12;
