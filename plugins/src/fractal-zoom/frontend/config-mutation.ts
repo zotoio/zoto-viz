@@ -84,6 +84,7 @@ export function fractalTypeLabel(type: string): string {
     kaleido: "Kaleidoscopic IFS",
     mandel2d: "Mandelbrot 2D",
     julia2d: "Julia 2D",
+    mandel3d: "Mandelbrot 3D",
   };
   return labels[row] ?? row;
 }

@@ -11,9 +11,10 @@ function vizHost(): FractalHost {
   return (globalThis as typeof globalThis & { zoto: FractalHost }).zoto;
 }
 
-let cfg: Record<string, string> = {};
+// Boot config arrives with init, not through onConfig, which only fires on later changes.
+let cfg: Record<string, string> = { ...(vizHost().getConfig?.() ?? {}) };
 let simT = 0;
-let lastType = "";
+let lastType = cfg.fractalType ?? "";
 
 vizHost().onConfig = (config) => {
   cfg = { ...config };

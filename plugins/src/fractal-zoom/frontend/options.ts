@@ -1,5 +1,7 @@
 /** View config → runtime options for the fractal zoom sky. */
 
+import { FRACTAL_PALETTES, type FractalPalette } from "../../../sdk/fractal-palette";
+
 export const FRACTAL_TYPES = [
   "mandelbulb",
   "mandelbox",
@@ -9,23 +11,20 @@ export const FRACTAL_TYPES = [
   "kaleido",
   "mandel2d",
   "julia2d",
+  "mandel3d",
 ] as const;
 export type FractalType = (typeof FRACTAL_TYPES)[number];
+
+/** Types the drive steers as a point on the complex plane (2D zooms and the Mandelbrot terrain). */
+export function isPlanarType(t: FractalType): boolean {
+  return t === "mandel2d" || t === "julia2d" || t === "mandel3d";
+}
 
 export const ZOOM_DIRECTIONS = ["in", "out", "pingpong"] as const;
 export type ZoomDirection = (typeof ZOOM_DIRECTIONS)[number];
 
-export const PALETTE_PRESETS = [
-  "cosmic",
-  "ember",
-  "ice",
-  "acid",
-  "mono",
-  "sunset",
-  "deep",
-  "neon",
-] as const;
-export type PalettePreset = (typeof PALETTE_PRESETS)[number];
+export const PALETTE_PRESETS = FRACTAL_PALETTES;
+export type PalettePreset = FractalPalette;
 
 export interface FractalPreset {
   id: string;
@@ -42,14 +41,15 @@ export interface FractalPreset {
 }
 
 export const FRACTAL_PRESETS: FractalPreset[] = [
-  { id: "bulb-classic", label: "Classic Dive", type: "mandelbulb", power: 8, palette: "cosmic", zoomSpeed: 0.55, glow: 0.35, fog: 0.2, morph: true },
-  { id: "box-abyss", label: "Deep Cathedral", type: "mandelbox", scale: 2.1, fold: 0.55, palette: "ember", zoomSpeed: 0.45, glow: 0.4, fog: 0.35, morph: false },
+  { id: "mandel-terrain", label: "Mandelbrot Terrain", type: "mandel3d", palette: "classic", zoomSpeed: 0.4, glow: 0.4, fog: 0.25, morph: false },
+  { id: "bulb-classic", label: "Classic Dive", type: "mandelbulb", power: 8, palette: "classic", zoomSpeed: 0.55, glow: 0.35, fog: 0.2, morph: true },
+  { id: "box-abyss", label: "Deep Cathedral", type: "mandelbox", scale: -1.5, fold: 0.55, palette: "ember", zoomSpeed: 0.45, glow: 0.4, fog: 0.35, morph: false },
   { id: "menger-tunnel", label: "Menger Tunnel", type: "menger", palette: "ice", zoomSpeed: 0.5, glow: 0.25, fog: 0.15, morph: false },
-  { id: "sierpinski-crystal", label: "Crystal Spire", type: "sierpinski", palette: "acid", zoomSpeed: 0.42, glow: 0.5, fog: 0.1, morph: true },
-  { id: "julia-quaternion", label: "Quaternion Bloom", type: "julia4d", palette: "sunset", zoomSpeed: 0.48, glow: 0.45, fog: 0.25, morph: true },
-  { id: "kaleido-ifs", label: "Kaleidoscope", type: "kaleido", palette: "neon", zoomSpeed: 0.4, glow: 0.55, fog: 0.2, morph: true },
-  { id: "mandel-deep", label: "Seahorse Valley", type: "mandel2d", palette: "deep", zoomSpeed: 0.6, glow: 0.3, fog: 0.05, morph: false },
-  { id: "julia-deep", label: "Julia Spiral", type: "julia2d", palette: "cosmic", zoomSpeed: 0.58, glow: 0.35, fog: 0.08, morph: true },
+  { id: "sierpinski-crystal", label: "Crystal Spire", type: "sierpinski", palette: "mono", zoomSpeed: 0.42, glow: 0.5, fog: 0.1, morph: true },
+  { id: "julia-quaternion", label: "Quaternion Bloom", type: "julia4d", palette: "topo", zoomSpeed: 0.48, glow: 0.45, fog: 0.25, morph: true },
+  { id: "kaleido-ifs", label: "Kaleidoscope", type: "kaleido", palette: "classic", zoomSpeed: 0.4, glow: 0.55, fog: 0.2, morph: true },
+  { id: "mandel-deep", label: "Seahorse Valley", type: "mandel2d", palette: "classic", zoomSpeed: 0.6, glow: 0.3, fog: 0.05, morph: false },
+  { id: "julia-deep", label: "Julia Spiral", type: "julia2d", palette: "ice", zoomSpeed: 0.58, glow: 0.35, fog: 0.08, morph: true },
 ];
 
 /** Host sliders clamp; pack only coerces types. */
@@ -132,7 +132,7 @@ export const FRACTAL_DEFAULTS: FractalOptions = {
   fog: 0.22,
   dof: false,
   renderScale: 1,
-  palette: "deep",
+  palette: "classic",
   paletteCycle: 0.25,
   orbitTrap: true,
   hueShift: 0,
