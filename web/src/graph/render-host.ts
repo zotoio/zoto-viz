@@ -383,8 +383,9 @@ export class RenderHost {
     scene: THREE.Scene,
     camera: THREE.Camera,
     log?: (msg: string) => void,
+    material?: THREE.Material,
   ): string | null {
-    return this.tileShader.probeTileSky(tileId, scene, camera, log);
+    return this.tileShader.probeTileSky(tileId, scene, camera, log, material);
   }
 
   compilePluginSky(
@@ -392,8 +393,9 @@ export class RenderHost {
     scene: THREE.Scene,
     camera: THREE.Camera,
     log?: (msg: string) => void,
+    material?: THREE.Material,
   ): boolean {
-    return this.tileShader.compilePluginSky(tileId, scene, camera, log);
+    return this.tileShader.compilePluginSky(tileId, scene, camera, log, material);
   }
 
   onTileShaderCompileFailed(tileId: string): void {

@@ -2373,12 +2373,14 @@ export class NetScene implements HostedView, RenderScalePane {
         meta.isShaderPack ?? true,
       );
     }
+    // The backdrop has the new sky's material on its sphere when it calls the probe: judge that one.
     const gpuProbe = this.host && opts && meta
       ? () => this.host!.probeTileSky(
         this.tileId,
         this.scene,
         this.camera,
         (m) => console.warn("zoto-viz tile shader:", m),
+        this.backdrop.mesh.material as THREE.Material,
       )
       : undefined;
     // Every install (or clear) needs its own first drawn frame before it counts as on screen.

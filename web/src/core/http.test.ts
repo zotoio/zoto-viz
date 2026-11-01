@@ -130,8 +130,8 @@ describe("apiFetch CSRF", () => {
   it("asks for the LAN operator token and sends it on the retry", async () => {
     setOperatorTokenForTests("");
     const seen: string[] = [];
-    const prompt = vi.fn(() => "lan-token");
-    window.prompt = prompt as unknown as typeof window.prompt;
+    const prompt = vi.fn<typeof window.prompt>(() => "lan-token");
+    window.prompt = prompt;
     globalThis.fetch = (async (url: string, init?: RequestInit) => {
       const path = String(url);
       const h = new Headers(init?.headers);
