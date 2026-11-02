@@ -73,7 +73,8 @@ function tagAquariumDecor(
     x: matrix[12] || 0,
     y,
     z: matrix[14] || 0,
-    yaw: Math.atan2(matrix[2] || 0, matrix[0] || scale),
+    // Heading from the nose column (local +Z), the same yaw hostMeshMatrixYawPos was given.
+    yaw: Math.atan2(matrix[8] || 0, matrix[10] || scale),
     scale,
     phase: extras.param1,
     speed: extras.param2 > 0 ? extras.param2 : 0.4,

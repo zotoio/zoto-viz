@@ -93,14 +93,17 @@ export function decodeHostMeshSlotPacket(
   return null;
 }
 
-/** Column-major 4×4 from Y-up yaw (radians) and translation (metres). */
+/**
+ * Column-major 4×4 from Y-up yaw (radians) and translation (metres). The model's local +Z (its nose)
+ * points along (sin yaw, 0, cos yaw), the heading packs move along (`x += sin(yaw)`, `z += cos(yaw)`).
+ */
 export function hostMeshMatrixYawPos(x: number, y: number, z: number, yaw: number, scale = 1): number[] {
   const c = Math.cos(yaw) * scale;
   const s = Math.sin(yaw) * scale;
   return [
-    c, 0, s, 0,
+    c, 0, -s, 0,
     0, scale, 0, 0,
-    -s, 0, c, 0,
+    s, 0, c, 0,
     x, y, z, 1,
   ];
 }

@@ -2267,11 +2267,14 @@ function feed(m: StateMsg): void {
   ];
   arcade.pacman?.view.setTicker?.(ticker);
   renderLegend(scene.currentMode, currentOpts);
-  sandbox.tick(shown.devices.slice(0, 80).map((d) => ({
+  // The same live nodes go to the shared sandbox and to each pane's own sandbox (#235).
+  const graphNodes = shown.devices.slice(0, 80).map((d) => ({
     id: d.ip,
     rate: d.packets,
     role: d.role,
-  })));
+  }));
+  sandbox.tick(graphNodes);
+  tileSandboxes.tick(graphNodes);
   const tsMode = modeById(modeSel.value);
   const tsActive = tsMode.pluginId ? pluginSpecs.find((p) => p.id === tsMode.pluginId) : undefined;
   typesafeHost.configure({

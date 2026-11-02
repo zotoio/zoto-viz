@@ -36,7 +36,7 @@ export type PaneSandboxGap = "present-tick" | "graph-read";
 export function paneSandboxGaps(spec: PluginView): PaneSandboxGap[] {
   const gaps: PaneSandboxGap[] = [];
   if (spec.viz?.presentTick === true) gaps.push("present-tick");
-  if (spec.capabilities?.includes("graph.read")) gaps.push("graph-read");
+  // graph.read reaches each pane sandbox through TileSandboxes.tick (#235), so it is no longer a gap.
   return gaps;
 }
 
@@ -69,6 +69,8 @@ export interface TileSandboxLike {
   unload(): void;
   /** Live config (PluginSandbox.setConfig: posts only to a pack that declares config.read). */
   setConfig?(config: Record<string, string>): void;
+  /** Graph nodes for a graph.read pack (PluginSandbox.tick: posts only when the pack declares graph.read). */
+  tick?(nodes: readonly { id: string; rate: number; role: string }[]): void;
 }
 
 /** The pane scene a tile's own writes land on. */
@@ -230,6 +232,11 @@ export class TileSandboxes<S extends TileSandboxLike> {
   /** One post per present to every tile's own sandbox. */
   frame(frame: VizDataFrame): void {
     for (const e of this.byTile.values()) e.sandbox.frame(frame);
+  }
+
+  /** One graph refresh to every tile's own sandbox (graph.read packs; #235). */
+  tick(nodes: readonly { id: string; rate: number; role: string }[]): void {
+    for (const e of this.byTile.values()) e.sandbox.tick?.(nodes);
   }
 
   /** Unload the tile's own sandbox; other tiles keep theirs. Every pane teardown goes through here or load(). */

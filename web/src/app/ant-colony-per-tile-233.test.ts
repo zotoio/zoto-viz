@@ -44,8 +44,8 @@ import {
 
 /**
  * #233 (UX Pro, ZotoBoss): a mosaic pane runs its pack in a sandbox of its own, with no "Preview
- * only" label, only when the pack needs none of the wires pane sandboxes still lack (presentTick,
- * graph.read: #235); every other pane stays on main.ts's shared sandbox with the label. Live config
+ * only" label, only when the pack needs none of the wires pane sandboxes still lack (presentTick;
+ * graph.read closed by #235); every other pane stays on main.ts's shared sandbox with the label. Live config
  * pushes reach pane sandboxes (one batched post per pane), so Ant panes own theirs. One answer,
  * ownsSandboxTile, picks both. Own-sandbox panes get 2 iframes / 2 modules, one post per present
  * each and their own pane UBO, and a teardown, failure ("<Pack> couldn't start." with Retry),
@@ -249,7 +249,7 @@ function noticeText(tileId: string): string | null {
 }
 
 describe("#233 which panes own a sandbox", () => {
-  it("(gate) a pane owns a sandbox, and drops Preview only, only for a pack needing no presentTick or graph.read", () => {
+  it("(gate) a pane owns a sandbox, and drops Preview only, only for a pack needing no presentTick (#235 closed graph.read)", () => {
     const tiles = new TileSandboxes<TileSandboxLike>({
       main: new AntTileSandbox(),
       create: () => new AntTileSandbox(),
@@ -262,7 +262,8 @@ describe("#233 which panes own a sandbox", () => {
       [BACKROOMS, []],
       [ANT, []],
       [VOXEL, ["present-tick"]],
-      [PULSE, ["graph-read"]],
+      // graph.read reaches each pane's own sandbox since #235 (TileSandboxes.tick), so Pulse owns one.
+      [PULSE, []],
     ];
     expect(ANT.capabilities, "Ant reads live config").toContain("config.read");
     for (const [spec, gaps] of cases) {
@@ -273,9 +274,9 @@ describe("#233 which panes own a sandbox", () => {
     }
     expect(tiles.owns(DRIVEN, BACKROOMS), "the tile the shared sandbox drives").toBe(false);
     tiles.sync(cases.map(([spec]) => ({ id: spec.id, spec })));
-    expect(tiles.tiles(), "panes that booted their own sandbox").toEqual([BACKROOMS.id, ANT.id]);
+    expect(tiles.tiles(), "panes that booted their own sandbox").toEqual([BACKROOMS.id, ANT.id, PULSE.id]);
     expect(tiles.sharedTiles(cases.map(([spec]) => spec.id)), "panes left on the shared sandbox (and its UBO)")
-      .toEqual([VOXEL.id, PULSE.id]);
+      .toEqual([VOXEL.id]);
     tiles.sync([]);
   });
 });
