@@ -348,6 +348,8 @@ export class Mosaic {
     onCloseLast: () => void;
     /** #242 N3: a pane left the wall. main.ts unloads the pane's own sandbox here, not at the next present. */
     onPaneDrop?: (id: string) => void;
+    /** A graph pane was bound to its scene (its view's mode is set). main.ts mounts the pack's own meshes here. */
+    onPaneScene?: (id: string, scene: NetScene) => void;
     /** Live tile picker (consent, setMode, sky sync). When set, pane chrome uses this instead of bare assignViews. */
     onPanePick?: (fromId: string, toId: string) => boolean | Promise<boolean>;
     paneCog?: (id: string) => HTMLButtonElement;
@@ -876,6 +878,7 @@ export class Mosaic {
         this.cfg.main.setMode(m, this.cfg.optsFor(m));
         this.cfg.main.retargetPanel(id);
         this.mainId = id;
+        this.cfg.onPaneScene?.(id, this.cfg.main);
       } else {
         const host = pane.querySelector<HTMLElement>(":scope > .mosaic-scene")
           ?? Object.assign(document.createElement("div"), { className: "mosaic-scene" });
@@ -885,6 +888,7 @@ export class Mosaic {
         const m = mosaicPaneMode(id);
         s.setMode(m, this.cfg.optsFor(m));
         this.extras.push({ id, scene: s });
+        this.cfg.onPaneScene?.(id, s);
       }
       this.holdPluginSkies(new Set([id]));
       this.auditPane(id, "bind");

@@ -45,7 +45,10 @@ const AQUARIUM_PLANT_SCALE = 2.6;
 /** Designer fish are about 8–20 cm; this sits them in the tank without filling it. */
 const AQUARIUM_FISH_SCALE = 1.35;
 
-function pinAquariumContents(lane: HostMeshLane): void {
+/** The lane methods a pack's fixed contents need. */
+export type MeshPinLane = Pick<HostMeshLane, "applySlotBuffer" | "setScenery">;
+
+function pinAquariumContents(lane: MeshPinLane): void {
   const plant = (x: number, z: number, yaw: number) => ({
     matrix: hostMeshMatrixYawPos(x, -0.74, z, yaw, AQUARIUM_PLANT_SCALE),
   });
@@ -88,7 +91,7 @@ const KOI_FISH_SCALE = 0.48;
 const KOI_LILY_SCALE = 0.32;
 const KOI_ROCK_SCALE = 0.9;
 
-function pinKoiContents(lane: HostMeshLane): void {
+function pinKoiContents(lane: MeshPinLane): void {
   const fish: [number, number, number, number, number][] = [
     [0, -0.55, 0.04, 0.15, 0.4],
     [0, 0.35, 0.05, -0.4, 2.1],
@@ -117,6 +120,39 @@ function pinKoiContents(lane: HostMeshLane): void {
   for (const [asset, instances] of byAsset) {
     lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, instances));
   }
+}
+
+/** A pack's shipped scenery and fixed contents, pinned into a lane with no sandbox packets. */
+export function pinPackContents(lane: MeshPinLane, packId: string): void {
+  if (packId === "aquarium") {
+    lane.setScenery(buildAquariumTank());
+    pinAquariumContents(lane);
+  } else if (packId === "koi-pond") {
+    pinKoiContents(lane);
+  }
+}
+
+/**
+ * A mosaic pane that shows a pack mounts that pack's host meshes into the pane's own scene.
+ * Without this a pane that is not the live view stays a dark field until its view is promoted
+ * (the live path only runs in applyMode). `stillShown` guards against the pane being rebound
+ * while its assets load.
+ */
+export async function mountPaneHostMeshes(
+  lane: Pick<HostMeshLane, "clear" | "setAssetOrder" | "ensureAssets"> & MeshPinLane,
+  spec: { id: string; assets?: HostMeshAssetDecl[] },
+  stillShown: () => boolean,
+): Promise<void> {
+  lane.clear();
+  const decls = spec.assets;
+  if (!decls?.length) return;
+  lane.setAssetOrder(decls.map((d) => d.id));
+  await lane.ensureAssets(spec.id, decls);
+  if (!stillShown()) {
+    lane.clear();
+    return;
+  }
+  pinPackContents(lane, spec.id);
 }
 
 /**
@@ -160,12 +196,7 @@ export function createHostMeshBridge(
         into.clear();
         return false;
       }
-      if (spec.id === "aquarium") {
-        into.setScenery(buildAquariumTank());
-        pinAquariumContents(into);
-      } else if (spec.id === "koi-pond") {
-        pinKoiContents(into);
-      }
+      pinPackContents(into, spec.id);
       return !into.allAssetsFailed();
     },
     applySlotBuffer(data) {

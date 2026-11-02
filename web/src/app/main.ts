@@ -264,7 +264,7 @@ import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-vi
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { applyVizWriteBatch } from "../plugins/viz-write-batch";
 import { notePackPerfPresent } from "./pack-perf-report";
-import { createHostMeshBridge, tryApplyHostMeshBridge } from "./host-mesh-bridge";
+import { createHostMeshBridge, mountPaneHostMeshes, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { installTileSkyShader } from "./plugin-sky-compile";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
@@ -702,6 +702,21 @@ function hostMeshCanPlace(packId: string): boolean {
   const current = pluginSpecForMode(modeSel.value);
   if (current?.id !== packId) return false;
   return !pluginHasFrontend(current) || sandbox.readyPack === packId;
+}
+/** A pane's pack mounts its host meshes into that pane's own scene, live or not. */
+function mountPaneScene(id: string, paneScene: NetScene): void {
+  const lane = paneScene.hostMeshLane;
+  const spec = pluginSpecForMode(id);
+  if (!spec) {
+    lane.clear();
+    return;
+  }
+  // A pane restored at boot never runs the view-switch consent step, so its pack stayed without
+  // consent (preview-only, no sandbox) until `look`. Ask now: autoconsent grants eligible packs.
+  if (pluginNeedsReview(spec)) {
+    void ensureReviewed(spec, refreshPluginSignal.signal, { wait: false }).catch(() => {});
+  }
+  void mountPaneHostMeshes(lane, spec, () => mosaic?.graphScene(id) === paneScene).catch(() => {});
 }
 /** Mosaic pane showing a sandboxed pack that the single sandbox is not driving. */
 function mosaicPanePreviewOnly(tileId: string): boolean {
@@ -2414,6 +2429,7 @@ mosaic = new Mosaic({
   },
   // #242 N3: a removed pane's own sandbox unloads now; the present listener's sync stays the backstop.
   onPaneDrop: (id) => tileSandboxes.drop(id),
+  onPaneScene: (id, paneScene) => mountPaneScene(id, paneScene),
   onPanePick: (from, to) => pickMosaicPane(from, to),
   paneCog: (id) => makeViewCogButton({
     className: "mosaic-pane-cog",
