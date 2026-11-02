@@ -1948,10 +1948,10 @@ async def broadcast_loop(app: web.Application) -> None:
     state: State = app["state"]
     while True:
         signals.observe_capture(state)
-        # Refresh even with no browser so MCP get_state hits this memo.
-        snap = publish_state(state, refresh=True)
         clients: set[web.WebSocketResponse] = app["clients"]
         if clients:
+            # refresh=True so a 1s cache does not freeze the socket on a fast tick.
+            snap = publish_state(state, refresh=True)
             msg = json.dumps({"type": "state", **snap})
             await asyncio.gather(*(ws.send_str(msg) for ws in list(clients)), return_exceptions=True)
         await asyncio.sleep(1)
