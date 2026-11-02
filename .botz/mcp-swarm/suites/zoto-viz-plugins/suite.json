@@ -1,0 +1,4580 @@
+{
+  "kind": "botz-suite",
+  "schemaVersion": 1,
+  "id": "4bb33839-37ab-44f5-a7fd-609106db50b1",
+  "capturedAt": "2026-11-01T22:28:15.490Z",
+  "name": "zoto-viz-plugins",
+  "target": {
+    "transport": "streamable-http",
+    "url": "http://127.0.0.1:7020/mcp",
+    "headers": {
+      "Authorization": "Bearer ${env:ZOTO_VIZ_OPERATOR_TOKEN}"
+    }
+  },
+  "surface": {
+    "protocolVersion": "2025-03-26",
+    "serverName": "zoto-viz-plugins",
+    "serverVersion": "4",
+    "capabilities": [
+      "tools"
+    ],
+    "tools": [
+      {
+        "name": "list_features",
+        "description": "Map of every settable key and which tool writes it. Use when you do not yet know whether to call set_settings, set_view, set_plugin, or something else. No arguments. Returns theme/chrome/feed/anim enums (including graphFabric, graphSpace, graphLayout, backdrop), dice, and a how-to that names the tool for views, knobs, consent, sources, and LAN. Call this before inventing a settings key. Camera and microphone are absent on purpose.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "get_settings",
+        "description": "Read the startup profile plus the queued live patch. Use when you need the last settings this server was asked to apply (theme, mode, anim, plugins, temper). No arguments. Returns profile, agent, live, settings, aiControl. This is not the live canvas: a queued mode can differ from the picture on screen until the open tab applies the patch. Do not treat it as proof a sky or view rendered.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "set_settings",
+        "description": "Patch the open monitor. Use for theme, motion, mosaic, sky, feed, dice repeat, sound, and agent look \u2014 not for switching a view (set_view) or one plugin's knobs (set_plugin). Pass only whitelist keys from list_features: theme, dream, mode, chrome, redact, merge, autoconsent, sound (speakers; starts off), feed, show, filters, anim, modeOptions, arcade, plugins, agent {clear, shader, shaderPhoto, decos}, dice {on, periodMin, include}, shuffle, temper, weather, control, model. anim.audioNodes true follows the mic beat; false keeps graph motion eased. anim.skyAudio false unless a pulse fade is intended. Do not write uBright. Camera and microphone are operator-only and are rejected. Queues a live patch; wait about a second, then look at the open UI.",
+        "schemaHash": "c3a0f7617994c37a",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "theme": {
+              "type": "string",
+              "enum": [
+                "midnight",
+                "ocean",
+                "nord",
+                "dracula",
+                "solarized",
+                "gruvbox",
+                "ember",
+                "neon",
+                "tactical",
+                "paper",
+                "dusk",
+                "void",
+                "vhs",
+                "acid",
+                "ice",
+                "phosphor"
+              ]
+            },
+            "dream": {
+              "type": "boolean"
+            },
+            "mode": {
+              "type": "string",
+              "description": "Catalog view id, e.g. plugin:command"
+            },
+            "chrome": {
+              "type": "string",
+              "enum": [
+                "top",
+                "left",
+                "right"
+              ]
+            },
+            "redact": {
+              "type": "boolean"
+            },
+            "merge": {
+              "type": "boolean"
+            },
+            "autoconsent": {
+              "type": "boolean",
+              "description": "Auto-grant source-review consent for shipped plugins/src and ~/.zoto-viz/plugins/local zips (not contrib zips)."
+            },
+            "sound": {
+              "type": "boolean",
+              "description": "Speaker output (plugin SFX, arcade, spoken replies). Starts off."
+            },
+            "temper": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "weather": {
+              "type": "string",
+              "enum": [
+                "hush",
+                "drift",
+                "pulse",
+                "storm"
+              ]
+            },
+            "control": {
+              "type": "boolean",
+              "description": "Server AI Control"
+            },
+            "model": {
+              "type": "string",
+              "description": "Ollama tag or Cursor SDK model id"
+            },
+            "shuffle": {
+              "type": "boolean",
+              "description": "One-shot dice roll (same as Settings \u2192 Dice roll now). Repeat uses dice.on + dice.periodMin."
+            },
+            "dice": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "on": {
+                  "type": "boolean",
+                  "description": "Header dice repeat switch"
+                },
+                "periodMin": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 60,
+                  "description": "Minutes between automatic rolls while on"
+                },
+                "include": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "theme": {
+                      "type": "boolean"
+                    },
+                    "view": {
+                      "type": "boolean"
+                    },
+                    "mosaic": {
+                      "type": "boolean"
+                    },
+                    "feed": {
+                      "type": "boolean"
+                    },
+                    "motion": {
+                      "type": "boolean"
+                    },
+                    "style": {
+                      "type": "boolean"
+                    },
+                    "physics": {
+                      "type": "boolean"
+                    },
+                    "knobs": {
+                      "type": "boolean"
+                    },
+                    "show": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "handoff": {
+                  "type": "boolean"
+                },
+                "cycle": {
+                  "type": "boolean"
+                },
+                "labelsMax": {
+                  "type": "number",
+                  "minimum": 8,
+                  "maximum": 120
+                },
+                "sparksMax": {
+                  "type": "number",
+                  "minimum": 20,
+                  "maximum": 3000
+                },
+                "sparkPeak": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 80
+                },
+                "mosaicMax": {
+                  "type": "string",
+                  "enum": [
+                    "4",
+                    "6",
+                    "8"
+                  ]
+                },
+                "feedDensityMax": {
+                  "type": "number",
+                  "minimum": 12,
+                  "maximum": 80
+                },
+                "nodeTop": {
+                  "type": "number",
+                  "minimum": 8,
+                  "maximum": 80
+                }
+              }
+            },
+            "feed": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "on": {
+                  "type": "boolean"
+                },
+                "source": {
+                  "type": "string",
+                  "enum": [
+                    "traffic",
+                    "transcript",
+                    "both"
+                  ]
+                },
+                "layout": {
+                  "type": "string",
+                  "enum": [
+                    "ticker",
+                    "bars",
+                    "both"
+                  ]
+                },
+                "scope": {
+                  "type": "string",
+                  "enum": [
+                    "lan",
+                    "selected",
+                    "any"
+                  ]
+                },
+                "modulate": {
+                  "type": "boolean"
+                },
+                "includeSources": {
+                  "type": "boolean"
+                },
+                "density": {
+                  "type": "number",
+                  "minimum": 12,
+                  "maximum": 80
+                },
+                "textSize": {
+                  "type": "number",
+                  "minimum": 10,
+                  "maximum": 20
+                }
+              }
+            },
+            "show": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "lan": {
+                  "type": "boolean"
+                },
+                "internet": {
+                  "type": "boolean"
+                },
+                "multicast": {
+                  "type": "boolean"
+                },
+                "offline": {
+                  "type": "boolean"
+                },
+                "labels": {
+                  "type": "boolean"
+                },
+                "cpuIdle": {
+                  "type": "boolean"
+                }
+              }
+            },
+            "filters": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "allowNames": {
+                  "type": "string"
+                },
+                "blockNames": {
+                  "type": "string"
+                },
+                "allowNets": {
+                  "type": "string"
+                },
+                "blockNets": {
+                  "type": "string"
+                }
+              }
+            },
+            "anim": {
+              "type": "object",
+              "additionalProperties": true,
+              "properties": {
+                "follow": {
+                  "type": "boolean"
+                },
+                "cycle": {
+                  "type": "boolean"
+                },
+                "randomize": {
+                  "type": "boolean"
+                },
+                "skyAudio": {
+                  "type": "boolean"
+                },
+                "bgAudio": {
+                  "type": "boolean"
+                },
+                "gridAudio": {
+                  "type": "boolean"
+                },
+                "audioCamera": {
+                  "type": "boolean"
+                },
+                "camTheme": {
+                  "type": "boolean"
+                },
+                "audioNodes": {
+                  "type": "boolean"
+                },
+                "audioPhysics": {
+                  "type": "boolean"
+                },
+                "audioParts": {
+                  "type": "boolean"
+                },
+                "autoTune": {
+                  "type": "boolean"
+                },
+                "mosaicSharedTheme": {
+                  "type": "boolean"
+                },
+                "mosaicUniqueSkies": {
+                  "type": "boolean"
+                },
+                "yawPeriod": {
+                  "type": "number",
+                  "minimum": 40,
+                  "maximum": 480
+                },
+                "pitchDeg": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 20
+                },
+                "pitchPeriod": {
+                  "type": "number",
+                  "minimum": 6,
+                  "maximum": 40
+                },
+                "zoom": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 0.7
+                },
+                "zoomPeriod": {
+                  "type": "number",
+                  "minimum": 15,
+                  "maximum": 180
+                },
+                "cyclePeriod": {
+                  "type": "number",
+                  "minimum": 15,
+                  "maximum": 180
+                },
+                "skyOpacity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "skyBright": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "skySpeed": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4
+                },
+                "skyEase": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "skyPhotoS": {
+                  "type": "number",
+                  "minimum": 15,
+                  "maximum": 300
+                },
+                "skyAiMin": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 30
+                },
+                "bgOpacity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "gridOpacity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "gridBright": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "gridSize": {
+                  "type": "number",
+                  "minimum": 16,
+                  "maximum": 160
+                },
+                "gridFollow": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "audioSens": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "camAudio": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "camChange": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "camGaze": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "camInertia": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "moveEase": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "labelWeight": {
+                  "type": "number",
+                  "minimum": 0.5,
+                  "maximum": 2
+                },
+                "labelCount": {
+                  "type": "number",
+                  "minimum": 8,
+                  "maximum": 120
+                },
+                "nodeWeight": {
+                  "type": "number",
+                  "minimum": 0.4,
+                  "maximum": 2.5
+                },
+                "edgeWeight": {
+                  "type": "number",
+                  "minimum": 0.3,
+                  "maximum": 2.5
+                },
+                "edgeOpacity": {
+                  "type": "number",
+                  "minimum": 0.05,
+                  "maximum": 1
+                },
+                "edgeGlowAmt": {
+                  "type": "number",
+                  "minimum": 0.2,
+                  "maximum": 2
+                },
+                "edgeGlowSpeed": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 3
+                },
+                "partAmt": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "partBusy": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 3
+                },
+                "partQuiet": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 4000
+                },
+                "partPeak": {
+                  "type": "number",
+                  "minimum": 1,
+                  "maximum": 80
+                },
+                "partCap": {
+                  "type": "number",
+                  "minimum": 20,
+                  "maximum": 4000
+                },
+                "partSpeed": {
+                  "type": "number",
+                  "minimum": 0.25,
+                  "maximum": 3
+                },
+                "partSize": {
+                  "type": "number",
+                  "minimum": 0.3,
+                  "maximum": 2.5
+                },
+                "magnetSelf": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "magnetGateway": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "magnetLan": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "magnetLocal": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "magnetInternet": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "magnetMulticast": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "magnetCross": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "magnetRange": {
+                  "type": "number",
+                  "minimum": 0.15,
+                  "maximum": 2
+                },
+                "magnetTraffic": {
+                  "type": "number",
+                  "minimum": -1,
+                  "maximum": 1
+                },
+                "gravity": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "swirl": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "chargeAmt": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "spring": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "linkSpan": {
+                  "type": "number",
+                  "minimum": 0.4,
+                  "maximum": 2.5
+                },
+                "drag": {
+                  "type": "number",
+                  "minimum": 0.12,
+                  "maximum": 0.7
+                },
+                "centerPull": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 2
+                },
+                "stringAmt": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                },
+                "backdrop": {
+                  "type": "string",
+                  "enum": [
+                    "none",
+                    "fractal",
+                    "space",
+                    "matrix",
+                    "live",
+                    "aurora",
+                    "rain",
+                    "ocean",
+                    "fire",
+                    "warp",
+                    "clouds",
+                    "circuit",
+                    "plasma",
+                    "lattice",
+                    "dusk",
+                    "void",
+                    "vhs",
+                    "nebula",
+                    "acid",
+                    "ice",
+                    "dawn",
+                    "phosphor",
+                    "earth",
+                    "meadow",
+                    "tunnel",
+                    "bomb",
+                    "reef",
+                    "tornado",
+                    "desert",
+                    "amazon",
+                    "aquarium",
+                    "macaws",
+                    "ruins",
+                    "fungi",
+                    "alpine",
+                    "bamboo",
+                    "blossom",
+                    "fjord",
+                    "glacier",
+                    "lagoon",
+                    "lava",
+                    "lavender",
+                    "saltflat",
+                    "seastacks",
+                    "dynamic",
+                    "custom",
+                    "plugin"
+                  ]
+                },
+                "gridShape": {
+                  "type": "string",
+                  "enum": [
+                    "square",
+                    "hex",
+                    "triangle",
+                    "diamond",
+                    "circle"
+                  ]
+                },
+                "audioDrive": {
+                  "type": "string",
+                  "enum": [
+                    "mic",
+                    "traffic",
+                    "node"
+                  ]
+                },
+                "themeCycle": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "cadence",
+                    "audio"
+                  ]
+                },
+                "skyCycle": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "cadence",
+                    "audio"
+                  ]
+                },
+                "edgeGlow": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "comet",
+                    "pulse"
+                  ]
+                },
+                "nodeShape": {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "mixed",
+                    "sphere",
+                    "cube",
+                    "star",
+                    "octahedron",
+                    "diamond",
+                    "disc",
+                    "drone",
+                    "ring",
+                    "capsule",
+                    "crystal",
+                    "teardrop"
+                  ]
+                },
+                "graphFabric": {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "off",
+                    "tubes",
+                    "cloth",
+                    "crystals",
+                    "voxels",
+                    "neon",
+                    "beads",
+                    "pillars",
+                    "orbit",
+                    "wire",
+                    "lattice",
+                    "ribbon",
+                    "dots",
+                    "constellation",
+                    "hex",
+                    "circuit",
+                    "ink",
+                    "map",
+                    "tiles",
+                    "mosaic"
+                  ]
+                },
+                "graphSpace": {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "space",
+                    "plane"
+                  ]
+                },
+                "graphLayout": {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "force",
+                    "tree",
+                    "radial",
+                    "concentric",
+                    "cluster",
+                    "dag",
+                    "globe",
+                    "bars",
+                    "scatter",
+                    "helix",
+                    "vortex",
+                    "bloom",
+                    "ripple",
+                    "weave",
+                    "cascade",
+                    "knot",
+                    "hourglass",
+                    "coral",
+                    "tide",
+                    "mobius",
+                    "spine",
+                    "halo",
+                    "fold",
+                    "drift",
+                    "sierpinski",
+                    "hilbert",
+                    "koch",
+                    "julia",
+                    "spectrum",
+                    "waterfall",
+                    "carrier",
+                    "phased",
+                    "heap",
+                    "trie",
+                    "hashmap",
+                    "matrix",
+                    "queue"
+                  ]
+                },
+                "graphLinks": {
+                  "type": "string",
+                  "enum": [
+                    "auto",
+                    "arrows",
+                    "bundle",
+                    "both"
+                  ]
+                },
+                "mosaic": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "4",
+                    "6",
+                    "8",
+                    "16"
+                  ]
+                },
+                "hero": {
+                  "type": "string",
+                  "enum": [
+                    "off",
+                    "left",
+                    "center",
+                    "right"
+                  ]
+                },
+                "focus": {
+                  "type": "string",
+                  "enum": [
+                    "activity",
+                    "motion",
+                    "cloud",
+                    "selection"
+                  ]
+                },
+                "bgColor": {
+                  "type": "string"
+                },
+                "gridColor": {
+                  "type": "string"
+                }
+              }
+            },
+            "modeOptions": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object"
+              }
+            },
+            "arcade": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "plugins": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "object"
+              }
+            },
+            "agent": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "clear": {
+                  "type": "boolean"
+                },
+                "shader": {
+                  "type": "string"
+                },
+                "shaderPhoto": {
+                  "type": "string"
+                },
+                "decos": {
+                  "type": "array"
+                }
+              }
+            }
+          },
+          "additionalProperties": true
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "list_plugins",
+        "description": "List views the header menu can show. Use before set_view or set_plugin, and whenever the view dropdown is empty. Omit id for every row; pass a bare id (topology, not plugin:topology) for one. Each row has mode (pass that string to set_view), knobs (keys for set_plugin), and saved values. Also returns errors and blocked. plugins:[] plus an errors entry means the catalog scan refused the menu (often two plugin directories whose names slug to the same id). Values are the startup profile, not unsaved live knob edits.",
+        "schemaHash": "8f0eec873706449c",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Optional plugin id to return only that row"
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "set_plugin",
+        "description": "Set one view's knobs. Use after list_plugins shows that id's knob keys. Pass {id, values}. id is bare (cypher-cic, not plugin:cypher-cic). values is an object of knob key \u2192 string; booleans are \"1\" or \"0\". Unknown keys error. The reserved prompt key is the AI Dynamic brief for that view. Also queues modeOptions for plugin:<id>. Does not switch the view \u2014 call set_view for that. Does not consent code.",
+        "schemaHash": "59b883bb759fbdc0",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string",
+              "description": "Plugin id (not plugin: prefix)"
+            },
+            "values": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Knob key \u2192 string value (booleans as 0/1)"
+            }
+          },
+          "required": [
+            "id",
+            "values"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "set_view",
+        "description": "Switch the open monitor's VIEW. Use when the user wants a different picture. Pass {mode} copied from list_plugins (the mode field), e.g. plugin:topology or plugin:fluid-dyn. Do not invent ids and do not strip or add plugin: yourself if list_plugins already returned mode. Queues a live patch the open tab applies within about a second; a tab that loaded while the catalog was empty must be reloaded. get_settings showing the mode is not proof the canvas changed. Sky stays near-black (about 5,10,22) until consent_plugin if the pack has TypeScript or GLSL.",
+        "schemaHash": "5f930528d197175e",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "mode": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "mode"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "set_agent",
+        "description": "Set the in-monitor agent's temper, weather, or AI Control. Use for the chat agent inside zoto-viz, not for theme or view. Pass any of temper (integer 0\u2013100), weather (hush, drift, pulse, or storm), control (boolean). temper also scales Ollama temperature. weather is how often AI Dynamic rebuilds. control must be on before draft_plugin can write plugins/src. Empty arguments error.",
+        "schemaHash": "b9924963ff14394e",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "temper": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 100
+            },
+            "weather": {
+              "type": "string",
+              "enum": [
+                "hush",
+                "drift",
+                "pulse",
+                "storm"
+              ]
+            },
+            "control": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "roll_dice",
+        "description": "Roll the dice once. Use for a single reshuffle of the groups left on in Settings \u2192 Dice (theme, view, mosaic, feed, motion, physics, knobs by default). No arguments. Does not flip the header repeat switch \u2014 that is set_settings {dice:{on, periodMin}}. Chrome, camera, and microphone stay. Filters and prompts stay. Does not start a chat turn.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "get_state",
+        "description": "Read the live LAN snapshot. Use when you need devices, flows, services, or radio as the monitor sees them now. No arguments. Same payload as GET /api/state. Fails if this MCP call has no monitor process attached. Not a settings read \u2014 use get_settings for theme and view.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "get_pack_perf",
+        "description": "Read the latest pack frame timings the browser posted. Use when a view is slow or you need pack-level frame numbers, not the HUD fps. No arguments. The page must have been loaded with ?packPerf=1 or localStorage zoto-viz.packPerf=1 (set before load or from another tab) or the buffer stays empty. Does not change settings.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "get_traffic",
+        "description": "Read recent packets. Use after get_state when you need flows for one address or a group. Pass ip: a host address, @lan, @internet, @any, or a comma list. Optional peer and since (unix seconds). Unknown ip returns an error. Does not change capture.",
+        "schemaHash": "6b4adf703dfbdf4f",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "ip": {
+              "type": "string"
+            },
+            "peer": {
+              "type": "string"
+            },
+            "since": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "ip"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "get_rf_watch",
+        "description": "Read the Wi-Fi watch list. Use before set_rf_watch, or to see the channel plan and current tune. No arguments. Returns ssids, dwell, rotate, and what the radio is doing.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "set_rf_watch",
+        "description": "Replace the Wi-Fi SSID watch list. Use when Air SSIDs should follow specific names. Pass ssids (string list or comma-separated), and optionally other (boolean), dwell (seconds), rotate (boolean). At least one of those keys is required. Persists and rewrites the hopper plan. Read first with get_rf_watch.",
+        "schemaHash": "6084b4016439ed54",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "ssids": {
+              "description": "String list or comma-separated names"
+            },
+            "other": {
+              "type": "boolean"
+            },
+            "dwell": {
+              "type": "number"
+            },
+            "rotate": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "consent_plugin",
+        "description": "Allow one plugin's TypeScript, Python, or GLSL to run. Use after you change frontend/, backend/, datasource/, or sky/, or when a plugin sky stays near-black (about 5,10,22). Pass {id, kind}. id is bare. kind authored means you wrote it; reviewed means you only read the source. Then set_view. YAML-only plugins return needed:false. A hash change invalidates the old stamp \u2014 consent again. autoconsent via set_settings covers shipped src and local zips only, not contrib zips.",
+        "schemaHash": "c17a46804200b9da",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "reviewed",
+                "authored"
+              ]
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "draft_plugin",
+        "description": "Validate a shipped plugin tree, and optionally write it. Use when the plugin belongs in plugins/src/<id>/ (the git catalog). Pass files (relative path \u2192 text, plugin.yml required) or legacy yaml. install true writes the tree only when AI Control is already on (set_agent {control:true}); otherwise it validates and does not write. Never packs a zip and does not git-add. For a home-dir experiment use publish_local_plugin.",
+        "schemaHash": "ea276d2d03aed7ce",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "files": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              }
+            },
+            "yaml": {
+              "type": "string",
+              "description": "Legacy lone plugin.yml body"
+            },
+            "install": {
+              "type": "boolean",
+              "default": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "list_profiles",
+        "description": "List saved UI profiles. Use before apply_profile. No arguments. Each row has id, label, shipped, and whether it is the default. Does not change the open view.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "apply_profile",
+        "description": "Load a saved profile onto the open UI. Use when the user names a profile from list_profiles. Pass {id}. Same whitelist as set_settings, so camera and microphone in a profile are dropped. Unknown id errors. Queues a live patch; wait, then look at the canvas. Does not set the profile as the startup default.",
+        "schemaHash": "a2151ca7aa5b132d",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "list_memories",
+        "description": "List curated memories the in-monitor chat agent sees on later turns. Use before add_memory or delete_memory. No arguments. Returns memories with id and text. Not LAN state and not the view prompt (that is set_plugin prompt).",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "add_memory",
+        "description": "Store one memory for later in-monitor chat turns. Use when the user asks to remember a fact. Pass {text}. Empty text errors. Returns the new row and the full list. Each call adds another row; it does not update by id.",
+        "schemaHash": "89a9141eb3c6b09c",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": false,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "delete_memory",
+        "description": "Delete curated chat memories. Use after list_memories, when the user wants one fact or the whole list gone. Pass {id} to remove that row. Omit id to clear every memory. Returns the list that remains. Does not touch the view prompt or LAN state.",
+        "schemaHash": "31ff75f529c07bfb",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "destructiveHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "list_sources",
+        "description": "List host headline sources. Use before set_source or delete_source. No arguments. Returns the registry in ~/.zoto-viz/sources.yml plus the last poll. Kinds: rss, http, file, journal, kmsg. Headlines also appear on GET /api/state. feed:true on a source is what puts it on the on-screen ticker (set_settings feed.on still has to be true).",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "list_source_library",
+        "description": "List third-party datasource recipes that are not polled yet. Use when a plugin or view should consume a public feed (weather, quakes, news, prices) instead of inventing a URL. No arguments. Returns id, label, vendor, type, hint, and extends. Then set_source {library: id} or {library: [id, id], feed: true} to combine and enable. Plugins name the same ids under visualisation.yml datasource.library.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "set_source",
+        "description": "Create or update headline sources. Use after list_sources, or pass library from list_source_library to add a third-party feed. library is one id or a list to combine (usgs-quakes, bbc-news). interval, feed, url, and fields overlay every chosen recipe. Otherwise pass type rss, http, file, journal, or kmsg. rss/http need a public https url. file needs a path under the home directory. journal is journalctl --user. kmsg reads /dev/kmsg. Same id updates that row. Library rows stay off the ticker until feed is true.",
+        "schemaHash": "49dd8b08d0e46dde",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "library": {
+              "description": "Source-library id, or a list of ids to combine. See list_source_library.",
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                }
+              ]
+            },
+            "type": {
+              "type": "string",
+              "enum": [
+                "rss",
+                "http",
+                "file",
+                "journal",
+                "kmsg"
+              ]
+            },
+            "label": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string",
+              "description": "Public HTTPS URL for rss / http"
+            },
+            "path": {
+              "type": "string",
+              "description": "Local file under $HOME or ~/.zoto-viz"
+            },
+            "unit": {
+              "type": "string",
+              "description": "Optional systemd user unit for type=journal"
+            },
+            "interval": {
+              "type": "number",
+              "minimum": 15,
+              "maximum": 86400
+            },
+            "enabled": {
+              "type": "boolean"
+            },
+            "feed": {
+              "type": "boolean",
+              "description": "Show headlines on the live feed ticker"
+            },
+            "fields": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number"
+                ]
+              },
+              "description": "JSON field map for type=http (list, title, caption, image, link, filter, expand)"
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "delete_source",
+        "description": "Remove one headline source from ~/.zoto-viz/sources.yml. Use after list_sources, when that feed should stop polling. Pass {id}. Unknown id errors. Does not delete a plugin, a plugin instance, or the on-screen feed toggle (that is set_settings).",
+        "schemaHash": "a2151ca7aa5b132d",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "destructiveHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "list_plugin_instances",
+        "description": "List extra catalog rows that reuse a shipped plugin. Use before set_plugin_instance. No arguments. Each row is plugin + instance id with a source and field picks (~/.zoto-viz/plugin-instances.yml). The view id on screen is plugin:<plugin>:<id>. Does not copy the plugin tree.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "set_plugin_instance",
+        "description": "Add or update an extra row on a shipped plugin. Use when one pack should appear twice with a different source (carousel, hn-rain, hn-term), not when you need a new plugin. Pass plugin (bare catalog id) and id (instance slug). Optional name, hint, source, title, caption, image, link, filter become that row's defaults. Open it with set_view {mode:\"plugin:<plugin>:<id>\"}. Does not duplicate files. Shipped rows stay if you only meant to change knobs \u2014 that is set_plugin.",
+        "schemaHash": "141e4f69b4875760",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "plugin": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "hint": {
+              "type": "string"
+            },
+            "source": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "caption": {
+              "type": "string"
+            },
+            "image": {
+              "type": "string"
+            },
+            "link": {
+              "type": "string"
+            },
+            "filter": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "plugin",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "delete_plugin_instance",
+        "description": "Remove one operator-added plugin instance. Use after list_plugin_instances. Pass {plugin, id}. Shipped instances that came with the pack stay. Does not delete the plugin tree or a headline source.",
+        "schemaHash": "ee2adfd22fc8e437",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "plugin": {
+              "type": "string"
+            },
+            "id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "plugin",
+            "id"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "destructiveHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "get_sdm",
+        "description": "Read Nest Device Access status without secrets. Use before set_sdm or list_cameras. No arguments. Returns the PCM URL, linked flag, devices, and recent Pub/Sub events. Config file is ~/.zoto-viz/sdm.yml. linked false means set_sdm still needs a code.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "list_cameras",
+        "description": "List Nest cameras and doorbells from the last devices poll. Use when the user asks what cameras are linked. No arguments. Empty devices with linked false means OAuth is not finished \u2014 get_sdm then set_sdm. Does not start a live stream.",
+        "schemaHash": "c3de9366a788bda4",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "set_sdm",
+        "description": "Save Nest Device Access config and/or queue an OAuth code. Use after get_sdm shows what is missing. Pass any of enterprise_id (Device Access project UUID, not the GCP project id), gcp_project, client_id, client_secret, redirect_uri, topic, subscription, code. client_id and client_secret must be a Web OAuth client whose redirect is https://www.google.com. Pass code only after the PCM page redirects to google.com?code=... Secrets stay in ~/.zoto-viz/sdm.yml and are not echoed back.",
+        "schemaHash": "a80b498e8d41a47a",
+        "writeLike": true,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "enterprise_id": {
+              "type": "string",
+              "description": "Device Access project UUID"
+            },
+            "gcp_project": {
+              "type": "string"
+            },
+            "client_id": {
+              "type": "string"
+            },
+            "client_secret": {
+              "type": "string"
+            },
+            "redirect_uri": {
+              "type": "string"
+            },
+            "topic": {
+              "type": "string"
+            },
+            "subscription": {
+              "type": "string"
+            },
+            "code": {
+              "type": "string",
+              "description": "PCM OAuth authorization code"
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "get_logs",
+        "description": "Read the monitor's in-process log ring. Use when a view is black, a plugin failed to load, or the catalog looks wrong and list_plugins errors are not enough. Pass {after: seq} to fetch lines newer than that seq, or omit after for the buffer. Returns {seq, lines:[{seq, t, text}]}. Same data as GET /api/logs. Does not include packet payloads.",
+        "schemaHash": "96e2f28bc95ff541",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "after": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Return lines with seq greater than this. Omit for the whole ring."
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "install_plugin_zip",
+        "description": "Drop a contrib plugin zip into the checkout. Use when the operator wants plugins/<id>.zip (gitignored), not a shipped src tree and not a home-dir experiment. Pass {zip_b64}. overwrite replaces that same contrib zip when the sha256 differs. force writes even if plugins/src/<id>/ has uncommitted edits; it still will not replace a shipped src tree (the id is reminted to <id>-2). Returns path, id, and consent-required when TypeScript, Python, or GLSL needs consent_plugin before it runs. Do not git-add. For ~/.zoto-viz/plugins/local use publish_local_plugin.",
+        "schemaHash": "f72bbf29f5e1787d",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "zip_b64": {
+              "type": "string",
+              "description": "Base64-encoded plugin zip"
+            },
+            "overwrite": {
+              "type": "boolean",
+              "default": false,
+              "description": "Replace plugins/<id>.zip when the incoming sha256 differs"
+            },
+            "force": {
+              "type": "boolean",
+              "default": false,
+              "description": "Write even when plugins/src/<id>/ has uncommitted changes. Does not override a shipped src tree."
+            },
+            "mirror": {
+              "type": "boolean",
+              "default": false,
+              "description": "Ignored. Catalog install does not copy into a home-dir plugin tree."
+            }
+          },
+          "required": [
+            "zip_b64"
+          ],
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      },
+      {
+        "name": "publish_local_plugin",
+        "description": "Write a plugin that is not part of the git checkout. Use when experimenting without touching plugins/src. Pass exactly one of zip_b64, files (path \u2192 text, plugin.yml required), or description. Optional id, name, engine, base, overwrite, activate (default true). Writes ~/.zoto-viz/plugins/local/<id>.zip, unpacks it, and switches the open view when the zip is YAML-only or already consented. Code-bearing zips return consent-required \u2014 then consent_plugin and set_view. A taken id is reminted to <id>-2 unless overwrite updates that same local zip. Do not use this for a shipped tree (draft_plugin) or a contrib zip in the repo (install_plugin_zip). Does not git-add.",
+        "schemaHash": "11dba8530d102b29",
+        "writeLike": false,
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "zip_b64": {
+              "type": "string",
+              "description": "Base64-encoded plugin zip"
+            },
+            "files": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "Plugin tree (plugin.yml required; optional visualisation.yml, frontend/, \u2026)"
+            },
+            "description": {
+              "type": "string",
+              "description": "Natural-language brief, or a plugin.yml body starting with id:"
+            },
+            "yaml": {
+              "type": "string",
+              "description": "Lone plugin.yml body"
+            },
+            "id": {
+              "type": "string",
+              "description": "Preferred plugin id when minting from description. Slugged, then reminted if that id is already in the catalog (unless overwrite updates that zip)."
+            },
+            "name": {
+              "type": "string"
+            },
+            "engine": {
+              "type": "string",
+              "enum": [
+                "graph",
+                "netpong",
+                "invaders",
+                "command",
+                "frogger",
+                "cpupong",
+                "doom",
+                "waves",
+                "orbits",
+                "helix",
+                "skyline",
+                "pacman",
+                "tetris",
+                "portal",
+                "carousel"
+              ]
+            },
+            "base": {
+              "type": "string",
+              "description": "Graph wrap target when engine is graph"
+            },
+            "overwrite": {
+              "type": "boolean",
+              "default": false,
+              "description": "Replace ~/.zoto-viz/plugins/local/<id>.zip when the sha256 differs"
+            },
+            "activate": {
+              "type": "boolean",
+              "default": true,
+              "description": "Switch the open UI to plugin:<id> when the zip is safe"
+            }
+          },
+          "additionalProperties": false
+        },
+        "annotations": {
+          "idempotentHint": true,
+          "openWorldHint": false
+        }
+      }
+    ],
+    "resources": [],
+    "resourceTemplates": [],
+    "prompts": []
+  },
+  "nodes": [
+    {
+      "id": "nmvyeim0x12",
+      "type": "group",
+      "enabled": true,
+      "label": "Contract",
+      "children": [
+        {
+          "id": "nmvyeim0v1",
+          "type": "sampler",
+          "enabled": true,
+          "label": "Initialize",
+          "method": "initialize",
+          "expect": {
+            "resultShape": "initialize"
+          }
+        },
+        {
+          "id": "nmvyeim0v2",
+          "type": "sampler",
+          "enabled": true,
+          "label": "Ping",
+          "method": "ping",
+          "expect": {
+            "resultShape": "ping"
+          }
+        },
+        {
+          "id": "nmvyeim0v3",
+          "type": "sampler",
+          "enabled": true,
+          "label": "List tools",
+          "method": "tools/list",
+          "expect": {
+            "resultShape": "tools/list"
+          }
+        },
+        {
+          "id": "nmvyeim0v4",
+          "type": "sampler",
+          "enabled": true,
+          "label": "list_features",
+          "method": "tools/call",
+          "tool": "list_features",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-list_features-pos",
+              "polarity": "positive",
+              "prompt": "Please use list_features for this request. list_features: Map of every settable key and which tool writes it. Use when you do not yet know whether to call set_settings, set_view, set_plugin, or something else. No arguments. Returns theme/chrome/feed/anim enums (including graphFabric, graphSpace, graphLayout, backdrop), dice, and a how-to that names the tool for views, knobs, consent, sources, and LAN. Call this before inventing a settings key. Camera and microphone are absent on purpose..",
+              "assertions": [
+                {
+                  "id": "auto-list_features-pos-called",
+                  "text": "The assistant called list_features."
+                },
+                {
+                  "id": "auto-list_features-pos-args",
+                  "text": "The arguments passed to list_features fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-list_features-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call list_features. The request is unrelated to list_features: Map of every settable key and which tool writes it. Use when you do not yet know whether to call set_settings, set_view, set_plugin, or something else. No arguments. Returns theme/chrome/feed/anim enums (including graphFabric, graphSpace, graphLayout, backdrop), dice, and a how-to that names the tool for views, knobs, consent, sources, and LAN. Call this before inventing a settings key. Camera and microphone are absent on purpose..",
+              "assertions": [
+                {
+                  "id": "auto-list_features-neg-absent",
+                  "text": "The assistant did not call list_features."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0w5",
+          "type": "sampler",
+          "enabled": true,
+          "label": "get_settings",
+          "method": "tools/call",
+          "tool": "get_settings",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-get_settings-pos",
+              "polarity": "positive",
+              "prompt": "Please use get_settings for this request. get_settings: Read the startup profile plus the queued live patch. Use when you need the last settings this server was asked to apply (theme, mode, anim, plugins, temper). No arguments. Returns profile, agent, live, settings, aiControl. This is not the live canvas: a queued mode can differ from the picture on screen until the open tab applies the patch. Do not treat it as proof a sky or view rendered..",
+              "assertions": [
+                {
+                  "id": "auto-get_settings-pos-called",
+                  "text": "The assistant called get_settings."
+                },
+                {
+                  "id": "auto-get_settings-pos-args",
+                  "text": "The arguments passed to get_settings fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-get_settings-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call get_settings. The request is unrelated to get_settings: Read the startup profile plus the queued live patch. Use when you need the last settings this server was asked to apply (theme, mode, anim, plugins, temper). No arguments. Returns profile, agent, live, settings, aiControl. This is not the live canvas: a queued mode can differ from the picture on screen until the open tab applies the patch. Do not treat it as proof a sky or view rendered..",
+              "assertions": [
+                {
+                  "id": "auto-get_settings-neg-absent",
+                  "text": "The assistant did not call get_settings."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0w6",
+          "type": "sampler",
+          "enabled": false,
+          "label": "set_settings",
+          "method": "tools/call",
+          "tool": "set_settings",
+          "args": {
+            "theme": "midnight",
+            "dream": false,
+            "mode": "fixture",
+            "chrome": "top",
+            "redact": false,
+            "merge": false,
+            "autoconsent": false,
+            "sound": false
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "theme": {
+                  "type": "string",
+                  "enum": [
+                    "midnight",
+                    "ocean",
+                    "nord",
+                    "dracula",
+                    "solarized",
+                    "gruvbox",
+                    "ember",
+                    "neon",
+                    "tactical",
+                    "paper",
+                    "dusk",
+                    "void",
+                    "vhs",
+                    "acid",
+                    "ice",
+                    "phosphor"
+                  ]
+                },
+                "dream": {
+                  "type": "boolean"
+                },
+                "mode": {
+                  "type": "string",
+                  "description": "Catalog view id, e.g. plugin:command"
+                },
+                "chrome": {
+                  "type": "string",
+                  "enum": [
+                    "top",
+                    "left",
+                    "right"
+                  ]
+                },
+                "redact": {
+                  "type": "boolean"
+                },
+                "merge": {
+                  "type": "boolean"
+                },
+                "autoconsent": {
+                  "type": "boolean",
+                  "description": "Auto-grant source-review consent for shipped plugins/src and ~/.zoto-viz/plugins/local zips (not contrib zips)."
+                },
+                "sound": {
+                  "type": "boolean",
+                  "description": "Speaker output (plugin SFX, arcade, spoken replies). Starts off."
+                },
+                "temper": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "weather": {
+                  "type": "string",
+                  "enum": [
+                    "hush",
+                    "drift",
+                    "pulse",
+                    "storm"
+                  ]
+                },
+                "control": {
+                  "type": "boolean",
+                  "description": "Server AI Control"
+                },
+                "model": {
+                  "type": "string",
+                  "description": "Ollama tag or Cursor SDK model id"
+                },
+                "shuffle": {
+                  "type": "boolean",
+                  "description": "One-shot dice roll (same as Settings \u2192 Dice roll now). Repeat uses dice.on + dice.periodMin."
+                },
+                "dice": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "on": {
+                      "type": "boolean",
+                      "description": "Header dice repeat switch"
+                    },
+                    "periodMin": {
+                      "type": "integer",
+                      "minimum": 1,
+                      "maximum": 60,
+                      "description": "Minutes between automatic rolls while on"
+                    },
+                    "include": {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "theme": {
+                          "type": "boolean"
+                        },
+                        "view": {
+                          "type": "boolean"
+                        },
+                        "mosaic": {
+                          "type": "boolean"
+                        },
+                        "feed": {
+                          "type": "boolean"
+                        },
+                        "motion": {
+                          "type": "boolean"
+                        },
+                        "style": {
+                          "type": "boolean"
+                        },
+                        "physics": {
+                          "type": "boolean"
+                        },
+                        "knobs": {
+                          "type": "boolean"
+                        },
+                        "show": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "handoff": {
+                      "type": "boolean"
+                    },
+                    "cycle": {
+                      "type": "boolean"
+                    },
+                    "labelsMax": {
+                      "type": "number",
+                      "minimum": 8,
+                      "maximum": 120
+                    },
+                    "sparksMax": {
+                      "type": "number",
+                      "minimum": 20,
+                      "maximum": 3000
+                    },
+                    "sparkPeak": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 80
+                    },
+                    "mosaicMax": {
+                      "type": "string",
+                      "enum": [
+                        "4",
+                        "6",
+                        "8"
+                      ]
+                    },
+                    "feedDensityMax": {
+                      "type": "number",
+                      "minimum": 12,
+                      "maximum": 80
+                    },
+                    "nodeTop": {
+                      "type": "number",
+                      "minimum": 8,
+                      "maximum": 80
+                    }
+                  }
+                },
+                "feed": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "on": {
+                      "type": "boolean"
+                    },
+                    "source": {
+                      "type": "string",
+                      "enum": [
+                        "traffic",
+                        "transcript",
+                        "both"
+                      ]
+                    },
+                    "layout": {
+                      "type": "string",
+                      "enum": [
+                        "ticker",
+                        "bars",
+                        "both"
+                      ]
+                    },
+                    "scope": {
+                      "type": "string",
+                      "enum": [
+                        "lan",
+                        "selected",
+                        "any"
+                      ]
+                    },
+                    "modulate": {
+                      "type": "boolean"
+                    },
+                    "includeSources": {
+                      "type": "boolean"
+                    },
+                    "density": {
+                      "type": "number",
+                      "minimum": 12,
+                      "maximum": 80
+                    },
+                    "textSize": {
+                      "type": "number",
+                      "minimum": 10,
+                      "maximum": 20
+                    }
+                  }
+                },
+                "show": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "lan": {
+                      "type": "boolean"
+                    },
+                    "internet": {
+                      "type": "boolean"
+                    },
+                    "multicast": {
+                      "type": "boolean"
+                    },
+                    "offline": {
+                      "type": "boolean"
+                    },
+                    "labels": {
+                      "type": "boolean"
+                    },
+                    "cpuIdle": {
+                      "type": "boolean"
+                    }
+                  }
+                },
+                "filters": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "allowNames": {
+                      "type": "string"
+                    },
+                    "blockNames": {
+                      "type": "string"
+                    },
+                    "allowNets": {
+                      "type": "string"
+                    },
+                    "blockNets": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "anim": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "properties": {
+                    "follow": {
+                      "type": "boolean"
+                    },
+                    "cycle": {
+                      "type": "boolean"
+                    },
+                    "randomize": {
+                      "type": "boolean"
+                    },
+                    "skyAudio": {
+                      "type": "boolean"
+                    },
+                    "bgAudio": {
+                      "type": "boolean"
+                    },
+                    "gridAudio": {
+                      "type": "boolean"
+                    },
+                    "audioCamera": {
+                      "type": "boolean"
+                    },
+                    "camTheme": {
+                      "type": "boolean"
+                    },
+                    "audioNodes": {
+                      "type": "boolean"
+                    },
+                    "audioPhysics": {
+                      "type": "boolean"
+                    },
+                    "audioParts": {
+                      "type": "boolean"
+                    },
+                    "autoTune": {
+                      "type": "boolean"
+                    },
+                    "mosaicSharedTheme": {
+                      "type": "boolean"
+                    },
+                    "mosaicUniqueSkies": {
+                      "type": "boolean"
+                    },
+                    "yawPeriod": {
+                      "type": "number",
+                      "minimum": 40,
+                      "maximum": 480
+                    },
+                    "pitchDeg": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 20
+                    },
+                    "pitchPeriod": {
+                      "type": "number",
+                      "minimum": 6,
+                      "maximum": 40
+                    },
+                    "zoom": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 0.7
+                    },
+                    "zoomPeriod": {
+                      "type": "number",
+                      "minimum": 15,
+                      "maximum": 180
+                    },
+                    "cyclePeriod": {
+                      "type": "number",
+                      "minimum": 15,
+                      "maximum": 180
+                    },
+                    "skyOpacity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "skyBright": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "skySpeed": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 4
+                    },
+                    "skyEase": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "skyPhotoS": {
+                      "type": "number",
+                      "minimum": 15,
+                      "maximum": 300
+                    },
+                    "skyAiMin": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 30
+                    },
+                    "bgOpacity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "gridOpacity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "gridBright": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "gridSize": {
+                      "type": "number",
+                      "minimum": 16,
+                      "maximum": 160
+                    },
+                    "gridFollow": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "audioSens": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "camAudio": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "camChange": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "camGaze": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "camInertia": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "moveEase": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "labelWeight": {
+                      "type": "number",
+                      "minimum": 0.5,
+                      "maximum": 2
+                    },
+                    "labelCount": {
+                      "type": "number",
+                      "minimum": 8,
+                      "maximum": 120
+                    },
+                    "nodeWeight": {
+                      "type": "number",
+                      "minimum": 0.4,
+                      "maximum": 2.5
+                    },
+                    "edgeWeight": {
+                      "type": "number",
+                      "minimum": 0.3,
+                      "maximum": 2.5
+                    },
+                    "edgeOpacity": {
+                      "type": "number",
+                      "minimum": 0.05,
+                      "maximum": 1
+                    },
+                    "edgeGlowAmt": {
+                      "type": "number",
+                      "minimum": 0.2,
+                      "maximum": 2
+                    },
+                    "edgeGlowSpeed": {
+                      "type": "number",
+                      "minimum": 0.25,
+                      "maximum": 3
+                    },
+                    "partAmt": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "partBusy": {
+                      "type": "number",
+                      "minimum": 0.25,
+                      "maximum": 3
+                    },
+                    "partQuiet": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 4000
+                    },
+                    "partPeak": {
+                      "type": "number",
+                      "minimum": 1,
+                      "maximum": 80
+                    },
+                    "partCap": {
+                      "type": "number",
+                      "minimum": 20,
+                      "maximum": 4000
+                    },
+                    "partSpeed": {
+                      "type": "number",
+                      "minimum": 0.25,
+                      "maximum": 3
+                    },
+                    "partSize": {
+                      "type": "number",
+                      "minimum": 0.3,
+                      "maximum": 2.5
+                    },
+                    "magnetSelf": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "magnetGateway": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "magnetLan": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "magnetLocal": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "magnetInternet": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "magnetMulticast": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "magnetCross": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "magnetRange": {
+                      "type": "number",
+                      "minimum": 0.15,
+                      "maximum": 2
+                    },
+                    "magnetTraffic": {
+                      "type": "number",
+                      "minimum": -1,
+                      "maximum": 1
+                    },
+                    "gravity": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "swirl": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "chargeAmt": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "spring": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "linkSpan": {
+                      "type": "number",
+                      "minimum": 0.4,
+                      "maximum": 2.5
+                    },
+                    "drag": {
+                      "type": "number",
+                      "minimum": 0.12,
+                      "maximum": 0.7
+                    },
+                    "centerPull": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 2
+                    },
+                    "stringAmt": {
+                      "type": "number",
+                      "minimum": 0,
+                      "maximum": 1
+                    },
+                    "backdrop": {
+                      "type": "string",
+                      "enum": [
+                        "none",
+                        "fractal",
+                        "space",
+                        "matrix",
+                        "live",
+                        "aurora",
+                        "rain",
+                        "ocean",
+                        "fire",
+                        "warp",
+                        "clouds",
+                        "circuit",
+                        "plasma",
+                        "lattice",
+                        "dusk",
+                        "void",
+                        "vhs",
+                        "nebula",
+                        "acid",
+                        "ice",
+                        "dawn",
+                        "phosphor",
+                        "earth",
+                        "meadow",
+                        "tunnel",
+                        "bomb",
+                        "reef",
+                        "tornado",
+                        "desert",
+                        "amazon",
+                        "aquarium",
+                        "macaws",
+                        "ruins",
+                        "fungi",
+                        "alpine",
+                        "bamboo",
+                        "blossom",
+                        "fjord",
+                        "glacier",
+                        "lagoon",
+                        "lava",
+                        "lavender",
+                        "saltflat",
+                        "seastacks",
+                        "dynamic",
+                        "custom",
+                        "plugin"
+                      ]
+                    },
+                    "gridShape": {
+                      "type": "string",
+                      "enum": [
+                        "square",
+                        "hex",
+                        "triangle",
+                        "diamond",
+                        "circle"
+                      ]
+                    },
+                    "audioDrive": {
+                      "type": "string",
+                      "enum": [
+                        "mic",
+                        "traffic",
+                        "node"
+                      ]
+                    },
+                    "themeCycle": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "cadence",
+                        "audio"
+                      ]
+                    },
+                    "skyCycle": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "cadence",
+                        "audio"
+                      ]
+                    },
+                    "edgeGlow": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "comet",
+                        "pulse"
+                      ]
+                    },
+                    "nodeShape": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "mixed",
+                        "sphere",
+                        "cube",
+                        "star",
+                        "octahedron",
+                        "diamond",
+                        "disc",
+                        "drone",
+                        "ring",
+                        "capsule",
+                        "crystal",
+                        "teardrop"
+                      ]
+                    },
+                    "graphFabric": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "off",
+                        "tubes",
+                        "cloth",
+                        "crystals",
+                        "voxels",
+                        "neon",
+                        "beads",
+                        "pillars",
+                        "orbit",
+                        "wire",
+                        "lattice",
+                        "ribbon",
+                        "dots",
+                        "constellation",
+                        "hex",
+                        "circuit",
+                        "ink",
+                        "map",
+                        "tiles",
+                        "mosaic"
+                      ]
+                    },
+                    "graphSpace": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "space",
+                        "plane"
+                      ]
+                    },
+                    "graphLayout": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "force",
+                        "tree",
+                        "radial",
+                        "concentric",
+                        "cluster",
+                        "dag",
+                        "globe",
+                        "bars",
+                        "scatter",
+                        "helix",
+                        "vortex",
+                        "bloom",
+                        "ripple",
+                        "weave",
+                        "cascade",
+                        "knot",
+                        "hourglass",
+                        "coral",
+                        "tide",
+                        "mobius",
+                        "spine",
+                        "halo",
+                        "fold",
+                        "drift",
+                        "sierpinski",
+                        "hilbert",
+                        "koch",
+                        "julia",
+                        "spectrum",
+                        "waterfall",
+                        "carrier",
+                        "phased",
+                        "heap",
+                        "trie",
+                        "hashmap",
+                        "matrix",
+                        "queue"
+                      ]
+                    },
+                    "graphLinks": {
+                      "type": "string",
+                      "enum": [
+                        "auto",
+                        "arrows",
+                        "bundle",
+                        "both"
+                      ]
+                    },
+                    "mosaic": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "4",
+                        "6",
+                        "8",
+                        "16"
+                      ]
+                    },
+                    "hero": {
+                      "type": "string",
+                      "enum": [
+                        "off",
+                        "left",
+                        "center",
+                        "right"
+                      ]
+                    },
+                    "focus": {
+                      "type": "string",
+                      "enum": [
+                        "activity",
+                        "motion",
+                        "cloud",
+                        "selection"
+                      ]
+                    },
+                    "bgColor": {
+                      "type": "string"
+                    },
+                    "gridColor": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "modeOptions": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                },
+                "arcade": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "plugins": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "object"
+                  }
+                },
+                "agent": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "clear": {
+                      "type": "boolean"
+                    },
+                    "shader": {
+                      "type": "string"
+                    },
+                    "shaderPhoto": {
+                      "type": "string"
+                    },
+                    "decos": {
+                      "type": "array"
+                    }
+                  }
+                }
+              },
+              "additionalProperties": true
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-set_settings-pos",
+              "polarity": "positive",
+              "prompt": "Please use set_settings for this request. set_settings: Patch the open monitor. Use for theme, motion, mosaic, sky, feed, dice repeat, sound, and agent look \u2014 not for switching a view (set_view) or one plugin's knobs (set_plugin). Pass only whitelist keys from list_features: theme, dream, mode, chrome, redact, merge, autoconsent, sound (speakers; starts off), feed, show, filters, anim, modeOptions, arcade, plugins, agent {clear, shader, shaderPhoto, decos}, dice {on, periodMin, include}, shuffle, temper, weather, control, model. anim.audioNodes true follows the mic beat; false keeps graph motion eased. anim.skyAudio false unless a pulse fade is intended. Do not write uBright. Camera and microphone are operator-only and are rejected. Queues a live patch; wait about a second, then look at the open UI..",
+              "assertions": [
+                {
+                  "id": "auto-set_settings-pos-called",
+                  "text": "The assistant called set_settings."
+                },
+                {
+                  "id": "auto-set_settings-pos-args",
+                  "text": "The arguments passed to set_settings fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-set_settings-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call set_settings. The request is unrelated to set_settings: Patch the open monitor. Use for theme, motion, mosaic, sky, feed, dice repeat, sound, and agent look \u2014 not for switching a view (set_view) or one plugin's knobs (set_plugin). Pass only whitelist keys from list_features: theme, dream, mode, chrome, redact, merge, autoconsent, sound (speakers; starts off), feed, show, filters, anim, modeOptions, arcade, plugins, agent {clear, shader, shaderPhoto, decos}, dice {on, periodMin, include}, shuffle, temper, weather, control, model. anim.audioNodes true follows the mic beat; false keeps graph motion eased. anim.skyAudio false unless a pulse fade is intended. Do not write uBright. Camera and microphone are operator-only and are rejected. Queues a live patch; wait about a second, then look at the open UI..",
+              "assertions": [
+                {
+                  "id": "auto-set_settings-neg-absent",
+                  "text": "The assistant did not call set_settings."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0w7",
+          "type": "sampler",
+          "enabled": true,
+          "label": "list_plugins",
+          "method": "tools/call",
+          "tool": "list_plugins",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Optional plugin id to return only that row"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-list_plugins-pos",
+              "polarity": "positive",
+              "prompt": "Please use list_plugins for this request. list_plugins: List views the header menu can show. Use before set_view or set_plugin, and whenever the view dropdown is empty. Omit id for every row; pass a bare id (topology, not plugin:topology) for one. Each row has mode (pass that string to set_view), knobs (keys for set_plugin), and saved values. Also returns errors and blocked. plugins:[] plus an errors entry means the catalog scan refused the menu (often two plugin directories whose names slug to the same id). Values are the startup profile, not unsaved live knob edits..",
+              "assertions": [
+                {
+                  "id": "auto-list_plugins-pos-called",
+                  "text": "The assistant called list_plugins."
+                },
+                {
+                  "id": "auto-list_plugins-pos-args",
+                  "text": "The arguments passed to list_plugins fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-list_plugins-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call list_plugins. The request is unrelated to list_plugins: List views the header menu can show. Use before set_view or set_plugin, and whenever the view dropdown is empty. Omit id for every row; pass a bare id (topology, not plugin:topology) for one. Each row has mode (pass that string to set_view), knobs (keys for set_plugin), and saved values. Also returns errors and blocked. plugins:[] plus an errors entry means the catalog scan refused the menu (often two plugin directories whose names slug to the same id). Values are the startup profile, not unsaved live knob edits..",
+              "assertions": [
+                {
+                  "id": "auto-list_plugins-neg-absent",
+                  "text": "The assistant did not call list_plugins."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0w8",
+          "type": "sampler",
+          "enabled": false,
+          "label": "set_plugin",
+          "method": "tools/call",
+          "tool": "set_plugin",
+          "args": {
+            "id": "fixture",
+            "values": {}
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "description": "Plugin id (not plugin: prefix)"
+                },
+                "values": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Knob key \u2192 string value (booleans as 0/1)"
+                }
+              },
+              "required": [
+                "id",
+                "values"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-set_plugin-pos",
+              "polarity": "positive",
+              "prompt": "Please use set_plugin for this request. set_plugin: Set one view's knobs. Use after list_plugins shows that id's knob keys. Pass {id, values}. id is bare (cypher-cic, not plugin:cypher-cic). values is an object of knob key \u2192 string; booleans are \"1\" or \"0\". Unknown keys error. The reserved prompt key is the AI Dynamic brief for that view. Also queues modeOptions for plugin:<id>. Does not switch the view \u2014 call set_view for that. Does not consent code.. Include id, values.",
+              "assertions": [
+                {
+                  "id": "auto-set_plugin-pos-called",
+                  "text": "The assistant called set_plugin."
+                },
+                {
+                  "id": "auto-set_plugin-pos-args",
+                  "text": "The arguments passed to set_plugin fit the user request and include id, values."
+                }
+              ]
+            },
+            {
+              "id": "auto-set_plugin-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call set_plugin. The request is unrelated to set_plugin: Set one view's knobs. Use after list_plugins shows that id's knob keys. Pass {id, values}. id is bare (cypher-cic, not plugin:cypher-cic). values is an object of knob key \u2192 string; booleans are \"1\" or \"0\". Unknown keys error. The reserved prompt key is the AI Dynamic brief for that view. Also queues modeOptions for plugin:<id>. Does not switch the view \u2014 call set_view for that. Does not consent code..",
+              "assertions": [
+                {
+                  "id": "auto-set_plugin-neg-absent",
+                  "text": "The assistant did not call set_plugin."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0w9",
+          "type": "sampler",
+          "enabled": false,
+          "label": "set_view",
+          "method": "tools/call",
+          "tool": "set_view",
+          "args": {
+            "mode": "fixture"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "mode": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mode"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-set_view-pos",
+              "polarity": "positive",
+              "prompt": "Please use set_view for this request. set_view: Switch the open monitor's VIEW. Use when the user wants a different picture. Pass {mode} copied from list_plugins (the mode field), e.g. plugin:topology or plugin:fluid-dyn. Do not invent ids and do not strip or add plugin: yourself if list_plugins already returned mode. Queues a live patch the open tab applies within about a second; a tab that loaded while the catalog was empty must be reloaded. get_settings showing the mode is not proof the canvas changed. Sky stays near-black (about 5,10,22) until consent_plugin if the pack has TypeScript or GLSL.. Include mode.",
+              "assertions": [
+                {
+                  "id": "auto-set_view-pos-called",
+                  "text": "The assistant called set_view."
+                },
+                {
+                  "id": "auto-set_view-pos-args",
+                  "text": "The arguments passed to set_view fit the user request and include mode."
+                }
+              ]
+            },
+            {
+              "id": "auto-set_view-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call set_view. The request is unrelated to set_view: Switch the open monitor's VIEW. Use when the user wants a different picture. Pass {mode} copied from list_plugins (the mode field), e.g. plugin:topology or plugin:fluid-dyn. Do not invent ids and do not strip or add plugin: yourself if list_plugins already returned mode. Queues a live patch the open tab applies within about a second; a tab that loaded while the catalog was empty must be reloaded. get_settings showing the mode is not proof the canvas changed. Sky stays near-black (about 5,10,22) until consent_plugin if the pack has TypeScript or GLSL..",
+              "assertions": [
+                {
+                  "id": "auto-set_view-neg-absent",
+                  "text": "The assistant did not call set_view."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0wa",
+          "type": "sampler",
+          "enabled": false,
+          "label": "set_agent",
+          "method": "tools/call",
+          "tool": "set_agent",
+          "args": {
+            "temper": 0,
+            "weather": "hush",
+            "control": false
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "temper": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 100
+                },
+                "weather": {
+                  "type": "string",
+                  "enum": [
+                    "hush",
+                    "drift",
+                    "pulse",
+                    "storm"
+                  ]
+                },
+                "control": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-set_agent-pos",
+              "polarity": "positive",
+              "prompt": "Please use set_agent for this request. set_agent: Set the in-monitor agent's temper, weather, or AI Control. Use for the chat agent inside zoto-viz, not for theme or view. Pass any of temper (integer 0\u2013100), weather (hush, drift, pulse, or storm), control (boolean). temper also scales Ollama temperature. weather is how often AI Dynamic rebuilds. control must be on before draft_plugin can write plugins/src. Empty arguments error..",
+              "assertions": [
+                {
+                  "id": "auto-set_agent-pos-called",
+                  "text": "The assistant called set_agent."
+                },
+                {
+                  "id": "auto-set_agent-pos-args",
+                  "text": "The arguments passed to set_agent fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-set_agent-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call set_agent. The request is unrelated to set_agent: Set the in-monitor agent's temper, weather, or AI Control. Use for the chat agent inside zoto-viz, not for theme or view. Pass any of temper (integer 0\u2013100), weather (hush, drift, pulse, or storm), control (boolean). temper also scales Ollama temperature. weather is how often AI Dynamic rebuilds. control must be on before draft_plugin can write plugins/src. Empty arguments error..",
+              "assertions": [
+                {
+                  "id": "auto-set_agent-neg-absent",
+                  "text": "The assistant did not call set_agent."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0wb",
+          "type": "sampler",
+          "enabled": false,
+          "label": "roll_dice",
+          "method": "tools/call",
+          "tool": "roll_dice",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-roll_dice-pos",
+              "polarity": "positive",
+              "prompt": "Please use roll_dice for this request. roll_dice: Roll the dice once. Use for a single reshuffle of the groups left on in Settings \u2192 Dice (theme, view, mosaic, feed, motion, physics, knobs by default). No arguments. Does not flip the header repeat switch \u2014 that is set_settings {dice:{on, periodMin}}. Chrome, camera, and microphone stay. Filters and prompts stay. Does not start a chat turn..",
+              "assertions": [
+                {
+                  "id": "auto-roll_dice-pos-called",
+                  "text": "The assistant called roll_dice."
+                },
+                {
+                  "id": "auto-roll_dice-pos-args",
+                  "text": "The arguments passed to roll_dice fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-roll_dice-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call roll_dice. The request is unrelated to roll_dice: Roll the dice once. Use for a single reshuffle of the groups left on in Settings \u2192 Dice (theme, view, mosaic, feed, motion, physics, knobs by default). No arguments. Does not flip the header repeat switch \u2014 that is set_settings {dice:{on, periodMin}}. Chrome, camera, and microphone stay. Filters and prompts stay. Does not start a chat turn..",
+              "assertions": [
+                {
+                  "id": "auto-roll_dice-neg-absent",
+                  "text": "The assistant did not call roll_dice."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0wc",
+          "type": "sampler",
+          "enabled": true,
+          "label": "get_state",
+          "method": "tools/call",
+          "tool": "get_state",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-get_state-pos",
+              "polarity": "positive",
+              "prompt": "Please use get_state for this request. get_state: Read the live LAN snapshot. Use when you need devices, flows, services, or radio as the monitor sees them now. No arguments. Same payload as GET /api/state. Fails if this MCP call has no monitor process attached. Not a settings read \u2014 use get_settings for theme and view..",
+              "assertions": [
+                {
+                  "id": "auto-get_state-pos-called",
+                  "text": "The assistant called get_state."
+                },
+                {
+                  "id": "auto-get_state-pos-args",
+                  "text": "The arguments passed to get_state fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-get_state-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call get_state. The request is unrelated to get_state: Read the live LAN snapshot. Use when you need devices, flows, services, or radio as the monitor sees them now. No arguments. Same payload as GET /api/state. Fails if this MCP call has no monitor process attached. Not a settings read \u2014 use get_settings for theme and view..",
+              "assertions": [
+                {
+                  "id": "auto-get_state-neg-absent",
+                  "text": "The assistant did not call get_state."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xd",
+          "type": "sampler",
+          "enabled": true,
+          "label": "get_pack_perf",
+          "method": "tools/call",
+          "tool": "get_pack_perf",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-get_pack_perf-pos",
+              "polarity": "positive",
+              "prompt": "Please use get_pack_perf for this request. get_pack_perf: Read the latest pack frame timings the browser posted. Use when a view is slow or you need pack-level frame numbers, not the HUD fps. No arguments. The page must have been loaded with ?packPerf=1 or localStorage zoto-viz.packPerf=1 (set before load or from another tab) or the buffer stays empty. Does not change settings..",
+              "assertions": [
+                {
+                  "id": "auto-get_pack_perf-pos-called",
+                  "text": "The assistant called get_pack_perf."
+                },
+                {
+                  "id": "auto-get_pack_perf-pos-args",
+                  "text": "The arguments passed to get_pack_perf fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-get_pack_perf-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call get_pack_perf. The request is unrelated to get_pack_perf: Read the latest pack frame timings the browser posted. Use when a view is slow or you need pack-level frame numbers, not the HUD fps. No arguments. The page must have been loaded with ?packPerf=1 or localStorage zoto-viz.packPerf=1 (set before load or from another tab) or the buffer stays empty. Does not change settings..",
+              "assertions": [
+                {
+                  "id": "auto-get_pack_perf-neg-absent",
+                  "text": "The assistant did not call get_pack_perf."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xe",
+          "type": "sampler",
+          "enabled": true,
+          "label": "get_traffic",
+          "method": "tools/call",
+          "tool": "get_traffic",
+          "args": {
+            "ip": "${ip}"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "ip": {
+                  "type": "string"
+                },
+                "peer": {
+                  "type": "string"
+                },
+                "since": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "ip"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-get_traffic-pos",
+              "polarity": "positive",
+              "prompt": "Please use get_traffic for this request. get_traffic: Read recent packets. Use after get_state when you need flows for one address or a group. Pass ip: a host address, @lan, @internet, @any, or a comma list. Optional peer and since (unix seconds). Unknown ip returns an error. Does not change capture.. Include ip.",
+              "assertions": [
+                {
+                  "id": "auto-get_traffic-pos-called",
+                  "text": "The assistant called get_traffic."
+                },
+                {
+                  "id": "auto-get_traffic-pos-args",
+                  "text": "The arguments passed to get_traffic fit the user request and include ip."
+                }
+              ]
+            },
+            {
+              "id": "auto-get_traffic-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call get_traffic. The request is unrelated to get_traffic: Read recent packets. Use after get_state when you need flows for one address or a group. Pass ip: a host address, @lan, @internet, @any, or a comma list. Optional peer and since (unix seconds). Unknown ip returns an error. Does not change capture..",
+              "assertions": [
+                {
+                  "id": "auto-get_traffic-neg-absent",
+                  "text": "The assistant did not call get_traffic."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xf",
+          "type": "sampler",
+          "enabled": true,
+          "label": "get_rf_watch",
+          "method": "tools/call",
+          "tool": "get_rf_watch",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-get_rf_watch-pos",
+              "polarity": "positive",
+              "prompt": "Please use get_rf_watch for this request. get_rf_watch: Read the Wi-Fi watch list. Use before set_rf_watch, or to see the channel plan and current tune. No arguments. Returns ssids, dwell, rotate, and what the radio is doing..",
+              "assertions": [
+                {
+                  "id": "auto-get_rf_watch-pos-called",
+                  "text": "The assistant called get_rf_watch."
+                },
+                {
+                  "id": "auto-get_rf_watch-pos-args",
+                  "text": "The arguments passed to get_rf_watch fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-get_rf_watch-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call get_rf_watch. The request is unrelated to get_rf_watch: Read the Wi-Fi watch list. Use before set_rf_watch, or to see the channel plan and current tune. No arguments. Returns ssids, dwell, rotate, and what the radio is doing..",
+              "assertions": [
+                {
+                  "id": "auto-get_rf_watch-neg-absent",
+                  "text": "The assistant did not call get_rf_watch."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xg",
+          "type": "sampler",
+          "enabled": false,
+          "label": "set_rf_watch",
+          "method": "tools/call",
+          "tool": "set_rf_watch",
+          "args": {
+            "ssids": "fixture",
+            "other": false,
+            "dwell": 0,
+            "rotate": false
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "ssids": {
+                  "description": "String list or comma-separated names"
+                },
+                "other": {
+                  "type": "boolean"
+                },
+                "dwell": {
+                  "type": "number"
+                },
+                "rotate": {
+                  "type": "boolean"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-set_rf_watch-pos",
+              "polarity": "positive",
+              "prompt": "Please use set_rf_watch for this request. set_rf_watch: Replace the Wi-Fi SSID watch list. Use when Air SSIDs should follow specific names. Pass ssids (string list or comma-separated), and optionally other (boolean), dwell (seconds), rotate (boolean). At least one of those keys is required. Persists and rewrites the hopper plan. Read first with get_rf_watch..",
+              "assertions": [
+                {
+                  "id": "auto-set_rf_watch-pos-called",
+                  "text": "The assistant called set_rf_watch."
+                },
+                {
+                  "id": "auto-set_rf_watch-pos-args",
+                  "text": "The arguments passed to set_rf_watch fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-set_rf_watch-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call set_rf_watch. The request is unrelated to set_rf_watch: Replace the Wi-Fi SSID watch list. Use when Air SSIDs should follow specific names. Pass ssids (string list or comma-separated), and optionally other (boolean), dwell (seconds), rotate (boolean). At least one of those keys is required. Persists and rewrites the hopper plan. Read first with get_rf_watch..",
+              "assertions": [
+                {
+                  "id": "auto-set_rf_watch-neg-absent",
+                  "text": "The assistant did not call set_rf_watch."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xh",
+          "type": "sampler",
+          "enabled": false,
+          "label": "consent_plugin",
+          "method": "tools/call",
+          "tool": "consent_plugin",
+          "args": {
+            "id": "${id}",
+            "kind": "${kind}"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "reviewed",
+                    "authored"
+                  ]
+                }
+              },
+              "required": [
+                "id",
+                "kind"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-consent_plugin-pos",
+              "polarity": "positive",
+              "prompt": "Please use consent_plugin for this request. consent_plugin: Allow one plugin's TypeScript, Python, or GLSL to run. Use after you change frontend/, backend/, datasource/, or sky/, or when a plugin sky stays near-black (about 5,10,22). Pass {id, kind}. id is bare. kind authored means you wrote it; reviewed means you only read the source. Then set_view. YAML-only plugins return needed:false. A hash change invalidates the old stamp \u2014 consent again. autoconsent via set_settings covers shipped src and local zips only, not contrib zips.. Include id, kind.",
+              "assertions": [
+                {
+                  "id": "auto-consent_plugin-pos-called",
+                  "text": "The assistant called consent_plugin."
+                },
+                {
+                  "id": "auto-consent_plugin-pos-args",
+                  "text": "The arguments passed to consent_plugin fit the user request and include id, kind."
+                }
+              ]
+            },
+            {
+              "id": "auto-consent_plugin-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call consent_plugin. The request is unrelated to consent_plugin: Allow one plugin's TypeScript, Python, or GLSL to run. Use after you change frontend/, backend/, datasource/, or sky/, or when a plugin sky stays near-black (about 5,10,22). Pass {id, kind}. id is bare. kind authored means you wrote it; reviewed means you only read the source. Then set_view. YAML-only plugins return needed:false. A hash change invalidates the old stamp \u2014 consent again. autoconsent via set_settings covers shipped src and local zips only, not contrib zips..",
+              "assertions": [
+                {
+                  "id": "auto-consent_plugin-neg-absent",
+                  "text": "The assistant did not call consent_plugin."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xi",
+          "type": "sampler",
+          "enabled": false,
+          "label": "draft_plugin",
+          "method": "tools/call",
+          "tool": "draft_plugin",
+          "args": {
+            "files": {},
+            "yaml": "fixture",
+            "install": false
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "files": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  }
+                },
+                "yaml": {
+                  "type": "string",
+                  "description": "Legacy lone plugin.yml body"
+                },
+                "install": {
+                  "type": "boolean",
+                  "default": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-draft_plugin-pos",
+              "polarity": "positive",
+              "prompt": "Please use draft_plugin for this request. draft_plugin: Validate a shipped plugin tree, and optionally write it. Use when the plugin belongs in plugins/src/<id>/ (the git catalog). Pass files (relative path \u2192 text, plugin.yml required) or legacy yaml. install true writes the tree only when AI Control is already on (set_agent {control:true}); otherwise it validates and does not write. Never packs a zip and does not git-add. For a home-dir experiment use publish_local_plugin..",
+              "assertions": [
+                {
+                  "id": "auto-draft_plugin-pos-called",
+                  "text": "The assistant called draft_plugin."
+                },
+                {
+                  "id": "auto-draft_plugin-pos-args",
+                  "text": "The arguments passed to draft_plugin fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-draft_plugin-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call draft_plugin. The request is unrelated to draft_plugin: Validate a shipped plugin tree, and optionally write it. Use when the plugin belongs in plugins/src/<id>/ (the git catalog). Pass files (relative path \u2192 text, plugin.yml required) or legacy yaml. install true writes the tree only when AI Control is already on (set_agent {control:true}); otherwise it validates and does not write. Never packs a zip and does not git-add. For a home-dir experiment use publish_local_plugin..",
+              "assertions": [
+                {
+                  "id": "auto-draft_plugin-neg-absent",
+                  "text": "The assistant did not call draft_plugin."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xj",
+          "type": "sampler",
+          "enabled": true,
+          "label": "list_profiles",
+          "method": "tools/call",
+          "tool": "list_profiles",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-list_profiles-pos",
+              "polarity": "positive",
+              "prompt": "Please use list_profiles for this request. list_profiles: List saved UI profiles. Use before apply_profile. No arguments. Each row has id, label, shipped, and whether it is the default. Does not change the open view..",
+              "assertions": [
+                {
+                  "id": "auto-list_profiles-pos-called",
+                  "text": "The assistant called list_profiles."
+                },
+                {
+                  "id": "auto-list_profiles-pos-args",
+                  "text": "The arguments passed to list_profiles fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-list_profiles-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call list_profiles. The request is unrelated to list_profiles: List saved UI profiles. Use before apply_profile. No arguments. Each row has id, label, shipped, and whether it is the default. Does not change the open view..",
+              "assertions": [
+                {
+                  "id": "auto-list_profiles-neg-absent",
+                  "text": "The assistant did not call list_profiles."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xk",
+          "type": "sampler",
+          "enabled": false,
+          "label": "apply_profile",
+          "method": "tools/call",
+          "tool": "apply_profile",
+          "args": {
+            "id": "${id}"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-apply_profile-pos",
+              "polarity": "positive",
+              "prompt": "Please use apply_profile for this request. apply_profile: Load a saved profile onto the open UI. Use when the user names a profile from list_profiles. Pass {id}. Same whitelist as set_settings, so camera and microphone in a profile are dropped. Unknown id errors. Queues a live patch; wait, then look at the canvas. Does not set the profile as the startup default.. Include id.",
+              "assertions": [
+                {
+                  "id": "auto-apply_profile-pos-called",
+                  "text": "The assistant called apply_profile."
+                },
+                {
+                  "id": "auto-apply_profile-pos-args",
+                  "text": "The arguments passed to apply_profile fit the user request and include id."
+                }
+              ]
+            },
+            {
+              "id": "auto-apply_profile-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call apply_profile. The request is unrelated to apply_profile: Load a saved profile onto the open UI. Use when the user names a profile from list_profiles. Pass {id}. Same whitelist as set_settings, so camera and microphone in a profile are dropped. Unknown id errors. Queues a live patch; wait, then look at the canvas. Does not set the profile as the startup default..",
+              "assertions": [
+                {
+                  "id": "auto-apply_profile-neg-absent",
+                  "text": "The assistant did not call apply_profile."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xl",
+          "type": "sampler",
+          "enabled": true,
+          "label": "list_memories",
+          "method": "tools/call",
+          "tool": "list_memories",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-list_memories-pos",
+              "polarity": "positive",
+              "prompt": "Please use list_memories for this request. list_memories: List curated memories the in-monitor chat agent sees on later turns. Use before add_memory or delete_memory. No arguments. Returns memories with id and text. Not LAN state and not the view prompt (that is set_plugin prompt)..",
+              "assertions": [
+                {
+                  "id": "auto-list_memories-pos-called",
+                  "text": "The assistant called list_memories."
+                },
+                {
+                  "id": "auto-list_memories-pos-args",
+                  "text": "The arguments passed to list_memories fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-list_memories-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call list_memories. The request is unrelated to list_memories: List curated memories the in-monitor chat agent sees on later turns. Use before add_memory or delete_memory. No arguments. Returns memories with id and text. Not LAN state and not the view prompt (that is set_plugin prompt)..",
+              "assertions": [
+                {
+                  "id": "auto-list_memories-neg-absent",
+                  "text": "The assistant did not call list_memories."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xm",
+          "type": "sampler",
+          "enabled": false,
+          "label": "add_memory",
+          "method": "tools/call",
+          "tool": "add_memory",
+          "args": {
+            "text": "fixture"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "text": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-add_memory-pos",
+              "polarity": "positive",
+              "prompt": "Please use add_memory for this request. add_memory: Store one memory for later in-monitor chat turns. Use when the user asks to remember a fact. Pass {text}. Empty text errors. Returns the new row and the full list. Each call adds another row; it does not update by id.. Include text.",
+              "assertions": [
+                {
+                  "id": "auto-add_memory-pos-called",
+                  "text": "The assistant called add_memory."
+                },
+                {
+                  "id": "auto-add_memory-pos-args",
+                  "text": "The arguments passed to add_memory fit the user request and include text."
+                }
+              ]
+            },
+            {
+              "id": "auto-add_memory-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call add_memory. The request is unrelated to add_memory: Store one memory for later in-monitor chat turns. Use when the user asks to remember a fact. Pass {text}. Empty text errors. Returns the new row and the full list. Each call adds another row; it does not update by id..",
+              "assertions": [
+                {
+                  "id": "auto-add_memory-neg-absent",
+                  "text": "The assistant did not call add_memory."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xn",
+          "type": "sampler",
+          "enabled": false,
+          "label": "delete_memory",
+          "method": "tools/call",
+          "tool": "delete_memory",
+          "args": {
+            "id": "fixture"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-delete_memory-pos",
+              "polarity": "positive",
+              "prompt": "Please use delete_memory for this request. delete_memory: Delete curated chat memories. Use after list_memories, when the user wants one fact or the whole list gone. Pass {id} to remove that row. Omit id to clear every memory. Returns the list that remains. Does not touch the view prompt or LAN state..",
+              "assertions": [
+                {
+                  "id": "auto-delete_memory-pos-called",
+                  "text": "The assistant called delete_memory."
+                },
+                {
+                  "id": "auto-delete_memory-pos-args",
+                  "text": "The arguments passed to delete_memory fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-delete_memory-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call delete_memory. The request is unrelated to delete_memory: Delete curated chat memories. Use after list_memories, when the user wants one fact or the whole list gone. Pass {id} to remove that row. Omit id to clear every memory. Returns the list that remains. Does not touch the view prompt or LAN state..",
+              "assertions": [
+                {
+                  "id": "auto-delete_memory-neg-absent",
+                  "text": "The assistant did not call delete_memory."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xo",
+          "type": "sampler",
+          "enabled": true,
+          "label": "list_sources",
+          "method": "tools/call",
+          "tool": "list_sources",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-list_sources-pos",
+              "polarity": "positive",
+              "prompt": "Please use list_sources for this request. list_sources: List host headline sources. Use before set_source or delete_source. No arguments. Returns the registry in ~/.zoto-viz/sources.yml plus the last poll. Kinds: rss, http, file, journal, kmsg. Headlines also appear on GET /api/state. feed:true on a source is what puts it on the on-screen ticker (set_settings feed.on still has to be true)..",
+              "assertions": [
+                {
+                  "id": "auto-list_sources-pos-called",
+                  "text": "The assistant called list_sources."
+                },
+                {
+                  "id": "auto-list_sources-pos-args",
+                  "text": "The arguments passed to list_sources fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-list_sources-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call list_sources. The request is unrelated to list_sources: List host headline sources. Use before set_source or delete_source. No arguments. Returns the registry in ~/.zoto-viz/sources.yml plus the last poll. Kinds: rss, http, file, journal, kmsg. Headlines also appear on GET /api/state. feed:true on a source is what puts it on the on-screen ticker (set_settings feed.on still has to be true)..",
+              "assertions": [
+                {
+                  "id": "auto-list_sources-neg-absent",
+                  "text": "The assistant did not call list_sources."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xp",
+          "type": "sampler",
+          "enabled": true,
+          "label": "list_source_library",
+          "method": "tools/call",
+          "tool": "list_source_library",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-list_source_library-pos",
+              "polarity": "positive",
+              "prompt": "Please use list_source_library for this request. list_source_library: List third-party datasource recipes that are not polled yet. Use when a plugin or view should consume a public feed (weather, quakes, news, prices) instead of inventing a URL. No arguments. Returns id, label, vendor, type, hint, and extends. Then set_source {library: id} or {library: [id, id], feed: true} to combine and enable. Plugins name the same ids under visualisation.yml datasource.library..",
+              "assertions": [
+                {
+                  "id": "auto-list_source_library-pos-called",
+                  "text": "The assistant called list_source_library."
+                },
+                {
+                  "id": "auto-list_source_library-pos-args",
+                  "text": "The arguments passed to list_source_library fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-list_source_library-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call list_source_library. The request is unrelated to list_source_library: List third-party datasource recipes that are not polled yet. Use when a plugin or view should consume a public feed (weather, quakes, news, prices) instead of inventing a URL. No arguments. Returns id, label, vendor, type, hint, and extends. Then set_source {library: id} or {library: [id, id], feed: true} to combine and enable. Plugins name the same ids under visualisation.yml datasource.library..",
+              "assertions": [
+                {
+                  "id": "auto-list_source_library-neg-absent",
+                  "text": "The assistant did not call list_source_library."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xq",
+          "type": "sampler",
+          "enabled": false,
+          "label": "set_source",
+          "method": "tools/call",
+          "tool": "set_source",
+          "args": {
+            "id": "fixture",
+            "library": "fixture",
+            "type": "rss",
+            "label": "fixture",
+            "url": "fixture",
+            "path": "fixture",
+            "unit": "fixture",
+            "interval": 15
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "library": {
+                  "description": "Source-library id, or a list of ids to combine. See list_source_library.",
+                  "oneOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  ]
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "rss",
+                    "http",
+                    "file",
+                    "journal",
+                    "kmsg"
+                  ]
+                },
+                "label": {
+                  "type": "string"
+                },
+                "url": {
+                  "type": "string",
+                  "description": "Public HTTPS URL for rss / http"
+                },
+                "path": {
+                  "type": "string",
+                  "description": "Local file under $HOME or ~/.zoto-viz"
+                },
+                "unit": {
+                  "type": "string",
+                  "description": "Optional systemd user unit for type=journal"
+                },
+                "interval": {
+                  "type": "number",
+                  "minimum": 15,
+                  "maximum": 86400
+                },
+                "enabled": {
+                  "type": "boolean"
+                },
+                "feed": {
+                  "type": "boolean",
+                  "description": "Show headlines on the live feed ticker"
+                },
+                "fields": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": [
+                      "string",
+                      "number"
+                    ]
+                  },
+                  "description": "JSON field map for type=http (list, title, caption, image, link, filter, expand)"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-set_source-pos",
+              "polarity": "positive",
+              "prompt": "Please use set_source for this request. set_source: Create or update headline sources. Use after list_sources, or pass library from list_source_library to add a third-party feed. library is one id or a list to combine (usgs-quakes, bbc-news). interval, feed, url, and fields overlay every chosen recipe. Otherwise pass type rss, http, file, journal, or kmsg. rss/http need a public https url. file needs a path under the home directory. journal is journalctl --user. kmsg reads /dev/kmsg. Same id updates that row. Library rows stay off the ticker until feed is true..",
+              "assertions": [
+                {
+                  "id": "auto-set_source-pos-called",
+                  "text": "The assistant called set_source."
+                },
+                {
+                  "id": "auto-set_source-pos-args",
+                  "text": "The arguments passed to set_source fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-set_source-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call set_source. The request is unrelated to set_source: Create or update headline sources. Use after list_sources, or pass library from list_source_library to add a third-party feed. library is one id or a list to combine (usgs-quakes, bbc-news). interval, feed, url, and fields overlay every chosen recipe. Otherwise pass type rss, http, file, journal, or kmsg. rss/http need a public https url. file needs a path under the home directory. journal is journalctl --user. kmsg reads /dev/kmsg. Same id updates that row. Library rows stay off the ticker until feed is true..",
+              "assertions": [
+                {
+                  "id": "auto-set_source-neg-absent",
+                  "text": "The assistant did not call set_source."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xr",
+          "type": "sampler",
+          "enabled": false,
+          "label": "delete_source",
+          "method": "tools/call",
+          "tool": "delete_source",
+          "args": {
+            "id": "fixture"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-delete_source-pos",
+              "polarity": "positive",
+              "prompt": "Please use delete_source for this request. delete_source: Remove one headline source from ~/.zoto-viz/sources.yml. Use after list_sources, when that feed should stop polling. Pass {id}. Unknown id errors. Does not delete a plugin, a plugin instance, or the on-screen feed toggle (that is set_settings).. Include id.",
+              "assertions": [
+                {
+                  "id": "auto-delete_source-pos-called",
+                  "text": "The assistant called delete_source."
+                },
+                {
+                  "id": "auto-delete_source-pos-args",
+                  "text": "The arguments passed to delete_source fit the user request and include id."
+                }
+              ]
+            },
+            {
+              "id": "auto-delete_source-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call delete_source. The request is unrelated to delete_source: Remove one headline source from ~/.zoto-viz/sources.yml. Use after list_sources, when that feed should stop polling. Pass {id}. Unknown id errors. Does not delete a plugin, a plugin instance, or the on-screen feed toggle (that is set_settings)..",
+              "assertions": [
+                {
+                  "id": "auto-delete_source-neg-absent",
+                  "text": "The assistant did not call delete_source."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xs",
+          "type": "sampler",
+          "enabled": true,
+          "label": "list_plugin_instances",
+          "method": "tools/call",
+          "tool": "list_plugin_instances",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-list_plugin_instances-pos",
+              "polarity": "positive",
+              "prompt": "Please use list_plugin_instances for this request. list_plugin_instances: List extra catalog rows that reuse a shipped plugin. Use before set_plugin_instance. No arguments. Each row is plugin + instance id with a source and field picks (~/.zoto-viz/plugin-instances.yml). The view id on screen is plugin:<plugin>:<id>. Does not copy the plugin tree..",
+              "assertions": [
+                {
+                  "id": "auto-list_plugin_instances-pos-called",
+                  "text": "The assistant called list_plugin_instances."
+                },
+                {
+                  "id": "auto-list_plugin_instances-pos-args",
+                  "text": "The arguments passed to list_plugin_instances fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-list_plugin_instances-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call list_plugin_instances. The request is unrelated to list_plugin_instances: List extra catalog rows that reuse a shipped plugin. Use before set_plugin_instance. No arguments. Each row is plugin + instance id with a source and field picks (~/.zoto-viz/plugin-instances.yml). The view id on screen is plugin:<plugin>:<id>. Does not copy the plugin tree..",
+              "assertions": [
+                {
+                  "id": "auto-list_plugin_instances-neg-absent",
+                  "text": "The assistant did not call list_plugin_instances."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xt",
+          "type": "sampler",
+          "enabled": false,
+          "label": "set_plugin_instance",
+          "method": "tools/call",
+          "tool": "set_plugin_instance",
+          "args": {
+            "plugin": "fixture",
+            "id": "fixture"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "plugin": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "hint": {
+                  "type": "string"
+                },
+                "source": {
+                  "type": "string"
+                },
+                "title": {
+                  "type": "string"
+                },
+                "caption": {
+                  "type": "string"
+                },
+                "image": {
+                  "type": "string"
+                },
+                "link": {
+                  "type": "string"
+                },
+                "filter": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "plugin",
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-set_plugin_instance-pos",
+              "polarity": "positive",
+              "prompt": "Please use set_plugin_instance for this request. set_plugin_instance: Add or update an extra row on a shipped plugin. Use when one pack should appear twice with a different source (carousel, hn-rain, hn-term), not when you need a new plugin. Pass plugin (bare catalog id) and id (instance slug). Optional name, hint, source, title, caption, image, link, filter become that row's defaults. Open it with set_view {mode:\"plugin:<plugin>:<id>\"}. Does not duplicate files. Shipped rows stay if you only meant to change knobs \u2014 that is set_plugin.. Include plugin, id.",
+              "assertions": [
+                {
+                  "id": "auto-set_plugin_instance-pos-called",
+                  "text": "The assistant called set_plugin_instance."
+                },
+                {
+                  "id": "auto-set_plugin_instance-pos-args",
+                  "text": "The arguments passed to set_plugin_instance fit the user request and include plugin, id."
+                }
+              ]
+            },
+            {
+              "id": "auto-set_plugin_instance-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call set_plugin_instance. The request is unrelated to set_plugin_instance: Add or update an extra row on a shipped plugin. Use when one pack should appear twice with a different source (carousel, hn-rain, hn-term), not when you need a new plugin. Pass plugin (bare catalog id) and id (instance slug). Optional name, hint, source, title, caption, image, link, filter become that row's defaults. Open it with set_view {mode:\"plugin:<plugin>:<id>\"}. Does not duplicate files. Shipped rows stay if you only meant to change knobs \u2014 that is set_plugin..",
+              "assertions": [
+                {
+                  "id": "auto-set_plugin_instance-neg-absent",
+                  "text": "The assistant did not call set_plugin_instance."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xu",
+          "type": "sampler",
+          "enabled": false,
+          "label": "delete_plugin_instance",
+          "method": "tools/call",
+          "tool": "delete_plugin_instance",
+          "args": {
+            "plugin": "fixture",
+            "id": "fixture"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "plugin": {
+                  "type": "string"
+                },
+                "id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "plugin",
+                "id"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-delete_plugin_instance-pos",
+              "polarity": "positive",
+              "prompt": "Please use delete_plugin_instance for this request. delete_plugin_instance: Remove one operator-added plugin instance. Use after list_plugin_instances. Pass {plugin, id}. Shipped instances that came with the pack stay. Does not delete the plugin tree or a headline source.. Include plugin, id.",
+              "assertions": [
+                {
+                  "id": "auto-delete_plugin_instance-pos-called",
+                  "text": "The assistant called delete_plugin_instance."
+                },
+                {
+                  "id": "auto-delete_plugin_instance-pos-args",
+                  "text": "The arguments passed to delete_plugin_instance fit the user request and include plugin, id."
+                }
+              ]
+            },
+            {
+              "id": "auto-delete_plugin_instance-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call delete_plugin_instance. The request is unrelated to delete_plugin_instance: Remove one operator-added plugin instance. Use after list_plugin_instances. Pass {plugin, id}. Shipped instances that came with the pack stay. Does not delete the plugin tree or a headline source..",
+              "assertions": [
+                {
+                  "id": "auto-delete_plugin_instance-neg-absent",
+                  "text": "The assistant did not call delete_plugin_instance."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xv",
+          "type": "sampler",
+          "enabled": true,
+          "label": "get_sdm",
+          "method": "tools/call",
+          "tool": "get_sdm",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-get_sdm-pos",
+              "polarity": "positive",
+              "prompt": "Please use get_sdm for this request. get_sdm: Read Nest Device Access status without secrets. Use before set_sdm or list_cameras. No arguments. Returns the PCM URL, linked flag, devices, and recent Pub/Sub events. Config file is ~/.zoto-viz/sdm.yml. linked false means set_sdm still needs a code..",
+              "assertions": [
+                {
+                  "id": "auto-get_sdm-pos-called",
+                  "text": "The assistant called get_sdm."
+                },
+                {
+                  "id": "auto-get_sdm-pos-args",
+                  "text": "The arguments passed to get_sdm fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-get_sdm-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call get_sdm. The request is unrelated to get_sdm: Read Nest Device Access status without secrets. Use before set_sdm or list_cameras. No arguments. Returns the PCM URL, linked flag, devices, and recent Pub/Sub events. Config file is ~/.zoto-viz/sdm.yml. linked false means set_sdm still needs a code..",
+              "assertions": [
+                {
+                  "id": "auto-get_sdm-neg-absent",
+                  "text": "The assistant did not call get_sdm."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xw",
+          "type": "sampler",
+          "enabled": true,
+          "label": "list_cameras",
+          "method": "tools/call",
+          "tool": "list_cameras",
+          "args": {},
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {},
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-list_cameras-pos",
+              "polarity": "positive",
+              "prompt": "Please use list_cameras for this request. list_cameras: List Nest cameras and doorbells from the last devices poll. Use when the user asks what cameras are linked. No arguments. Empty devices with linked false means OAuth is not finished \u2014 get_sdm then set_sdm. Does not start a live stream..",
+              "assertions": [
+                {
+                  "id": "auto-list_cameras-pos-called",
+                  "text": "The assistant called list_cameras."
+                },
+                {
+                  "id": "auto-list_cameras-pos-args",
+                  "text": "The arguments passed to list_cameras fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-list_cameras-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call list_cameras. The request is unrelated to list_cameras: List Nest cameras and doorbells from the last devices poll. Use when the user asks what cameras are linked. No arguments. Empty devices with linked false means OAuth is not finished \u2014 get_sdm then set_sdm. Does not start a live stream..",
+              "assertions": [
+                {
+                  "id": "auto-list_cameras-neg-absent",
+                  "text": "The assistant did not call list_cameras."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xx",
+          "type": "sampler",
+          "enabled": false,
+          "label": "set_sdm",
+          "method": "tools/call",
+          "tool": "set_sdm",
+          "args": {
+            "enterprise_id": "fixture",
+            "gcp_project": "fixture",
+            "client_id": "fixture",
+            "client_secret": "fixture",
+            "redirect_uri": "fixture",
+            "topic": "fixture",
+            "subscription": "fixture",
+            "code": "fixture"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "enterprise_id": {
+                  "type": "string",
+                  "description": "Device Access project UUID"
+                },
+                "gcp_project": {
+                  "type": "string"
+                },
+                "client_id": {
+                  "type": "string"
+                },
+                "client_secret": {
+                  "type": "string"
+                },
+                "redirect_uri": {
+                  "type": "string"
+                },
+                "topic": {
+                  "type": "string"
+                },
+                "subscription": {
+                  "type": "string"
+                },
+                "code": {
+                  "type": "string",
+                  "description": "PCM OAuth authorization code"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-set_sdm-pos",
+              "polarity": "positive",
+              "prompt": "Please use set_sdm for this request. set_sdm: Save Nest Device Access config and/or queue an OAuth code. Use after get_sdm shows what is missing. Pass any of enterprise_id (Device Access project UUID, not the GCP project id), gcp_project, client_id, client_secret, redirect_uri, topic, subscription, code. client_id and client_secret must be a Web OAuth client whose redirect is https://www.google.com. Pass code only after the PCM page redirects to google.com?code=... Secrets stay in ~/.zoto-viz/sdm.yml and are not echoed back..",
+              "assertions": [
+                {
+                  "id": "auto-set_sdm-pos-called",
+                  "text": "The assistant called set_sdm."
+                },
+                {
+                  "id": "auto-set_sdm-pos-args",
+                  "text": "The arguments passed to set_sdm fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-set_sdm-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call set_sdm. The request is unrelated to set_sdm: Save Nest Device Access config and/or queue an OAuth code. Use after get_sdm shows what is missing. Pass any of enterprise_id (Device Access project UUID, not the GCP project id), gcp_project, client_id, client_secret, redirect_uri, topic, subscription, code. client_id and client_secret must be a Web OAuth client whose redirect is https://www.google.com. Pass code only after the PCM page redirects to google.com?code=... Secrets stay in ~/.zoto-viz/sdm.yml and are not echoed back..",
+              "assertions": [
+                {
+                  "id": "auto-set_sdm-neg-absent",
+                  "text": "The assistant did not call set_sdm."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xy",
+          "type": "sampler",
+          "enabled": true,
+          "label": "get_logs",
+          "method": "tools/call",
+          "tool": "get_logs",
+          "args": {
+            "after": 0
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "after": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "description": "Return lines with seq greater than this. Omit for the whole ring."
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-get_logs-pos",
+              "polarity": "positive",
+              "prompt": "Please use get_logs for this request. get_logs: Read the monitor's in-process log ring. Use when a view is black, a plugin failed to load, or the catalog looks wrong and list_plugins errors are not enough. Pass {after: seq} to fetch lines newer than that seq, or omit after for the buffer. Returns {seq, lines:[{seq, t, text}]}. Same data as GET /api/logs. Does not include packet payloads..",
+              "assertions": [
+                {
+                  "id": "auto-get_logs-pos-called",
+                  "text": "The assistant called get_logs."
+                },
+                {
+                  "id": "auto-get_logs-pos-args",
+                  "text": "The arguments passed to get_logs fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-get_logs-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call get_logs. The request is unrelated to get_logs: Read the monitor's in-process log ring. Use when a view is black, a plugin failed to load, or the catalog looks wrong and list_plugins errors are not enough. Pass {after: seq} to fetch lines newer than that seq, or omit after for the buffer. Returns {seq, lines:[{seq, t, text}]}. Same data as GET /api/logs. Does not include packet payloads..",
+              "assertions": [
+                {
+                  "id": "auto-get_logs-neg-absent",
+                  "text": "The assistant did not call get_logs."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0xz",
+          "type": "sampler",
+          "enabled": false,
+          "label": "install_plugin_zip",
+          "method": "tools/call",
+          "tool": "install_plugin_zip",
+          "args": {
+            "zip_b64": "${zip_b64}"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "zip_b64": {
+                  "type": "string",
+                  "description": "Base64-encoded plugin zip"
+                },
+                "overwrite": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Replace plugins/<id>.zip when the incoming sha256 differs"
+                },
+                "force": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Write even when plugins/src/<id>/ has uncommitted changes. Does not override a shipped src tree."
+                },
+                "mirror": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Ignored. Catalog install does not copy into a home-dir plugin tree."
+                }
+              },
+              "required": [
+                "zip_b64"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-install_plugin_zip-pos",
+              "polarity": "positive",
+              "prompt": "Please use install_plugin_zip for this request. install_plugin_zip: Drop a contrib plugin zip into the checkout. Use when the operator wants plugins/<id>.zip (gitignored), not a shipped src tree and not a home-dir experiment. Pass {zip_b64}. overwrite replaces that same contrib zip when the sha256 differs. force writes even if plugins/src/<id>/ has uncommitted edits; it still will not replace a shipped src tree (the id is reminted to <id>-2). Returns path, id, and consent-required when TypeScript, Python, or GLSL needs consent_plugin before it runs. Do not git-add. For ~/.zoto-viz/plugins/local use publish_local_plugin.. Include zip_b64.",
+              "assertions": [
+                {
+                  "id": "auto-install_plugin_zip-pos-called",
+                  "text": "The assistant called install_plugin_zip."
+                },
+                {
+                  "id": "auto-install_plugin_zip-pos-args",
+                  "text": "The arguments passed to install_plugin_zip fit the user request and include zip_b64."
+                }
+              ]
+            },
+            {
+              "id": "auto-install_plugin_zip-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call install_plugin_zip. The request is unrelated to install_plugin_zip: Drop a contrib plugin zip into the checkout. Use when the operator wants plugins/<id>.zip (gitignored), not a shipped src tree and not a home-dir experiment. Pass {zip_b64}. overwrite replaces that same contrib zip when the sha256 differs. force writes even if plugins/src/<id>/ has uncommitted edits; it still will not replace a shipped src tree (the id is reminted to <id>-2). Returns path, id, and consent-required when TypeScript, Python, or GLSL needs consent_plugin before it runs. Do not git-add. For ~/.zoto-viz/plugins/local use publish_local_plugin..",
+              "assertions": [
+                {
+                  "id": "auto-install_plugin_zip-neg-absent",
+                  "text": "The assistant did not call install_plugin_zip."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0x10",
+          "type": "sampler",
+          "enabled": false,
+          "label": "publish_local_plugin",
+          "method": "tools/call",
+          "tool": "publish_local_plugin",
+          "args": {
+            "zip_b64": "fixture",
+            "files": {},
+            "description": "fixture",
+            "yaml": "fixture",
+            "id": "fixture",
+            "name": "fixture",
+            "engine": "graph",
+            "base": "fixture"
+          },
+          "expect": {
+            "resultShape": "tools/call",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "zip_b64": {
+                  "type": "string",
+                  "description": "Base64-encoded plugin zip"
+                },
+                "files": {
+                  "type": "object",
+                  "additionalProperties": {
+                    "type": "string"
+                  },
+                  "description": "Plugin tree (plugin.yml required; optional visualisation.yml, frontend/, \u2026)"
+                },
+                "description": {
+                  "type": "string",
+                  "description": "Natural-language brief, or a plugin.yml body starting with id:"
+                },
+                "yaml": {
+                  "type": "string",
+                  "description": "Lone plugin.yml body"
+                },
+                "id": {
+                  "type": "string",
+                  "description": "Preferred plugin id when minting from description. Slugged, then reminted if that id is already in the catalog (unless overwrite updates that zip)."
+                },
+                "name": {
+                  "type": "string"
+                },
+                "engine": {
+                  "type": "string",
+                  "enum": [
+                    "graph",
+                    "netpong",
+                    "invaders",
+                    "command",
+                    "frogger",
+                    "cpupong",
+                    "doom",
+                    "waves",
+                    "orbits",
+                    "helix",
+                    "skyline",
+                    "pacman",
+                    "tetris",
+                    "portal",
+                    "carousel"
+                  ]
+                },
+                "base": {
+                  "type": "string",
+                  "description": "Graph wrap target when engine is graph"
+                },
+                "overwrite": {
+                  "type": "boolean",
+                  "default": false,
+                  "description": "Replace ~/.zoto-viz/plugins/local/<id>.zip when the sha256 differs"
+                },
+                "activate": {
+                  "type": "boolean",
+                  "default": true,
+                  "description": "Switch the open UI to plugin:<id> when the zip is safe"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "evals": [
+            {
+              "id": "auto-publish_local_plugin-pos",
+              "polarity": "positive",
+              "prompt": "Please use publish_local_plugin for this request. publish_local_plugin: Write a plugin that is not part of the git checkout. Use when experimenting without touching plugins/src. Pass exactly one of zip_b64, files (path \u2192 text, plugin.yml required), or description. Optional id, name, engine, base, overwrite, activate (default true). Writes ~/.zoto-viz/plugins/local/<id>.zip, unpacks it, and switches the open view when the zip is YAML-only or already consented. Code-bearing zips return consent-required \u2014 then consent_plugin and set_view. A taken id is reminted to <id>-2 unless overwrite updates that same local zip. Do not use this for a shipped tree (draft_plugin) or a contrib zip in the repo (install_plugin_zip). Does not git-add..",
+              "assertions": [
+                {
+                  "id": "auto-publish_local_plugin-pos-called",
+                  "text": "The assistant called publish_local_plugin."
+                },
+                {
+                  "id": "auto-publish_local_plugin-pos-args",
+                  "text": "The arguments passed to publish_local_plugin fit the user request."
+                }
+              ]
+            },
+            {
+              "id": "auto-publish_local_plugin-neg",
+              "polarity": "negative",
+              "prompt": "Answer in one sentence and do not call publish_local_plugin. The request is unrelated to publish_local_plugin: Write a plugin that is not part of the git checkout. Use when experimenting without touching plugins/src. Pass exactly one of zip_b64, files (path \u2192 text, plugin.yml required), or description. Optional id, name, engine, base, overwrite, activate (default true). Writes ~/.zoto-viz/plugins/local/<id>.zip, unpacks it, and switches the open view when the zip is YAML-only or already consented. Code-bearing zips return consent-required \u2014 then consent_plugin and set_view. A taken id is reminted to <id>-2 unless overwrite updates that same local zip. Do not use this for a shipped tree (draft_plugin) or a contrib zip in the repo (install_plugin_zip). Does not git-add..",
+              "assertions": [
+                {
+                  "id": "auto-publish_local_plugin-neg-absent",
+                  "text": "The assistant did not call publish_local_plugin."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "id": "nmvyeim0x11",
+          "type": "sampler",
+          "enabled": true,
+          "label": "Teardown",
+          "method": "teardown"
+        }
+      ]
+    }
+  ],
+  "load": {
+    "durationMs": 0,
+    "rampUpMs": 0,
+    "maxConcurrency": 1,
+    "jitterMs": 0,
+    "rampDownMs": 60000,
+    "dwellMs": 0,
+    "iterations": 1,
+    "lanes": 1
+  },
+  "params": {
+    "ip": {
+      "example": "@lan",
+      "usedBy": [
+        "nmvyeim0xe"
+      ]
+    },
+    "id": {
+      "example": "fixture",
+      "usedBy": [
+        "nmvyeim0xh",
+        "nmvyeim0xk"
+      ]
+    },
+    "kind": {
+      "example": "reviewed",
+      "usedBy": [
+        "nmvyeim0xh"
+      ]
+    },
+    "zip_b64": {
+      "example": "fixture",
+      "usedBy": [
+        "nmvyeim0xz"
+      ]
+    }
+  }
+}

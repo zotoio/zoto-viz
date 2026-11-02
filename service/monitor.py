@@ -121,7 +121,7 @@ TSHARK_RSS_LIMIT = 1 << 30  # recycle capture when tshark RSS passes 1 GiB
 RATE_WINDOW_S = 5          # bytes/s smoothing window
 DISCOVERY_EVERY_S = 60
 PERSIST_EVERY_S = 30
-_PUBLISH_CACHE_S = 0.75
+_PUBLISH_CACHE_S = 1.0
 _publish_memo: tuple[float, dict] | None = None
 TLS_PORTS = {"443", "8443", "853", "993", "995", "465", "5223", "5228"}
 
@@ -1827,16 +1827,17 @@ async def housekeeping_loop(state: State) -> None:
 # --------------------------------------------------------------------------- web
 
 
-def publish_state(state: State) -> dict:
+def publish_state(state: State, *, refresh: bool = False) -> dict:
     """1 Hz snapshot after plugin service hooks have had a chance to decorate it.
 
-    Reuse the last payload for a short window so a Vite reconnect storm
-    (``/ws`` + ``GET /api/state`` + the broadcast tick) does not rebuild
-    thousands of devices on the event loop three times and starve curl.
+    Reuse the last payload for one second so a Vite reconnect storm
+    (``/ws`` + ``GET /api/state`` + an MCP ``get_state``) does not rebuild
+    thousands of devices on the event loop and starve other requests.
+    The broadcast tick passes ``refresh=True`` so the socket still moves.
     """
     global _publish_memo
     now = time.time()
-    if _publish_memo and now - _publish_memo[0] < _PUBLISH_CACHE_S:
+    if not refresh and _publish_memo and now - _publish_memo[0] < _PUBLISH_CACHE_S:
         return _publish_memo[1]
     msg = plugin_ds.apply_snapshot(hooks.on_snapshot(state.snapshot(now)))
     sources.apply(msg)
@@ -1949,7 +1950,9 @@ async def broadcast_loop(app: web.Application) -> None:
         signals.observe_capture(state)
         clients: set[web.WebSocketResponse] = app["clients"]
         if clients:
-            msg = json.dumps({"type": "state", **publish_state(state)})
+            # refresh=True so a 1s cache does not freeze the socket on a fast tick.
+            snap = publish_state(state, refresh=True)
+            msg = json.dumps({"type": "state", **snap})
             await asyncio.gather(*(ws.send_str(msg) for ws in list(clients)), return_exceptions=True)
         await asyncio.sleep(1)
 

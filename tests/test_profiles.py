@@ -234,3 +234,23 @@ def test_global_stores_mic_declined_for_every_browser(tmp_path, monkeypatch) -> 
         assert json.loads(junk.body)["media"] == {}
 
     asyncio.run(run())
+
+
+def test_read_reuses_parse_until_the_file_changes(tmp_path, monkeypatch) -> None:
+    _iso(tmp_path, monkeypatch)
+    profiles.FILE.write_text(
+        "default: zoto-viz\nprofiles:\n  zoto-viz: {shipped: true, label: zoto viz, settings: {theme: midnight}}\n",
+        encoding="utf-8",
+    )
+    first = profiles._read()
+    second = profiles._read()
+    assert first == second
+    assert first is not second
+    assert profiles.current_profile() == ("zoto-viz", {"theme": "midnight"})
+    profiles._write({
+        "default": "zoto-viz",
+        "profiles": {
+            "zoto-viz": {"shipped": True, "label": "zoto viz", "settings": {"theme": "ember"}},
+        },
+    })
+    assert profiles.current_settings()["theme"] == "ember"

@@ -47,7 +47,7 @@ Private plugin catalog access needs `gh auth login` (device flow) when using
 
 Local steps (idempotent):
 
-1. `.venv` + `pip install -r requirements.txt`, then continue in that interpreter
+1. `.venv` + `pip install -r requirements.txt`, then continue in that interpreter. A venv whose `pyvenv.cfg` names another directory, or whose interpreter is a different Python than the one that created it, is rebuilt (`python3 -m venv --clear`) instead of reused. The user service runs the same check before each start (`python3 -m service.ensure_venv`).
 2. `corepack` → pnpm, then `web/` install + build, and `service/cursor-bridge/` `pnpm install` (Cursor SDK harness for pytest)
 3. PATH shim (`~/.local/bin/zoto-viz` or `%LOCALAPPDATA%\zoto-viz\bin\zoto-viz.cmd`). On macOS the installer also appends that dir to `~/.zprofile` / `~/.zshrc`.
 4. `~/.zoto-viz/sys-config.yml` (existing keys kept)

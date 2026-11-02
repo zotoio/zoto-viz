@@ -367,6 +367,94 @@ def test_create_venv_and_pip(tmp_path: Path) -> None:
     inst.pip_install(host, run)
     assert any("venv" in c for c in calls)
     assert any("pip" in c for c in calls)
+    assert not any("--clear" in c for c in calls)
+
+
+def _write_pyvenv(host: inst.Host, command: str, version: str = "3.12.3") -> Path:
+    py = inst.venv_python(host)
+    py.parent.mkdir(parents=True, exist_ok=True)
+    py.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+    cfg = host.root / ".venv" / "pyvenv.cfg"
+    cfg.write_text(
+        f"home = /usr/bin\nversion = {version}\ncommand = {command}\n",
+        encoding="utf-8",
+    )
+    return py
+
+
+def test_create_venv_clears_foreign_or_version_mismatch(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    _write_pyvenv(host, "/usr/bin/python3 -m venv /other/project/.venv")
+    calls: list[list[str]] = []
+
+    def run(cmd, cwd):
+        calls.append(cmd)
+        return 0, "3 12\n", ""
+
+    inst.create_venv(host, run)
+    assert calls[0][:4] == ["/usr/bin/python3", "-m", "venv", "--clear"]
+
+    calls.clear()
+    _write_pyvenv(host, f"/usr/bin/python3 -m venv {host.root / '.venv'}")
+
+    def run_new(cmd, cwd):
+        calls.append(cmd)
+        if cmd[-1:] == ["print(sys.version_info[0], sys.version_info[1])"] or "version_info" in " ".join(cmd):
+            return 0, "3 14\n", ""
+        return 0, "", ""
+
+    inst.create_venv(host, run_new)
+    assert "--clear" in calls[-1]
+
+
+def test_unquoted_venv_path_with_spaces_is_not_foreign(tmp_path: Path) -> None:
+    root = tmp_path / "my project" / "repo"
+    host = _host(tmp_path, root=root)
+    dest = root / ".venv"
+    _write_pyvenv(host, f"/usr/bin/python3 -m venv --clear {dest}", version="3.14.4")
+
+    def run(cmd, cwd):
+        if "version_info" in " ".join(cmd):
+            return 0, "3 14\n", ""
+        return 0, "", ""
+
+    assert inst.venv_rebuild_reason(host, run) is None
+
+
+def test_windows_venv_command_keeps_backslashes() -> None:
+    venv = Path(r"C:\Users\me\My Project\.venv")
+    command = r"C:\Python314\python.exe -m venv --clear C:\Users\me\My Project\.venv"
+    assert inst._command_targets_venv(command, venv)
+    assert not inst._command_targets_venv(
+        r"C:\Python314\python.exe -m venv C:\other\My Project\.venv",
+        venv,
+    )
+
+
+def test_ensure_checkout_venv_skips_healthy_and_installs_missing_import(tmp_path: Path) -> None:
+    host = _host(tmp_path)
+    _write_pyvenv(host, f"/usr/bin/python3 -m venv {host.root / '.venv'}", version="3.14.4")
+    notes: list[str] = []
+
+    def healthy(cmd, cwd):
+        if "version_info" in " ".join(cmd):
+            return 0, "3 14\n", ""
+        if "aiohttp" in " ".join(cmd):
+            return 0, "", ""
+        return 0, "", ""
+
+    assert inst.ensure_checkout_venv(host, healthy, emit=notes.append) == "ok"
+    assert notes == []
+
+    def missing_import(cmd, cwd):
+        if "version_info" in " ".join(cmd):
+            return 0, "3 14\n", ""
+        if "aiohttp" in " ".join(cmd):
+            return 1, "", "ModuleNotFoundError"
+        return 0, "", ""
+
+    assert inst.ensure_checkout_venv(host, missing_import, emit=notes.append) == "requirements"
+    assert notes == ["venv: installing requirements.txt"]
 
 
 def _executable_venv_python(host: inst.Host) -> Path:

@@ -253,6 +253,9 @@ def test_write_systemd_override(tmp_path: Path) -> None:
     assert "ZOTO_VIZ_REPO_ROOT=/opt/zoto-viz" in text
     assert "WorkingDirectory=/opt/zoto-viz" in text
     assert "ExecStart=/opt/zoto-viz/.venv/bin/python -m service.monitor\n" in text
+    assert "ExecStartPre=" in text
+    assert "-m service.ensure_venv" in text
+    assert "TimeoutStartSec=300" in text
     assert "--bind" not in text
     assert "do not copy" in text
 

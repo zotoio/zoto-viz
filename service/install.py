@@ -174,6 +174,138 @@ def venv_python(host: Host) -> Path:
     return host.root / ".venv" / "bin" / "python"
 
 
+def base_python() -> str:
+    """Interpreter outside a checkout ``.venv``, used to recreate that venv.
+
+    ``sys.executable`` is the venv itself after ``install`` re-execs, and a
+    copied or upgraded venv is the interpreter that cannot import ``aiohttp``.
+    """
+    found = shutil.which("python3")
+    # Keep the python3 symlink. Resolving it would pin python3.14 in the
+    # systemd drop-in and the next interpreter upgrade would not run this check.
+    candidates = [Path(found)] if found else []
+    candidates.extend([Path("/usr/bin/python3"), Path(sys.executable)])
+    for candidate in candidates:
+        if not candidate.is_file():
+            continue
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if ".venv" in candidate.parts or ".venv" in resolved.parts:
+            continue
+        return str(candidate)
+    return found or sys.executable
+
+
+def _pyvenv_field(text: str, key: str) -> str | None:
+    for line in text.splitlines():
+        if line.startswith(key + " =") or line.startswith(key + "="):
+            return line.split("=", 1)[1].strip()
+    return None
+
+
+def _version_pair(text: str) -> tuple[int, int] | None:
+    parts = text.replace(",", " ").split()
+    nums: list[int] = []
+    for part in parts:
+        head = part.split(".", 1)[0]
+        if not head.isdigit():
+            if nums:
+                break
+            continue
+        nums.append(int(head))
+        rest = part.split(".", 1)[1] if "." in part else ""
+        if rest:
+            minor = rest.split(".", 1)[0]
+            if minor.isdigit():
+                nums.append(int(minor))
+        if len(nums) >= 2:
+            return nums[0], nums[1]
+    return None
+
+
+def _command_ends_with_path(command: str, path: str) -> bool:
+    """True when ``command`` ends with ``path`` on a token boundary.
+
+    Separators are treated as equivalent so a Windows ``pyvenv.cfg`` matches
+    after the backslashes are left intact.
+    """
+    if not path:
+        return False
+    hay = command.replace("\\", "/")
+    needle = path.replace("\\", "/")
+    if os.name == "nt":
+        hay = hay.casefold()
+        needle = needle.casefold()
+    if not hay.endswith(needle):
+        return False
+    if len(hay) == len(needle):
+        return True
+    return hay[-len(needle) - 1] in " \t\"'"
+
+
+def _command_targets_venv(command: str, venv: Path) -> bool:
+    """True when this ``pyvenv.cfg`` command created ``venv``.
+
+    CPython writes ``command = {exe} -m venv {flags} {env_dir}`` and appends
+    ``env_dir`` unquoted. A POSIX ``shlex`` split truncates a path that
+    contains spaces and strips Windows backslashes, so a healthy venv looks
+    foreign and is deleted on every check.
+    """
+    text = command.strip()
+    if not text:
+        return False
+    needles = [os.path.normpath(os.fspath(venv))]
+    try:
+        needles.append(os.path.normpath(os.fspath(venv.expanduser().resolve())))
+    except OSError:
+        pass
+    return any(_command_ends_with_path(text, needle) for needle in needles)
+
+
+def venv_rebuild_reason(host: Host, run: Run) -> str | None:
+    """Why ``.venv`` cannot be this checkout's interpreter, or None when it can.
+
+    ``missing`` — no venv yet.
+    ``broken`` — directory or interpreter does not run.
+    ``foreign`` — ``pyvenv.cfg`` was created for a different directory (a copied venv).
+    ``version`` — ``python3`` is a different major.minor than the venv (site-packages
+    for 3.12 are invisible to 3.14, so ``import aiohttp`` fails and systemd restarts).
+    """
+    py = venv_python(host)
+    venv = host.root / ".venv"
+    if not py.is_file():
+        return "broken" if venv.exists() else "missing"
+    cfg = venv / "pyvenv.cfg"
+    if not cfg.is_file():
+        return None
+    text = cfg.read_text(encoding="utf-8", errors="replace")
+    command = _pyvenv_field(text, "command")
+    if command and not _command_targets_venv(command, venv):
+        return "foreign"
+    want = _version_pair(_pyvenv_field(text, "version") or "")
+    if want is None:
+        return None
+    code, out, _err = run(
+        [str(py), "-c", "import sys; print(sys.version_info[0], sys.version_info[1])"],
+        host.root,
+    )
+    if code != 0:
+        return "broken"
+    if _version_pair(out) != want:
+        return "version"
+    return None
+
+
+def venv_imports_runtime(host: Host, run: Run) -> bool:
+    py = venv_python(host)
+    if not py.is_file():
+        return False
+    code, _out, _err = run([str(py), "-c", "import aiohttp"], host.root)
+    return code == 0
+
+
 def cli_path(host: Host) -> Path:
     return host.root / CLI_NAME
 
@@ -758,7 +890,7 @@ def build_plan(host: Host, checks: Sequence[Check], *, no_system: bool = False) 
     steps.append(
         PlanStep(
             id="venv",
-            summary=f"create {host.root / '.venv'} if missing",
+            summary=f"create or rebuild {host.root / '.venv'} when the interpreter does not match this checkout",
             risk="local",
             fn="create_venv",
         )
@@ -974,12 +1106,33 @@ def ensure_user_path(host: Host) -> str:
 
 
 def create_venv(host: Host, run: Run) -> None:
-    py = venv_python(host)
-    if py.is_file():
+    reason = venv_rebuild_reason(host, run)
+    if reason is None:
         return
-    code, _out, err = run([host.executable, "-m", "venv", str(host.root / ".venv")], host.root)
+    argv = [host.executable, "-m", "venv"]
+    if (host.root / ".venv").exists():
+        argv.append("--clear")
+    argv.append(str(host.root / ".venv"))
+    code, _out, err = run(argv, host.root)
     if code != 0:
         raise RuntimeError(err.strip() or "venv create failed")
+
+
+def ensure_checkout_venv(host: Host, run: Run, *, emit: Callable[[str], None] | None = None) -> str:
+    """Recreate a copied or version-mismatched venv, then install requirements if needed."""
+    reason = venv_rebuild_reason(host, run)
+    if reason is not None:
+        if emit is not None:
+            emit(f"venv: rebuilding ({reason})")
+        create_venv(host, run)
+        pip_install(host, run)
+        return reason
+    if not venv_imports_runtime(host, run):
+        if emit is not None:
+            emit("venv: installing requirements.txt")
+        pip_install(host, run)
+        return "requirements"
+    return "ok"
 
 
 def pip_install(host: Host, run: Run) -> None:

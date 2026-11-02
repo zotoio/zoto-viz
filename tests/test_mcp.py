@@ -351,6 +351,72 @@ def test_mcp_tool_descriptions_tell_agents_how() -> None:
     assert any("set_view" in line for line in feat["how"])
 
 
+def test_list_plugins_scans_the_catalog_once(monkeypatch: pytest.MonkeyPatch) -> None:
+    calls = {"n": 0}
+
+    def scan() -> dict:
+        calls["n"] += 1
+        return {"plugins": [{"id": "sample", "name": "Sample"}], "errors": [], "blocked": []}
+
+    monkeypatch.setattr(plugin_mcp.plugins, "scan", scan)
+    monkeypatch.setattr(plugin_mcp.profiles, "current_settings", lambda: {})
+    listed = json.loads(plugin_mcp.call_tool("list_plugins", {})["content"][0]["text"])
+    assert calls["n"] == 1
+    assert listed["plugins"][0]["mode"] == "plugin:sample"
+
+
+def test_get_state_omits_flows(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        "service.monitor.publish_state",
+        lambda _state: {"devices": [{"ip": "10.0.0.2"}], "flows": [{"a": "10.0.0.2"}], "stats": {"flows": 1}},
+    )
+    app = web.Application()
+    app["state"] = object()
+    got = json.loads(plugin_mcp.call_tool("get_state", {}, app=app)["content"][0]["text"])
+    assert got["ok"] is True
+    assert "flows" not in got
+    assert got["stats"]["flows"] == 1
+    assert "get_traffic" in next(t["description"] for t in plugin_mcp.active_tools() if t["name"] == "get_state")
+
+
+def test_publish_state_reuses_a_fresh_memo(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    from service import monitor
+
+    sentinel = {"devices": [], "flows": [{"a": "10.0.0.2"}]}
+    monkeypatch.setattr(monitor, "_publish_memo", (time.time(), sentinel))
+
+    class Boom:
+        def snapshot(self, now: float) -> dict:
+            raise AssertionError("rebuilt")
+
+    assert monitor.publish_state(Boom()) is sentinel
+
+
+def test_publish_state_refresh_rebuilds(monkeypatch: pytest.MonkeyPatch) -> None:
+    import time
+
+    from service import monitor
+
+    monkeypatch.setattr(monitor, "_publish_memo", (time.time(), {"old": True}))
+
+    class State:
+        def snapshot(self, now: float) -> dict:
+            return {"devices": [], "flows": []}
+
+    monkeypatch.setattr(monitor.hooks, "on_snapshot", lambda msg: msg)
+    monkeypatch.setattr(monitor.plugin_ds, "apply_snapshot", lambda msg: msg)
+    monkeypatch.setattr(monitor.sources, "apply", lambda msg: msg)
+    monkeypatch.setattr(monitor.sdm, "apply", lambda msg: msg)
+    monkeypatch.setattr(monitor.live, "snapshot", lambda: {"seq": 1})
+    monkeypatch.setattr(monitor.repo_sync, "repo_rev", lambda: "")
+    out = monitor.publish_state(State(), refresh=True)
+    assert out["flows"] == []
+    assert out["live"]["seq"] == 1
+    assert "old" not in out
+
+
 class McpHttpTests(AioHTTPTestCase):
     async def get_application(self) -> web.Application:
         app = web.Application()
