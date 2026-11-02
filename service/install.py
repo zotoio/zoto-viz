@@ -9,7 +9,6 @@ instructions.
 from __future__ import annotations
 
 import os
-import shlex
 import shutil
 import subprocess
 import sys
@@ -226,6 +225,45 @@ def _version_pair(text: str) -> tuple[int, int] | None:
     return None
 
 
+def _command_ends_with_path(command: str, path: str) -> bool:
+    """True when ``command`` ends with ``path`` on a token boundary.
+
+    Separators are treated as equivalent so a Windows ``pyvenv.cfg`` matches
+    after the backslashes are left intact.
+    """
+    if not path:
+        return False
+    hay = command.replace("\\", "/")
+    needle = path.replace("\\", "/")
+    if os.name == "nt":
+        hay = hay.casefold()
+        needle = needle.casefold()
+    if not hay.endswith(needle):
+        return False
+    if len(hay) == len(needle):
+        return True
+    return hay[-len(needle) - 1] in " \t\"'"
+
+
+def _command_targets_venv(command: str, venv: Path) -> bool:
+    """True when this ``pyvenv.cfg`` command created ``venv``.
+
+    CPython writes ``command = {exe} -m venv {flags} {env_dir}`` and appends
+    ``env_dir`` unquoted. A POSIX ``shlex`` split truncates a path that
+    contains spaces and strips Windows backslashes, so a healthy venv looks
+    foreign and is deleted on every check.
+    """
+    text = command.strip()
+    if not text:
+        return False
+    needles = [os.path.normpath(os.fspath(venv))]
+    try:
+        needles.append(os.path.normpath(os.fspath(venv.expanduser().resolve())))
+    except OSError:
+        pass
+    return any(_command_ends_with_path(text, needle) for needle in needles)
+
+
 def venv_rebuild_reason(host: Host, run: Run) -> str | None:
     """Why ``.venv`` cannot be this checkout's interpreter, or None when it can.
 
@@ -244,14 +282,8 @@ def venv_rebuild_reason(host: Host, run: Run) -> str | None:
         return None
     text = cfg.read_text(encoding="utf-8", errors="replace")
     command = _pyvenv_field(text, "command")
-    if command:
-        try:
-            dest = Path(shlex.split(command)[-1]).expanduser().resolve()
-            same = dest == venv.resolve()
-        except (OSError, ValueError):
-            same = False
-        if not same:
-            return "foreign"
+    if command and not _command_targets_venv(command, venv):
+        return "foreign"
     want = _version_pair(_pyvenv_field(text, "version") or "")
     if want is None:
         return None
