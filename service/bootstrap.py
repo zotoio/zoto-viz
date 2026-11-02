@@ -146,14 +146,21 @@ def gather_bootstrap_items(host: inst.Host, run: Run | None = None) -> list[Boot
             )
 
     venv_py = inst.venv_python(host)
-    venv_ok = venv_py.is_file()
+    venv_reason = inst.venv_rebuild_reason(host, run)
+    venv_ok = venv_reason is None and inst.venv_imports_runtime(host, run)
+    if venv_ok:
+        venv_detail = str(venv_py)
+    elif venv_reason:
+        venv_detail = f"{venv_reason}: {venv_py}"
+    else:
+        venv_detail = f"cannot import aiohttp: {venv_py}"
     items.append(
         BootstrapItem(
             id="venv",
             label="Python venv (.venv)",
             ok=venv_ok,
-            detail=str(venv_py) if venv_ok else "missing",
-            install_summary="create .venv + pip install -r requirements.txt",
+            detail=venv_detail,
+            install_summary="create or rebuild .venv and pip install -r requirements.txt",
             install_fn="venv_and_pip",
             risk="local",
         )
@@ -189,8 +196,7 @@ def format_bootstrap(items: Sequence[BootstrapItem]) -> str:
 
 def _apply_item(item: BootstrapItem, host: inst.Host, run: Run) -> str:
     if item.install_fn == "venv_and_pip":
-        inst.create_venv(host, run)
-        inst.pip_install(host, run)
+        inst.ensure_checkout_venv(host, run)
         return "venv + pip ok"
     if item.install_fn == "setup_pnpm":
         inst.setup_pnpm(host, run)

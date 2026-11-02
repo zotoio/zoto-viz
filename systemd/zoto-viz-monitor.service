@@ -22,9 +22,12 @@ Wants=network-online.target
 Type=simple
 Environment=ZOTO_VIZ_ROOT=%h/zoto-viz
 WorkingDirectory=%h/zoto-viz
+# Base interpreter, not the venv: a copied or version-mismatched .venv is what fails.
+ExecStartPre=/usr/bin/python3 -m service.ensure_venv
 ExecStart=%h/zoto-viz/.venv/bin/python -m service.monitor --bind 127.0.0.1 --port 7020
 Restart=on-failure
 RestartSec=5
+TimeoutStartSec=300
 Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-%h/zoto-viz/.env
 KillMode=control-group

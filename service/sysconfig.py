@@ -480,7 +480,10 @@ def write_systemd_override(
     # Listen / screensaver flags are read from sys-config.yml at process start
     # (do not bake --bind into ExecStart or a later yaml edit is ignored).
     abs_root = str(Path(root).expanduser().resolve())
+    from .install import base_python
+
     argv = [f"{abs_root}/.venv/bin/python", "-m", "service.monitor"]
+    pre = f"{base_python()} -m service.ensure_venv"
     if resolve_listen(cfg)["inhibit_screensaver"]:
         binary = inhibit_bin if inhibit_bin is not None else shutil.which("systemd-inhibit")
         if binary:
@@ -499,8 +502,11 @@ def write_systemd_override(
         f"WorkingDirectory={abs_root}\n"
         f"Environment=ZOTO_VIZ_ROOT={abs_root}\n"
         f"Environment=ZOTO_VIZ_REPO_ROOT={abs_root}\n"
+        "ExecStartPre=\n"
+        f"ExecStartPre={pre}\n"
         "ExecStart=\n"
-        f"ExecStart={' '.join(argv)}\n",
+        f"ExecStart={' '.join(argv)}\n"
+        "TimeoutStartSec=300\n",
         encoding="utf-8",
     )
     return path

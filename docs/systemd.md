@@ -11,7 +11,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now zoto-viz-monitor
 ```
 
-The unit’s `ZOTO_VIZ_ROOT=%h/zoto-viz` is a placeholder. Install writes the drop-in from the detected checkout (`Environment=ZOTO_VIZ_ROOT` and `Environment=ZOTO_VIZ_REPO_ROOT`) and from listen keys in `~/.zoto-viz/sys-config.yml` (`bind`, `port`, `insecure_lan`, `inhibit_screensaver`). See [Install](/install) for catalog detection order. A Cursor stop hook restarts this unit when checkout `service/*.py` is newer than the process (`ZOTO_VIZ_NO_AUTO_RESTART=1` disables it). The monitor also fast-forwards the checkout every 5 minutes (`ZOTO_VIZ_PULL_S` / `ZOTO_VIZ_NO_AUTO_PULL=1`) and restarts this unit after a pull.
+The unit’s `ZOTO_VIZ_ROOT=%h/zoto-viz` is a placeholder. Install writes the drop-in from the detected checkout (`Environment=ZOTO_VIZ_ROOT` and `Environment=ZOTO_VIZ_REPO_ROOT`) and from listen keys in `~/.zoto-viz/sys-config.yml` (`bind`, `port`, `insecure_lan`, `inhibit_screensaver`). Before each start, `ExecStartPre` runs `python3 -m service.ensure_venv` on the base interpreter. That recreates `.venv` when `pyvenv.cfg` belongs to another directory or to a different Python than `python3` (a 3.12 tree whose `python3` symlink now points at 3.14 cannot see `aiohttp`), then installs `requirements.txt` if the import still fails. See [Install](/install) for catalog detection order. A Cursor stop hook restarts this unit when checkout `service/*.py` is newer than the process (`ZOTO_VIZ_NO_AUTO_RESTART=1` disables it). The monitor also fast-forwards the checkout every 5 minutes (`ZOTO_VIZ_PULL_S` / `ZOTO_VIZ_NO_AUTO_PULL=1`) and restarts this unit after a pull.
 
 ```yaml
 # ~/.zoto-viz/sys-config.yml — LAN kiosk

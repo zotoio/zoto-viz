@@ -12,15 +12,22 @@ whitelist.
 """
 from __future__ import annotations
 
+import copy
 import os
 import re
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
 from . import paths
 import yaml
 from aiohttp import web
+
+# safe_load stays on the pure-Python loader even when libyaml is installed.
+_YAML_LOAD = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+_doc_cache: tuple[tuple[str, int, int], dict[str, Any]] | None = None
+_doc_lock = threading.Lock()
 
 DIR = paths.user_dir()
 FILE = paths.profiles_file()
@@ -129,66 +136,101 @@ def _canon_id(pid: str) -> str:
     return SHIPPED_ID if pid == LEGACY_SHIPPED_ID else pid
 
 
-def _read() -> dict[str, Any]:
-    if not FILE.exists():
-        return _empty(fresh=True)
+def _load_yaml(text: str) -> Any:
+    loaded = yaml.load(text, Loader=_YAML_LOAD)
+    return loaded if loaded is not None else {}
+
+
+def _cache_key() -> tuple[str, int, int] | None:
     try:
-        raw = yaml.safe_load(FILE.read_text(encoding="utf-8")) or {}
-    except (OSError, yaml.YAMLError) as e:
-        raise ValueError(f"could not read {FILE}: {e}") from e
-    if not isinstance(raw, dict):
-        raise ValueError(f"{FILE} must be a mapping")
-    had_global = "global" in raw
-    profiles: dict[str, Any] = {}
-    src = raw.get("profiles") or {}
-    if not isinstance(src, dict):
-        raise ValueError("profiles must be a mapping")
-    for pid, body in src.items():
-        pid = str(pid)
-        if not ID_RE.match(pid) or not isinstance(body, dict):
-            continue
-        settings = body.get("settings")
-        item: dict[str, Any] = {
-            "shipped": _is_shipped(pid) or bool(body.get("shipped")),
-            "label": str(body.get("label") or pid),
-            "settings": settings if isinstance(settings, dict) else {},
-        }
-        model = _opt_model(body)
-        if model:
-            item["model"] = model
-        profiles[pid] = item
-    migrated = False
-    if LEGACY_SHIPPED_ID in profiles:
-        legacy = profiles.pop(LEGACY_SHIPPED_ID)
-        if SHIPPED_ID not in profiles:
-            profiles[SHIPPED_ID] = legacy
-        migrated = True
-    if SHIPPED_ID not in profiles:
-        profiles[SHIPPED_ID] = {"shipped": True, "label": SHIPPED_LABEL, "settings": {}}
-        migrated = True
-    else:
-        profiles[SHIPPED_ID]["shipped"] = True
-        profiles[SHIPPED_ID]["label"] = SHIPPED_LABEL
-        profiles[SHIPPED_ID].setdefault("settings", {})
-    default = _canon_id(str(raw.get("default") or SHIPPED_ID))
-    if default not in profiles:
-        default = SHIPPED_ID
-    global_block = _normalize_global(raw.get("global"))
-    if not had_global:
-        seeded = _seed_ai(profiles, default)
-        if seeded:
-            global_block = {"ai": seeded, "media": global_block["media"]}
-        migrated = True
-    doc = {"default": default, "global": global_block, "profiles": profiles, "fresh": False}
-    if migrated:
+        st = FILE.stat()
+    except OSError:
+        return None
+    return (str(FILE), st.st_mtime_ns, st.st_size)
+
+
+def _drop_cache() -> None:
+    global _doc_cache
+    _doc_cache = None
+
+
+def _read() -> dict[str, Any]:
+    """Parse profiles.yml once per mtime and size. Callers receive a copy."""
+    global _doc_cache
+    if not FILE.exists():
+        with _doc_lock:
+            _drop_cache()
+        return _empty(fresh=True)
+    with _doc_lock:
+        key = _cache_key()
+        if key is not None and _doc_cache is not None and _doc_cache[0] == key:
+            return copy.deepcopy(_doc_cache[1])
         try:
-            _write(doc)
-        except OSError:
-            pass
-    return doc
+            raw = _load_yaml(FILE.read_text(encoding="utf-8"))
+        except (OSError, yaml.YAMLError) as e:
+            raise ValueError(f"could not read {FILE}: {e}") from e
+        if not isinstance(raw, dict):
+            raise ValueError(f"{FILE} must be a mapping")
+        had_global = "global" in raw
+        profiles: dict[str, Any] = {}
+        src = raw.get("profiles") or {}
+        if not isinstance(src, dict):
+            raise ValueError("profiles must be a mapping")
+        for pid, body in src.items():
+            pid = str(pid)
+            if not ID_RE.match(pid) or not isinstance(body, dict):
+                continue
+            settings = body.get("settings")
+            item: dict[str, Any] = {
+                "shipped": _is_shipped(pid) or bool(body.get("shipped")),
+                "label": str(body.get("label") or pid),
+                "settings": settings if isinstance(settings, dict) else {},
+            }
+            model = _opt_model(body)
+            if model:
+                item["model"] = model
+            profiles[pid] = item
+        migrated = False
+        if LEGACY_SHIPPED_ID in profiles:
+            legacy = profiles.pop(LEGACY_SHIPPED_ID)
+            if SHIPPED_ID not in profiles:
+                profiles[SHIPPED_ID] = legacy
+            migrated = True
+        if SHIPPED_ID not in profiles:
+            profiles[SHIPPED_ID] = {"shipped": True, "label": SHIPPED_LABEL, "settings": {}}
+            migrated = True
+        else:
+            profiles[SHIPPED_ID]["shipped"] = True
+            profiles[SHIPPED_ID]["label"] = SHIPPED_LABEL
+            profiles[SHIPPED_ID].setdefault("settings", {})
+        default = _canon_id(str(raw.get("default") or SHIPPED_ID))
+        if default not in profiles:
+            default = SHIPPED_ID
+        global_block = _normalize_global(raw.get("global"))
+        if not had_global:
+            seeded = _seed_ai(profiles, default)
+            if seeded:
+                global_block = {"ai": seeded, "media": global_block["media"]}
+            migrated = True
+        doc = {"default": default, "global": global_block, "profiles": profiles, "fresh": False}
+        if migrated:
+            try:
+                _write_file(doc)
+            except OSError:
+                pass
+            key = _cache_key()
+        if key is not None:
+            _doc_cache = (key, doc)
+        return copy.deepcopy(doc)
 
 
 def _write(doc: dict[str, Any]) -> None:
+    with _doc_lock:
+        _write_file(doc)
+        _drop_cache()
+
+
+def _write_file(doc: dict[str, Any]) -> None:
     DIR.mkdir(mode=0o700, exist_ok=True)
     out = {
         "default": doc["default"],
@@ -271,18 +313,22 @@ def _id(raw: str) -> str:
     return pid
 
 
-def current_settings() -> dict[str, Any]:
-    """Default profile's settings blob (empty mapping when missing)."""
+def current_profile() -> tuple[str, dict[str, Any]]:
+    """Default profile id and its settings, from one cached read."""
     doc = _read()
     pid = str(doc.get("default") or SHIPPED_ID)
     p = doc["profiles"].get(pid) or {}
     settings = p.get("settings")
-    return settings if isinstance(settings, dict) else {}
+    return pid, settings if isinstance(settings, dict) else {}
+
+
+def current_settings() -> dict[str, Any]:
+    """Default profile's settings blob (empty mapping when missing)."""
+    return current_profile()[1]
 
 
 def current_id() -> str:
-    doc = _read()
-    return str(doc.get("default") or SHIPPED_ID)
+    return current_profile()[0]
 
 
 def list_meta() -> dict[str, Any]:

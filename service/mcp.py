@@ -394,10 +394,11 @@ ROLL_DICE_TOOL: dict[str, Any] = {
 GET_STATE_TOOL: dict[str, Any] = {
     "name": "get_state",
     "description": (
-        "Read the live LAN snapshot. Use when you need devices, flows, services, or radio "
-        "as the monitor sees them now. No arguments. Same payload as GET /api/state. "
-        "Fails if this MCP call has no monitor process attached. Not a settings read — "
-        "use get_settings for theme and view."
+        "Read the live LAN snapshot. Use when you need devices, services, or radio "
+        "as the monitor sees them now. Flow rows are left out; use get_traffic for "
+        "packets on one address or a group. No arguments. Device and radio fields "
+        "match GET /api/state, reused from the 1 Hz snapshot. Fails if this MCP call "
+        "has no monitor process attached. Not a settings read — use get_settings for theme and view."
     ),
     "inputSchema": {"type": "object", "additionalProperties": False, "properties": {}},
 }
@@ -981,8 +982,9 @@ def _knobs_for(row: dict[str, Any]) -> list[dict[str, Any]]:
     return knobs
 
 
-def _plugin_rows(pid: str | None = None) -> list[dict[str, Any]]:
-    scan = plugins.scan()
+def _plugin_rows(pid: str | None = None, scan: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+    if scan is None:
+        scan = plugins.scan()
     rows = scan.get("plugins") or []
     out: list[dict[str, Any]] = []
     settings = {}
@@ -1069,13 +1071,13 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
         if name == "list_features":
             return _tool_text({"ok": True, **live.features()})
         if name == "get_settings":
-            settings = {}
+            settings: dict[str, Any] = {}
             pid = ""
             try:
-                settings = profiles.current_settings()
-                pid = profiles.current_id()
+                pid, settings = profiles.current_profile()
             except Exception:
                 settings = {}
+                pid = ""
             return _tool_text({
                 "ok": True,
                 "profile": pid,
@@ -1095,7 +1097,7 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
         if name == "list_plugins":
             want = str(args.get("id") or "").strip() or None
             scan = plugins.scan()
-            rows = _plugin_rows(want)
+            rows = _plugin_rows(want, scan)
             errors = [dict(e) for e in (scan.get("errors") or []) if isinstance(e, dict)]
             blocked = [dict(b) for b in (scan.get("blocked") or []) if isinstance(b, dict)]
             if want and not rows:
@@ -1189,7 +1191,10 @@ def call_tool(name: str, arguments: dict[str, Any] | None, app: web.Application 
             return _tool_text({"ok": True, **logbuf.since(int(after))})
         if name == "get_state":
             from .monitor import publish_state
-            return _tool_text({"ok": True, **publish_state(_require_state(app))})
+            snap = publish_state(_require_state(app))
+            # The UI socket still carries flows. Agents use get_traffic for packets.
+            body = {k: v for k, v in snap.items() if k != "flows"}
+            return _tool_text({"ok": True, **body})
         if name == "get_pack_perf":
             from . import pack_perf
             return _tool_text(pack_perf.mcp_pack_perf_payload(app))
