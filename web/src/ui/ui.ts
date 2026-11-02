@@ -31,6 +31,8 @@ export interface SelectConfig {
   /** show a type-to-filter field when the menu has many rows (default: 8+) */
   filterable?: boolean;
   onChange?: (value: string, opt: SelectOption) => void;
+  /** Label for a value with no row; when it returns one the value is kept instead of falling back to the first row. */
+  unlistedLabel?: (value: string) => string | null;
 }
 
 let openSelect: Select | null = null;
@@ -79,10 +81,12 @@ export class Select {
   private banner: string | null = null;
   private readonly filterable: boolean;
   private readonly menuId: string;
+  private readonly unlistedLabel: ((value: string) => string | null) | undefined;
   onChange: (value: string, opt: SelectOption) => void;
 
   constructor(cfg: SelectConfig) {
     this.onChange = cfg.onChange ?? (() => {});
+    this.unlistedLabel = cfg.unlistedLabel;
     this.filterable = cfg.filterable ?? cfg.options.length >= 8;
     this.menuId = `menu-${Math.random().toString(36).slice(2, 8)}`;
     this.el = document.createElement("div");
@@ -160,7 +164,20 @@ export class Select {
   }
   /** Set the value without firing onChange. */
   set value(v: string) {
-    const opt = this.options.find((o) => o.value === v && !o.disabled) ?? this.options.find((o) => !o.disabled);
+    const listed = this.options.find((o) => o.value === v && !o.disabled);
+    const unlisted = !listed && v ? this.unlistedLabel?.(v) : null;
+    if (unlisted) {
+      this.current = v;
+      this.valEl.innerHTML = "";
+      const txt = document.createElement("span");
+      txt.className = "txt";
+      txt.textContent = unlisted;
+      this.valEl.appendChild(txt);
+      this.valEl.insertAdjacentHTML("beforeend", CHEVRON);
+      for (const li of this.items) li.setAttribute("aria-selected", "false");
+      return;
+    }
+    const opt = listed ?? this.options.find((o) => !o.disabled);
     if (!opt) { this.current = ""; this.valEl.innerHTML = CHEVRON; return; }
     this.current = opt.value;
     this.valEl.innerHTML = "";
@@ -176,7 +193,9 @@ export class Select {
   setOptions(options: SelectOption[]): void {
     this.options = options;
     this.renderMenu();
-    if (this.current && options.some((o) => o.value === this.current && !o.disabled)) this.value = this.current;
+    if (this.current && (options.some((o) => o.value === this.current && !o.disabled) || this.unlistedLabel?.(this.current))) {
+      this.value = this.current;
+    }
   }
 
   /** One note at the top of the menu (not an option), or none (#169 setup banner). */

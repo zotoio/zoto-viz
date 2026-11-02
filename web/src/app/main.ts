@@ -803,6 +803,11 @@ const modeSel = new Select({
   filterable: true,
   options: viewPickerOptions(),
   onChange: (id) => applyMode(id, {}, { channel: "user" }),
+  // A `picker: hidden` view (QE fixtures, MCP-only views) has no row but is still the live view.
+  unlistedLabel: (id) => {
+    const m = modeById(id);
+    return m.id === id ? m.label : null;
+  },
 });
 $("modeBox").append(modeSel.el);
 modeSel.setBanner(viewPickerBanner());
@@ -3007,17 +3012,20 @@ async function bootCatalogFromSession(): Promise<void> {
       }
     }
     const restored = profiles ? await profiles.boot(live) : false;
+    quiet(() => {
+      // The picker has no row for a `picker: hidden` view and reads back as its first row.
+      applyMode(liveMode || modeSel.value, {}, { channel: "automatic", auto: "profile-restore" });
+      applyViewLook();
+      if (restored && live) applyTheme(live.settings.theme, false, false);
+    });
+    if (restored && live?.selected) scene.selectIp(live.selected);
+    // AI status can take seconds (Ollama probe, Cursor model list); the view must not wait on it.
+    document.body.classList.remove("view-booting");
     await agent.syncStatus();
     if (!agent.savedBackend() && agent.cursorReady()) {
       agent.useBackend("cursor");
       touch();
     }
-    quiet(() => {
-      applyMode(modeSel.value, {}, { channel: "automatic", auto: "profile-restore" });
-      applyViewLook();
-      if (restored && live) applyTheme(live.settings.theme, false, false);
-    });
-    if (restored && live?.selected) scene.selectIp(live.selected);
     if (restored) agent.setCycleChecked(!!live?.aiCycle);
     else if (agent.cycleOn) await setAiCycle(true);
     liveReady = true;

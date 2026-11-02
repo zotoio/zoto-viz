@@ -89,7 +89,7 @@ function harness() {
     h.couldntStart = false;
     mon.noteGrace("main", now);
   };
-  return { h, mon, run, retry };
+  return { h, mon, run, retry, scene };
 }
 
 describe("#216: drawing nothing after resend-frame shows couldn't-start and stays on the pack", () => {
@@ -125,5 +125,34 @@ describe("#216: drawing nothing after resend-frame shows couldn't-start and stay
     expect(h.events.filter((e) => e === CANT_START).length, "couldn't-start twice in total").toBe(2);
     expect(h.events.filter((e) => /:(restart-pack|recreate-context|demo-snapshot|fallback-pack)$/.test(e)), "never a later ladder step").toEqual([]);
     expect(h.mode, "never switched to plugin:topology").toBe(RCS_MODE);
+  });
+});
+
+describe("a pack whose writes answer each frame late is drawing, not drawing nothing", () => {
+  it("every check lands between a delivered frame and its write: no heal, no couldn't-start", () => {
+    const { h, mon, scene } = harness();
+    for (let t = 0; t < 120_000; t += STEP_MS) {
+      (scene as { pictureSerial: number }).pictureSerial++;
+      mon.noteVizFrameDelivered();
+      mon.tick(t);
+      mon.noteSandboxWrite();
+    }
+    mon.dispose();
+    expect(h.events, "a slow sandbox still writes every frame").toEqual([]);
+  });
+});
+
+describe("a page presenting a frame every few seconds does not judge its pack drawing nothing", () => {
+  it("3 s between presents, the sandbox answers every third frame: no heal, no couldn't-start", () => {
+    const { h, mon, scene } = harness();
+    let f = 0;
+    for (let t = 0; t < 300_000; t += 3_000, f++) {
+      (scene as { pictureSerial: number }).pictureSerial++;
+      mon.noteVizFrameDelivered();
+      mon.tick(t);
+      if (f % 3 === 2) mon.noteSandboxWrite();
+    }
+    mon.dispose();
+    expect(h.events, "a starved sandbox still writes").toEqual([]);
   });
 });

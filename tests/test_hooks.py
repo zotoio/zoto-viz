@@ -186,16 +186,16 @@ def test_stat_error_drops(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> No
     spec = {**plugins.load_file(yml), "file": str(yml), **plugins.service_meta(plugins.load_file(yml), yml)}
     hooks.sync([spec])
     assert "gone" in hooks.loaded()
-    hits = {"n": 0}
     real_stat = Path.stat
+    real_is_file = Path.is_file
 
     def boom(self, *a, **k):
         if self == py:
-            hits["n"] += 1
-            if hits["n"] > 2:
-                raise OSError("gone")
+            raise OSError("gone")
         return real_stat(self, *a, **k)
 
+    # is_file() stays true so sync() reaches its own stat; 3.14's is_file() no longer calls Path.stat.
+    monkeypatch.setattr(Path, "is_file", lambda self: True if self == py else real_is_file(self))
     monkeypatch.setattr(Path, "stat", boom)
     hooks.sync([spec])
     assert "gone" not in hooks.loaded()
