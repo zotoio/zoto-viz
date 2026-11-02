@@ -272,6 +272,22 @@ function arcadeKey(id: string): string {
 }
 
 /** Chrome / Alt picks the tile up; a body drag picks up once the pointer is over another tile. */
+/**
+ * Init for the pointercancel sent to the pane's canvas when a body drag lifts into a swap. It must
+ * carry the real pointer's id: OrbitControls looks the pointer up by id on cancel, and a default
+ * id of 0 it never saw threw "reading 'x' of undefined" on release.
+ */
+export function mosaicPointerCancelInit(ev: Pick<PointerEvent, "pointerId" | "pointerType" | "clientX" | "clientY" | "isPrimary">): PointerEventInit {
+  return {
+    bubbles: true,
+    pointerId: ev.pointerId,
+    pointerType: ev.pointerType,
+    isPrimary: ev.isPrimary,
+    clientX: ev.clientX,
+    clientY: ev.clientY,
+  };
+}
+
 export function mosaicShouldLift(
   kind: "chrome" | "alt" | "body",
   overId: string | null,
@@ -1248,7 +1264,7 @@ export class Mosaic {
         if (!mosaicShouldLift("body", over, id)) return;
         window.removeEventListener("pointermove", onMove);
         window.removeEventListener("pointerup", onUp);
-        t.dispatchEvent(new PointerEvent("pointercancel", { bubbles: true }));
+        t.dispatchEvent(new PointerEvent("pointercancel", mosaicPointerCancelInit(ev)));
         this.beginSwapDrag(id, ev.clientX, ev.clientY, "body");
       };
       const onUp = () => {
