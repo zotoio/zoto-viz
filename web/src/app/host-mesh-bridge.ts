@@ -33,6 +33,29 @@ export function tryApplyHostMeshBridge(
   bridge.applySlotBuffer(data);
 }
 
+/** Suffix of an asset id that is the HD alternative of the asset without it (`koi-ogon-hd`). */
+export const HD_ASSET_SUFFIX = "-hd";
+export type HostMeshModelSet = "standard" | "hd";
+
+export function hostMeshModelSet(config: Record<string, string | undefined> | undefined): HostMeshModelSet {
+  return config?.modelSet === "hd" ? "hd" : "standard";
+}
+
+/**
+ * The asset list a lane loads for `set`. HD entries never take a slot of their own: the list keeps
+ * the standard ids and order (packs address meshes by that index), and with `hd` each standard
+ * entry that has an `<id>-hd` sibling loads the sibling's file under the standard id.
+ */
+export function hostMeshDeclsForSet(decls: HostMeshAssetDecl[], set: HostMeshModelSet): HostMeshAssetDecl[] {
+  const hd = new Map(decls.filter((d) => d.id.endsWith(HD_ASSET_SUFFIX)).map((d) => [d.id, d]));
+  return decls
+    .filter((d) => !d.id.endsWith(HD_ASSET_SUFFIX))
+    .map((d) => {
+      const alt = set === "hd" ? hd.get(d.id + HD_ASSET_SUFFIX) : undefined;
+      return alt ? { ...alt, id: d.id } : d;
+    });
+}
+
 export type HostMeshBridge = {
   readonly lane: HostMeshLane;
   mountPack: (spec: PluginView | null) => Promise<boolean>;
@@ -142,9 +165,10 @@ export async function mountPaneHostMeshes(
   lane: Pick<HostMeshLane, "clear" | "setAssetOrder" | "ensureAssets"> & MeshPinLane,
   spec: { id: string; assets?: HostMeshAssetDecl[] },
   stillShown: () => boolean,
+  modelSet: HostMeshModelSet = "standard",
 ): Promise<void> {
   lane.clear();
-  const decls = spec.assets;
+  const decls = spec.assets ? hostMeshDeclsForSet(spec.assets, modelSet) : undefined;
   if (!decls?.length) return;
   lane.setAssetOrder(decls.map((d) => d.id));
   await lane.ensureAssets(spec.id, decls);
@@ -168,6 +192,7 @@ export async function mountPaneHostMeshes(
 export function createHostMeshBridge(
   target: NetScene | (() => NetScene),
   canPlace: (packId: string) => boolean = () => true,
+  modelSetFor: (spec: PluginView) => HostMeshModelSet = () => "standard",
 ): HostMeshBridge {
   const sceneOf = typeof target === "function" ? target : () => target;
   // Resolved lazily: the getter may read state that is set up after the bridge.
@@ -187,7 +212,7 @@ export function createHostMeshBridge(
       lane.clear();
       if (!spec?.assets?.length) return true;
       if (!canPlace(spec.id)) return false;
-      const decls = spec.assets as HostMeshAssetDecl[];
+      const decls = hostMeshDeclsForSet(spec.assets as HostMeshAssetDecl[], modelSetFor(spec));
       const into = lane;
       into.setAssetOrder(decls.map((d) => d.id));
       await into.ensureAssets(spec.id, decls);

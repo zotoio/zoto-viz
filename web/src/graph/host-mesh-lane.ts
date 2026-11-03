@@ -540,7 +540,10 @@ export class HostMeshLane {
       const skinned = hasSkinnedMesh(template);
       const rawSwim = gltf.animations.find((a) => a.name === "swim") ?? gltf.animations[0] ?? null;
       const swimClip = normalizeSwimClipStart(rawSwim);
-      const kind = skinned && swimClip ? "skinned" : "rigid";
+      // A rigid model with a clip named "swim" animates its parts by node transforms (the HD
+      // Blender koi wag their tails that way); it plays through the same cloned-mixer path.
+      const nodeSwim = !skinned && rawSwim?.name === "swim";
+      const kind = (skinned || nodeSwim) && swimClip ? "skinned" : "rigid";
       return this.storeTemplate(decl.id, {
         id: decl.id,
         kind,
