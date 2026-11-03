@@ -153,3 +153,31 @@ describe("stillFit (fit to height)", () => {
     expect(stillFit(0, 0, 800, 600)).toBe("cover");
   });
 });
+
+describe("carousel open-on-site button", () => {
+  it("labels an https page by host and carries page through slides", async () => {
+    const { carouselOpenLabel, carouselSlides } = await import("./carousel-slides");
+    expect(carouselOpenLabel("https://botz.ai/#2026-11-03-08")).toBe("Open on botz.ai");
+    expect(carouselOpenLabel("http://botz.ai/")).toBeNull();
+    expect(carouselOpenLabel(undefined)).toBeNull();
+    const [s] = carouselSlides([{ id: "botz:0", label: "Botz", text: "T", image: "https://botz.ai/a.png", page: "https://botz.ai/#k" }]);
+    expect(s?.page).toBe("https://botz.ai/#k");
+  });
+
+  it("CarouselView points the button at the current slide's page", async () => {
+    const { CarouselView } = await import("./carousel");
+    const paint = Reflect.get(CarouselView.prototype, "paintCaption") as (this: unknown, s: unknown) => void;
+    const el = (tag: string) => document.createElement(tag);
+    const self = {
+      capTitle: el("strong"), capBody: el("span"), capMeta: el("span"), stillEl: el("figure"),
+      openEl: el("a") as HTMLAnchorElement, capEl: el("figcaption"), sampleEl: el("div"),
+    };
+    paint.call(self, { id: "a", title: "One", label: "Botz", page: "https://botz.ai/#a" });
+    expect(self.openEl.hidden).toBe(false);
+    expect(self.openEl.href).toBe("https://botz.ai/#a");
+    paint.call(self, { id: "b", title: "Two", label: "Botz", page: "https://botz.ai/#b" });
+    expect(self.openEl.href).toBe("https://botz.ai/#b");
+    paint.call(self, { id: "c", title: "Three", label: "NASA" });
+    expect(self.openEl.hidden).toBe(true);
+  });
+});

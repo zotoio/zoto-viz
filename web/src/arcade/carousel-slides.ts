@@ -9,6 +9,8 @@ export interface CarouselSlide {
   image?: string;
   author?: string;
   origin?: string;
+  /** HTTPS page for this story on the source's site (botz.ai permalink); drives the open button. */
+  page?: string;
 }
 
 /** Caption placements a slide can take. */
@@ -100,7 +102,18 @@ export function carouselSlides(headlines: SourceHeadline[], cap = FEED_SLIDE_LIM
     image: h.image,
     ...(h.author ? { author: h.author } : {}),
     ...(h.origin ? { origin: h.origin } : {}),
+    ...(h.page ? { page: h.page } : {}),
   }));
+}
+
+/** Open-button text for a slide page: "Open on botz.ai". Null when there is no https page. */
+export function carouselOpenLabel(page: string | undefined): string | null {
+  if (!page || !page.startsWith("https://")) return null;
+  try {
+    return `Open on ${new URL(page).hostname.replace(/^www\./, "")}`;
+  } catch {
+    return null;
+  }
 }
 
 export function proxiedStill(url: string): string {

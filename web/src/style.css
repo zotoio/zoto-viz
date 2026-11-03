@@ -204,6 +204,27 @@ body[data-softgl] .brand::after {
 /* Captions clear the pane's own header row (picker + look/max/close, ~2.4rem tall). */
 :is(#carousel, .arcade.carousel).mosaic-live .carousel-still[data-layout="high-right"] .carousel-caption { padding-top: calc(var(--pane-head, 2.4rem) + 0.9rem); }
 :is(#carousel, .arcade.carousel).mosaic-live .carousel-still:is([data-layout="centre"], [data-layout="side-left"]) .carousel-caption { padding-top: calc(var(--pane-head, 2.4rem) + 0.4rem); }
+/* Open-on-site button: translucent pill, top centre of the slide, readable over any still. */
+:is(#carousel, .arcade.carousel) .carousel-open {
+  position: absolute; z-index: 2;
+  top: max(0.8rem, 3cqh); left: 50%; transform: translateX(-50%);
+  max-width: min(22rem, calc(100% - 1.5rem));
+  padding: 0.35em 0.9em; border-radius: 999px;
+  font: 600 clamp(0.72rem, 2.6cqmin, 0.95rem)/1.25 ui-sans-serif, system-ui, sans-serif;
+  color: #fff; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: rgba(8, 10, 16, 0.42); border: 1px solid rgba(255, 255, 255, 0.35);
+  backdrop-filter: blur(6px) saturate(1.2); -webkit-backdrop-filter: blur(6px) saturate(1.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  pointer-events: auto; cursor: pointer;
+  opacity: 0.82; transition: opacity 0.2s ease, background 0.2s ease;
+}
+:is(#carousel, .arcade.carousel) .carousel-open:is(:hover, :focus-visible) { opacity: 1; background: rgba(8, 10, 16, 0.66); }
+:is(#carousel, .arcade.carousel) .carousel-open[hidden] { display: none; }
+/* In a mosaic tile: below the pane header row (picker + look/max/close), never on it. */
+:is(#carousel, .arcade.carousel).mosaic-live .carousel-open { top: calc(var(--pane-head, 2.4rem) + 0.35rem); }
+/* Top-anchored captions drop below the button. */
+:is(#carousel, .arcade.carousel) .carousel-still[data-open][data-layout="high-right"] .carousel-caption,
+:is(#carousel, .arcade.carousel) .carousel-still[data-open]:is([data-layout="centre"], [data-layout="side-left"]) .carousel-caption { margin-top: 2.4rem; }
 /* Blurred cover of the current still behind a contain-fit picture: no bare letterbox bars. */
 :is(#carousel, .arcade.carousel) .carousel-still::before {
   content: "";

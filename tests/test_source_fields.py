@@ -93,3 +93,15 @@ def test_project_botz_archive_byline_and_relative_image() -> None:
 def test_byline_fields_are_optional() -> None:
     items = source_fields.project_items([{"title": "T", "image": "https://x.test/a.png"}], {"author": "nope", "source": "nope"})
     assert "author" not in items[0] and "source" not in items[0]
+
+
+def test_page_template_builds_botz_permalink_and_skips_missing_key() -> None:
+    fields = {"list": "editorials", "title": "entry.article.title", "pageTemplate": "https://botz.ai/#{cache_key}"}
+    data = {"editorials": [
+        {"cache_key": "2026-11-03-08", "entry": {"article": {"title": "A"}}},
+        {"entry": {"article": {"title": "B"}}},
+    ]}
+    items = source_fields.project_items(data, fields)
+    assert items[0]["page"] == "https://botz.ai/#2026-11-03-08"
+    assert "page" not in items[1]
+    assert source_fields.normalize_fields(fields)["pageTemplate"] == "https://botz.ai/#{cache_key}"

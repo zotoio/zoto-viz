@@ -6,6 +6,7 @@ import { FEED_SLIDE_LIMIT } from "../core/sources";
 import {
   carouselArrival,
   carouselByline,
+  carouselOpenLabel,
   carouselCaptionParts,
   carouselVariant,
   stillFit,
@@ -30,6 +31,8 @@ export class CarouselView extends Stage3D {
   private readonly capTitle: HTMLElement;
   private readonly capBody: HTMLElement;
   private readonly capMeta: HTMLElement;
+  /** Translucent top button: opens the current story on its source site in a new tab. */
+  readonly openEl: HTMLAnchorElement;
   private layoutKey = "";
   private fitKey = "";
   /** Shown while the bound source serves its own bundled demo stills (`demo: true`). */
@@ -85,7 +88,14 @@ export class CarouselView extends Stage3D {
     this.sampleEl.style.cssText = "margin-bottom:.5rem;font:600 clamp(.95rem,1.6vw,1.25rem)/1.3 ui-sans-serif,system-ui,sans-serif";
     this.sampleEl.hidden = true;
     this.capEl.append(this.sampleEl, this.capMeta, this.capTitle, this.capBody);
-    this.stillEl.append(this.imgA, this.imgB, this.capEl);
+    this.openEl = document.createElement("a");
+    this.openEl.className = "carousel-open";
+    this.openEl.target = "_blank";
+    this.openEl.rel = "noopener noreferrer";
+    this.openEl.hidden = true;
+    // The pane's drag / focus handlers must not swallow the click.
+    for (const ev of ["pointerdown", "mousedown"] as const) this.openEl.addEventListener(ev, (e) => e.stopPropagation());
+    this.stillEl.append(this.imgA, this.imgB, this.openEl, this.capEl);
     this.front = this.imgA;
 
     this.container.append(this.stillEl);
@@ -340,6 +350,17 @@ export class CarouselView extends Stage3D {
     this.capTitle.textContent = title;
     this.capBody.textContent = body;
     this.capBody.hidden = !body;
+    const open = carouselOpenLabel(slide?.page);
+    if (open && slide?.page) {
+      this.openEl.href = slide.page;
+      this.openEl.textContent = `${open} ↗`;
+      this.openEl.title = `${slide.title} — ${open} (new tab)`;
+      this.openEl.hidden = false;
+    } else {
+      this.openEl.hidden = true;
+      this.openEl.removeAttribute("href");
+    }
+    this.stillEl.toggleAttribute("data-open", !!open);
     const meta = slide ? carouselByline(slide) : "";
     this.capMeta.textContent = meta;
     this.capMeta.hidden = !meta;
