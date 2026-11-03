@@ -249,7 +249,7 @@ function noticeText(tileId: string): string | null {
 }
 
 describe("#233 which panes own a sandbox", () => {
-  it("(gate) a pane owns a sandbox, and drops Preview only, only for a pack needing no presentTick (#235 closed graph.read)", () => {
+  it("(gate) a pane owns a sandbox, and drops Preview only, for every frontend pack (#235 closed graph.read and presentTick)", () => {
     const tiles = new TileSandboxes<TileSandboxLike>({
       main: new AntTileSandbox(),
       create: () => new AntTileSandbox(),
@@ -261,7 +261,8 @@ describe("#233 which panes own a sandbox", () => {
     const cases: [PluginView, string[]][] = [
       [BACKROOMS, []],
       [ANT, []],
-      [VOXEL, ["present-tick"]],
+      // viz.presentTick reaches each pane's own sandbox since #235 (TileSandboxes.presentTick).
+      [VOXEL, []],
       // graph.read reaches each pane's own sandbox since #235 (TileSandboxes.tick), so Pulse owns one.
       [PULSE, []],
     ];
@@ -274,9 +275,9 @@ describe("#233 which panes own a sandbox", () => {
     }
     expect(tiles.owns(DRIVEN, BACKROOMS), "the tile the shared sandbox drives").toBe(false);
     tiles.sync(cases.map(([spec]) => ({ id: spec.id, spec })));
-    expect(tiles.tiles(), "panes that booted their own sandbox").toEqual([BACKROOMS.id, ANT.id, PULSE.id]);
+    expect(tiles.tiles(), "panes that booted their own sandbox").toEqual([BACKROOMS.id, ANT.id, VOXEL.id, PULSE.id]);
     expect(tiles.sharedTiles(cases.map(([spec]) => spec.id)), "panes left on the shared sandbox (and its UBO)")
-      .toEqual([VOXEL.id]);
+      .toEqual([]);
     tiles.sync([]);
   });
 });

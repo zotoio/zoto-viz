@@ -34,10 +34,11 @@ export type PaneSandboxGap = "present-tick" | "graph-read";
  * (TileSandboxes.pushConfig from the config batcher), so they are not a gap.
  */
 export function paneSandboxGaps(spec: PluginView): PaneSandboxGap[] {
-  const gaps: PaneSandboxGap[] = [];
-  if (spec.viz?.presentTick === true) gaps.push("present-tick");
-  // graph.read reaches each pane sandbox through TileSandboxes.tick (#235), so it is no longer a gap.
-  return gaps;
+  void spec;
+  // #235: both wires reach every pane sandbox now: graph.read through TileSandboxes.tick and
+  // viz.presentTick through TileSandboxes.presentTick (one tick per pane sandbox per display
+  // frame). No pack is held back on "Preview only" for a host wire any more.
+  return [];
 }
 
 /**
@@ -60,6 +61,17 @@ export function ownsSandboxTile(
     && paneSandboxGaps(spec).length === 0;
 }
 
+/**
+ * #235: the mosaic tile main.ts's shared sandbox drives. The shared sandbox runs the global view's
+ * pack, so it drives a pane only when the global view IS a pane; otherwise "main" and every pane
+ * runs its own sandbox. (Before, the focus slot was named driven: it got neither its own sandbox
+ * nor the shared pack, and sat blank on "Preview only" — the HN Rain pane under a NET Tetris global.)
+ */
+export function sharedSandboxTile(mosaicOn: boolean, tileIds: readonly string[], globalModeId: string): string {
+  if (!mosaicOn) return "main";
+  return tileIds.includes(globalModeId) ? globalModeId : "main";
+}
+
 /** The PluginSandbox surface a tile's sandbox needs (tests pass a stand-in). */
 export interface TileSandboxLike {
   handlers: PluginHostHandlers;
@@ -71,6 +83,8 @@ export interface TileSandboxLike {
   setConfig?(config: Record<string, string>): void;
   /** Graph nodes for a graph.read pack (PluginSandbox.tick: posts only when the pack declares graph.read). */
   tick?(nodes: readonly { id: string; rate: number; role: string }[]): void;
+  /** Per-frame present tick (PluginSandbox.deliverPresentTick: posts only to a viz.presentTick pack). */
+  deliverPresentTick?(frameMs: number, tileId: string, pluginClock?: number, aspect?: number): void;
 }
 
 /** The pane scene a tile's own writes land on. */
@@ -237,6 +251,24 @@ export class TileSandboxes<S extends TileSandboxLike> {
   /** One graph refresh to every tile's own sandbox (graph.read packs; #235). */
   tick(nodes: readonly { id: string; rate: number; role: string }[]): void {
     for (const e of this.byTile.values()) e.sandbox.tick?.(nodes);
+  }
+
+  /**
+   * #235: one present tick per display frame to every ready pane sandbox whose pack declares
+   * viz.presentTick, with that pane's own clock and aspect. Returns the ticks posted.
+   */
+  presentTick(
+    frameMs: number,
+    clockFor?: (tileId: string) => number | undefined,
+    aspectFor?: (tileId: string) => number | undefined,
+  ): number {
+    let n = 0;
+    for (const [tileId, e] of this.byTile) {
+      if (!e.ready || e.spec.viz?.presentTick !== true || !e.sandbox.deliverPresentTick) continue;
+      e.sandbox.deliverPresentTick(frameMs, e.spec.id, clockFor?.(tileId), aspectFor?.(tileId));
+      n += 1;
+    }
+    return n;
   }
 
   /** Unload the tile's own sandbox; other tiles keep theirs. Every pane teardown goes through here or load(). */
