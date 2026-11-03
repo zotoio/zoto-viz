@@ -47,6 +47,8 @@ export interface AquariumOptions {
   seed: number;
   label: boolean;
   reducedMotion: boolean;
+  /** Debug only: seconds between eats for a test capture. 0 (default) keeps the normal rare rate. */
+  eatTestSec: number;
   freshSpecies: number[];
   reefSpecies: number[];
 }
@@ -59,6 +61,8 @@ type AquariumFrame = Pick<
 export const FAIL_MURK_THRESHOLD = 0.35;
 export const PACKET_FRAME_CAP = 8;
 export const MAX_FISH = 16;
+/** Id prefix of the ambient fish that fill a tank when there are fewer talkers than fishCount. */
+export const AMBIENT_FISH_PREFIX = "ambient-";
 export const MAX_PARTICLES = 24;
 export const PARTICLE_STRIDE = 4;
 export const FIXED_SIM_DT = 1 / 60;
@@ -91,7 +95,7 @@ export const CONFIG_KEYS = [
   "preset", "randomise", "undoRandom", "resetSettings", "modelSet",
   "water", "fishCount", "temperament", "feedingMin", "feedingTraffic",
   "lighting", "dayNight", "density", "bubbles", "camera", "seed", "label",
-  "reducedMotion",
+  "reducedMotion", "eatTestSec",
   "sp_neon", "sp_angel", "sp_guppy", "sp_cory", "sp_discus", "sp_cichlid", "sp_betta",
   "sp_clown", "sp_tang", "sp_damsel", "sp_goby", "sp_wrasse", "sp_anemone",
   "modelGlb",
@@ -258,6 +262,7 @@ export const DEFAULT_OPTIONS: AquariumOptions = {
   seed: 4242,
   label: true,
   reducedMotion: false,
+  eatTestSec: 0,
   freshSpecies: [1, 1, 1, 1, 1, 0, 1],
   reefSpecies: [0, 0, 0, 0, 0, 0],
 };
@@ -382,6 +387,7 @@ export function parseAquariumOptions(cfg?: Record<string, string> | null): Aquar
     seed: Math.round(clamp(parseNum(merged?.seed, base.seed), 0, 99999)),
     label: parseBool(merged?.label, base.label ?? true),
     reducedMotion: parseBool(merged?.reducedMotion, base.reducedMotion ?? false),
+    eatTestSec: clamp(parseNum(merged?.eatTestSec, 0), 0, 600),
     freshSpecies: parseSpeciesFlags(merged ?? undefined, "sp", FRESH_SPECIES, base.freshSpecies ?? DEFAULT_OPTIONS.freshSpecies),
     reefSpecies: parseSpeciesFlags(merged ?? undefined, "sp", REEF_SPECIES, base.reefSpecies ?? DEFAULT_OPTIONS.reefSpecies),
   };
@@ -801,6 +807,9 @@ export class AquariumSim {
       f.vigor = vigorFromRate(talker.rate);
       school.push(f);
     }
+    const testGap = this.opts.eatTestSec;
+    this.school.testInterval = testGap;
+    if (testGap > 0 && this.school.eatCool > testGap) this.school.eatCool = testGap;
     stepSchool(school, {
       reef: this.opts.water === "reef",
       temperament: this.opts.temperament,
@@ -845,7 +854,23 @@ export class AquariumSim {
     return best;
   }
 
-  private stepOnce(simT: number, allTalkers: VizTalkerSample[]): void {
+  /**
+   * A quiet network has fewer talkers than the tank holds (live: ~7 online for fishCount 12),
+   * which left the tank half empty. Fill the free places with ambient fish so the tank always
+   * holds fishCount fish; an ambient fish gives its place up as soon as a real talker needs it.
+   */
+  private withAmbientFish(talkers: VizTalkerSample[]): VizTalkerSample[] {
+    const free = this.fishSlotCap() - talkers.length;
+    if (free <= 0) return talkers;
+    const out = talkers.slice();
+    for (let i = 0; i < free; i++) {
+      out.push({ id: `${AMBIENT_FISH_PREFIX}${i}`, rate: 0, role: "device" } as unknown as VizTalkerSample);
+    }
+    return out;
+  }
+
+  private stepOnce(simT: number, frameTalkers: VizTalkerSample[]): void {
+    const allTalkers = this.withAmbientFish(frameTalkers);
     const allIds = new Set(allTalkers.map((t) => t.id));
     const slotted = this.slottedTalkers(allTalkers, simT);
     this.syncFish(slotted, allIds, allTalkers);

@@ -208,3 +208,48 @@ describe("predation", () => {
     expect(sawPuff).toBe(true);
   }, 30_000);
 });
+
+describe("eat test interval (debug knob)", () => {
+  const tank = () => {
+    const pred = fish(idFor(5, true, "p"), 5, 0, -0.2);
+    const prey = Array.from({ length: 6 }, (_, i) => fish(`prey${i}`, 0, (i - 3) * 0.25, 0.1 + (i % 2) * 0.2));
+    return { pred, school: [pred, ...prey] };
+  };
+  it("is off by default and the normal rate is unchanged", async () => {
+    const { DEFAULT_OPTIONS } = await import("./aquarium");
+    expect(DEFAULT_OPTIONS.eatTestSec).toBe(0);
+    const { EAT_MIN_INTERVAL: min, newSchoolState: nss } = await import("./fish-behaviour");
+    expect(min).toBe(90);
+    expect(nss().testInterval).toBeUndefined();
+  });
+  it("when set, shortens the gap between eats", () => {
+    const { school } = tank();
+    const st = newSchoolState(0);
+    st.testInterval = 12;
+    const w = world({ state: st });
+    const eatTimes: number[] = [];
+    let last = 0;
+    step(school, w, 120, (k) => { if (st.eats > last) { eatTimes.push(k / 60); last = st.eats; } });
+    expect(eatTimes.length).toBeGreaterThanOrEqual(2);
+    for (let i = 1; i < eatTimes.length; i++) expect(eatTimes[i]! - eatTimes[i - 1]!).toBeGreaterThanOrEqual(11.9);
+  }, 30_000);
+  it("parses eatTestSec, clamped, default 0", () => {
+    expect(parseAquariumOptions({}).eatTestSec).toBe(0);
+    expect(parseAquariumOptions({ eatTestSec: "20" }).eatTestSec).toBe(20);
+    expect(parseAquariumOptions({ eatTestSec: "9999" }).eatTestSec).toBe(600);
+  });
+});
+
+describe("a quiet network still fills the tank", () => {
+  it("tops up to fishCount with ambient fish and gives places back to real talkers", () => {
+    const mk = (n: number): VizTalkerSample[] => Array.from({ length: n }, (_, i) => ({ id: `talker-${i * 7919}-${i}`, rate: 30 + i * 20, role: "device" }));
+    const sim = new AquariumSim(parseAquariumOptions({ preset: "planted", fishCount: "12" }));
+    let p = sim.advance({ t: 0, dt: 1 / 60, audio: 0, talkers: mk(3), packets: [], demo: false });
+    for (let i = 1; i < 30; i++) p = sim.advance({ t: i / 60, dt: 1 / 60, audio: 0, talkers: mk(3), packets: [], demo: false });
+    expect(p.slot0[17]).toBe(sim.fishSlotCap());
+    for (let i = 30; i < 90; i++) p = sim.advance({ t: i / 60, dt: 1 / 60, audio: 0, talkers: mk(10), packets: [], demo: false });
+    expect(p.slot0[17]).toBe(sim.fishSlotCap());
+    const ids = sim.visibleFishIds();
+    for (const t of mk(10)) expect(ids).toContain(t.id);
+  });
+});
