@@ -512,7 +512,13 @@ void main() {
     return;
   }
 
-  int steps = int(min(48.0, max(12.0, maxStepsN * 48.0)));
+  // Bulb, box and quaternion Julia under-estimate distance near the surface, so a ray that grazes
+  // it creeps in tiny steps and ran out of its 48 before it landed: only rays aimed square at the
+  // surface hit, and the rest filled in with the near-miss aura, which read as shards on a smooth
+  // haze. Those types get up to 1.5x the steps, the hit test widens with distance to about one
+  // pixel's footprint, and a ray that ends its budget already hugging the surface counts as a hit.
+  bool slowDe = typ < 1.5 || (typ > 3.5 && typ < 4.5);
+  int steps = int(min(slowDe ? 72.0 : 48.0, max(12.0, maxStepsN * (slowDe ? 72.0 : 48.0))));
   float t = 0.0;
   vec3 col = bg;
   float hit = 0.0;
@@ -520,12 +526,26 @@ void main() {
   float eHit = (mark > 0.5 && typ < 6.0)
     ? max(1.2e-4, eps * max(stand, 0.008) * 0.55)
     : max(1e-6, eps * max(stand, 0.02) / max(zsc, 1.0));
-  for (int i = 0; i < 48; i++) {
+  // Pixel footprint per unit of ray length: the cone over half the canvas height.
+  float pixK = cone / 360.0;
+  // Camera already inside the solid: march out along the ray first instead of shading the inside black.
+  float d0 = mapDE(ro, typ, powr, sc, fold, jc, sym);
+  if (d0 <= 0.0) t = 0.02;
+  for (int i = 0; i < 72; i++) {
     if (i >= steps) break;
-    vec3 p = ro + rd * t;
-    float d = mapDE(p, typ, powr, sc, fold, jc, sym);
-    closest = min(closest, d);
-    if (d < eHit) {
+    vec3 p0 = ro + rd * t;
+    float d0i = mapDE(p0, typ, powr, sc, fold, jc, sym);
+    bool last = i == steps - 1 || t + d0i > 18.0;
+    float eNow = max(eHit, t * pixK);
+    if (!(d0i < eNow) && !(last && d0i < max(eNow * 6.0, t * 0.01))) {
+      closest = min(closest, d0i);
+      t += d0i * (slowDe ? 0.9 : 1.0);
+      if (t > 18.0) break;
+      continue;
+    }
+    {
+      vec3 p = p0;
+      closest = min(closest, d0i);
       hit = 1.0;
       // A one-sided difference at the hit epsilon is below float resolution near the surface: the
       // gradient came back zero or NaN and the whole surface shaded black. Central differences at a
@@ -568,8 +588,6 @@ void main() {
       col += glow * 0.6 * ao * pow(max(dot(reflect(-l, n), -rd), 0.0), 12.0) * vec3(0.6, 0.75, 1.0);
       break;
     }
-    t += d;
-    if (t > 18.0) break;
   }
   float mist = exp(-t * 0.22) * (0.45 + glow * 0.55);
   float aura = exp(-clamp(closest, 0.0, 4.0) * 5.5) * (0.55 + glow);
