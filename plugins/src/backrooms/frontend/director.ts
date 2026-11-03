@@ -36,8 +36,10 @@ export const BR_SLOT = {
   optOsd: 40, optVhs: 41, optWriting: 42, optObjects: 43, optDarkness: 44, optShadows: 45,
   /** Blood trail: up to 8 (x, z) points from the kill spot, round the corners, to the body; then the count. */
   trail0: 46, trailN: 62,
+  /** Tape seed + variety / 2.001 in the fraction (0 = no variety): the sky's per-tape look and zones. */
+  variant: 63,
 } as const;
-export const BR_SLOT0_FLOATS = 63;
+export const BR_SLOT0_FLOATS = 64;
 export const BR_TRAIL_POINTS = 8;
 
 /** Creature looks, by slot value: Kane's wire Lifeform, its hunched thick-set kin, the pale Howler, the crawling Hound, the Smiler in the dark. */
@@ -94,6 +96,11 @@ export interface BrOptions {
   breathing: number;
   heartbeat: number;
   creatureVolume: number;
+  /**
+   * How far each episode and each stretch of hall strays from the settings above (0 = every tape the
+   * same). Pacing, the encounter mix and the look vary around the settings, never gentler than them.
+   */
+  variety: number;
 }
 
 export const BR_DEFAULTS: BrOptions = {
@@ -124,6 +131,7 @@ export const BR_DEFAULTS: BrOptions = {
   breathing: 1,
   heartbeat: 1,
   creatureVolume: 1,
+  variety: 1,
 };
 
 function num(raw: string | undefined, def: number, lo: number, hi: number, scale = 1): number {
@@ -166,6 +174,7 @@ export function parseBackroomsOptions(o: Record<string, string | undefined> = {}
     breathing: num(o.breathing, BR_DEFAULTS.breathing, 0, 2, 0.01),
     heartbeat: num(o.heartbeat, BR_DEFAULTS.heartbeat, 0, 2, 0.01),
     creatureVolume: num(o.creatureVolume, BR_DEFAULTS.creatureVolume, 0, 2, 0.01),
+    variety: num(o.variety, BR_DEFAULTS.variety, 0, 2, 0.01),
   };
 }
 
@@ -175,7 +184,7 @@ let simKey = "";
 /** Options that change the simulated episodes (the rest only change the look or the mix). */
 function simKeyOf(o: BrOptions): string {
   return JSON.stringify([o.episode, o.encounters, o.endCatch, o.catchChance, o.cornerKill, o.freeze, o.runDistance, o.creatures, o.sameCreature,
-    o.walkSpeed, o.runSpeed, o.creatureSpeed, o.lookBacks, o.pauses, o.handheld, o.musicBox]);
+    o.walkSpeed, o.runSpeed, o.creatureSpeed, o.lookBacks, o.pauses, o.handheld, o.musicBox, o.variety]);
 }
 
 /** Apply view options; episodes are re-simulated only when a story or motion option changed. */
@@ -220,6 +229,8 @@ export interface BrSfx {
 }
 export interface BrFrame {
   episode: number;
+  /** The episode the current tape started on (see Track.tape). */
+  tape: number;
   kind: BrKind;
   creature: BrCreature;
   tau: number;
@@ -281,9 +292,37 @@ function dirOf(dx: number, dz: number): number {
 
 // ---------------------------------------------------------------- maze
 
+/** Smooth 2-D value noise in 0…1 over maze nodes; one lattice cell spans `scale` nodes. */
+function zoneNoise(i: number, k: number, scale: number, seed: number): number {
+  const x = i / scale;
+  const z = k / scale;
+  const xi = Math.floor(x);
+  const zi = Math.floor(z);
+  const fx = x - xi;
+  const fz = z - zi;
+  const ux = fx * fx * (3 - 2 * fx);
+  const uz = fz * fz * (3 - 2 * fz);
+  const a = brHash(xi, zi, seed);
+  const b = brHash(xi + 1, zi, seed);
+  const c = brHash(xi, zi + 1, seed);
+  const d = brHash(xi + 1, zi + 1, seed);
+  return a + (b - a) * ux + (c - a) * uz + (a - b - c + d) * ux * uz;
+}
+
+/**
+ * Share of corridor edges walled off around node (i, k). One fixed world (episodes carry on through
+ * it), but with variety it drifts from open, pillared halls to tight warrens of dead ends.
+ */
+export function brWallRate(i: number, k: number): number {
+  const v = opts.variety;
+  if (v <= 0) return 0.3;
+  const z = 0.65 * zoneNoise(i, k, 7, 211) + 0.35 * zoneNoise(i, k, 2.5, 212);
+  return clamp(0.31 + v * 0.2 * (2 * z - 1), 0.2, 0.46);
+}
+
 /** Edge from node (i, k) toward +x (axis 0) or +z (axis 1) is walled off. */
 export function brEdgeBlocked(i: number, k: number, axis: number): boolean {
-  return brHash(i, k, 101 + axis) < 0.3;
+  return brHash(i, k, 101 + axis) < brWallRate(i, k);
 }
 
 /** Corridor from node (i, k) in direction 0:+x 1:+z 2:−x 3:−z is walkable. */
@@ -474,6 +513,8 @@ interface StartState {
 
 interface Track {
   e: number;
+  /** The episode this tape started on: chained episodes (no catch between) keep one tape and one look. */
+  tape: number;
   t0: number;
   dur: number;
   kind: BrKind;
@@ -488,12 +529,41 @@ interface Track {
 type Walk = "explore" | "pause" | "approach" | "stare" | "brake" | "flee" | "recover" | "rest" | "caught";
 type Crea = "lunge" | "drag" | "off" | "lurk" | "lean" | "hold" | "withdraw" | "stepout" | "stare" | "charge" | "pursue" | "giveup" | "stand" | "leave" | "cross";
 
-function pickKind(r: number): BrKind {
-  return r < 0.16 ? "calm" : r < 0.4 ? "peek" : r < 0.82 ? "charge" : "ambush";
+/** `bias` > 0 leans the draw toward charges and ambushes, < 0 toward peeks and quiet stretches. */
+function pickKind(r: number, bias = 0): BrKind {
+  const q = clamp(r + 0.12 * bias, 0, 0.999999);
+  return q < 0.16 ? "calm" : q < 0.4 ? "peek" : q < 0.82 ? "charge" : "ambush";
+}
+
+/**
+ * The episode's own pacing, drawn once from its index around the view settings. More encounters,
+ * never fewer; the creature only ever faster; you only ever slower (a quicker walk cuts corners into
+ * the pillars, a quicker run breaks human speed). Its own random stream, so variety 0 changes nothing.
+ */
+function episodeOptions(o: BrOptions, e: number): { O: BrOptions; kindBias: number } {
+  const v = o.variety;
+  if (v <= 0) return { O: o, kindBias: 0 };
+  const r = rng(Math.imul(e + 7, 0x9e3779b1) ^ 0x5bd1e995);
+  const j = (lo: number, hi: number): number => 1 + v * (lo + (hi - lo) * r());
+  const O: BrOptions = {
+    ...o,
+    encounters: Math.min(8, o.encounters + Math.floor(r() * 2.999 * Math.min(v, 1))),
+    // A longer stare and a later bolt let it get closer: these only ever tighten.
+    freeze: clamp(o.freeze * j(0, 0.4), 0.2, 4),
+    runDistance: clamp(o.runDistance * j(-0.25, 0), 2, 12),
+    creatureSpeed: clamp(o.creatureSpeed * j(0, 0.15), 0.5, 1.6),
+    walkSpeed: clamp(o.walkSpeed * j(-0.15, 0), 0.6, 2),
+    runSpeed: clamp(o.runSpeed * j(-0.06, 0), 2.5, 6),
+    lookBacks: clamp(o.lookBacks + v * (r() * 0.35 - 0.15), 0, 1),
+    pauses: clamp(o.pauses * j(-0.5, 0.9), 0, 0.6),
+    handheld: clamp(o.handheld * j(-0.1, 0.35), 0, 2),
+    cornerKill: clamp(o.cornerKill * j(0, 0.6), 0, 1),
+  };
+  return { O, kindBias: v * (r() * 1.2 - 0.2) };
 }
 
 function simulate(e: number, t0: number, dur: number, start: StartState | null): Track {
-  const O = opts;
+  const { O, kindBias } = episodeOptions(opts, e);
   const R = rng(Math.imul(e + 1, 2654435761));
   const pool = O.creatures;
   let creature: BrCreature = pool[Math.floor(R() * pool.length)]!;
@@ -662,7 +732,7 @@ function simulate(e: number, t0: number, dur: number, start: StartState | null):
     const earlyOk = tau < finalAt - 8 && encounterCount < O.encounters - (O.endCatch ? 1 : 0) && tau < dur - 10;
     if (!encounterActive && (walk as Walk) === "explore" && tau >= nextEncounterAt && (isFinal ? tau < dur - 14 : earlyOk)) {
       const late = tau > nextEncounterAt + 4;
-      kind = isFinal ? (R() < 0.6 ? "charge" : "ambush") : pickKind(R());
+      kind = isFinal ? (R() < 0.6 ? "charge" : "ambush") : pickKind(R(), kindBias);
       const tryAt = (minM: number, maxM: number, needBoth: boolean): { m: number; side: number } | null => {
         const run = straightRun(li, lk, dir);
         for (let m = maxM; m >= minM; m--) {
@@ -783,8 +853,9 @@ function simulate(e: number, t0: number, dur: number, start: StartState | null):
       }
     }
     if (nd === rev && fleeing && cVis > 0.3 && Math.hypot(cx - li * BR_GRID, cz - lk * BR_GRID) < 18) {
-      // Cornered: never run back into it. Stop at the dead end — it may give up, or it may not.
-      if (R() < 0.6) willCatch = true;
+      // Cornered: never run back into it. Stop at the dead end — it may give up, or it may not
+      // (with the end catch off and no catch chance, every chase can be outrun: it gives up).
+      if (R() < 0.6 && (O.endCatch || O.catchChance > 0)) willCatch = true;
       stopU = route.end;
       walk = "rest";
       walkT = 0;
@@ -1689,7 +1760,7 @@ function simulate(e: number, t0: number, dur: number, start: StartState | null):
   events.sort((a, b) => a.t - b.t);
   const endPos = route.sample(u);
   return {
-    e, t0, dur, kind: k2, creature: firstCreature, n, f, events,
+    e, tape: e, t0, dur, kind: k2, creature: firstCreature, n, f, events,
     endCaught: caughtAt >= 0,
     end: { x: endPos.x, z: endPos.z, li, lk, dir, yaw, camH, phi },
   };
@@ -1704,11 +1775,16 @@ function trackFor(e: number, t0: number, dur: number): Track {
   let tr = cache.get(e);
   if (!tr) {
     let start: StartState | null = null;
+    let tape = e;
     if (e > 0 && e % CHAIN !== 0) {
       const prev = trackFor(e - 1, t0 - dur, dur);
-      if (!prev.endCaught) start = prev.end;
+      if (!prev.endCaught) {
+        start = prev.end;
+        tape = prev.tape;
+      }
     }
     tr = simulate(e, t0, dur, start);
+    tr.tape = tape;
     cache.set(e, tr);
     if (cache.size > 3) cache.delete(cache.keys().next().value as number);
   }
@@ -1739,16 +1815,19 @@ export function backroomsFrame(t: number): BrFrame {
   slot0[BR_SLOT.winI] = tr.f[a + BR_SLOT.winI]!;
   slot0[BR_SLOT.winK] = tr.f[a + BR_SLOT.winK]!;
   for (let k = BR_SLOT.trail0; k <= BR_SLOT.trailN; k++) slot0[k] = tr.f[a + k]!;
-  // Never blend the creature across a reveal or a vanish (its hidden position is stale).
+  // Never blend the creature across a reveal or a vanish (its hidden position is stale), or across a
+  // jump (the forced last chase moves it onto your trail): halfway there is inside a pillar.
   const va = tr.f[a + BR_SLOT.crVis]!;
   const vb = tr.f[b + BR_SLOT.crVis]!;
-  if ((va < 0.01) !== (vb < 0.01)) {
+  const crJump = Math.hypot(tr.f[b + BR_SLOT.crX]! - tr.f[a + BR_SLOT.crX]!, tr.f[b + BR_SLOT.crZ]! - tr.f[a + BR_SLOT.crZ]!) > 1;
+  if ((va < 0.01) !== (vb < 0.01) || crJump) {
     const src = vb >= 0.01 ? b : a;
     for (const k of [BR_SLOT.crX, BR_SLOT.crZ, BR_SLOT.crFace, BR_SLOT.crGait, BR_SLOT.crClock]) slot0[k] = tr.f[src + k]!;
   }
   const s = BR_SLOT0_FLOATS;
   return {
     episode: tr.e,
+    tape: tr.tape,
     kind: KINDS[Math.round(tr.f[a + s + SFX.kind]!)] ?? tr.kind,
     creature: BR_CREATURES[Math.round(tr.f[a + BR_SLOT.crType]!)] ?? tr.creature,
     tau,
@@ -1785,6 +1864,18 @@ export function backroomsEvents(t0: number, t1: number): BrEvent[] {
 let lastWin = "";
 let lastWinData: number[] = [];
 
+/** One tape's look: dead lights, clutter, writing and tape wear drawn around the view settings. */
+function tapeMood(tape: number, v: number): { darkness: number; objects: number; writing: number; vhs: number } {
+  if (v <= 0) return { darkness: 1, objects: 1, writing: 1, vhs: 1 };
+  const r = rng(Math.imul(tape + 3, 0x85ebca6b) ^ 0x27d4eb2f);
+  return {
+    darkness: 1 + v * (r() * 0.7 - 0.12),
+    objects: 1 + v * (r() * 1.0 - 0.3),
+    writing: 1 + v * (r() * 1.3 - 0.4),
+    vhs: 1 + v * (r() * 0.45 - 0.1),
+  };
+}
+
 /**
  * Slot 0 (camera, creature, fx, camcorder OSD) and slot 1 (walled edges around the camera) for the sky.
  * `clock` is the wall time stamped on the tape; `aspect` places the OSD at the frame edges.
@@ -1798,15 +1889,17 @@ export function backroomsSlots(t: number, clock = new Date(), aspect = 16 / 9): 
   frame.slot0[BR_SLOT.aspect] = aspect;
   // One battery lasts 25 minutes of footage, then a fresh one goes in.
   frame.slot0[BR_SLOT.battery] = 1 - 0.95 * ((Math.max(0, t) / 1500) % 1);
+  const mood = tapeMood(frame.tape, opts.variety);
   frame.slot0[BR_SLOT.optOsd] = opts.osd ? 1 : 0;
-  frame.slot0[BR_SLOT.optVhs] = opts.vhs;
-  frame.slot0[BR_SLOT.optWriting] = opts.writing;
-  frame.slot0[BR_SLOT.optObjects] = opts.objects;
-  frame.slot0[BR_SLOT.optDarkness] = opts.darkness;
+  frame.slot0[BR_SLOT.optVhs] = clamp(opts.vhs * mood.vhs, 0, 2);
+  frame.slot0[BR_SLOT.optWriting] = clamp(opts.writing * mood.writing, 0, 3);
+  frame.slot0[BR_SLOT.optObjects] = clamp(opts.objects * mood.objects, 0, 3);
+  frame.slot0[BR_SLOT.optDarkness] = clamp(opts.darkness * mood.darkness, 0, 3);
   frame.slot0[BR_SLOT.optShadows] = opts.shadows ? 1 : 0;
+  frame.slot0[BR_SLOT.variant] = opts.variety > 0 ? (frame.tape % 8191) + 1 + Math.min(opts.variety, 2) / 2.001 : 0;
   const oi = frame.slot0[BR_SLOT.winI]!;
   const ok = frame.slot0[BR_SLOT.winK]!;
-  const key = `${oi},${ok}`;
+  const key = `${oi},${ok},${opts.variety}`;
   if (key !== lastWin) {
     lastWin = key;
     lastWinData = brMazeWindow(oi, ok);

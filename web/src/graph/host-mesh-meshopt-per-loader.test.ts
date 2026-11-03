@@ -14,7 +14,7 @@ describe("ensureHostMeshoptDecoder", () => {
     await ensureHostMeshoptDecoder(a);
     await ensureHostMeshoptDecoder(b);
     // Revert: the old memoised promise only ever called a.setMeshoptDecoder.
-    expect((a as unknown as { meshoptDecoder: unknown }).meshoptDecoder).toBeTruthy();
-    expect((b as unknown as { meshoptDecoder: unknown }).meshoptDecoder).toBeTruthy();
+    expect(a).toHaveProperty("meshoptDecoder", expect.anything());
+    expect(b).toHaveProperty("meshoptDecoder", expect.anything());
   });
 });
