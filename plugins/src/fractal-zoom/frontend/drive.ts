@@ -95,6 +95,9 @@ let poseKey = "";
 let generation = 0;
 let cruise: Cruise2 = { x: SEAHORSE_X, y: SEAHORSE_Y, vx: 0, vy: 0, heading: 0.7 };
 let canyon: Canyon3 = { ...CANYON_HOME };
+/** Last canyon pose whose ray origin was outside the solid, and how long the cruise has been inside. */
+let canyonSafe: Canyon3 | null = null;
+let canyonInsideS = 0;
 
 /** Mandelbrot terrain opens on the whole set: centre of the cardioid-to-antenna span, window wide enough to hold it. */
 export const TERRAIN_HOME = { x: -0.75, y: 0 };
@@ -185,6 +188,45 @@ export const FRACTAL_PREROLL_MAX_STEPS = 1500;
 const PREROLL_DT = 1 / 60;
 const prerollCache = new Map<string, Canyon3>();
 
+/** Ray-origin room the shader needs; below this the view starts inside the surface (flat colour or black). */
+export const CANYON_RO_FLOOR = 0.004;
+/** Seconds the cruise may stay inside before the flight restarts from the settled pre-roll pose. */
+export const CANYON_INSIDE_RESEED_S = 1.5;
+
+/** Shader ray origin for a canyon pose: `near` back from the focus toward the camera (fragment.glsl). */
+export function canyonRayOrigin(c: Canyon3): [number, number, number] {
+  const fx = c.fx - c.cx;
+  const fy = c.fy - c.cy;
+  const fz = c.fz - c.cz;
+  const l = Math.hypot(fx, fy, fz) || 1;
+  const stand = c.near > 1e-4 ? c.near : Math.max(l, 0.35);
+  return [c.fx - (fx / l) * stand, c.fy - (fy / l) * stand, c.fz - (fz / l) * stand];
+}
+
+/**
+ * The canyon cruise can slip through a thin Mandelbox wall and fly on inside the solid, where every
+ * ray starts at distance 0 and the view went black. Show the last outside pose while it is in
+ * there, and restart from the pre-roll pose if it does not come out.
+ */
+export function guardCanyon(next: Canyon3, opts: FractalOptions, dt: number): Canyon3 {
+  const kind = fractalTypeIndex(opts.type);
+  const [rx, ry, rz] = canyonRayOrigin(next);
+  const d = de3(kind, rx, ry, rz, deParams(opts));
+  if (Number.isFinite(d) && d > CANYON_RO_FLOOR) {
+    canyonSafe = { ...next };
+    canyonInsideS = 0;
+    return next;
+  }
+  canyonInsideS += dt;
+  if (canyonInsideS > CANYON_INSIDE_RESEED_S || !canyonSafe) {
+    canyonInsideS = 0;
+    canyon = settledCanyon(opts);
+    canyonSafe = { ...canyon };
+    return canyon;
+  }
+  return canyonSafe;
+}
+
 function deParams(opts: FractalOptions): DeParams {
   return {
     power: opts.power,
@@ -251,6 +293,8 @@ function reseedPose(opts: FractalOptions): void {
     heading: terrain ? TERRAIN_OPEN_YAW : 0.7,
   };
   canyon = settledCanyon(opts);
+  canyonSafe = null;
+  canyonInsideS = 0;
   camX = CANYON_HOME.cx;
   camY = CANYON_HOME.cy;
   camZ = CANYON_HOME.cz;
@@ -362,6 +406,8 @@ export function resetFractalCamera(): void {
   iterShift = 0;
   cruise = { x: SEAHORSE_X, y: SEAHORSE_Y, vx: 0, vy: 0, heading: 0.7 };
   canyon = settledCanyon(optsCache);
+  canyonSafe = null;
+  canyonInsideS = 0;
 }
 
 export function resetFractalDrive(): void {
@@ -456,6 +502,7 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   const juliaC = opts.type === "julia2d" ? { x: opts.juliaCr, y: opts.juliaCi } : undefined;
   const glide = opts.autoPilot && !opts.paused && !driftOnly;
   if (is2d && glide) stepJourney(dt, aspect, juliaC, terrain ? terrainIntro() : 1);
+  let shown = canyon;
   if (!is2d && glide) {
     canyon = stepCanyon(canyon, dt, fractalTypeIndex(opts.type), {
       power: opts.power,
@@ -467,9 +514,10 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
       jz: opts.quatC2,
       jw: opts.quatC3,
     }, zoomLog);
-    camX = canyon.cx;
-    camY = canyon.cy;
-    camZ = canyon.cz;
+    shown = guardCanyon(canyon, opts, dt);
+    camX = shown.cx;
+    camY = shown.cy;
+    camZ = shown.cz;
   }
 
   let terrainLook = 0;
@@ -574,10 +622,10 @@ export function fractalDrive(input: FractalDriveInput): FractalDriveOut {
   slot0[FZ_SLOT.frameMs] = lastFrameMs;
   slot0[FZ_SLOT.precisionClamp] = precisionClamp;
   slot0[FZ_SLOT.mark] = 1;
-  slot0[FZ_SLOT.focusX] = terrain ? terrainAheadX : canyon.fx;
-  slot0[FZ_SLOT.focusY] = terrain ? terrainLook : canyon.fy;
-  slot0[FZ_SLOT.focusZ] = terrain ? terrainAheadZ : canyon.fz;
-  slot0[FZ_SLOT.nearDist] = terrain ? 0 : canyon.near;
+  slot0[FZ_SLOT.focusX] = terrain ? terrainAheadX : shown.fx;
+  slot0[FZ_SLOT.focusY] = terrain ? terrainLook : shown.fy;
+  slot0[FZ_SLOT.focusZ] = terrain ? terrainAheadZ : shown.fz;
+  slot0[FZ_SLOT.nearDist] = terrain ? 0 : shown.near;
   slot0[FZ_SLOT.orbitLen] = orbitLen;
   slot0[FZ_SLOT.generation] = generation;
   slot0[FZ_SLOT.refDx] = refDx;
