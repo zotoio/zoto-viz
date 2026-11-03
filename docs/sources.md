@@ -28,7 +28,7 @@ Views that still need a key or OAuth stay out of **dice** until they work: **Nes
 
 A `{date}` token in an `http` / `rss` URL becomes the host-local `YYYY-MM-DD` on every fetch (for example Botz `https://botz.ai/archive/day/{date}?n=24`). JSON rows with a token fall back to yesterday when today is a 404 or projects no items, and keep the last good items (`stale: true`) if both fail; `fetchedUrl` on the live row shows which day was used.
 
-`fields.pageTemplate` builds each item's page on the source's own site (for example Botz `https://botz.ai/#{cache_key}`, the botz.ai story permalink). It is only set when every placeholder resolves; the carousel shows it as a translucent "Open on <host> ↗" button at the top of the slide (new tab).
+`fields.pageTemplate` builds each item's page on the source's own site (for example Botz `https://botz.ai/#{cache_key}`, the botz.ai story permalink). It is only set when every placeholder resolves; the carousel shows it as a translucent `Open on <host> ↗` button at the top of the slide (new tab).
 
 JSON field maps may also set `author`, `source`, and `published` (dotted paths). The carousel shows `source · author` above the title, and varies each still's caption layout and arrival (fade, slide, zoom-out, iris, blur) per slide and cycle; reduced motion keeps a plain crossfade and the bottom caption.
 
