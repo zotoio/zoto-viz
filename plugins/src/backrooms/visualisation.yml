@@ -12,6 +12,14 @@ look:
   mosaic: "off"
 config:
   # ---- story
+  - key: variety
+    label: variety (%)
+    type: number
+    default: 100
+    min: 0
+    max: 200
+    step: 10
+    hint: How far each tape and each stretch of hall strays from the settings below. Open pillared halls and tight warrens, dead and flickering patches, damp, clutter, writing and wallpaper vary by zone; pacing, the encounter mix, how fast it is and the camera's colour cast vary by tape — never gentler than the settings. 0 makes every tape the same Level 0.
   - key: episode
     label: episode length (s)
     type: number
