@@ -11,6 +11,16 @@ describe("stage mesh camera", () => {
     expect(stageMeshPackId("plugin:koi-pond:2", "koi-pond")).toBe("koi-pond");
   });
 
+  it("uses the view's own aspect over the pack canvas guess (maximised / narrow panes)", () => {
+    for (const aspect of [0.6, 1, 2.7, 3.5]) {
+      const pose = aquariumStagePose(slots({ "0:8": 2, "0:12": 1280, "0:13": 800 }), aspect);
+      const t = Math.tan(((pose.fov ?? 0) * Math.PI) / 360);
+      const d = pose.position[2] - 1.02;
+      expect(0.82).toBeLessThan(d * t);
+      expect(1.22).toBeLessThan(d * t * aspect);
+    }
+  });
+
   it("frames the whole tank front at the pane aspect", () => {
     for (const [w, h] of [[1400, 820], [800, 800], [1920, 600], [0, 0]]) {
       const pose = aquariumStagePose(slots({ "0:8": 2, "0:12": w!, "0:13": h! }));

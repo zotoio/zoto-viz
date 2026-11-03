@@ -725,11 +725,14 @@ function hostMeshCanPlace(packId: string): boolean {
   return !pluginHasFrontend(current) || sandbox.readyPack === packId;
 }
 /** A pane's pack mounts its host meshes into that pane's own scene, live or not. */
-function mountPaneScene(id: string, paneScene: NetScene): void {
+/** Model set each mosaic pane's host meshes were mounted with (tile id → set). */
+const paneMeshSetMounted = new Map<string, string>();
+function mountPaneScene(id: string, paneScene: NetScene, setOverride?: ReturnType<typeof hostMeshModelSet>): void {
   const lane = paneScene.hostMeshLane;
   const spec = pluginSpecForMode(id);
   if (!spec) {
     lane.clear();
+    paneMeshSetMounted.delete(id);
     return;
   }
   // A pane restored at boot never runs the view-switch consent step, so its pack stayed without
@@ -737,11 +740,13 @@ function mountPaneScene(id: string, paneScene: NetScene): void {
   if (pluginNeedsReview(spec)) {
     void ensureReviewed(spec, refreshPluginSignal.signal, { wait: false }).catch(() => {});
   }
+  const paneSet = setOverride ?? hostMeshModelSet(sandboxPluginConfig(spec));
+  paneMeshSetMounted.set(id, paneSet);
   void mountPaneHostMeshes(
     lane,
     spec,
     () => mosaic?.graphScene(id) === paneScene,
-    hostMeshModelSet(sandboxPluginConfig(spec)),
+    paneSet,
   ).catch(() => {});
 }
 /** Mosaic pane showing a sandboxed pack that the single sandbox is not driving. */
@@ -942,6 +947,20 @@ const sandboxConfigBatcher = new SandboxConfigBatcher(
 /** Model set each pack's host meshes were last mounted with, so a settings change remounts them. */
 const hostMeshSetMounted = new Map<string, string>();
 function remountHostMeshesOnModelSet(storeId: string, config: Record<string, string>): void {
+  // Mosaic panes already showing this pack remount too, or a Standard/HD switch only lands on a re-pick.
+  const set = hostMeshModelSet(config);
+  for (const id of mosaic?.on ? mosaic.tileIds : []) {
+    const paneSpec = pluginSpecForMode(id);
+    if (!paneSpec?.assets?.length || configStoreId(paneSpec) !== storeId) continue;
+    const was = paneMeshSetMounted.get(id);
+    const paneScene = mosaic?.graphScene(id);
+    if (was === undefined || was === set || !paneScene || paneScene === sandboxDrivenScene()) continue;
+    mountPaneScene(id, paneScene, set);
+  }
+  remountActiveHostMeshes(storeId, config);
+}
+
+function remountActiveHostMeshes(storeId: string, config: Record<string, string>): void {
   const spec = activePluginSpec;
   if (!spec?.assets?.length || configStoreId(spec) !== storeId) return;
   const set = hostMeshModelSet(config);

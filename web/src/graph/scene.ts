@@ -3262,7 +3262,7 @@ export class NetScene implements HostedView, RenderScalePane {
    */
   private applyStageMeshCamera(): boolean {
     const pack = stageMeshPackId(this.mode.id, this.mode.pluginId);
-    const pose = stageMeshPose(pack, (slot, index) => this.backdrop.pluginSlot(slot, index));
+    const pose = stageMeshPose(pack, (slot, index) => this.backdrop.pluginSlot(slot, index), this.camera.aspect);
     if (!pose) {
       if (this.stageMeshCam) {
         this.camera.near = 1;

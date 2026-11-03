@@ -35,12 +35,15 @@ const AQ_FRAME_MARGIN = 1.08;
  * included) is in frame at this pane's aspect (slot0[12..13] = canvas w, h), so a fish near the
  * front never looks huge or outside the glass. Drift sways a little; hold sits still.
  */
-export function aquariumStagePose(read: StageSlotReader): StageMeshPose {
+export function aquariumStagePose(read: StageSlotReader, viewAspect?: number): StageMeshPose {
   const mode = read(0, 8);
   const phase = read(0, 9);
   const w = read(0, 12);
   const h = read(0, 13);
-  const aspect = w > 1 && h > 1 ? w / h : 1.6;
+  // The pane's own camera aspect wins (a maximised or solo pane is far wider than the pack's canvas guess).
+  const aspect = viewAspect !== undefined && Number.isFinite(viewAspect) && viewAspect > 0.1
+    ? viewAspect
+    : w > 1 && h > 1 ? w / h : 1.6;
   const t = Math.tan((AQUARIUM_FOV * Math.PI) / 360);
   const dist = Math.max((AQ_HALF_H * AQ_FRAME_MARGIN) / t, (AQ_HALF_W * AQ_FRAME_MARGIN) / (t * aspect));
   let x = 0;
@@ -96,8 +99,8 @@ export function rocketCarStagePose(read: StageSlotReader): StageMeshPose {
   return { position: [x, y, z], target: [x + fx, y + fy, z + fz], near: 0.1 };
 }
 
-export function stageMeshPose(packId: string, read: StageSlotReader): StageMeshPose | null {
-  if (packId === "aquarium") return aquariumStagePose(read);
+export function stageMeshPose(packId: string, read: StageSlotReader, viewAspect?: number): StageMeshPose | null {
+  if (packId === "aquarium") return aquariumStagePose(read, viewAspect);
   if (packId === "koi-pond") return koiStagePose(read);
   if (packId === "rocket-car-soccer") return rocketCarStagePose(read);
   return null;
