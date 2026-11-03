@@ -239,7 +239,7 @@ import {
 } from "./main-viz-tile-lines";
 import { vizClockMs } from "../core/viz-clock";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
-import { attachPaneSandbox, postBatchedConfig, TileSandboxes } from "./tile-sandboxes";
+import { attachPaneSandbox, postBatchedConfig, sharedSandboxTile, TileSandboxes } from "./tile-sandboxes";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -622,6 +622,20 @@ function stagePresentAspect(): number {
   return Number.isFinite(a) && a > 0 ? a : 16 / 9;
 }
 
+/** #235: a mosaic pane's own sky clock and aspect for its pane sandbox's present tick. */
+function paneSkyTime(_tileId: string): number | undefined {
+  // The host plugin clock (what the shared sandbox's tick carries, i.e. what `look` gives the pane).
+  // A pane NetScene's own sky clock does not advance for a pane pack, so packs stepping on
+  // pluginClock deltas (fluid-dyn) would freeze on it.
+  return scene.skyTime();
+}
+function paneAspect(tileId: string): number | undefined {
+  const el = mosaic?.graphScene(tileId)?.viewEl;
+  const w = el?.clientWidth ?? 0;
+  const h = el?.clientHeight ?? 0;
+  return w > 0 && h > 0 ? w / h : undefined;
+}
+
 const presentDriveDeps = {
   sandbox,
   pluginClock: () => scene.skyTime(),
@@ -638,6 +652,8 @@ addPresentListener((ts) => {
   if (packId) vizBudget.markPresent(ts);
   notePackPerfPresent(ts, presentInterval);
   deliverPluginPresentTick(presentDrive, ts);
+  // #235: pane sandboxes running a viz.presentTick pack get their own tick (pane clock + aspect).
+  if (tileSandboxes.size > 0) tileSandboxes.presentTick(ts, paneSkyTime, paneAspect);
   if (mode.pluginId === "backrooms") {
     pluginSfx.syncBackroomsViewConfig(currentOpts);
     pluginSfx.setBackrooms(scene.skyTime());
@@ -690,8 +706,7 @@ scene.afterLook = () => {
 };
 /** The mosaic tile the single sandbox drives ("main" outside the mosaic). */
 function sandboxVizTileId(): string {
-  if (!mosaic?.on) return "main";
-  return mosaic.tileIds.includes(modeSel.value) ? modeSel.value : mosaicFocusSlot(mosaic) || "main";
+  return sharedSandboxTile(!!mosaic?.on, mosaic?.tileIds ?? [], modeSel.value);
 }
 /** #233: tile-health counts the shared sandbox's writes for the tile it drives. */
 function noteSharedSandboxWrite(): void {
