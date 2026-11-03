@@ -53,21 +53,57 @@ function chunkInstances<T>(items: T[]): T[][] {
   return out;
 }
 
+/**
+ * Per-fish yaw rate (rad/s) for the host, carried in extras.param1. The host bends the HD fish
+ * spine by it; Standard ignores it. Fish are tracked by school index; a jump bigger than a fish
+ * can turn in one frame (slot reshuffle) resets that fish instead of reading as a spin.
+ */
+export class FishTurnTracker {
+  private prev = new Map<number, { yaw: number; rate: number }>();
+  private lastClock = Number.NaN;
+  private dt = 0;
+
+  /** Start a frame at host clock `clock` (seconds). */
+  frame(clock: number): void {
+    const dt = clock - this.lastClock;
+    this.dt = Number.isFinite(dt) && dt > 0 && dt < 0.5 ? dt : 0;
+    this.lastClock = clock;
+  }
+
+  /** Smoothed yaw rate for fish `n` now at `yaw`. */
+  rate(n: number, yaw: number): number {
+    const p = this.prev.get(n);
+    let rate = 0;
+    if (p && this.dt > 0) {
+      const d = Math.atan2(Math.sin(yaw - p.yaw), Math.cos(yaw - p.yaw));
+      const raw = Math.abs(d) > 0.6 ? 0 : d / this.dt;
+      const k = Math.min(1, this.dt * 6);
+      rate = p.rate + (Math.max(-4, Math.min(4, raw)) - p.rate) * k;
+    }
+    this.prev.set(n, { yaw, rate });
+    return rate;
+  }
+}
+
+const defaultTurnTracker = new FishTurnTracker();
+
 export function writeAquariumHostMeshSlots(
   writeBuffer: (slot: number, data: number[] | Float32Array) => void,
   slot0: ArrayLike<number>,
   slot1: ArrayLike<number>,
   clock: number,
+  turns: FishTurnTracker = defaultTurnTracker,
 ): void {
   const byAsset = new Map<number, { matrix: number[]; extras: { animTime: number; param1: number; param2: number; flags: number } }[]>();
-  const push = (assetIndex: number, matrix: number[], animTime: number) => {
+  const push = (assetIndex: number, matrix: number[], animTime: number, turnRate = 0) => {
     const list = byAsset.get(assetIndex) ?? [];
-    list.push({ matrix, extras: { animTime, param1: 0, param2: 0, flags: 0 } });
+    list.push({ matrix, extras: { animTime, param1: turnRate, param2: 0, flags: 0 } });
     byAsset.set(assetIndex, list);
   };
 
   const fishCount = Math.round(Number(slot0[AQU_SLOT.fishCount]) || 0);
   const reef = Number(slot0[AQU_SLOT.water]) > 0.5;
+  turns.frame(clock);
   for (let fi = 0, n = 0; n < fishCount && fi + 3 < slot1.length; fi += 4, n++) {
     const x = Number(slot1[fi]) || 0;
     const y = Number(slot1[fi + 1]) || 0;
@@ -78,7 +114,7 @@ export function writeAquariumHostMeshSlots(
     const assetIndex = assetForSpecies(species, reef);
     const fishY = species === CORY_SPECIES_INDEX ? y + CORY_BELLY_LIFT_M * FISH_SCALE : y;
     const phase = clock * (0.9 + vigor * 0.4) + n * 0.29;
-    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw, FISH_SCALE), phase);
+    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw, FISH_SCALE), phase, turns.rate(n, yaw));
   }
 
   // Plants and gravel are pinned by the host when the pack mounts. These slots
