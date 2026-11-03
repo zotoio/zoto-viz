@@ -240,6 +240,7 @@ import {
 import { vizClockMs } from "../core/viz-clock";
 import { broadcastPluginUbo } from "./viz-plugin-ubo";
 import { attachPaneSandbox, postBatchedConfig, sharedSandboxTile, TileSandboxes } from "./tile-sandboxes";
+import { changedPluginStores, pluginConfigSnapshot } from "./plugin-config-diff";
 import { AgentPanel, aiMosaicLayoutOn, CYCLE_KEY, type AgentLookInput } from "../ui/agent";
 import { invalidateSkyRecipe, setSkyPrompt } from "../graph/sky-ai";
 import { compileAgentSky } from "../graph/sky-agent";
@@ -3289,6 +3290,7 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
     }
     replaceStorage(/^zoto-viz\.mode\./, modeEntries);
   }
+  const pluginsBefore = s.pluginsSaved ? pluginConfigSnapshot() : null;
   if (s.pluginsSaved) replacePluginConfigs(s.plugins);
   applyTheme(s.theme, s.theme !== theme.id);
   setDream(s.dream);
@@ -3351,10 +3353,27 @@ function applySettings(s: ProfileSettings, flags: { keepLayout?: boolean } = {})
     scene.setStageOnly(false);
   }
   applyMode(s.mode, { keepLayout: flags.keepLayout }, { channel: "user" });
+  // set_plugin / profile knob changes reach every pane showing that plugin, not only the global view.
+  if (pluginsBefore) pushChangedPluginStores(changedPluginStores(pluginsBefore, pluginConfigSnapshot()));
   if (s.mosaicFocusSaved && s.mosaicFocus && mosaic?.on) mosaic.focus(s.mosaicFocus);
   if (lastRaw) feed(lastRaw);
   void syncWifiWatch();
   persistLive();
+}
+
+/** Push a changed plugin store to its sandboxes (shared + every pane) and re-mode host-drawn panes on it. */
+function pushChangedPluginStores(stores: readonly string[]): void {
+  for (const storeId of stores) {
+    const spec = pluginSpecForStoreId(storeId);
+    if (!spec) continue;
+    maybePushSandboxForStore(storeId, loadPluginConfigCached(spec, pluginViewKnobs(spec)));
+    if (!mosaic?.on) continue;
+    for (const tileId of mosaic.tileIds) {
+      if (configStoreIdForMode(tileId) !== storeId) continue;
+      const pm = hostModeById(tileId);
+      setSceneMode(mosaic.graphScene(tileId), pm, optsFor(pm));
+    }
+  }
 }
 
 let aiBusy = false;
