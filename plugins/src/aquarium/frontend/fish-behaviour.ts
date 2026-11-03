@@ -66,7 +66,7 @@ export function traitsFor(species: number, reef: boolean): FishTraits {
 export const TANK = { xMin: -1.2, xMax: 1.2, yMin: -0.72, yMax: 0.78, zMin: -1.0, zMax: 0.62 } as const;
 
 /** Host mesh scale of the designer fish (host-mesh-drive uses the same number). */
-export const FISH_MESH_SCALE = 1.35;
+export const FISH_MESH_SCALE = 2.0;
 /** Clear water kept between a fish's body and the glass. */
 export const WALL_GAP = 0.03;
 
