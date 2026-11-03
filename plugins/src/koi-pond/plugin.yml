@@ -41,6 +41,31 @@ assets:
     sha256: 3b910d506fab10a46e434350afcafb1659de53e517dbb4a150c9b01ce0ace5a2
     bytes: 604576
     triangles: 9216
+  - id: koi-kohaku-hd
+    path: assets/koi-kohaku-hd.glb
+    sha256: 4068cb2aadb91bf3602da810f26a25da9005a2a7a5ddbd2bc5f905257298e516
+    bytes: 63728
+    triangles: 8640
+  - id: koi-showa-hd
+    path: assets/koi-showa-hd.glb
+    sha256: aab252d39c64bb800b29a01ba519717b21c35ee8fea8668e23f910f2216d34af
+    bytes: 63728
+    triangles: 8640
+  - id: koi-ogon-hd
+    path: assets/koi-ogon-hd.glb
+    sha256: af3e48e73034de13dad78e6ae057ec00c3621a4bb99cd811e0e470bc97fde069
+    bytes: 63724
+    triangles: 8640
+  - id: lily-pads-hd
+    path: assets/lily-pads-hd.glb
+    sha256: d63ff13707ac97894903289309b575bdd2124ff54e953fb659a247e9c595879d
+    bytes: 9708
+    triangles: 124
+  - id: pond-rocks-hd
+    path: assets/pond-rocks-hd.glb
+    sha256: 22c8a70c7bd2d77a9e4ded26eb77a5c537f9176bb07a379a2e39fe58ec2c2401
+    bytes: 9108
+    triangles: 320
 viz:
   graphWalk: false
   idle:
