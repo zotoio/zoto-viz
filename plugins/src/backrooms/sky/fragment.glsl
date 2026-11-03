@@ -10,6 +10,8 @@ vec3 gCam, gBodyA, gBodyB, gBC; vec2 gCr, gDrag; ivec2 gWin; int gType;
 float gYaw, gPitch, gRoll, gVis, gCS, gCC, gCT, gHush, gGlitch, gCut, gExpo, gTh, gBR, gBreath, gMouth;
 float gDragVis, gDragC, gDragS, gOsd, gVhs, gWriting, gObjects, gDark, gShadows;
 bool gSelf;
+// Variety (slot 63): gVar scales it (0 = the one fixed Level 0), gSeed is the tape.
+float gVar, gHaze; int gSeed; vec2 gZoneOff; vec3 gWB, gPaper;
 vec3 jH, jC, jSL, jSR, jHd, jEL, jER, jWL, jWR, jKL, jKR, jFL, jFR, jHL, jHR, fLa, fLb, fLc, fRa, fRb, fRc;
 mat3 hM;
 
@@ -74,6 +76,13 @@ float sdOct(vec2 p, float r) {
   return length(p) * sign(p.y);
 }
 
+// ---------------------------------------------------------------- zones
+
+// Slow zones over the floor plan, shifted per tape: some stretches darker, wetter, more cluttered or
+// with more open rooms than others. Smooth zones for shading, cell zones for discrete placements.
+float zoneAt(vec2 xz, int s) { return vn(xz / 26.0 + gZoneOff, s); }
+float zoneCell(ivec2 c, float size, int s) { return hf(ivec2(floor(vec2(c) / size)) + ivec2(gSeed * 7, gSeed * 13), s); }
+
 // ---------------------------------------------------------------- maze
 
 bool walled(int i, int k, int a) {
@@ -84,7 +93,7 @@ bool walled(int i, int k, int a) {
 }
 float chamber(vec2 xz) {
   ivec2 r = ivec2(floor((xz + 6.0) / 12.0));
-  if (hf(r, 31) < 0.8) return -1e3;
+  if (hf(r, 31) < mix(0.8, 0.62 + 0.3 * zoneCell(r, 3.0, 94), min(gVar, 1.0))) return -1e3;
   vec2 l = abs(xz - vec2(r) * 12.0);
   return 4.6 + hf(r, 32) - max(l.x, l.y);
 }
@@ -127,10 +136,12 @@ float tripod(vec3 q, float h) {
 // 9 CRT TV showing static, 10 heap of cardboard boxes, 11 stained mattress. Local x along the face, z out.
 bool objFrame(ivec2 c, out int kind, out vec2 base, out vec2 tg, out vec2 o2) {
   kind = -1; base = vec2(0.0); tg = vec2(1.0, 0.0); o2 = vec2(0.0, 1.0);
-  if (hf(c, 80) > 0.14 * gObjects) return false;
+  if (hf(c, 80) > 0.14 * gObjects * mix(1.0, 0.35 + 2.0 * zoneCell(c, 6.0, 95), min(gVar, 1.5))) return false;
   vec2 pc = vec2(c) * G + 2.0;
   if (chamber(pc) > -1.0) return false;
   kind = int(hf(c, 81) * 12.0);
+  // Themed stretches: in some zones most of what noclipped through is the same kind of thing.
+  if (hf(c, 84) < 0.5 * min(gVar, 1.0)) kind = int(zoneCell(c, 7.0, 96) * 12.0);
   int f = int(hf(c, 82) * 4.0);
   o2 = f == 0 ? vec2(1.0, 0.0) : f == 1 ? vec2(0.0, 1.0) : f == 2 ? vec2(-1.0, 0.0) : vec2(0.0, -1.0);
   tg = vec2(-o2.y, o2.x);
@@ -550,11 +561,12 @@ vec2 lampC(ivec2 q, int a) { return vec2(q) * G + (a == 0 ? vec2(2.333, 0.0) : v
 float lampOn(ivec2 q, int a) {
   if (walled(q.x, q.y, a)) return 0.0;
   float r = hf(q, 40 + a), r2 = hf(q, 50 + a);
-  if (r < 0.07 * gDark || hf(ivec2(floor(vec2(q) / 5.0)), 60) < 0.12 * gDark) return 0.0;
+  float zd = gDark * mix(1.0, 0.45 + 2.0 * zoneCell(q, 5.0, 93), min(gVar, 1.5));
+  if (r < 0.07 * zd || hf(ivec2(floor(vec2(q) / 5.0)), 60) < 0.12 * zd) return 0.0;
   // A Smiler only shows in the dark: the tubes around it are dead.
   if (gType == 4 && gVis > 0.5 && length(lampC(q, a) - gCr) < 9.0) return 0.0;
   float on = 0.86 + 0.2 * r2;
-  if (r2 < 0.07 * gDark) on *= step(0.3, h1(uTime * 13.0 + r * 97.0));
+  if (r2 < 0.07 * zd) on *= step(0.3, h1(uTime * 13.0 + r * 97.0));
   float nearC = gHush * smoothstep(12.0, 3.0, length(lampC(q, a) - gCr));
   return on * mix(1.0, 0.35 + 0.65 * step(0.4, h1(uTime * 17.0 + r * 31.0)), nearC);
 }
@@ -715,7 +727,7 @@ float graffiti(vec3 p, vec3 n) {
   bool xw = abs(n.x) > abs(n.z);
   float u = xw ? p.z : p.x, cu = floor(u / 2.0 + 0.5) * 2.0;
   ivec2 id = ivec2(int(cu), int(floor((xw ? p.x : p.z) * 4.0)));
-  if (hf(id, 120) > 0.085 * gWriting) return 0.0;
+  if (hf(id, 120) > 0.085 * gWriting * mix(1.0, 0.3 + 2.2 * zoneAt(p.xz, 98), min(gVar, 1.5))) return 0.0;
   float r = (hf(id, 123) - 0.5) * 0.12;
   vec2 lp = mat2(cos(r), sin(r), -sin(r), cos(r)) * vec2((u - cu) * (xw ? -n.x : n.z), p.y - 1.35 - (hf(id, 122) - 0.5) * 0.3);
   int d = int(hf(id, 121) * 8.0);
@@ -805,7 +817,8 @@ vec3 surface(vec3 p, vec3 n, vec3 rd, float dist) {
     // Damp mustard carpet: fibre, wear, dark wet patches — and where the body was dragged, a wet red smear.
     vec2 x = p.xz;
     float fine = mix(0.5, vn(x * 60.0, 1) * 0.6 + vn(x * 150.0, 2) * 0.4, smoothstep(0.03, 0.006, fw));
-    float damp = smoothstep(0.56, 0.78, fbm(x * 0.28 + 3.0, 4));
+    float wet = gVar * (zoneAt(x, 97) - 0.45);
+    float damp = smoothstep(0.56 - 0.2 * wet, 0.78 - 0.2 * wet, fbm(x * 0.28 + 3.0, 4));
     alb = vec3(0.30, 0.22, 0.085) * (0.82 + 0.3 * fine) * (0.85 + 0.3 * fbm(x * 0.9, 3));
     alb = mix(alb, alb * vec3(0.55, 0.46, 0.33), damp);
     amb = 0.15;
@@ -822,7 +835,7 @@ vec3 surface(vec3 p, vec3 n, vec3 rd, float dist) {
     ivec2 tid = ivec2(floor(tq));
     float edge = min(min(tf.x, 1.0 - tf.x), min(tf.y, 1.0 - tf.y)) * 0.6667;
     alb = vec3(0.50, 0.46, 0.32) * (0.9 + 0.1 * vn(x * 3.0, 5)) * (1.0 - 0.22 * step(0.8, vn(x * 70.0, 6)) * det);
-    if (hf(tid, 70) < 0.07) alb *= 1.0 - 0.3 * smoothstep(0.42, 0.18, length(tf - 0.5 - 0.15 * vec2(hf(tid, 71), hf(tid, 72))));
+    if (hf(tid, 70) < 0.07 * (1.0 + 2.5 * max(gVar * (zoneAt(x, 97) - 0.3), 0.0))) alb *= 1.0 - 0.3 * smoothstep(0.42, 0.18, length(tf - 0.5 - 0.15 * vec2(hf(tid, 71), hf(tid, 72))));
     if (hf(tid, 73) < 0.004) alb = vec3(0.012);
     alb = mix(alb, vec3(0.58, 0.56, 0.5), 1.0 - smoothstep(0.011, 0.011 + fw, edge));
     float on;
@@ -838,9 +851,9 @@ vec3 surface(vec3 p, vec3 n, vec3 rd, float dist) {
     float s = fract(u / 0.16);
     float cv = abs(fract(v * 6.5 + abs(s - 0.75) * 2.4) - 0.5);
     float pat = (0.08 * step(0.5, s) * smoothstep(0.1, 0.04, cv) + 0.05 * (smoothstep(0.03, 0.0, abs(s - 0.5)) + smoothstep(0.03, 0.0, min(s, 1.0 - s)))) * det;
-    alb = vec3(0.60, 0.53, 0.2) * (0.86 + 0.24 * fbm(vec2(u, v) * 1.4, 8)) * (1.0 - pat);
+    alb = gPaper * (0.86 + 0.24 * fbm(vec2(u, v) * 1.4, 8)) * (1.0 - pat);
     alb *= 1.0 + 0.1 * smoothstep(0.004 + fw, 0.0, abs(fract(u / 0.533 + 0.5) - 0.5) * 0.533) * det;
-    float th = 0.1 + 0.32 * fbm(vec2(u * 0.6, 3.0), 9);
+    float th = clamp(0.1 + 0.32 * fbm(vec2(u * 0.6, 3.0), 9) + 0.22 * gVar * (zoneAt(p.xz, 97) - 0.4), 0.05, 1.2);
     alb = mix(alb, alb * vec3(0.66, 0.56, 0.34), smoothstep(th, th - 0.2, v) * 0.75);
     alb *= (1.0 - 0.18 * exp(-abs(v - th) * 45.0)) * (1.0 - 0.14 * smoothstep(0.62, 0.82, vn(vec2(u, v) * 0.8 + 11.0, 10)));
     if (v < 0.095) alb = vec3(0.34, 0.27, 0.12) * (0.9 + 0.1 * vn(vec2(u * 8.0, v * 40.0), 12)) * (1.0 + 0.4 * smoothstep(0.08, 0.095, v));
@@ -1067,6 +1080,8 @@ void main() {
     gDrag = vec2(slot(37), slot(38));
     gDragS = sin(slot(39)); gDragC = cos(slot(39));
     gOsd = slot(40); gVhs = slot(41); gWriting = slot(42); gObjects = slot(43); gDark = slot(44); gShadows = slot(45);
+    float vs = slot(63);
+    gSeed = int(floor(vs)); gVar = vs >= 1.0 ? fract(vs) * 2.001 : 0.0;
   } else {
     gCam = vec3(0.0, 1.5 + 0.015 * abs(sin(t * 5.4)), -mod(t * 1.25, 400.0));
     gYaw = 0.03 * sin(t * 0.31); gPitch = -0.03; gRoll = 0.012 * sin(t * 0.7);
@@ -1075,7 +1090,17 @@ void main() {
     gType = 0;
     gDragVis = 0.0;
     gOsd = 0.0; gVhs = 1.0; gWriting = 1.0; gObjects = 1.0; gDark = 1.0; gShadows = 1.0;
+    gSeed = 0; gVar = 0.0;
   }
+  // The tape's look: where its zones fall, its wallpaper batch, the camcorder's white balance, the haze.
+  gZoneOff = vec2(hf(ivec2(gSeed, 3), 91), hf(ivec2(gSeed, 5), 92)) * 977.0;
+  int pal = int(hf(ivec2(gSeed, 9), 99) * 4.0);
+  vec3 paper = pal == 0 ? vec3(0.63, 0.49, 0.16) : pal == 1 ? vec3(0.64, 0.59, 0.31) : pal == 2 ? vec3(0.55, 0.54, 0.22) : vec3(0.57, 0.46, 0.19);
+  gPaper = mix(vec3(0.60, 0.53, 0.2), paper, 0.6 * min(gVar, 1.0));
+  int wbi = int(hf(ivec2(gSeed, 11), 100) * 4.0);
+  vec3 wbT = wbi == 0 ? vec3(1.04, 1.0, 0.9) : wbi == 1 ? vec3(0.94, 0.99, 1.07) : wbi == 2 ? vec3(0.97, 1.04, 0.94) : vec3(1.0);
+  gWB = mix(vec3(1.0), wbT, min(gVar, 1.0));
+  gHaze = mix(1.0, 0.7 + 0.9 * zoneAt(gCam.xz, 101), min(gVar, 1.0));
   gSelf = false;
   gTh = 1.0;
   gBC = vec3(0.0, 1.2, 0.35); gBR = 1.8;
@@ -1128,8 +1153,8 @@ void main() {
     else if (dob < drm) col = objectShade(p, n, rd, ok, oq);
     else col = surface(p, n, rd, hit);
   }
-  col *= exp(-hit * 0.017);
-  col = mix(col, vec3(0.3, 0.27, 0.12), (1.0 - exp(-hit * 0.028)) * 0.45);
+  col *= exp(-hit * 0.017 * gHaze);
+  col = mix(col, vec3(0.3, 0.27, 0.12), (1.0 - exp(-hit * 0.028 * gHaze)) * 0.45);
 
   if (gVis > 0.5 && gType == 4) {
     vec3 H = vec3(gCr.x, 1.62 + 0.03 * sin(gCT * 1.7), gCr.y);
@@ -1162,7 +1187,7 @@ void main() {
   col = (col * (2.51 * col + 0.03)) / (col * (2.43 * col + 0.59) + 0.14);
   col = pow(clamp(col, 0.0, 1.0), vec3(0.4545));
   float lum = dot(col, vec3(0.299, 0.587, 0.114));
-  col = mix(vec3(lum), col, 1.12) * vec3(1.0, 0.99, 0.86) * 0.93 + vec3(0.035, 0.035, 0.012);
+  col = mix(vec3(lum), col, 1.12) * vec3(1.0, 0.99, 0.86) * gWB * 0.93 + vec3(0.035, 0.035, 0.012);
 
   // OSD rides the same wobbling lines as the picture.
   if (dirOn && gOsd > 0.5 && uvT.y > 0.2) {
