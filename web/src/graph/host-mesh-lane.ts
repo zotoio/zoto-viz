@@ -161,13 +161,17 @@ export function normalizeSwimClipStart(clip: THREE.AnimationClip | null): THREE.
   return out;
 }
 
+/**
+ * The decoder's wasm init is shared, but every loader needs its own setMeshoptDecoder call. Each
+ * mosaic pane mounts its own HostMeshLane (and GLTFLoader); memoising the set call left every lane
+ * after the first throwing "setMeshoptDecoder must be called before loading compressed files", so
+ * aquarium fish, koi rocks and rocket cars never appeared.
+ */
 export function ensureHostMeshoptDecoder(loader: GLTFLoader): Promise<void> {
-  if (!meshoptReady) {
-    meshoptReady = MeshoptDecoder.ready.then(() => {
-      loader.setMeshoptDecoder(MeshoptDecoder);
-    });
-  }
-  return meshoptReady;
+  if (!meshoptReady) meshoptReady = MeshoptDecoder.ready;
+  return meshoptReady.then(() => {
+    loader.setMeshoptDecoder(MeshoptDecoder);
+  });
 }
 
 /**
