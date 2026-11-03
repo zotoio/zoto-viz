@@ -28,6 +28,8 @@ vec2 viewRotate(vec2 q) {
 // Colour coordinate, linear in escape count so a loop jump (which lowers every count by the cycle
 // period) is cancelled exactly by the accumulated shift in slot 53. FZ_BAND_K in fractal-slot.ts.
 const float FZ_BAND_K = 0.07;
+// Most a ray that misses the surface can be lit by mist and the near-miss aura.
+const float FZ_GLOW_CAP = 0.55;
 float bandOf(float n) {
   return (n + fz0(53.0)) * FZ_BAND_K;
 }
@@ -525,11 +527,16 @@ void main() {
     closest = min(closest, d);
     if (d < eHit) {
       hit = 1.0;
-      vec3 n = normalize(vec3(
-        mapDE(p + vec3(eHit, 0.0, 0.0), typ, powr, sc, fold, jc, sym) - mapDE(p, typ, powr, sc, fold, jc, sym),
-        mapDE(p + vec3(0.0, eHit, 0.0), typ, powr, sc, fold, jc, sym) - mapDE(p, typ, powr, sc, fold, jc, sym),
-        mapDE(p + vec3(0.0, 0.0, eHit), typ, powr, sc, fold, jc, sym) - mapDE(p, typ, powr, sc, fold, jc, sym)
-      ));
+      // A one-sided difference at the hit epsilon is below float resolution near the surface: the
+      // gradient came back zero or NaN and the whole surface shaded black. Central differences at a
+      // step that grows with distance, with a facing fallback when the field is flat.
+      float ne = max(eHit * 4.0, 4e-4 + t * 1.5e-3);
+      vec3 g = vec3(
+        mapDE(p + vec3(ne, 0.0, 0.0), typ, powr, sc, fold, jc, sym) - mapDE(p - vec3(ne, 0.0, 0.0), typ, powr, sc, fold, jc, sym),
+        mapDE(p + vec3(0.0, ne, 0.0), typ, powr, sc, fold, jc, sym) - mapDE(p - vec3(0.0, ne, 0.0), typ, powr, sc, fold, jc, sym),
+        mapDE(p + vec3(0.0, 0.0, ne), typ, powr, sc, fold, jc, sym) - mapDE(p - vec3(0.0, 0.0, ne), typ, powr, sc, fold, jc, sym)
+      );
+      vec3 n = dot(g, g) > 1e-14 ? normalize(g) : -rd;
       vec3 lp = ro + vec3(2.0, 3.0, -2.0);
       vec3 l = normalize(lp - p);
       float diff = max(dot(n, l), 0.0);
@@ -554,7 +561,10 @@ void main() {
         }
         sh = mix(1.0, clamp(sh, 0.0, 1.0), shAmt);
       }
-      col = mapCol(p, typ, trapOn, tpal, pcyc, hue, sat) * (0.16 + diff * sh) * ao * (1.0 - 0.6 * cost);
+      // A headlight along the view ray keeps faces turned from the key light readable instead of
+      // the near-black 0.16 ambient they had, which hid the surface inside the dark fog.
+      float head = 0.5 * max(dot(n, -rd), 0.0);
+      col = mapCol(p, typ, trapOn, tpal, pcyc, hue, sat) * (0.22 + head + diff * sh) * ao * (1.0 - 0.45 * cost);
       col += glow * 0.6 * ao * pow(max(dot(reflect(-l, n), -rd), 0.0), 12.0) * vec3(0.6, 0.75, 1.0);
       break;
     }
@@ -565,7 +575,10 @@ void main() {
   float aura = exp(-clamp(closest, 0.0, 4.0) * 5.5) * (0.55 + glow);
   col = mix(bg, col, hit);
   // Mist and the near-miss aura light empty space only; on a hit they would wash the surface out.
-  col += mapCol(ro + rd * min(t, 6.0), typ, trapOn, tpal, pcyc, hue, sat) * (mist + aura) * (1.0 - hit);
+  // Blend toward the glow colour instead of adding it: unbounded mist + aura summed past 1 and
+  // washed every miss to a flat pale fog that buried the fractal (FZ_GLOW_CAP).
+  float haze = min(FZ_GLOW_CAP, 1.0 - exp(-(mist + aura) * 0.8)) * (1.0 - hit);
+  col = mix(col, mapCol(ro + rd * min(t, 6.0), typ, trapOn, tpal, pcyc, hue, sat), haze);
   col = mix(col, bg, fogAmt * clamp(t / 14.0, 0.0, 1.0));
   if (dof > 0.5) col = mix(col, bg, 0.08);
   col += uAudio * fz0(35.0) * 0.12;
