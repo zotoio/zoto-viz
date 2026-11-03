@@ -62,7 +62,7 @@ describe("fish behaviour", () => {
       });
     }
     expect(maxAbs).toBeGreaterThan(0.3);
-    expect(maxAbs).toBeLessThan(FRESH_TRAITS[0]!.turn * 2.2 * 1.8 * 1.2);
+    expect(maxAbs).toBeLessThan(FRESH_TRAITS[0]!.turn * 2.2 * 2.4 * 1.2); // dart × corner boost × vigor
   });
 
   it("schools: neons align headings, loners do not need to", () => {

@@ -5,6 +5,7 @@ import {
 } from "../../../sdk/host-mesh-frame";
 import { PACK_HOST_MESH_SLOT } from "../../../sdk/pack-host-mesh";
 import { AQU_SLOT } from "./aquarium";
+import { FISH_MESH_SCALE } from "./fish-behaviour";
 
 export const AQU_HOST_MESH_ASSETS = [
   "aquarium-plants",
@@ -35,8 +36,8 @@ export const AQU_SPECIES_TO_ASSET: number[] = [7, 2, 6, 8, 5, 9, 3];
  */
 export const AQU_REEF_SPECIES_TO_ASSET: number[] = [4, 2, 7, 8, 6, 5];
 
-/** Designer fish are about 8–20 cm; this sits them in the tank without filling it. */
-const FISH_SCALE = 1.35;
+/** Designer fish are about 4–15 cm; this sits them in the tank without filling it. */
+const FISH_SCALE = FISH_MESH_SCALE;
 
 /** Cory belly sits ~9 mm below rig origin — lift above gravel (scaled with the mesh). */
 const CORY_SPECIES_INDEX = 3;
@@ -93,7 +94,7 @@ export function writeAquariumHostMeshSlots(
   slot1: ArrayLike<number>,
   clock: number,
   turns: FishTurnTracker = defaultTurnTracker,
-  motion?: { turn: ArrayLike<number>; phase: ArrayLike<number> },
+  motion?: { turn: ArrayLike<number>; phase: ArrayLike<number>; grow?: ArrayLike<number> },
 ): void {
   const byAsset = new Map<number, { matrix: number[]; extras: { animTime: number; param1: number; param2: number; flags: number } }[]>();
   const push = (assetIndex: number, matrix: number[], animTime: number, turnRate = 0) => {
@@ -121,7 +122,10 @@ export function writeAquariumHostMeshSlots(
     const simPhase = motion ? Number(motion.phase[n]) : Number.NaN;
     const phase = Number.isFinite(simPhase) ? simPhase : clock * (0.9 + vigor * 0.4) + n * 0.29;
     const turnRate = Number.isFinite(simTurn) ? Math.max(-4, Math.min(4, simTurn)) : tracked;
-    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw, FISH_SCALE), phase, turnRate);
+    // A hatched fry grows to full size (the sim keeps its smaller body inside the glass too).
+    const growRaw = motion?.grow ? Number(motion.grow[n]) : 1;
+    const grow = Number.isFinite(growRaw) ? Math.max(0.05, Math.min(1, growRaw)) : 1;
+    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw, FISH_SCALE * grow), phase, turnRate);
   }
 
   // Plants and gravel are pinned by the host when the pack mounts. These slots
