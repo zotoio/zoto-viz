@@ -56,3 +56,40 @@ def test_expand_ids_cap() -> None:
     assert source_fields.normalize_fields({"title": "webTitle", "expandCap": 99})["expandCap"] == source_fields.MAX_EXPAND
     many = source_fields.expand_ids({"objectIDs": list(range(80))}, {"list": "objectIDs", "expandCap": 40})
     assert many == list(range(40))
+
+
+def test_project_botz_archive_byline_and_relative_image() -> None:
+    data = {"editorials": [{
+        "title": "Editorial take",
+        "author": "Botz Desk",
+        "published_at": "2026-11-03T01:00:00Z",
+        "image_url": "/cache/images/abc.png",
+        "entry": {"article": {
+            "title": "Model ships", "url": "https://example.com/a", "source": "Example News",
+            "author": "Jo Writer", "published_at": "2026-11-02T22:00:00Z",
+        }},
+    }]}
+    items = source_fields.project_items(data, {
+        "list": "editorials",
+        "title": "entry.article.title",
+        "caption": "title",
+        "link": "entry.article.url",
+        "imageTemplate": "https://botz.ai{image_url}",
+        "author": "entry.article.author",
+        "source": "entry.article.source",
+        "published": "entry.article.published_at",
+    })
+    assert items == [{
+        "title": "Model ships",
+        "summary": "Editorial take",
+        "link": "https://example.com/a",
+        "published": "2026-11-02T22:00:00Z",
+        "author": "Jo Writer",
+        "source": "Example News",
+        "image": "https://botz.ai/cache/images/abc.png",
+    }]
+
+
+def test_byline_fields_are_optional() -> None:
+    items = source_fields.project_items([{"title": "T", "image": "https://x.test/a.png"}], {"author": "nope", "source": "nope"})
+    assert "author" not in items[0] and "source" not in items[0]

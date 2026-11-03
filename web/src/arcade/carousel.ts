@@ -4,7 +4,10 @@ import { Stage3D } from "./stage3d";
 import { loadHtmlImage, stillSrc, warmStill } from "../core/load-image";
 import { FEED_SLIDE_LIMIT } from "../core/sources";
 import {
+  carouselArrival,
+  carouselByline,
   carouselCaptionParts,
+  carouselVariant,
   carouselSlides,
   headlinesFromSources,
   type CarouselSlide,
@@ -25,6 +28,8 @@ export class CarouselView extends Stage3D {
   private readonly capEl: HTMLElement;
   private readonly capTitle: HTMLElement;
   private readonly capBody: HTMLElement;
+  private readonly capMeta: HTMLElement;
+  private layoutKey = "";
   /** Shown while the bound source serves its own bundled demo stills (`demo: true`). */
   readonly sampleEl: HTMLElement;
   private slides: CarouselSlide[] = [];
@@ -69,12 +74,15 @@ export class CarouselView extends Stage3D {
     this.capTitle.className = "carousel-caption-title";
     this.capBody = document.createElement("span");
     this.capBody.className = "carousel-caption-body";
+    this.capMeta = document.createElement("span");
+    this.capMeta.className = "carousel-caption-meta";
+    this.capMeta.hidden = true;
     this.sampleEl = document.createElement("div");
     this.sampleEl.className = "carousel-sample";
     this.sampleEl.setAttribute("role", "status");
     this.sampleEl.style.cssText = "margin-bottom:.5rem;font:600 clamp(.95rem,1.6vw,1.25rem)/1.3 ui-sans-serif,system-ui,sans-serif";
     this.sampleEl.hidden = true;
-    this.capEl.append(this.sampleEl, this.capTitle, this.capBody);
+    this.capEl.append(this.sampleEl, this.capMeta, this.capTitle, this.capBody);
     this.stillEl.append(this.imgA, this.imgB, this.capEl);
     this.front = this.imgA;
 
@@ -136,15 +144,40 @@ export class CarouselView extends Stage3D {
     const incoming = this.slides[n > 1 ? (this.focus + 1) % n : this.focus];
     const fade = n > 1 ? play.fade : 0;
     this.paintStill(this.front, outgoing, n > 1 ? play.progress : Math.min(1, play.progress), 1 - fade);
-    if (n > 1 && fade > 0) this.paintStill(this.back(), incoming, 0, fade);
-    else if (this.back() !== this.front) this.back().style.opacity = "0";
+    clearArrival(this.front);
+    if (n > 1 && fade > 0) this.paintArrival(this.back(), incoming, fade, this.cycleN + 1);
+    else if (this.back() !== this.front) {
+      this.back().style.opacity = "0";
+      clearArrival(this.back());
+    }
     const capSlide = fade >= 0.5 ? incoming : outgoing;
     this.paintCaption(capSlide);
+    if (capSlide) this.applyLayout(capSlide.id, fade >= 0.5 ? this.cycleN + 1 : this.cycleN);
     this.capEl.style.opacity = (fade < 0.5 ? 1 - fade * 2 : (fade - 0.5) * 2).toFixed(3);
     this.camOrbit.target.set(0, 1.05, 0);
     this.camOrbit.radius = 4;
     this.camOrbit.theta = 0;
     this.camOrbit.phi = Math.PI / 2;
+  }
+
+  /** Incoming still: the slide's varied arrival (slide, zoom, iris, blur, fade). */
+  private paintArrival(el: HTMLImageElement, slide: CarouselSlide | undefined, fade: number, cycle: number): void {
+    if (this.reduceMotion || !slide) {
+      this.paintStill(el, slide, 0, fade);
+      return;
+    }
+    const a = carouselArrival(carouselVariant(slide.id, cycle).transition, fade);
+    el.style.opacity = a.opacity.toFixed(3);
+    el.style.transform = `${a.transform} ${kenBurnsTransform(kenBurnsAt(0, kenBurnsAim(slide.id)))}`.trim();
+    el.style.clipPath = a.clipPath;
+    el.style.filter = a.filter;
+  }
+
+  private applyLayout(id: string, cycle: number): void {
+    const layout = this.reduceMotion ? "low-left" : carouselVariant(id, cycle).layout;
+    if (layout === this.layoutKey) return;
+    this.layoutKey = layout;
+    this.stillEl.dataset.layout = layout;
   }
 
   private warm(slides: CarouselSlide[]): void {
@@ -288,7 +321,15 @@ export class CarouselView extends Stage3D {
     this.capTitle.textContent = title;
     this.capBody.textContent = body;
     this.capBody.hidden = !body;
+    const meta = slide ? carouselByline(slide) : "";
+    this.capMeta.textContent = meta;
+    this.capMeta.hidden = !meta;
   }
+}
+
+function clearArrival(el: HTMLImageElement): void {
+  if (el.style.clipPath) el.style.clipPath = "";
+  if (el.style.filter) el.style.filter = "";
 }
 
 function baseSrc(el: HTMLImageElement): string {
