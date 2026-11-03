@@ -86,7 +86,7 @@ export const PACK_HOST_MESH_ASSET: { id: string; path: string } | undefined = un
 
 /** Every visualisation.yml config key (config.read). */
 export const CONFIG_KEYS = [
-  "preset", "randomise", "undoRandom", "resetSettings", "modelSet",
+  "preset", "randomise", "undoRandom", "resetSettings",
   "water", "fishCount", "temperament", "feedingMin", "feedingTraffic",
   "lighting", "dayNight", "density", "bubbles", "camera", "seed", "label",
   "reducedMotion",

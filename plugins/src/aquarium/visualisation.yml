@@ -13,14 +13,6 @@ look:
   gridOpacity: 0
   mosaic: "off"
 config:
-  - key: modelSet
-    label: model set
-    type: select
-    values:
-      - [standard, Standard]
-      - [hd, HD]
-    default: standard
-    hint: Standard designer meshes, or the HD Blender set (assets ending -hd). Assets with no HD version stay standard.
   - key: preset
     label: preset
     type: select
