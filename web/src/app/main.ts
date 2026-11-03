@@ -623,8 +623,11 @@ function stagePresentAspect(): number {
 }
 
 /** #235: a mosaic pane's own sky clock and aspect for its pane sandbox's present tick. */
-function paneSkyTime(tileId: string): number | undefined {
-  return mosaic?.graphScene(tileId)?.skyTime() ?? undefined;
+function paneSkyTime(_tileId: string): number | undefined {
+  // The host plugin clock (what the shared sandbox's tick carries, i.e. what `look` gives the pane).
+  // A pane NetScene's own sky clock does not advance for a pane pack, so packs stepping on
+  // pluginClock deltas (fluid-dyn) would freeze on it.
+  return scene.skyTime();
 }
 function paneAspect(tileId: string): number | undefined {
   const el = mosaic?.graphScene(tileId)?.viewEl;
