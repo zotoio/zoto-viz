@@ -1,4 +1,4 @@
-/** Mosaic leaf ids may repeat the same pack view; `!n` suffixes disambiguate tile slots. */
+/** Legacy: saved leaf ids may carry `!n` slot suffixes. They are read (stripped) but never minted; a view is on at most one pane. */
 const SLOT_MARK = "!";
 
 export function mosaicTileViewId(tileSlotId: string): string {
@@ -57,12 +57,9 @@ export function mosaicWallUsesView(tileSlotIds: readonly string[], viewId: strin
 }
 
 /** Pick a unique leaf id for another tile of the same pack view. */
-export function allocateMosaicTileSlot(viewId: string, existing: readonly string[]): string {
-  const others = existing.filter((id) => mosaicTileViewId(id) === viewId);
-  if (!others.length) return viewId;
-  let n = 1;
-  while (existing.includes(mosaicTileSlotId(viewId, n))) n += 1;
-  return mosaicTileSlotId(viewId, n);
+/** Views are unique per wall now: never mints a `!n` copy, always the canonical view id. */
+export function allocateMosaicTileSlot(viewId: string, _existing?: readonly string[]): string {
+  return mosaicTileViewId(viewId);
 }
 
 /** Stable identity for an open view drawer (pack + catalog view, not tile slot position). */
@@ -78,4 +75,50 @@ function drawerKeyFor(viewId: string, packId: string | null): DrawerKey {
 export function drawerKeyForModeId(modeId: string): DrawerKey {
   const parsed = parseMosaicSlotId(modeId);
   return drawerKeyFor(parsed.viewId, parsed.packId);
+}
+
+/**
+ * One view per pane, always: strip `!n` slot suffixes and replace any repeated view (in place, so
+ * pane positions hold) with the first `pool` view not already on the wall. A repeat with no unused
+ * view left comes back as null so the caller closes that pane instead of showing the view twice.
+ */
+export function uniqueMosaicViews(ids: readonly string[], pool: readonly string[] = []): (string | null)[] {
+  const views = ids.map((id) => mosaicTileViewId(id));
+  const used = new Set<string>();
+  const taken = (v: string) => mosaicViewKeys(v).some((k) => used.has(k));
+  const take = (v: string) => { for (const k of mosaicViewKeys(v)) used.add(k); };
+  const out: (string | null)[] = views.map((v) => {
+    if (!v || taken(v)) return null;
+    take(v);
+    return v;
+  });
+  for (let i = 0; i < out.length; i++) {
+    if (out[i] !== null) continue;
+    const fill = pool.map((v) => mosaicTileViewId(v)).find((v) => !!v && !taken(v));
+    if (fill) {
+      take(fill);
+      out[i] = fill;
+    }
+  }
+  return out;
+}
+
+/**
+ * Identity keys for one view: the `!n`-free id plus whatever the catalog registers (pack +
+ * instance, caption). Two ids sharing any key are the same view for uniqueness.
+ */
+let viewKeys: (viewId: string) => readonly string[] = () => [];
+export function setMosaicViewKeys(fn: (viewId: string) => readonly string[]): void {
+  viewKeys = fn;
+}
+export function mosaicViewKeys(id: string): string[] {
+  const v = mosaicTileViewId(id);
+  let extra: readonly string[] = [];
+  try { extra = viewKeys(v); } catch { extra = []; }
+  return [`id:${v}`, ...extra.filter(Boolean)];
+}
+
+/** True when no view (suffix-normalised) shows on more than one pane. */
+export function mosaicViewsUnique(ids: readonly string[]): boolean {
+  return uniqueMosaicViews(ids).every((v, i) => v !== null && v === mosaicTileViewId(ids[i]!));
 }

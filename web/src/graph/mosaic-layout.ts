@@ -1,7 +1,16 @@
 import { remapSavedViewId } from "../core/saved-view-id";
 import { VIZ_MAX_ACTIVE_TILES } from "../plugins/viz-tile-constants";
 import type { HeroPos, MosaicSize } from "./scene";
-import { allocateMosaicTileSlot, mosaicTileViewId } from "./mosaic-tile-id";
+import { mosaicTileViewId, mosaicViewKeys, uniqueMosaicViews } from "./mosaic-tile-id";
+
+let viewPool: () => readonly string[] = () => [];
+/** Views a duplicate pane may be refilled from (graph/mosaic.ts registers the catalog pane pool). */
+export function setMosaicViewPool(fn: () => readonly string[]): void {
+  viewPool = fn;
+}
+function poolNow(): readonly string[] {
+  try { return viewPool(); } catch { return []; }
+}
 
 /** Horizontal = left/right. Vertical = top/bottom. */
 export type MosaicDir = "h" | "v";
@@ -69,7 +78,7 @@ export function parseMosaicTiles(raw: unknown): string[] {
   const seen = new Set<string>();
   for (const row of raw.slice(0, VIZ_MAX_ACTIVE_TILES)) {
     if (typeof row !== "string" || !row.trim()) continue;
-    const id = remapSavedViewId(row.trim().slice(0, 96));
+    const id = mosaicTileViewId(remapSavedViewId(row.trim().slice(0, 96)));
     if (seen.has(id)) continue;
     seen.add(id);
     out.push(id);
@@ -126,7 +135,8 @@ export function centerSplit(n: number): [number, number] {
   return [left, n - left];
 }
 
-export function defaultTree(ids: string[], hero: HeroPos = "off"): MosaicNode | null {
+export function defaultTree(raw: string[], hero: HeroPos = "off"): MosaicNode | null {
+  const ids = uniqueMosaicViews(raw, poolNow()).filter((x): x is string => !!x);
   if (!ids.length) return null;
   if (ids.length === 1 || hero === "off") return gridTree(ids, gridCols(ids.length));
   const heroId = ids[0]!;
@@ -220,19 +230,29 @@ export function mosaicPaneIdsWithViewChange(prev: string[], next: string[]): str
   return [...out];
 }
 
-/** Set one pane to a view id, allocating a new tile slot when needed. */
+/**
+ * Set one pane to a view id. A view already on another pane is never copied: the two panes swap,
+ * so every view stays on at most one pane.
+ */
 export function placePaneTileView(ids: string[], fromSlot: string, viewId: string): string[] {
   const i = ids.indexOf(fromSlot);
-  if (i < 0 || !viewId) return ids;
+  const want = mosaicTileViewId(viewId);
+  if (i < 0 || !want) return ids;
   const next = ids.slice();
-  next[i] = allocateMosaicTileSlot(viewId, next.filter((_, j) => j !== i));
+  const wantKeys = new Set(mosaicViewKeys(want));
+  const j = ids.findIndex((id, k) => k !== i && mosaicViewKeys(id).some((key) => wantKeys.has(key)));
+  next[i] = want;
+  if (j >= 0 && !mosaicViewKeys(fromSlot).some((key) => wantKeys.has(key))) next[j] = mosaicTileViewId(fromSlot);
   return next;
 }
 
-/** Set one pane. A view already on another pane is copied here; the other panes stay. */
+/** Set one pane. A view already on another pane swaps with this one; nothing is duplicated. */
 export function nextPaneTiles(ids: string[], fromSlot: string, viewId: string): string[] {
-  if (!viewId || fromSlot === viewId || mosaicTileViewId(fromSlot) === viewId) return ids;
-  return placePaneTileView(ids, fromSlot, viewId);
+  if (!viewId || fromSlot === viewId) return ids;
+  const out = placePaneTileView(ids, fromSlot, viewId);
+  // Anything still repeated (e.g. a legacy wall) is normalised in the same step.
+  const uniq = uniqueMosaicViews(out, poolNow());
+  return uniq.every(Boolean) ? (uniq as string[]) : ids;
 }
 
 /** Slot id this pane will show after `nextPaneTiles` (catalog id, or `view!n` when duplicated). */
@@ -248,12 +268,29 @@ export function nextPaneTilesForPicker(ids: string[], fromSlot: string, viewId: 
   return nextPaneTiles(ids, fromSlot, viewId);
 }
 
-/** Put `want` onto existing cells in order. Extra / missing ids keep the leftover leaves. */
-export function assignTiles(n: MosaicNode, want: string[]): MosaicNode {
+/**
+ * Put `want` onto existing cells in order. Extra / missing ids keep the leftover leaves. The result
+ * never shows a view twice: `!n` suffixes are dropped, a repeat is refilled from the view pool, and
+ * a repeat with nothing left to show is closed.
+ */
+export function assignTiles(n: MosaicNode, want: string[], pool: readonly string[] = poolNow()): MosaicNode {
   const cur = leafIds(n);
-  const clean = parseMosaicTiles(want);
-  const next = cur.map((id, i) => clean[i] ?? id);
-  return mapLeaves(n, next);
+  const clean = Array.isArray(want)
+    ? want.slice(0, VIZ_MAX_ACTIVE_TILES).map((row) =>
+      typeof row === "string" && row.trim() ? remapSavedViewId(row.trim().slice(0, 96)) : "")
+    : [];
+  const merged = cur.map((id, i) => clean[i] || id);
+  const uniq = uniqueMosaicViews(merged, pool);
+  const drop: string[] = [];
+  const ids = uniq.map((id, i) => {
+    if (id) return id;
+    const tmp = `\u0000drop${i}`;
+    drop.push(tmp);
+    return tmp;
+  });
+  let tree: MosaicNode | null = mapLeaves(n, ids);
+  for (const id of drop) tree = tree ? closeLeaf(tree, id) : null;
+  return tree ?? { type: "leaf", id: ids.find((x) => !drop.includes(x)) ?? mosaicTileViewId(cur[0] ?? "") };
 }
 
 export function equalize(n: MosaicNode): MosaicNode {

@@ -109,6 +109,14 @@ describe("switchPaneView", () => {
     const r2 = await second;
     expect(r1.ok).toBe(false);
     expect(r2.ok).toBe(true);
-    expect(mountView).toHaveBeenLastCalledWith("plugin:wifi!1");
+    expect(mountView).toHaveBeenLastCalledWith("plugin:wifi");
+  });
+});
+
+describe("switchPaneView: unique views (no duplicates)", () => {
+  it("a legacy view!n pane picking its own view succeeds (was 'Could not change that pane.')", async () => {
+    const { resolvePaneSwitchSlot } = await import("./switch-pane-view");
+    const r = resolvePaneSwitchSlot({ tileIds: ["a", "botz!1"], focusedId: "botz!1", mainTileId: "a" }, "botz", "botz!1");
+    expect(r).toEqual({ ok: true, paneId: "botz!1", swap: true, fromViewId: "botz!1", toViewId: "botz" });
   });
 });
