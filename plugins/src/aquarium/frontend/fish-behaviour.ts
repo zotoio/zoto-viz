@@ -126,6 +126,8 @@ export interface SchoolState {
   eatCool: number;
   eats: number;
   puffs: EatPuff[];
+  /** Test-only override (seconds) for the gap between eats; 0 = off, the normal rare rate. */
+  testInterval?: number;
 }
 
 export function newSchoolState(firstEatAfter = EAT_MIN_INTERVAL): SchoolState {
@@ -538,7 +540,9 @@ function scare(o: SwimFish, from: SwimFish): void {
 function eat(prey: SwimFish, st: SchoolState): void {
   st.puffs.push({ x: prey.x, y: prey.y, z: prey.z, age: 0 });
   st.eats++;
-  st.eatCool = EAT_MIN_INTERVAL + fishRand(prey) * EAT_JITTER;
+  st.eatCool = st.testInterval && st.testInterval > 0
+    ? st.testInterval
+    : EAT_MIN_INTERVAL + fishRand(prey) * EAT_JITTER;
   prey.eaten = true;
   prey.respawnT = RESPAWN_MIN + fishRand(prey) * 20;
   prey.target = undefined; prey.fleeX = undefined; prey.fleeZ = undefined;

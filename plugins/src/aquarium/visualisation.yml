@@ -138,6 +138,13 @@ config:
     type: boolean
     default: false
     hint: Wide hold shot, no camera drift, softer water motion.
+  - key: eatTestSec
+    label: eat test interval (debug)
+    type: number
+    default: 0
+    min: 0
+    max: 600
+    hint: "Debug only: seconds between eats for a test capture. 0 = off (normal rare rate)."
   - key: sp_neon
     label: neon tetra
     type: boolean
