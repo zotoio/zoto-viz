@@ -26,6 +26,8 @@ A first run seeds **Hacker News** (`hn`), **NASA image of the day** (`nasa`), **
 
 Views that still need a key or OAuth stay out of **dice** until they work: **Nest cams** ([Device Access](https://developers.google.com/nest/device-access), [console](https://console.nest.google.com/device-access)) and any view bound to Guardian while `api-key=test`. Settings → Sources shows the signup links on those rows.
 
+A `{date}` token in an `http` / `rss` URL becomes the host-local `YYYY-MM-DD` on every fetch (for example Botz `https://botz.ai/archive/day/{date}?n=24`). JSON rows with a token fall back to yesterday when today is a 404 or projects no items, and keep the last good items (`stale: true`) if both fail; `fetchedUrl` on the live row shows which day was used.
+
 HTTP JSON field maps live on the source row. Example APOD: `title`, `explanation` → caption, `hdurl` / `url` → image, `media_type=image` filter. Met uses `list: objectIDs` plus `expand: https://collectionapi.metmuseum.org/public/collection/v1/objects/{id}`.
 
 Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** are engines; Settings → This view picks `source` and field names. Shipped instances add extra VIEW rows (`plugin:carousel:apod`, `plugin:hn-rain:lobsters`, …). Operator extras: `~/.zoto-viz/plugin-instances.yml` or Settings → Sources → View instances. HN Rain Composer stills save as SVG under `~/.zoto-viz/images` (slug + hash), not the git checkout.
