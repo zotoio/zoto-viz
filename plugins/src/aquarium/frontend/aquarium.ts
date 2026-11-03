@@ -12,7 +12,7 @@ import {
   type TalkerSlot,
 } from "./talker-slots";
 
-import { stepSchool, TANK, type SwimFish } from "./fish-behaviour";
+import { newSchoolState, puffStrength, stepSchool, TANK, type SchoolState, type SwimFish } from "./fish-behaviour";
 
 export {
   assignTalkerSlots,
@@ -159,6 +159,9 @@ export const AQU_SLOT = {
 } as const;
 
 const FISH_ATTR_SLOTS = 16;
+
+/** slot2[60..63]: x, y, z, strength (0 = none) of the red puff where a fish was just eaten. */
+export const AQU_PUFF_SLOT2 = 60;
 
 /** Pack species (0–5) and vigor (0–1) into one float for GPU slot tests. */
 export function packFishMeta(species: number, vigor: number): number {
@@ -488,6 +491,8 @@ export class AquariumSim {
   private feedY = 0.85;
   private trafficFeedCooldown = 0;
   private camPhase = 0;
+  /** Eat rate limit and the red puffs where a fish was eaten. */
+  readonly school: SchoolState = newSchoolState();
   private packetCursor = 0;
   private simAccumulator = 0;
   private seedUndo = -1;
@@ -560,6 +565,7 @@ export class AquariumSim {
   resetLayout(): void {
     this.talkerSlots = [];
     this.fish.clear();
+    Object.assign(this.school, newSchoolState());
     this.packetCursor = 0;
     this.simAccumulator = 0;
   }
@@ -577,6 +583,7 @@ export class AquariumSim {
 
   teardown(): void {
     this.fish.clear();
+    Object.assign(this.school, newSchoolState());
     this.feedTimer = 0;
     this.feedActive = 0;
     this.packetCursor = 0;
@@ -800,22 +807,42 @@ export class AquariumSim {
       food: this.foodTarget(),
       cursor: this.cursor,
       motion: this.opts.reducedMotion ? 0.35 : 1,
+      state: this.school,
     }, dt);
   }
 
   /** Per-fish yaw rate (rad/s) and swim phase in slot1 order, for the host mesh drive. */
-  fishMotion(): { turn: number[]; phase: number[]; speed: number[] } {
+  fishMotion(): { turn: number[]; phase: number[]; speed: number[]; grow: number[] } {
     const turn: number[] = [];
     const phase: number[] = [];
     const speed: number[] = [];
-    for (const id of slottedTalkerIds(this.talkerSlots)) {
-      const f = this.fish.get(id);
-      if (!f) continue;
+    const grow: number[] = [];
+    for (const id of this.visibleFishIds()) {
+      const f = this.fish.get(id)!;
       turn.push(f.turnRate);
       phase.push(f.phase);
       speed.push(f.speed);
+      grow.push(f.grow ?? 1);
     }
-    return { turn, phase, speed };
+    return { turn, phase, speed, grow };
+  }
+
+  /** Slotted fish that are in the water (an eaten fish is hidden until it hatches again). */
+  visibleFishIds(): string[] {
+    return slottedTalkerIds(this.talkerSlots).filter((id) => {
+      const f = this.fish.get(id);
+      return !!f && !f.eaten;
+    });
+  }
+
+  /** The freshest eat puff (x, y, z, strength 0..1), or null when the water is clear. */
+  eatPuff(): [number, number, number, number] | null {
+    let best: [number, number, number, number] | null = null;
+    for (const p of this.school.puffs) {
+      const k = puffStrength(p.age);
+      if (k > 0.001 && (!best || k > best[3])) best = [p.x, p.y, p.z, k];
+    }
+    return best;
   }
 
   private stepOnce(simT: number, allTalkers: VizTalkerSample[]): void {
@@ -908,7 +935,7 @@ export class AquariumSim {
     s0[AQU_SLOT.labelOn] = o.label ? 1 : 0;
     s0[AQU_SLOT.presetNorm] = PRESET_IDS.indexOf(o.preset) / Math.max(1, PRESET_IDS.length - 1);
     s0[AQU_SLOT.seedFrac] = (o.seed % 1000) / 1000;
-    const packedIds = slottedTalkerIds(this.talkerSlots);
+    const packedIds = this.visibleFishIds();
     s0[AQU_SLOT.fishCount] = packedIds.length;
     s0[AQU_SLOT.demo] = this.lastDemo ? 1 : 0;
     s0[AQU_SLOT.trafficBurst] = clamp01(this.lastTraffic);
@@ -970,7 +997,8 @@ export class AquariumSim {
     scratch.fill(0);
     for (const p of this.particles) {
       if (p.life <= 0) continue;
-      if (pi >= MAX_PARTICLES * 4) break;
+      // The last vec4 of slot 2 carries the eat puff for the host.
+      if (pi >= Math.min(MAX_PARTICLES * 4, 60)) break;
       s2[pi++] = p.x;
       s2[pi++] = p.y;
       s2[pi++] = p.z;
@@ -983,6 +1011,13 @@ export class AquariumSim {
       pCount++;
     }
     s0[AQU_SLOT.particleCount] = pCount;
+    const puff = this.eatPuff();
+    if (puff) {
+      s2[AQU_PUFF_SLOT2] = puff[0];
+      s2[AQU_PUFF_SLOT2 + 1] = puff[1];
+      s2[AQU_PUFF_SLOT2 + 2] = puff[2];
+      s2[AQU_PUFF_SLOT2 + 3] = puff[3];
+    }
 
     const metric = this.lastDemo
       ? "demo"
