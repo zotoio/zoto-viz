@@ -52,6 +52,20 @@ function applyLiveConfig(cfg: Record<string, string>): void {
   sim.setModelSlotFloat(modelSlot.slotFloat());
 }
 
+/** Pointer over the canvas → a point in the front half of the tank (x across, y up). */
+if (typeof window !== "undefined" && typeof window.addEventListener === "function") {
+  window.addEventListener("pointermove", (e: PointerEvent) => {
+    const w = window.innerWidth || 1;
+    const h = window.innerHeight || 1;
+    const nx = e.clientX / w;
+    const ny = e.clientY / h;
+    sim.setCursor({ x: (nx - 0.5) * 2.0, y: 0.72 - ny * 1.3, z: 0.6 });
+  }, { passive: true });
+  const clear = () => sim.setCursor(null);
+  window.addEventListener("pointerleave", clear, { passive: true });
+  window.addEventListener("blur", clear);
+}
+
 host.onConfig = (cfg) => {
   applyLiveConfig(cfg);
 };
@@ -70,7 +84,7 @@ host.onFrame = (frame: VizDataFrame) => {
   host.writeBuffer(1, buf1);
   host.writeBuffer(2, buf2);
   if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
-    writeAquariumHostMeshSlots(host.writeBuffer, buf0, buf1, frame.t);
+    writeAquariumHostMeshSlots(host.writeBuffer, buf0, buf1, frame.t, undefined, sim.fishMotion());
   }
   if (packed.particleCount > 0) {
     host.writeParticles(

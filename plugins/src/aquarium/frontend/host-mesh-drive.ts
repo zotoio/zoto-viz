@@ -93,6 +93,7 @@ export function writeAquariumHostMeshSlots(
   slot1: ArrayLike<number>,
   clock: number,
   turns: FishTurnTracker = defaultTurnTracker,
+  motion?: { turn: ArrayLike<number>; phase: ArrayLike<number> },
 ): void {
   const byAsset = new Map<number, { matrix: number[]; extras: { animTime: number; param1: number; param2: number; flags: number } }[]>();
   const push = (assetIndex: number, matrix: number[], animTime: number, turnRate = 0) => {
@@ -113,8 +114,14 @@ export function writeAquariumHostMeshSlots(
     const vigor = Number(slot0[AQU_SLOT.fishVigor0 + n]) || 0.5;
     const assetIndex = assetForSpecies(species, reef);
     const fishY = species === CORY_SPECIES_INDEX ? y + CORY_BELLY_LIFT_M * FISH_SCALE : y;
-    const phase = clock * (0.9 + vigor * 0.4) + n * 0.29;
-    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw, FISH_SCALE), phase, turns.rate(n, yaw));
+    const tracked = turns.rate(n, yaw);
+    // The sim's own yaw rate and speed-driven fin phase when the pack hands them over; otherwise
+    // fall back to the clock and the yaw-difference tracker.
+    const simTurn = motion ? Number(motion.turn[n]) : Number.NaN;
+    const simPhase = motion ? Number(motion.phase[n]) : Number.NaN;
+    const phase = Number.isFinite(simPhase) ? simPhase : clock * (0.9 + vigor * 0.4) + n * 0.29;
+    const turnRate = Number.isFinite(simTurn) ? Math.max(-4, Math.min(4, simTurn)) : tracked;
+    push(assetIndex, hostMeshMatrixYawPos(x, fishY, z, yaw, FISH_SCALE), phase, turnRate);
   }
 
   // Plants and gravel are pinned by the host when the pack mounts. These slots
