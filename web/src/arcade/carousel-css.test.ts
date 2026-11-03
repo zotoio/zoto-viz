@@ -11,4 +11,13 @@ describe("carousel stylesheet", () => {
     expect(rules.length).toBeGreaterThan(5);
     for (const rule of rules) expect(rule).toContain(".arcade.carousel");
   });
+
+  it("hides the hint/legend foot over a main or maximised mosaic carousel", () => {
+    expect(css).toContain("body.mosaic:has(.mosaic-pane.max > .arcade.carousel:not([hidden])) #foot");
+    expect(css).toMatch(/:has\(\.mosaic-pane:first-of-type > \.arcade\.carousel:not\(\[hidden\]\)\) #foot \{ display: none; \}/);
+  });
+
+  it("keeps top captions below the pane header in mosaic tiles", () => {
+    expect(css).toMatch(/mosaic-live \.carousel-still\[data-layout="high-right"\] \.carousel-caption \{ padding-top: calc\(var\(--pane-head/);
+  });
 });

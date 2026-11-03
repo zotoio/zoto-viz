@@ -201,7 +201,9 @@ body[data-softgl] .brand::after {
 /* Mosaic tiles sit under their own pane chrome; the global bar offset does not apply. */
 :is(#carousel, .arcade.carousel).mosaic-live .carousel-still { inset: 0; }
 /* Top-anchored captions clear the pane's own header row (picker + look/max/close). */
-:is(#carousel, .arcade.carousel).mosaic-live .carousel-still[data-layout="high-right"] .carousel-caption { padding-top: 2.6rem; }
+/* Captions clear the pane's own header row (picker + look/max/close, ~2.4rem tall). */
+:is(#carousel, .arcade.carousel).mosaic-live .carousel-still[data-layout="high-right"] .carousel-caption { padding-top: calc(var(--pane-head, 2.4rem) + 0.9rem); }
+:is(#carousel, .arcade.carousel).mosaic-live .carousel-still:is([data-layout="centre"], [data-layout="side-left"]) .carousel-caption { padding-top: calc(var(--pane-head, 2.4rem) + 0.4rem); }
 /* Blurred cover of the current still behind a contain-fit picture: no bare letterbox bars. */
 :is(#carousel, .arcade.carousel) .carousel-still::before {
   content: "";
@@ -1741,6 +1743,10 @@ body[data-chrome="right"] #foot { max-width: calc(100vw - var(--bar-w) - 360px);
 }
 #livefeed[hidden], #livechat[hidden] { display: none; }
 body.arcade:has(#carousel:not([hidden])) #foot { display: none; }
+/* Mosaic: the hint + legend foot is fixed bottom-left over the main pane. When that pane (or the
+   maximised one) is a carousel, the foot would sit on the caption, so hide it as the solo wall does. */
+body.mosaic:has(.mosaic-pane.max > .arcade.carousel:not([hidden])) #foot,
+body.mosaic:not(:has(.mosaic-pane.max)):has(.mosaic-pane:first-of-type > .arcade.carousel:not([hidden])) #foot { display: none; }
 body:has(#nest-cams:not([hidden])) #foot { display: none; }
 body.panel-open:not(.panel-wide) #livefeed,
 body.panel-open:not(.panel-wide) #livechat { right: 344px; }
