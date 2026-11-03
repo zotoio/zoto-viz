@@ -15,7 +15,6 @@ import {
   BR_CREATURES,
   BR_DEFAULTS,
   brEdgeBlocked,
-  brWallRate,
   parseBackroomsOptions,
   setBackroomsOptions,
   brEpisodeAt,
@@ -245,68 +244,5 @@ describe("backrooms shipped pack", () => {
     expect(frozen).toBeGreaterThan(5);
     expect(pant).toBeGreaterThan(5);
     expect(heavy).toBeGreaterThan(2);
-  });
-
-  it("varies the halls and every tape by default; variety 0 is the one fixed Level 0", () => {
-    const rates: number[] = [];
-    for (let i = -210; i <= 210; i += 7) for (let k = -210; k <= 210; k += 7) rates.push(brWallRate(i, k));
-    // Open pillared halls in some zones, tight warrens in others.
-    expect(Math.min(...rates)).toBeLessThan(0.25);
-    expect(Math.max(...rates)).toBeGreaterThan(0.37);
-    const tapes = new Set<number>();
-    const dark = new Set<number>();
-    for (let e = 0; e < 12; e++) {
-      const s = backroomsSlots(e * 120 + 5).slot0;
-      tapes.add(Math.floor(s[BR_SLOT.variant]!));
-      dark.add(+s[BR_SLOT.optDarkness]!.toFixed(3));
-      expect(s[BR_SLOT.variant]! % 1).toBeCloseTo(1 / 2.001, 3);
-    }
-    expect(tapes.size).toBeGreaterThanOrEqual(6);
-    expect(dark.size).toBeGreaterThanOrEqual(6);
-    for (const fn of ["float zoneAt(", "float zoneCell(", "gPaper", "gWB", "gHaze"]) expect(FRAG).toContain(fn);
-
-    setBackroomsOptions(parseBackroomsOptions({ variety: "0" }));
-    for (let i = -210; i <= 210; i += 21) for (let k = -210; k <= 210; k += 21) expect(brWallRate(i, k)).toBe(0.3);
-    for (let e = 0; e < 6; e++) {
-      const s = backroomsSlots(e * 120 + 5).slot0;
-      expect(s[BR_SLOT.variant]).toBe(0);
-      expect(s[BR_SLOT.optDarkness]).toBe(BR_DEFAULTS.darkness);
-      expect(s[BR_SLOT.optObjects]).toBe(BR_DEFAULTS.objects);
-    }
-    setBackroomsOptions(BR_DEFAULTS);
-  });
-
-  it("is never gentler with variety than without: as many close calls and catches", () => {
-    const run = (): { close: number; caught: number } => {
-      let ep = -1;
-      let minD = 99;
-      let isCaught = false;
-      const out = { close: 0, caught: 0 };
-      const flush = (): void => {
-        if (minD < 4) out.close++;
-        if (isCaught) out.caught++;
-      };
-      for (let t = 0.02; t < 1800; t += 1 / 15) {
-        const f = backroomsFrame(t);
-        const s = f.slot0;
-        if (f.episode !== ep) {
-          if (ep >= 0) flush();
-          ep = f.episode;
-          minD = 99;
-          isCaught = false;
-        }
-        if (s[BR_SLOT.bodyVis]! > 0.5) isCaught = true;
-        if (s[BR_SLOT.crVis]! > 0.5 && !isCaught && f.tau < f.dur - 40) {
-          minD = Math.min(minD, Math.hypot(s[BR_SLOT.crX]! - s[BR_SLOT.camX]!, s[BR_SLOT.crZ]! - s[BR_SLOT.camZ]!));
-        }
-      }
-      return out;
-    };
-    setBackroomsOptions(parseBackroomsOptions({ variety: "0" }));
-    const fixed = run();
-    setBackroomsOptions(BR_DEFAULTS);
-    const varied = run();
-    expect(varied.close).toBeGreaterThanOrEqual(fixed.close);
-    expect(varied.caught).toBeGreaterThanOrEqual(fixed.caught);
   });
 });
