@@ -100,6 +100,10 @@ import {
   type LayoutXyz,
 } from "./graph-layouts";
 import { VIEW_MORPH_S, mixFade, mixShape } from "./morph";
+import {
+  EDGE_DAMPING_STORAGE_KEY, EdgeDamper, edgeKindFor, layoutDampingFor, parseEdgeDamping,
+  type EdgeDampingConfig, type EdgeKind, type EdgeSample,
+} from "./edge-damping";
 
 export { FABRIC_KINDS, FABRIC_OPTIONS, FABRIC_DICE, GRAPH_SPACE_OPTIONS, type FabricKind, type GraphSpace } from "./fabric";
 export {
@@ -144,10 +148,18 @@ export interface GNode extends SimNode {
   cpuIdleAt?: number;
   /** CPU view: dropped from the live slice, kept only to fade out */
   cpuGhost?: boolean;
+  /** wall seconds when this node first went missing from the snapshot (edge damping linger) */
+  missingSince?: number;
   /** last `--fade` written on the label, so CPU opacity is not a DOM write every frame */
   labelFade?: string;
 }
-export interface GLink extends SimLink<GNode> { id: string; flow: Flow; source: GNode; target: GNode; visible: boolean; shownBright?: number }
+export interface GLink extends SimLink<GNode> {
+  id: string; flow: Flow; source: GNode; target: GNode; visible: boolean; shownBright?: number;
+  /** gone from the snapshot; kept while its damping window fades the spring out */
+  stale?: boolean;
+  /** damped rate / presence for the layout (see edge-damping.ts) */
+  damp?: EdgeSample;
+}
 
 const SHELL: Record<Role, number> = { self: 110, gateway: 0, local: 200, lan: 360, multicast: 440, internet: 580 };
 /** a shell is crowded when the nodes on it get less ring than this each (world units; a label is ~2× this) */
@@ -1218,6 +1230,9 @@ export class NetScene implements HostedView, RenderScalePane {
   private pendingPin: Float32Array | null = null;
   private pendingRelease: Float32Array | null = null;
   private lastLayoutParams: LayoutParams | null = null;
+  /** Per-edge-type smoothing of bursty edges before they reach the layout. */
+  private readonly edgeDamper = new EdgeDamper(loadEdgeDamping());
+  private layoutDamp = { dragFloor: 0, alphaScale: 1 };
   private lines: THREE.LineSegments;
   private readonly sheath = new EdgeSheath();
   private readonly fibreSamples: FibreSample[] = [];
@@ -2837,7 +2852,8 @@ export class NetScene implements HostedView, RenderScalePane {
     };
     const params: LayoutParams = {
       spring: a.spring, chargeAmt: a.chargeAmt, linkSpan: a.linkSpan,
-      drag: a.audioNodes ? 0.35 - 0.22 * ease : Math.max(0.46, 0.35 - 0.22 * ease), centerPull: a.centerPull,
+      drag: Math.max(this.layoutDamp.dragFloor, a.audioNodes ? 0.35 - 0.22 * ease : Math.max(0.46, 0.35 - 0.22 * ease)),
+      centerPull: a.centerPull,
       magnets: ROLES.map((r) => (byRole[r] ?? 0) * p),
       magnetCross: a.magnetCross, magnetRange: a.magnetRange,
       magnetTraffic: Number.isFinite(a.magnetTraffic) ? a.magnetTraffic : 0,
@@ -3619,6 +3635,18 @@ export class NetScene implements HostedView, RenderScalePane {
 
   // ------------------------------------------------------------------ data
 
+  /** Replace the edge damping config (persisted under EDGE_DAMPING_STORAGE_KEY by the caller if wanted). */
+  setEdgeDamping(cfg: Partial<EdgeDampingConfig>): void {
+    this.edgeDamper.setConfig(parseEdgeDamping({ ...this.edgeDamper.config, ...cfg }));
+    this.lastLayoutParams = null;
+  }
+
+  get edgeDamping(): EdgeDampingConfig { return this.edgeDamper.config; }
+
+  private edgeKind(l: GLink): EdgeKind {
+    return edgeKindFor(this.mode.graphBase, l.id, [l.source.device.role, l.target.device.role], l.flow.protos);
+  }
+
   update(msg: StateMsg): void {
     this.now = msg.ts;
     this.lastMsg = msg;
@@ -3639,6 +3667,7 @@ export class NetScene implements HostedView, RenderScalePane {
       let n = this.nodes.get(d.ip);
       if (!n) { n = this.addNode(d, view); added = true; newNodes++; }
       n.device = d;
+      n.missingSince = undefined;
       n.cpuGhost = false;
       if (cpuView && isCpuCoreId(d.ip) && (d.cpu ?? 0) < CPU_IDLE_PCT) {
         n.cpuIdleAt ??= wall;
@@ -3662,6 +3691,13 @@ export class NetScene implements HostedView, RenderScalePane {
         }
         continue;
       }
+      // bursty sources (BT adverts, Wi-Fi channel hops) drop devices between scans: hold them for the
+      // type's linger window instead of tearing the node and its edges down every gap
+      const nodeLinger = this.edgeDamper.preset(edgeKindFor(this.mode.graphBase, "", [n.device.role, n.device.role])).lingerS;
+      if (nodeLinger > 0 && n.device.role !== "gateway") {
+        n.missingSince ??= wall;
+        if (wall - n.missingSince < nodeLinger) continue;
+      }
       this.removeNode(n);
     }
 
@@ -3676,7 +3712,7 @@ export class NetScene implements HostedView, RenderScalePane {
         l = { id, flow: f, source: a, target: b, visible: true };
         this.links.set(id, l);
         added = true;
-      } else l.flow = f;
+      } else { l.flow = f; l.stale = false; }
     }
     for (const id of [...this.links.keys()]) {
       if (id.startsWith("~") || liveKeys.has(id)) continue;
@@ -3685,7 +3721,7 @@ export class NetScene implements HostedView, RenderScalePane {
         l.flow = { ...l.flow, rate: 0, rate_ab: 0, rate_ba: 0 };
         continue;
       }
-      this.links.delete(id);
+      if (!l.stale) { l.stale = true; l.flow = { ...l.flow, rate: 0, rate_ab: 0, rate_ba: 0 }; }
     }
 
     // tether nodes without an observed conversation to their hub ("~" links): LAN and self -> gateway,
@@ -3698,7 +3734,7 @@ export class NetScene implements HostedView, RenderScalePane {
       n.device.role === "lan" || n.device.role === "self" ? gw : n.device.role === "local" ? me : undefined;
     const realLinks = new Set<string>();
     for (const l of this.links.values()) {
-      if (l.id.startsWith("~")) continue;
+      if (l.id.startsWith("~") || l.stale) continue;
       realLinks.add(`${l.source.id}|${l.target.id}`);
       realLinks.add(`${l.target.id}|${l.source.id}`);
     }
@@ -3711,16 +3747,31 @@ export class NetScene implements HostedView, RenderScalePane {
         const flow: Flow = { a: n.id, b: hub.id, bytes: 0, packets: 0, ports: [], protos: [], ifaces: [], first_seen: 0, last_seen: 0, rate: 0 };
         this.links.set(tetherId, { id: tetherId, flow, source: n, target: hub, visible: true });
         added = true;
+      } else if (wants && existing) {
+        existing.stale = false;
       } else if (!wants && existing) {
-        this.links.delete(tetherId);
+        existing.stale = true;
       }
     }
+    // damping: smooth rates, hold missing edges for their window, fade springs in and out
+    const seenEdges = new Map<string, readonly [EdgeKind, number]>();
+    for (const l of this.links.values()) if (!l.stale) seenEdges.set(l.id, [this.edgeKind(l), l.flow.rate]);
+    const damped = this.edgeDamper.step(wall, seenEdges);
+    const kinds: EdgeKind[] = [];
+    for (const [id, l] of [...this.links]) {
+      const s = damped.get(id);
+      if (!s) { this.links.delete(id); continue; }
+      l.damp = s;
+      kinds.push(this.edgeDamper.state(id)?.kind ?? "flow");
+    }
+    this.layoutDamp = layoutDampingFor(kinds, this.edgeDamper);
     for (const n of this.nodes.values()) { n.active = false; n.rate = 0; }
     for (const l of this.links.values()) {
-      if (l.flow.rate <= 0) continue;
+      const r = this.edgeDamper.config.enabled ? (l.damp?.active ? l.damp.rate : 0) : l.flow.rate;
+      if (r <= 0) continue;
       l.source.active = l.target.active = true;
-      l.source.rate += l.flow.rate;
-      l.target.rate += l.flow.rate;
+      l.source.rate += r;
+      l.target.rate += r;
       if (flowEarnsLabel(l)) {
         l.source.labelUntil = this.now + LABEL_HOLD_S;
         l.target.labelUntil = this.now + LABEL_HOLD_S;
@@ -3754,7 +3805,7 @@ export class NetScene implements HostedView, RenderScalePane {
       this.applyVolume();
       // every snapshot: rates and roles feed the slot / charge forces, so the worker gets fresh numbers
       // even when the structure did not change (it keeps positions and velocities across the resend)
-      this.syncSimulation(added && newNodes > 0 ? (this.nodes.size <= newNodes + 1 ? 1 : 0.12) : 0);
+      this.syncSimulation(added && newNodes > 0 ? (this.nodes.size <= newNodes + 1 ? 1 : 0.12 * this.layoutDamp.alphaScale) : 0);
       this.rebuildLineBuffers();
       this.rebuildParticles();
     } finally {
@@ -3890,7 +3941,7 @@ export class NetScene implements HostedView, RenderScalePane {
       const k = this.mode.linkStrength?.(l) ?? (l.id.startsWith("~") ? 0.03
         : l.source.device.role === "multicast" || l.target.device.role === "multicast" ? 0
         : 0.12);
-      links.push(s, t, base, k);
+      links.push(s, t, base, k * (l.damp?.presence ?? 1));
     }
     const linkArr = new Float32Array(links.length);
     for (let i = 0; i < links.length; i += LINK_STRIDE) {
@@ -5114,4 +5165,13 @@ export function inScrollingCantDrawLine(target: EventTarget | null): boolean {
   const oy = getComputedStyle(line).overflowY;
   if (oy !== "auto" && oy !== "scroll") return false;
   return line.scrollHeight > line.clientHeight;
+}
+
+/** Stored edge damping config (calm default when nothing is stored or storage is unavailable). */
+function loadEdgeDamping(): EdgeDampingConfig {
+  try {
+    return parseEdgeDamping(globalThis.localStorage?.getItem(EDGE_DAMPING_STORAGE_KEY) ?? null);
+  } catch {
+    return parseEdgeDamping(null);
+  }
 }
