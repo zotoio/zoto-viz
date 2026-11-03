@@ -481,3 +481,21 @@ describe("aquarium shipped pack", () => {
     expect(PLUGIN).toContain("fish-cichlid.glb");
   });
 });
+
+describe("aquarium fish turn rate for the host", () => {
+  it("reports a smoothed yaw rate per fish and ignores slot jumps", async () => {
+    const { FishTurnTracker } = await import("./host-mesh-drive");
+    const tr = new FishTurnTracker();
+    tr.frame(0);
+    expect(tr.rate(0, 0)).toBe(0);
+    let r = 0;
+    for (let i = 1; i <= 60; i++) {
+      tr.frame(i / 60);
+      r = tr.rate(0, i * (1.5 / 60));
+    }
+    expect(r).toBeGreaterThan(1.3);
+    expect(r).toBeLessThan(1.6);
+    tr.frame(61 / 60);
+    expect(Math.abs(tr.rate(0, 3))).toBeLessThan(r);
+  });
+});

@@ -1,6 +1,6 @@
 import type { PluginView } from "../plugins/plugin";
 import type { VizPluginContract } from "../plugins/viz-host";
-import { HostMeshLane, type HostMeshAssetDecl } from "../graph/host-mesh-lane";
+import { HostMeshLane, type HostMeshAssetDecl, type HostMeshMotionProfile } from "../graph/host-mesh-lane";
 import { buildAquariumTank } from "../graph/aquarium-tank";
 import {
   encodeHostMeshSlotPacket,
@@ -54,6 +54,11 @@ export function hostMeshDeclsForSet(decls: HostMeshAssetDecl[], set: HostMeshMod
       const alt = set === "hd" ? hd.get(d.id + HD_ASSET_SUFFIX) : undefined;
       return alt ? { ...alt, id: d.id } : d;
     });
+}
+
+/** Fin beat, turn bend and the brighter lamp are the aquarium HD set's; every other mount is the baked clip. */
+export function hostMeshMotionProfile(packId: string | undefined, set: HostMeshModelSet): HostMeshMotionProfile {
+  return packId === "aquarium" && set === "hd" ? "aquarium-hd" : "standard";
 }
 
 export type HostMeshBridge = {
@@ -162,12 +167,15 @@ export function pinPackContents(lane: MeshPinLane, packId: string): void {
  * while its assets load.
  */
 export async function mountPaneHostMeshes(
-  lane: Pick<HostMeshLane, "clear" | "setAssetOrder" | "ensureAssets"> & MeshPinLane,
+  lane: Pick<HostMeshLane, "clear" | "setAssetOrder" | "ensureAssets"> &
+    Partial<Pick<HostMeshLane, "setMotionProfile">> &
+    MeshPinLane,
   spec: { id: string; assets?: HostMeshAssetDecl[] },
   stillShown: () => boolean,
   modelSet: HostMeshModelSet = "standard",
 ): Promise<void> {
   lane.clear();
+  lane.setMotionProfile?.(hostMeshMotionProfile(spec.id, modelSet));
   const decls = spec.assets ? hostMeshDeclsForSet(spec.assets, modelSet) : undefined;
   if (!decls?.length) return;
   lane.setAssetOrder(decls.map((d) => d.id));
@@ -210,9 +218,11 @@ export function createHostMeshBridge(
       current = sceneOf().hostMeshLane;
       const lane = current;
       lane.clear();
+      const set = spec ? modelSetFor(spec) : "standard";
+      lane.setMotionProfile?.(hostMeshMotionProfile(spec?.id, set));
       if (!spec?.assets?.length) return true;
       if (!canPlace(spec.id)) return false;
-      const decls = hostMeshDeclsForSet(spec.assets as HostMeshAssetDecl[], modelSetFor(spec));
+      const decls = hostMeshDeclsForSet(spec.assets as HostMeshAssetDecl[], set);
       const into = lane;
       into.setAssetOrder(decls.map((d) => d.id));
       await into.ensureAssets(spec.id, decls);

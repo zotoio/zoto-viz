@@ -135,7 +135,156 @@ type LiveSkinned = {
   mixer: THREE.AnimationMixer;
   animOffset: number;
   clipDuration: number;
+  /** Aquarium HD only: bones the procedural fin beat and turn bend drive. */
+  hd?: HdFishRig;
 };
+
+/**
+ * How a lane animates fish beyond their baked swim clip. `aquarium-hd` (aquarium pack, HD model
+ * set) adds a fin beat, a median-fin ripple, a spine bend into turns and a brighter tank lamp.
+ * `standard` is the baked clip only, unchanged.
+ */
+export type HostMeshMotionProfile = "standard" | "aquarium-hd";
+
+/** Rig bones of the designer fish: root → spine_01..03 → tail_01..02 run nose to tail; head carries the pectorals. */
+const FISH_BEND_CHAIN = ["spine_01", "spine_02", "spine_03", "tail_01", "tail_02"] as const;
+/** Share of the tail-side bend each chain bone takes (sums to 1; the tail end swings most). */
+const FISH_BEND_WEIGHTS = [0.14, 0.2, 0.22, 0.24, 0.2] as const;
+/** Spine bend (rad, whole body) per rad/s of yaw rate, and its clamp. */
+export const FISH_BEND_PER_TURN = 0.3;
+export const FISH_BEND_MAX = 0.62;
+
+type HdFishRig = {
+  chain: (THREE.Object3D | null)[];
+  head: THREE.Object3D | null;
+  finL: THREE.Object3D | null;
+  finR: THREE.Object3D | null;
+  phase: number;
+  /** Yaw rate (rad/s) from the pack (param1) or the decor drift. */
+  turnRate: number;
+  /** Smoothed bend actually applied, rad. */
+  bend: number;
+};
+
+/** Whole-body bend for a yaw rate: positive yaw rate (nose swinging toward +X) curls the tail toward +X too. */
+export function fishTurnBend(turnRate: number): number {
+  if (!Number.isFinite(turnRate)) return 0;
+  return Math.max(-FISH_BEND_MAX, Math.min(FISH_BEND_MAX, turnRate * FISH_BEND_PER_TURN));
+}
+
+const _q = new THREE.Quaternion();
+const _qp = new THREE.Quaternion();
+const _ax = new THREE.Vector3();
+const _up = new THREE.Vector3();
+const _fwd = new THREE.Vector3();
+
+/** Rotate `bone` by `angle` about a world-space axis (applied on top of its current local pose). */
+function rotateBoneWorldAxis(bone: THREE.Object3D, worldAxis: THREE.Vector3, angle: number): void {
+  if (!angle || !bone.parent) return;
+  bone.parent.getWorldQuaternion(_qp).invert();
+  _ax.copy(worldAxis).applyQuaternion(_qp).normalize();
+  _q.setFromAxisAngle(_ax, angle);
+  bone.quaternion.premultiply(_q);
+}
+
+/**
+ * Procedural motion layered over the baked swim clip for HD aquarium fish: the spine curls into
+ * the turn (tail lags toward the inside, head leads), the caudal end beats harder, and the
+ * pectorals row. Exported for tests.
+ */
+export function applyHdFishMotion(root: THREE.Object3D, rig: HdFishRig, t: number, dt: number): void {
+  const target = fishTurnBend(rig.turnRate);
+  rig.bend += (target - rig.bend) * Math.min(1, Math.max(0, dt) * 8);
+  root.updateMatrixWorld(true);
+  root.getWorldQuaternion(_qp);
+  _up.set(0, 1, 0).applyQuaternion(_qp);
+  _fwd.set(0, 0, 1).applyQuaternion(_qp);
+  const up = _up.clone();
+  const fwd = _fwd.clone();
+  const beat = t * 9.5 + rig.phase;
+  rig.chain.forEach((bone, i) => {
+    if (!bone) return;
+    // Tail-side bones turn the opposite way to the nose: with root mid-body that curls the
+    // whole fish into a C toward the inside of the turn.
+    const tailBeat = i >= 3 ? Math.sin(beat - i * 1.1) * (i === 3 ? 0.16 : 0.26) : Math.sin(beat - i * 1.1) * 0.04;
+    rotateBoneWorldAxis(bone, up, -rig.bend * FISH_BEND_WEIGHTS[i]! + tailBeat);
+  });
+  if (rig.head) rotateBoneWorldAxis(rig.head, up, rig.bend * 0.22);
+  const flap = Math.sin(t * 6.2 + rig.phase * 1.3);
+  const row = Math.sin(t * 6.2 + rig.phase * 1.3 + 1.2);
+  if (rig.finL) {
+    rotateBoneWorldAxis(rig.finL, fwd, 0.42 * flap);
+    rotateBoneWorldAxis(rig.finL, up, 0.3 * row);
+  }
+  if (rig.finR) {
+    rotateBoneWorldAxis(rig.finR, fwd, -0.42 * flap);
+    rotateBoneWorldAxis(rig.finR, up, -0.3 * row);
+  }
+}
+
+function findHdFishRig(root: THREE.Object3D, phase: number, turnRate: number): HdFishRig | undefined {
+  const chain = FISH_BEND_CHAIN.map((n) => root.getObjectByName(n) ?? null);
+  if (!chain.some(Boolean)) return undefined;
+  return {
+    chain,
+    head: root.getObjectByName("head") ?? null,
+    finL: root.getObjectByName("fin_pectoral_L") ?? null,
+    finR: root.getObjectByName("fin_pectoral_R") ?? null,
+    phase,
+    turnRate,
+    bend: fishTurnBend(turnRate),
+  };
+}
+
+/** Shared uniforms of the HD median-fin ripple shader. */
+type FinRippleUniforms = { uFinTime: { value: number }; uFinAmp: { value: number } };
+
+/**
+ * Dorsal, anal and caudal fins have no bones; ripple them in the vertex shader before skinning.
+ * Vertices far from the body's mid-height (fins) and toward the tail sway sideways in a
+ * travelling wave. `box` is (midY, halfHeight, midZ, halfLength) of the bind-pose geometry.
+ */
+function patchFinRipple(mat: THREE.Material, shared: FinRippleUniforms, box: THREE.Vector4): void {
+  if ((mat as { userData: Record<string, unknown> }).userData.zotoFinRipple) return;
+  mat.userData.zotoFinRipple = true;
+  mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uFinTime = shared.uFinTime;
+    shader.uniforms.uFinAmp = shared.uFinAmp;
+    shader.uniforms.uFinBox = { value: box };
+    shader.vertexShader = shader.vertexShader
+      .replace(
+        "#include <common>",
+        "#include <common>\nuniform float uFinTime;\nuniform float uFinAmp;\nuniform vec4 uFinBox;",
+      )
+      .replace(
+        "#include <begin_vertex>",
+        [
+          "#include <begin_vertex>",
+          "{",
+          "  float hy = abs(transformed.y - uFinBox.x) / max(uFinBox.y, 1e-5);",
+          "  float az = (transformed.z - uFinBox.z) / max(uFinBox.w, 1e-5);",
+          "  float finW = smoothstep(0.55, 1.0, hy) + (1.0 - smoothstep(-1.0, -0.6, az)) * 0.7;",
+          "  float wave = sin(uFinTime * 7.5 - az * 6.0);",
+          "  transformed.x += uFinAmp * finW * uFinBox.w * 0.04 * wave;",
+          "}",
+        ].join("\n"),
+      );
+  };
+  mat.customProgramCacheKey = () => "zoto-fin-ripple";
+  mat.needsUpdate = true;
+}
+
+/** Brighter, cooler top lamp for the HD aquarium: the scanned PBR plants and gravel read darker than Standard. */
+export function buildAquariumHdLights(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = "AquariumHdLights";
+  const hemi = new THREE.HemisphereLight(0xe8f6ff, 0x4a3c28, 0.9);
+  const lamp = new THREE.DirectionalLight(0xfff3e2, 1.0);
+  lamp.position.set(0.3, 3, 1.2);
+  lamp.target.position.set(0, -0.6, 0);
+  g.add(hemi, lamp, lamp.target);
+  return g;
+}
 
 function stopSkinnedMixer(row: LiveSkinned): void {
   row.mixer.stopAllAction();
@@ -312,6 +461,9 @@ export class HostMeshLane {
   /** Last slot packet per asset index, replayed when that GLB finishes loading. */
   private pendingByAsset = new Map<number, ArrayLike<number>>();
   private scenery: THREE.Object3D | null = null;
+  private motion: HostMeshMotionProfile = "standard";
+  private hdLights: THREE.Group | null = null;
+  private readonly finUniforms: FinRippleUniforms = { uFinTime: { value: 0 }, uFinAmp: { value: 0 } };
 
   constructor() {
     this.group.name = "HostMeshLane";
@@ -320,6 +472,24 @@ export class HostMeshLane {
 
   setAssetOrder(ids: string[]): void {
     this.assetOrder = [...ids];
+  }
+
+  /** Set before {@link ensureAssets}: the HD fin ripple is patched into materials at load. */
+  setMotionProfile(profile: HostMeshMotionProfile): void {
+    this.motion = profile;
+    const hd = profile === "aquarium-hd";
+    this.finUniforms.uFinAmp.value = hd ? 1 : 0;
+    if (hd && !this.hdLights) {
+      this.hdLights = buildAquariumHdLights();
+      this.group.add(this.hdLights);
+    } else if (!hd && this.hdLights) {
+      this.hdLights.removeFromParent();
+      this.hdLights = null;
+    }
+  }
+
+  motionProfile(): HostMeshMotionProfile {
+    return this.motion;
   }
 
   setMaxInstancesPerAsset(n: number): void {
@@ -363,12 +533,17 @@ export class HostMeshLane {
   tick(dtSec: number): void {
     if (dtSec <= 0 || !Number.isFinite(dtSec)) return;
     this.clockSec += dtSec;
+    this.finUniforms.uFinTime.value = this.clockSec;
     for (const list of this.skinnedLive.values()) {
       for (const row of list) {
         row.mixer.time =
           row.animOffset + this.clockSec * (row.clipDuration > 0 ? 1 : 0);
         row.mixer.update(0);
-        this.driftDecor(row.root, dtSec);
+        const turn = this.driftDecor(row.root, dtSec);
+        if (row.hd) {
+          if (turn !== undefined) row.hd.turnRate = turn;
+          applyHdFishMotion(row.root, row.hd, this.clockSec, dtSec);
+        }
       }
     }
     for (const list of this.rigidLive.values()) {
@@ -377,13 +552,16 @@ export class HostMeshLane {
   }
 
   /** Gentle swim for host-pinned fish until a sandbox packet replaces them. */
-  private driftDecor(root: THREE.Object3D, dt: number): void {
+  /** Returns the decor fish's yaw rate (rad/s), or undefined when `root` is not drifting decor. */
+  private driftDecor(root: THREE.Object3D, dt: number): number | undefined {
     const d = root.userData.aquDecor as AquariumDecorPose | undefined;
-    if (!d) return;
+    if (!d) return undefined;
     if (d.homeY === undefined) d.homeY = d.y;
+    const yaw0 = d.yaw;
     stepAquariumDecor(d, this.clockSec, dt);
     root.matrix.fromArray(hostMeshMatrixYawPos(d.x, d.y, d.z, d.yaw, d.scale));
     root.updateMatrixWorld(true);
+    return dt > 0 ? (d.yaw - yaw0) / dt : 0;
   }
 
   /**
@@ -476,7 +654,11 @@ export class HostMeshLane {
       const clipDuration = tpl.swimClip.duration > 0 ? tpl.swimClip.duration : 1;
       const animOffset = inst.extras.animTime % clipDuration;
       this.group.add(root);
-      list.push({ root, mixer, animOffset, clipDuration });
+      // Sandbox fish carry their yaw rate in param1; pinned decor (flags 1) uses param1 as a phase.
+      const hd = this.motion === "aquarium-hd"
+        ? findHdFishRig(root, inst.extras.animTime * 3.1 + i, (inst.extras.flags & 1) === 0 ? inst.extras.param1 : 0)
+        : undefined;
+      list.push({ root, mixer, animOffset, clipDuration, hd });
     }
     this.skinnedLive.set(assetId, list);
   }
@@ -544,6 +726,7 @@ export class HostMeshLane {
       // Blender koi wag their tails that way); it plays through the same cloned-mixer path.
       const nodeSwim = !skinned && rawSwim?.name === "swim";
       const kind = (skinned || nodeSwim) && swimClip ? "skinned" : "rigid";
+      if (this.motion === "aquarium-hd" && skinned) this.patchHdFins(template);
       return this.storeTemplate(decl.id, {
         id: decl.id,
         kind,
@@ -564,6 +747,24 @@ export class HostMeshLane {
     } finally {
       this.pending.delete(decl.id);
     }
+  }
+
+  private patchHdFins(template: THREE.Object3D): void {
+    template.traverse((o) => {
+      const mesh = o as THREE.SkinnedMesh;
+      if (!mesh.isSkinnedMesh || !mesh.geometry) return;
+      mesh.geometry.computeBoundingBox();
+      const bb = mesh.geometry.boundingBox;
+      if (!bb) return;
+      const box = new THREE.Vector4(
+        (bb.min.y + bb.max.y) / 2,
+        (bb.max.y - bb.min.y) / 2,
+        (bb.min.z + bb.max.z) / 2,
+        (bb.max.z - bb.min.z) / 2,
+      );
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) if (m) patchFinRipple(m, this.finUniforms, box);
+    });
   }
 
   /** Glass tank (or any non-GLB scenery) parented with the live instances. */
