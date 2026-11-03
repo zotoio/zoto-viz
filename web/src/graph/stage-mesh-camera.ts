@@ -21,25 +21,40 @@ export function stageMeshPackId(modeId: string, pluginId?: string | null): strin
   return modeId.replace(/^plugin:/, "").split(":")[0] ?? "";
 }
 
-/** Aquarium shader `getCam` — view ray is the Three.js camera, origin is this pose. */
+/** Vertical fov of the aquarium stage camera (degrees). */
+export const AQUARIUM_FOV = 38;
+/** Tank opening the camera frames: glass half-width / half-height and the front pane z (aquarium-tank.ts). */
+const AQ_HALF_W = 1.22;
+const AQ_HALF_H = 0.82;
+const AQ_FRONT_Z = 1.02;
+/** Room left around the tank opening. */
+const AQ_FRAME_MARGIN = 1.08;
+
+/**
+ * Aquarium stage camera. It stands back far enough that the whole front of the tank (glass edges
+ * included) is in frame at this pane's aspect (slot0[12..13] = canvas w, h), so a fish near the
+ * front never looks huge or outside the glass. Drift sways a little; hold sits still.
+ */
 export function aquariumStagePose(read: StageSlotReader): StageMeshPose {
   const mode = read(0, 8);
   const phase = read(0, 9);
+  const w = read(0, 12);
+  const h = read(0, 13);
+  const aspect = w > 1 && h > 1 ? w / h : 1.6;
+  const t = Math.tan((AQUARIUM_FOV * Math.PI) / 360);
+  const dist = Math.max((AQ_HALF_H * AQ_FRAME_MARGIN) / t, (AQ_HALF_W * AQ_FRAME_MARGIN) / (t * aspect));
   let x = 0;
-  let y = 0.05;
-  let z = 2.35;
-  if (mode > 1.5) z = 2.15;
-  else if (mode < 0.5) {
-    y = 0;
-    z = 2.55;
-  } else {
-    x += Math.sin(phase) * 0.12;
-    y += Math.sin(phase * 0.7) * 0.04;
+  let y = 0.02;
+  const z = AQ_FRONT_Z + dist;
+  if (mode >= 0.5 && mode <= 1.5) {
+    x += Math.sin(phase) * 0.1;
+    y += Math.sin(phase * 0.7) * 0.03;
   }
   return {
     position: [x, y, z],
-    target: [x, y, z - 1],
+    target: [x * 0.5, y, z - 1],
     near: 0.05,
+    fov: AQUARIUM_FOV,
   };
 }
 

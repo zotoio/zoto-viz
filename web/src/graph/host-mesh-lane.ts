@@ -775,6 +775,15 @@ export class HostMeshLane {
     this.group.add(root);
   }
 
+  /**
+   * Hand the scenery the pack's slot reader once a frame. Scenery that reacts to the pack
+   * (the aquarium's eat puff) sets `userData.onSlots(read, dt)`.
+   */
+  updateScenery(read: (slot: number, index: number) => number, dt: number): void {
+    const fn = this.scenery?.userData.onSlots as ((r: typeof read, d: number) => void) | undefined;
+    fn?.(read, dt);
+  }
+
   private disposeScenery(): void {
     const root = this.scenery;
     this.scenery = null;

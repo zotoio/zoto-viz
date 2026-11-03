@@ -4327,6 +4327,7 @@ export class NetScene implements HostedView, RenderScalePane {
         this.controls.update();
         this.followUserCameraCoast();
         this.hostMeshLane.tick(dt);
+        this.hostMeshLane.updateScenery((slot, index) => this.backdrop.pluginSlot(slot, index), dt);
         // Fish GLBs live in the shader's metre-scale tank. That pose replaces the
         // level-horizon lock, which would flatten the koi camera.
         if (!this.applyStageMeshCamera() && !this.userOwnsCamera()) {

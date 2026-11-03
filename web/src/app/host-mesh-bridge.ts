@@ -67,27 +67,65 @@ export type HostMeshBridge = {
   applySlotBuffer: (data: number[]) => void;
 };
 
-/** Gravel bed is ~0.62 m wide; scale fills the 2.44 m tank floor. Plants stay under the lid. */
-const AQUARIUM_SUBSTRATE_SCALE = 3.5;
-const AQUARIUM_PLANT_SCALE = 2.6;
+/** Glass inner half-width and the back pane / front lip z (aquarium-tank.ts), and the tank floor y. */
+const AQ_INNER_X = 1.2;
+const AQ_BACK_Z = -1.0;
+const AQ_FRONT_Z = 1.0;
+const AQ_FLOOR_Y = -0.805;
+
+/**
+ * Measured bounds of the shipped gravel bed and plant clump GLBs (x0, x1, z0, z1, top), metres.
+ * HD swaps both models for scans of a different footprint, so each set is fitted on its own.
+ */
+type Bounds = { x0: number; x1: number; z0: number; z1: number; top: number };
+const AQ_BOUNDS: Record<HostMeshModelSet, { substrate: Bounds; plants: Bounds }> = {
+  standard: {
+    substrate: { x0: -0.31, x1: 0.31, z0: -0.16, z1: 0.16, top: 0.23 },
+    plants: { x0: -0.304, x1: 0.326, z0: -0.165, z1: 0.159, top: 0.398 },
+  },
+  hd: {
+    substrate: { x0: -0.332, x1: 0.31, z0: -0.229, z1: 0.16, top: 0.13 },
+    plants: { x0: -0.51, x1: 0.551, z0: -0.401, z1: 0.363, top: 0.42 },
+  },
+};
+const AQ_PLANT_SCALE: Record<HostMeshModelSet, number> = { standard: 2.2, hd: 1.25 };
+
+/** Gravel stretched (x, z) to cover the whole floor, glass to glass; height keeps the Standard look. */
+export function aquariumSubstrateMatrix(set: HostMeshModelSet): number[] {
+  const b = AQ_BOUNDS[set].substrate;
+  const sx = (AQ_INNER_X * 2) / (b.x1 - b.x0);
+  const sz = (AQ_FRONT_Z - AQ_BACK_Z) / (b.z1 - b.z0);
+  const sy = 3.5;
+  const tx = -((b.x0 + b.x1) / 2) * sx;
+  const tz = (AQ_FRONT_Z + AQ_BACK_Z) / 2 - ((b.z0 + b.z1) / 2) * sz;
+  return [sx, 0, 0, 0, 0, sy, 0, 0, 0, 0, sz, 0, tx, AQ_FLOOR_Y, tz, 1];
+}
+
+/** Plant clumps placed so every leaf stays inside the glass at any yaw (radius = farthest corner). */
+export function aquariumPlantPlacements(set: HostMeshModelSet): { x: number; z: number; yaw: number; scale: number; radius: number }[] {
+  const b = AQ_BOUNDS[set].plants;
+  const scale = AQ_PLANT_SCALE[set];
+  const radius = Math.hypot(Math.max(-b.x0, b.x1), Math.max(-b.z0, b.z1)) * scale;
+  const want: [number, number, number][] = [[-0.5, -0.3, 0.4], [0.15, -0.45, 1.1], [0.55, -0.05, -0.6]];
+  return want.map(([x, z, yaw]) => ({
+    x: Math.max(-AQ_INNER_X + radius, Math.min(AQ_INNER_X - radius, x)),
+    z: Math.max(AQ_BACK_Z + radius, Math.min(AQ_FRONT_Z - radius, z)),
+    yaw,
+    scale,
+    radius,
+  }));
+}
 /** Designer fish are about 8–20 cm; this sits them in the tank without filling it. */
 const AQUARIUM_FISH_SCALE = 1.35;
 
 /** The lane methods a pack's fixed contents need. */
 export type MeshPinLane = Pick<HostMeshLane, "applySlotBuffer" | "setScenery">;
 
-function pinAquariumContents(lane: MeshPinLane): void {
-  const plant = (x: number, z: number, yaw: number) => ({
-    matrix: hostMeshMatrixYawPos(x, -0.74, z, yaw, AQUARIUM_PLANT_SCALE),
-  });
-  lane.applySlotBuffer(encodeHostMeshSlotPacket(1, [{
-    matrix: hostMeshMatrixYawPos(0, -0.78, 0, 0, AQUARIUM_SUBSTRATE_SCALE),
-  }]));
-  lane.applySlotBuffer(encodeHostMeshSlotPacket(0, [
-    plant(-0.55, 0.15, 0.4),
-    plant(0.2, -0.25, 1.1),
-    plant(0.65, 0.35, -0.6),
-  ]));
+function pinAquariumContents(lane: MeshPinLane, set: HostMeshModelSet): void {
+  lane.applySlotBuffer(encodeHostMeshSlotPacket(1, [{ matrix: aquariumSubstrateMatrix(set) }]));
+  lane.applySlotBuffer(encodeHostMeshSlotPacket(0, aquariumPlantPlacements(set).map((p) => ({
+    matrix: hostMeshMatrixYawPos(p.x, -0.76, p.z, p.yaw, p.scale),
+  }))));
   // One of each shipped species. flags 1 drifts them until sandbox fish packets take over.
   const fish: [number, number, number, number, number][] = [
     [7, -0.85, 0.05, 0.35, 0.4],
@@ -151,10 +189,10 @@ function pinKoiContents(lane: MeshPinLane): void {
 }
 
 /** A pack's shipped scenery and fixed contents, pinned into a lane with no sandbox packets. */
-export function pinPackContents(lane: MeshPinLane, packId: string): void {
+export function pinPackContents(lane: MeshPinLane, packId: string, set: HostMeshModelSet = "standard"): void {
   if (packId === "aquarium") {
     lane.setScenery(buildAquariumTank());
-    pinAquariumContents(lane);
+    pinAquariumContents(lane, set);
   } else if (packId === "koi-pond") {
     pinKoiContents(lane);
   }
@@ -184,7 +222,7 @@ export async function mountPaneHostMeshes(
     lane.clear();
     return;
   }
-  pinPackContents(lane, spec.id);
+  pinPackContents(lane, spec.id, modelSet);
 }
 
 /**
@@ -231,7 +269,7 @@ export function createHostMeshBridge(
         into.clear();
         return false;
       }
-      pinPackContents(into, spec.id);
+      pinPackContents(into, spec.id, set);
       return !into.allAssetsFailed();
     },
     applySlotBuffer(data) {
