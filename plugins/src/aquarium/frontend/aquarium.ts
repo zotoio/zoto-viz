@@ -12,6 +12,8 @@ import {
   type TalkerSlot,
 } from "./talker-slots";
 
+import { stepSchool, TANK, type SwimFish } from "./fish-behaviour";
+
 export {
   assignTalkerSlots,
   slottedTalkerIds,
@@ -60,7 +62,7 @@ export const MAX_FISH = 16;
 export const MAX_PARTICLES = 24;
 export const PARTICLE_STRIDE = 4;
 export const FIXED_SIM_DT = 1 / 60;
-export const MAX_SIM_CATCHUP_STEPS = 3;
+export const MAX_SIM_CATCHUP_STEPS = 6;
 export const MAX_TALKER_SAMPLES = 24;
 
 /** Particle kind in slot2.w — shader distinguishes shape/colour/motion. */
@@ -456,18 +458,7 @@ export function vigorFromRate(rate: number): number {
   return clamp01(rate / 220);
 }
 
-interface FishBody {
-  id: string;
-  species: number;
-  vigor: number;
-  x: number;
-  y: number;
-  z: number;
-  vx: number;
-  vy: number;
-  vz: number;
-  yaw: number;
-}
+type FishBody = SwimFish;
 
 interface ParticleBody {
   x: number;
@@ -640,10 +631,16 @@ export class AquariumSim {
           x: (h - 0.5) * 1.2,
           y: 0.1 + (h * 0.7) % 0.35,
           z: ((h * 3.1) % 1 - 0.5) * 1.4,
-          vx: 0,
-          vy: 0,
-          vz: 0,
           yaw: h * 6.28,
+          speed: 0.1,
+          vy: 0,
+          turnRate: 0,
+          phase: h * 6.28,
+          mood: "cruise",
+          moodT: h * 2,
+          wander: 0,
+          plant: 0,
+          rs: ((Math.floor(h * 997) * 2654435761) ^ this.opts.seed) >>> 0,
         };
         this.fish.set(t.id, f);
       } else if (f && inSlot) {
@@ -769,57 +766,56 @@ export class AquariumSim {
     }
   }
 
-  private stepFish(simT: number, dt: number, slotted: VizTalkerSample[]): void {
-    const calm = 1 - this.opts.temperament;
-    const school = 0.35 + calm * 0.45;
-    const chase = this.opts.temperament * 0.9;
-    const feedPt = this.feedActive > 0 ? { x: 0, y: this.feedY, z: 0.2 } : null;
-    const slottedSet = new Set(slotted.map((t) => t.id));
-    for (const f of this.fish.values()) {
-      if (!slottedSet.has(f.id)) continue;
-      const talker = slotted.find((t) => t.id === f.id);
-      const vigor = talker ? vigorFromRate(talker.rate) : f.vigor;
-      f.vigor = vigor;
-      const wobble = Math.sin(simT * (1.2 + vigor) + idHash(f.id) * 9) * 0.15 * school;
-      let tx = Math.sin(simT * 0.25 + idHash(f.id) * 4) * (0.55 + calm * 0.25);
-      let ty = 0.05 + vigor * 0.25 + wobble * 0.08;
-      let tz = Math.cos(simT * 0.22 + idHash(f.id) * 3) * 0.65;
-      if (feedPt) {
-        tx = feedPt.x + (idHash(f.id) - 0.5) * 0.2;
-        ty = feedPt.y + (idHash(f.id + "y") - 0.5) * 0.1;
-        tz = feedPt.z;
-      } else if (chase > 0.35) {
-        tx += Math.sin(simT * 0.9 + idHash(f.id) * 5) * chase * 0.12;
-        tz += Math.cos(simT * 0.85 + idHash(f.id) * 4) * chase * 0.12;
-      }
-      // Cruise along the nose. A point behind the fish turns them; it does not pull them tail-first.
-      let sx = tx - f.x;
-      let sz = tz - f.z;
-      const wall = 0.9;
-      if (f.x > wall) sx -= (f.x - wall) * 3;
-      if (f.x < -wall) sx += (-wall - f.x) * 3;
-      if (f.z > wall) sz -= (f.z - wall) * 3;
-      if (f.z < -wall) sz += (-wall - f.z) * 3;
-      const desired = Math.atan2(sx, sz + 0.0001);
-      let dyaw = Math.atan2(Math.sin(desired - f.yaw), Math.cos(desired - f.yaw));
-      const nearWall = Math.abs(f.x) > wall || Math.abs(f.z) > wall;
-      const turn = (nearWall ? 2.6 : 0.85 + vigor * 1.15 + (feedPt ? 0.7 : 0)) * dt;
-      if (dyaw > turn) dyaw = turn;
-      else if (dyaw < -turn) dyaw = -turn;
-      f.yaw += dyaw;
-      const fx = Math.sin(f.yaw);
-      const fz = Math.cos(f.yaw);
-      const cruise = (0.0024 + vigor * 0.0024) * (0.75 + chase);
-      const facing = sx * fx + sz * fz;
-      const speed = cruise * (facing < 0 ? 0.7 : 1);
-      f.vx = fx * speed;
-      f.vz = fz * speed;
-      const ay = (ty - f.y) * (0.6 + vigor * 0.4) * dt;
-      f.vy = f.vy * 0.9 + ay;
-      f.x = clamp(f.x + f.vx, -1.1, 1.1);
-      f.y = clamp(f.y + f.vy, -0.55, 0.75);
-      f.z = clamp(f.z + f.vz, -1.15, 1.15);
+  private cursor: { x: number; y: number; z: number } | null = null;
+
+  /** Pointer over the tank in tank units, or null when it leaves. Curious fish come to look, shy ones flee. */
+  setCursor(c: { x: number; y: number; z: number } | null): void {
+    this.cursor = c;
+  }
+
+  /** Nearest live food particle (feeding flakes), else the feed point while a feed is on. */
+  private foodTarget(): { x: number; y: number; z: number } | null {
+    if (this.feedActive <= 0) return null;
+    let best: ParticleBody | null = null;
+    for (const p of this.particles) {
+      if (p.life <= 0 || p.kind < PARTICLE_KIND_TRAFFIC_FEED) continue;
+      if (!best || p.y < best.y) best = p;
     }
+    if (best) return { x: best.x, y: clamp(best.y, TANK.yMin, TANK.yMax), z: best.z };
+    return { x: 0, y: clamp(this.feedY, TANK.yMin, TANK.yMax), z: 0.2 };
+  }
+
+  private stepFish(_simT: number, dt: number, slotted: VizTalkerSample[]): void {
+    const school: FishBody[] = [];
+    const byId = new Map(slotted.map((t) => [t.id, t]));
+    for (const f of this.fish.values()) {
+      const talker = byId.get(f.id);
+      if (!talker) continue;
+      f.vigor = vigorFromRate(talker.rate);
+      school.push(f);
+    }
+    stepSchool(school, {
+      reef: this.opts.water === "reef",
+      temperament: this.opts.temperament,
+      food: this.foodTarget(),
+      cursor: this.cursor,
+      motion: this.opts.reducedMotion ? 0.35 : 1,
+    }, dt);
+  }
+
+  /** Per-fish yaw rate (rad/s) and swim phase in slot1 order, for the host mesh drive. */
+  fishMotion(): { turn: number[]; phase: number[]; speed: number[] } {
+    const turn: number[] = [];
+    const phase: number[] = [];
+    const speed: number[] = [];
+    for (const id of slottedTalkerIds(this.talkerSlots)) {
+      const f = this.fish.get(id);
+      if (!f) continue;
+      turn.push(f.turnRate);
+      phase.push(f.phase);
+      speed.push(f.speed);
+    }
+    return { turn, phase, speed };
   }
 
   private stepOnce(simT: number, allTalkers: VizTalkerSample[]): void {
