@@ -28,11 +28,18 @@ describe("aquarium HD model set", () => {
     for (const d of hd) expect(std.some((s) => `${s.id}-hd` === d.id)).toBe(true);
   });
 
+  it("keeps the scanned HD set under 8 MB and records its CC0 sources", () => {
+    const hd = decls.filter((d) => d.id.endsWith("-hd"));
+    expect(hd.reduce((a, d) => a + d.bytes, 0)).toBeLessThan(8_000_000);
+    const src = readFileSync(join(PACK, "assets/HD-SOURCES.md"), "utf8");
+    for (const a of ["grass_medium_02", "fern_02", "calathea_orbifolia_01", "rock_moss_set_01", "stone_01", "dead_tree_trunk", "clean_pebbles"]) expect(src).toContain(`polyhaven.com/a/${a}`);
+    expect(src).toContain("CC0 1.0");
+  });
   it("ships meshopt HD GLBs whose bytes and hash match the manifest", () => {
     for (const d of hd) {
       const bytes = readFileSync(join(PACK, d.path));
       expect(bytes.length).toBe(d.bytes);
-      expect(bytes.length).toBeLessThan(400_000);
+      expect(bytes.length).toBeLessThan(4_000_000);
       expect(createHash("sha256").update(bytes).digest("hex")).toBe(d.sha256);
       expect(bytes.toString("latin1")).toContain("EXT_meshopt_compression");
     }
