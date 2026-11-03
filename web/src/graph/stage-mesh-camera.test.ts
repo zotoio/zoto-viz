@@ -11,12 +11,17 @@ describe("stage mesh camera", () => {
     expect(stageMeshPackId("plugin:koi-pond:2", "koi-pond")).toBe("koi-pond");
   });
 
-  it("matches the aquarium drift camera", () => {
-    const pose = aquariumStagePose(slots({ "0:8": 1, "0:9": 0 }));
-    expect(pose.position[0]).toBeCloseTo(0);
-    expect(pose.position[2]).toBeCloseTo(2.35);
-    expect(pose.target[2]).toBeCloseTo(1.35);
-    expect(pose.fov).toBeUndefined();
+  it("frames the whole tank front at the pane aspect", () => {
+    for (const [w, h] of [[1400, 820], [800, 800], [1920, 600], [0, 0]]) {
+      const pose = aquariumStagePose(slots({ "0:8": 2, "0:12": w!, "0:13": h! }));
+      const aspect = w && h ? w / h : 1.6;
+      const t = Math.tan(((pose.fov ?? 0) * Math.PI) / 360);
+      const d = pose.position[2] - 1.02;
+      // front glass corners (±1.22, ±0.82) project inside the frame
+      expect(0.82 + Math.abs(pose.position[1])).toBeLessThan(d * t);
+      expect(1.22 + Math.abs(pose.position[0])).toBeLessThan(d * t * aspect);
+      expect(pose.target[2]).toBeCloseTo(pose.position[2] - 1);
+    }
   });
 
   it("pulls the koi camera down onto the pond", () => {
@@ -29,7 +34,7 @@ describe("stage mesh camera", () => {
 
   it("only poses the fish packs", () => {
     expect(stageMeshPose("topology", slots({}))).toBeNull();
-    expect(stageMeshPose("aquarium", slots({}))?.position[2]).toBeCloseTo(2.55);
+    expect(stageMeshPose("aquarium", slots({}))?.position[2]).toBeGreaterThan(3);
   });
 
   it("puts the stage camera in the rocket-car arena camera", () => {
