@@ -17,7 +17,7 @@ const PRESENT_PACKS = ["voxel-world", "fluid-dyn", "host-mesh-demo", "rocket-car
     hash: `h-${id}`,
     has_frontend: true,
     capabilities: ["viz.read", "viz.write"],
-    viz: mockPartial<NonNullable<PluginView["viz"]>>({ contract: 3, presentTick: true }),
+    viz: mockPartial<NonNullable<PluginView["viz"]>>({ contract: 2, presentTick: true }),
   }));
 const HN_RAIN = mockPartial<PluginView>({
   id: "hn-rain",
