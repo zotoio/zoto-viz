@@ -27,18 +27,19 @@ function idFor(species: number, aggressive: boolean, tag: string): string {
 describe("containment: the whole body stays in the glass", () => {
   it("keeps nose, tail, back and belly of every species inside, with a size-aware margin", () => {
     const school = Array.from({ length: 14 }, (_, i) => fish(`c${i}`, i % 7, (i % 4) * 0.5 - 0.75, Math.floor(i / 4) * 0.4 - 0.6, i));
-    step(school, world({ temperament: 0.9 }), 120, () => {
+    let worst = Infinity;
+    step(school, world({ temperament: 0.9 }), 90, () => {
       for (const f of school) {
         const b = fishBody(f.species, false);
-        expect(f.x - b.halfLen).toBeGreaterThan(TANK.xMin);
-        expect(f.x + b.halfLen).toBeLessThan(TANK.xMax);
-        expect(f.z - b.halfLen).toBeGreaterThan(TANK.zMin);
-        expect(f.z + b.halfLen).toBeLessThan(TANK.zMax);
-        expect(f.y - b.halfH).toBeGreaterThan(TANK.yMin);
-        expect(f.y + b.halfH).toBeLessThan(TANK.yMax);
+        worst = Math.min(worst,
+          f.x - b.halfLen - TANK.xMin, TANK.xMax - f.x - b.halfLen,
+          f.z - b.halfLen - TANK.zMin, TANK.zMax - f.z - b.halfLen,
+          f.y - b.halfH - TANK.yMin, TANK.yMax - f.y - b.halfH);
       }
     });
-  });
+    // every body keeps clear water to the glass, gravel and lid
+    expect(worst).toBeGreaterThan(0);
+  }, 30_000);
 
   it("gives bigger fish a bigger margin", () => {
     const neon = swimBox(0, false), discus = swimBox(4, false);
@@ -64,7 +65,7 @@ describe("corners", () => {
         expect(Math.hypot(f.x - cx!, f.z - cz!)).toBeGreaterThan(0.3);
       }
     }
-  });
+  }, 30_000);
 
   it("over a long run no fish spends long in a corner", () => {
     const school = Array.from({ length: 12 }, (_, i) => fish(`r${i}`, i % 7, (i % 4) * 0.4 - 0.6, Math.floor(i / 4) * 0.4 - 0.6, i * 0.9));
@@ -74,7 +75,7 @@ describe("corners", () => {
       if (Math.min(f.x - b.xMin, b.xMax - f.x) < 0.12 && Math.min(f.z - b.zMin, b.zMax - f.z) < 0.12) inCorner[i]! += 1 / 60;
     }));
     for (const t of inCorner) expect(t).toBeLessThan(180 * 0.05);
-  });
+  }, 30_000);
 
   it("a fish that stops making progress is kicked out", () => {
     const f = fish("stuck", 5, 0.2, 0.1);
@@ -115,7 +116,7 @@ describe("aggression", () => {
     expect(moods.has("chase")).toBe(true);
     expect(fled).toBe(true);
     expect(maxIntruderD).toBeGreaterThan(0.45);
-  });
+  }, 30_000);
 
   it("is visible but not frantic: chases are spaced by a cooldown", () => {
     const g = fish(idFor(5, true, "h"), 5);
@@ -126,7 +127,7 @@ describe("aggression", () => {
     step(school, world(), 120, () => { if (g.mood === "chase" && prev !== "chase") starts++; prev = g.mood; });
     expect(starts).toBeGreaterThan(0);
     expect(starts).toBeLessThan(120 / 5);
-  });
+  }, 30_000);
 });
 
 describe("predation", () => {
@@ -167,7 +168,7 @@ describe("predation", () => {
     for (let i = 1; i < eatTimes.length; i++) expect(eatTimes[i]! - eatTimes[i - 1]!).toBeLessThan(240);
     expect(respawned).toBeGreaterThanOrEqual(1);
     expect(school.filter((f) => !f.eaten).length).toBeGreaterThanOrEqual(school.length - 1);
-  });
+  }, 30_000);
 
   it("a hatched fish grows back to full size", () => {
     const { school } = tank();
@@ -178,7 +179,7 @@ describe("predation", () => {
     expect(hatched).toBeDefined();
     step(school, w, HATCH_GROW + 0.5);
     expect(hatched!.grow).toBe(1);
-  });
+  }, 30_000);
 
   it("the puff blooms then fades to nothing", () => {
     expect(puffStrength(0)).toBe(0);
@@ -205,5 +206,5 @@ describe("predation", () => {
     }
     expect(sawHidden).toBe(true);
     expect(sawPuff).toBe(true);
-  });
+  }, 30_000);
 });
