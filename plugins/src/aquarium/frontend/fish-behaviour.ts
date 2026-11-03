@@ -498,9 +498,18 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
     f.speed += (target - f.speed) * Math.min(1, ease * dt);
     f.speed = Math.max(0.01 * motion, f.speed);
 
-    const step = f.speed * dt;
-    f.x += Math.sin(f.yaw) * step;
-    f.z += Math.cos(f.yaw) * step;
+    // Move along the nose, but stop at the body box rather than being pushed back out of it.
+    let step = f.speed * dt;
+    const ux = Math.sin(f.yaw), uz = Math.cos(f.yaw);
+    if (inBox(f.x, f.z, box)) {
+      if (ux > 1e-9) step = Math.min(step, (box.xMax - f.x) / ux);
+      else if (ux < -1e-9) step = Math.min(step, (box.xMin - f.x) / ux);
+      if (uz > 1e-9) step = Math.min(step, (box.zMax - f.z) / uz);
+      else if (uz < -1e-9) step = Math.min(step, (box.zMin - f.z) / uz);
+      step = Math.max(0, step);
+    }
+    f.x += ux * step;
+    f.z += uz * step;
     ty = Math.max(bMin, Math.min(bMax, ty));
     if (f.mood === "feed" && w.food) ty = w.food.y - 0.05;
     if (f.mood === "chase" && f.target) ty = byId.get(f.target)?.y ?? ty;

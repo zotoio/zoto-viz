@@ -32,7 +32,7 @@ describe("fish behaviour", () => {
   });
 
   it("swims nose first and stays inside the glass", () => {
-    const school = Array.from({ length: 12 }, (_, i) => fish(i, i % 7, (i % 4) * 0.4 - 0.6, Math.floor(i / 4) * 0.5 - 0.5));
+    const school = Array.from({ length: 12 }, (_, i) => fish(i, i % 7, (i % 4) * 0.4 - 0.6, Math.floor(i / 4) * 0.4 - 0.5));
     let back = 0, steps = 0;
     for (let k = 0; k < 1800; k++) {
       const before = school.map((f) => [f.x, f.z]);
