@@ -56,8 +56,34 @@ export function koiStagePose(read: StageSlotReader): StageMeshPose {
   };
 }
 
+/**
+ * Rocket-car-soccer sky shader camera: origin slot0[1..3], yaw/pitch slot0[4..5], the view
+ * ray is the Three.js camera (vDir). Before the first tick (slot0[0] < 0.5) the shader uses
+ * a fixed kickoff camera. Without this pose the cars sit at the origin while the stage
+ * camera stays on the ~1000 m graph orbit, so none of them show.
+ */
+export function rocketCarStagePose(read: StageSlotReader): StageMeshPose {
+  let x = read(0, 1);
+  let y = read(0, 2);
+  let z = read(0, 3);
+  let yaw = read(0, 4);
+  let pitch = read(0, 5);
+  if (read(0, 0) < 0.5) {
+    x = 0;
+    y = 11;
+    z = 26;
+    yaw = Math.PI;
+    pitch = -0.32;
+  }
+  const fx = Math.sin(yaw) * Math.cos(pitch);
+  const fy = Math.sin(pitch);
+  const fz = Math.cos(yaw) * Math.cos(pitch);
+  return { position: [x, y, z], target: [x + fx, y + fy, z + fz], near: 0.1 };
+}
+
 export function stageMeshPose(packId: string, read: StageSlotReader): StageMeshPose | null {
   if (packId === "aquarium") return aquariumStagePose(read);
   if (packId === "koi-pond") return koiStagePose(read);
+  if (packId === "rocket-car-soccer") return rocketCarStagePose(read);
   return null;
 }
