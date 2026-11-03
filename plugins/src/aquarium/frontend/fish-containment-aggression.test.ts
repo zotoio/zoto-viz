@@ -170,6 +170,15 @@ describe("predation", () => {
     expect(school.filter((f) => !f.eaten).length).toBeGreaterThanOrEqual(school.length - 1);
   }, 30_000);
 
+  it("still happens while traffic keeps food in the water", () => {
+    const { school } = tank();
+    const st = newSchoolState(0);
+    const w = world({ state: st, food: { x: 0.2, y: 0.4, z: 0 } });
+    step(school, w, 200, () => {});
+    expect(st.eats).toBeGreaterThanOrEqual(1);
+    expect(st.eats).toBeLessThanOrEqual(3);
+  }, 30_000);
+
   it("a hatched fish grows back to full size", () => {
     const { school } = tank();
     const st = newSchoolState(0);

@@ -254,6 +254,8 @@ export function canEat(pred: SwimFish, prey: SwimFish, reef: boolean): boolean {
 function pickMood(f: SwimFish, tr: FishTraits, w: SwimWorld, dt: number, aggr: boolean): void {
   f.moodT -= dt;
   if (w.food) {
+    // A hunt that is under way carries on through feeding (traffic feeds almost constantly on a busy network).
+    if (f.mood === "chase" && f.hunt && f.moodT > 0) return;
     if (f.mood !== "feed") { f.mood = "feed"; f.moodT = 2 + fishRand(f) * 2; f.target = undefined; }
     return;
   }
@@ -365,9 +367,10 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
     }
 
     // Territory: a guard circles its spot and goes after a smaller (or other-species) fish that comes in.
-    if (aggr && !w.food && (f.mood === "guard" || f.mood === "cruise") && !f.cool) {
+    const hungryNow = !!st && st.eatCool <= 0 && live.length >= 3;
+    if (aggr && (!w.food || hungryNow) && (f.mood === "guard" || f.mood === "cruise" || f.mood === "feed") && !f.cool) {
       const home = TERRITORY_SPOTS[(f.home ?? 0) % TERRITORY_SPOTS.length]!;
-      const hungry = !!st && st.eatCool <= 0 && live.length >= 3;
+      const hungry = hungryNow;
       let best: SwimFish | null = null, bestD = Infinity, bestHunt = false;
       for (const o of live) {
         if (o === f || (o.grow ?? 1) < 1) continue;
