@@ -59,6 +59,16 @@ export function carouselArrival(kind: CarouselTransition, t: number): { opacity:
   return out;
 }
 
+/**
+ * Fit to height: the still always fills the panel's full height at its own aspect ratio.
+ * A still wider than the panel is cropped at the sides ("cover"); a narrower one is padded at
+ * the sides over a blurred copy of itself ("contain"). Both keep the full height.
+ */
+export function stillFit(imgW: number, imgH: number, boxW: number, boxH: number): "cover" | "contain" {
+  if (!(imgW > 0 && imgH > 0 && boxW > 0 && boxH > 0)) return "cover";
+  return imgW / imgH >= boxW / boxH ? "cover" : "contain";
+}
+
 /** "Source · Author" overlay line; empty when the source maps neither. */
 export function carouselByline(slide: Pick<CarouselSlide, "author" | "origin">): string {
   const origin = (slide.origin ?? "").trim();
