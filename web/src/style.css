@@ -206,7 +206,8 @@ body[data-softgl] .brand::after {
 :is(#carousel, .arcade.carousel).mosaic-live .carousel-still:is([data-layout="centre"], [data-layout="side-left"]) .carousel-caption { padding-top: calc(var(--pane-head, 2.4rem) + 0.4rem); }
 /* Open-on-site button: translucent pill, top centre of the slide, readable over any still. */
 :is(#carousel, .arcade.carousel) .carousel-open {
-  position: absolute; z-index: 2;
+  /* Above the caption's gradient (z 3) so a tall caption in a small tile never dims it. */
+  position: absolute; z-index: 4;
   top: max(0.8rem, 3cqh); left: 50%; transform: translateX(-50%);
   max-width: min(22rem, calc(100% - 1.5rem));
   padding: 0.35em 0.9em; border-radius: 999px;
@@ -225,6 +226,9 @@ body[data-softgl] .brand::after {
 /* Top-anchored captions drop below the button. */
 :is(#carousel, .arcade.carousel) .carousel-still[data-open][data-layout="high-right"] .carousel-caption,
 :is(#carousel, .arcade.carousel) .carousel-still[data-open]:is([data-layout="centre"], [data-layout="side-left"]) .carousel-caption { margin-top: 2.4rem; }
+/* Bottom captions stop below the button row instead of running up under it. */
+:is(#carousel, .arcade.carousel) .carousel-still[data-open] .carousel-caption { max-height: calc(100% - 3rem); }
+:is(#carousel, .arcade.carousel).mosaic-live .carousel-still[data-open] .carousel-caption { max-height: calc(100% - var(--pane-head, 2.4rem) - 2.6rem); }
 /* Blurred cover of the current still behind a contain-fit picture: no bare letterbox bars. */
 :is(#carousel, .arcade.carousel) .carousel-still::before {
   content: "";
