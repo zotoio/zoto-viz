@@ -440,9 +440,30 @@ def _refresh_shipped(rows: list[dict[str, Any]]) -> bool:
     return changed
 
 
+DATE_TOKEN = "{date}"
+
+
+def dated_url(url: str, day: date | None = None) -> str:
+    """Replace ``{date}`` with a host-local ``YYYY-MM-DD`` (today unless ``day`` given)."""
+    raw = url or ""
+    if DATE_TOKEN not in raw:
+        return raw
+    return raw.replace(DATE_TOKEN, (day or date.today()).isoformat())
+
+
+def dated_candidates(url: str, today: date | None = None) -> list[str]:
+    """Today's URL, then yesterday's (a new day can be empty or 404 for a while)."""
+    if DATE_TOKEN not in (url or ""):
+        return [url]
+    d = today or date.today()
+    return [dated_url(url, d), dated_url(url, d - timedelta(days=1))]
+
+
 def resolve_fetch_url(url: str) -> str:
-    """APOD ``count=`` is a random archive draw — prefer the last eight days."""
-    raw = (url or "").strip()
+    """APOD ``count=`` is a random archive draw — prefer the last eight days.
+
+    ``{date}`` becomes the host-local date on every fetch."""
+    raw = dated_url((url or "").strip())
     if "api.nasa.gov/planetary/apod" not in raw:
         return raw
     parsed = urlparse(raw)
@@ -1152,6 +1173,8 @@ async def _fetch_live(row: dict[str, Any]) -> dict[str, Any]:
             parsed = parse_rss(body)
             _record(row, ok=True, payload=parsed)
             _schedule_prefetch(parsed.get("items") or [])
+        elif DATE_TOKEN in str(row.get("url") or ""):
+            await _fetch_dated(row)
         else:
             body, ctype = await _http_body(resolve_fetch_url(str(row["url"])))
             if "json" in ctype or body.lstrip().startswith(("{", "[")):
@@ -1172,6 +1195,38 @@ async def _fetch_live(row: dict[str, Any]) -> dict[str, Any]:
     except (ValueError, ClientError, OSError, ET.ParseError, asyncio.TimeoutError) as e:
         _record(row, ok=False, error=str(e) or type(e).__name__)
     return _live[row["id"]]
+
+
+async def _fetch_dated(row: dict[str, Any]) -> None:
+    """HTTP JSON row whose URL carries ``{date}``: today, else yesterday; keep the last good items."""
+    fields = row.get("fields") if isinstance(row.get("fields"), dict) else None
+    last_err = "no items"
+    for url in dated_candidates(str(row["url"])):
+        try:
+            body, _ = await _http_body(url)
+            data = json.loads(body)
+        except json.JSONDecodeError:
+            last_err = "invalid json"
+            continue
+        except ValueError as e:
+            last_err = str(e)
+            continue
+        items = await _projected_items(data, fields) if fields else []
+        if fields and not items:
+            last_err = "no items"
+            continue
+        payload: dict[str, Any] = {"json": data, "fetchedUrl": url}
+        if items:
+            payload["items"] = items
+            _schedule_prefetch(items)
+        _record(row, ok=True, payload=payload)
+        return
+    prev = _live.get(row["id"]) or {}
+    if prev.get("items"):
+        keep = {k: prev[k] for k in ("items", "fetchedUrl") if k in prev}
+        _record(row, ok=True, payload={**keep, "stale": True}, error=last_err)
+        return
+    raise ValueError(last_err)
 
 
 async def poll(now: float | None = None) -> dict[str, dict[str, Any]]:

@@ -9,9 +9,11 @@ MAX_TITLE = 240
 MAX_SUMMARY = 400
 MAX_EXPAND = 48
 MAX_IMAGE = 2000
+MAX_BYLINE = 120
 FIELD_KEYS = (
     "list", "title", "caption", "image", "imageFallback", "link",
     "filter", "imageTemplate", "linkTemplate", "expand", "expandCap", "id",
+    "author", "source", "published",
 )
 
 _PLACE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_.]*)\}")
@@ -100,8 +102,16 @@ def item_from_record(rec: dict[str, Any], fields: dict[str, Any]) -> dict[str, s
         "title": title or (image.rsplit("/", 1)[-1] if image else ""),
         "summary": caption,
         "link": link[:500] if link.startswith("https://") else "",
-        "published": _text(dig(rec, "published") or dig(rec, "date") or "", 40),
+        "published": _text(
+            (dig(rec, str(fields["published"])) if fields.get("published") else None)
+            or dig(rec, "published") or dig(rec, "date") or "", 40),
     }
+    # Optional byline overlays (carousel shows "source · author").
+    for key in ("author", "source"):
+        if fields.get(key):
+            val = _text(dig(rec, str(fields[key])), MAX_BYLINE)
+            if val:
+                row[key] = val
     if image:
         row["image"] = image
     return row

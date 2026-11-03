@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  CAROUSEL_LAYOUTS,
+  CAROUSEL_TRANSITIONS,
+  carouselArrival,
+  carouselByline,
+  carouselVariant,
   carouselCaption,
   carouselCaptionParts,
   carouselSlides,
@@ -83,5 +88,53 @@ describe("carousel-slides", () => {
     expect(line).toContain("long NASA caption");
     expect(line).toContain("superbubble");
     expect(carouselTickerSeconds(line)).toBeGreaterThanOrEqual(56);
+  });
+
+  it("carries source and author through to slides", () => {
+    const slides = carouselSlides(headlinesFromSources({
+      botz: {
+        id: "botz", kind: "http", label: "Botz.ai daily", ok: true,
+        items: [{ title: "Model ships", image: "https://botz.ai/cache/images/a.png", author: "Jo Writer", source: "Example News" }],
+      },
+    }, { source: "botz" }));
+    expect(slides[0]!.author).toBe("Jo Writer");
+    expect(slides[0]!.origin).toBe("Example News");
+    expect(carouselByline(slides[0]!)).toBe("Example News · Jo Writer");
+  });
+
+  it("byline falls back to whichever part exists", () => {
+    expect(carouselByline({ origin: "Site" })).toBe("Site");
+    expect(carouselByline({ author: "Ann" })).toBe("Ann");
+    expect(carouselByline({})).toBe("");
+    expect(carouselByline({ origin: "Same", author: "same" })).toBe("Same");
+  });
+
+  it("varies layout and transition across slides and cycles", () => {
+    const layouts = new Set<string>();
+    const transitions = new Set<string>();
+    for (let i = 0; i < 24; i++) {
+      for (let c = 0; c < 3; c++) {
+        const v = carouselVariant(`botz:${i}`, c);
+        expect(CAROUSEL_LAYOUTS).toContain(v.layout);
+        expect(CAROUSEL_TRANSITIONS).toContain(v.transition);
+        layouts.add(v.layout);
+        transitions.add(v.transition);
+      }
+    }
+    expect(layouts.size).toBeGreaterThanOrEqual(4);
+    expect(transitions.size).toBeGreaterThanOrEqual(5);
+    expect(carouselVariant("botz:3", 7)).toEqual(carouselVariant("botz:3", 7));
+  });
+
+  it("arrival ends fully in place for every transition", () => {
+    for (const kind of CAROUSEL_TRANSITIONS) {
+      const start = carouselArrival(kind, 0);
+      const end = carouselArrival(kind, 1);
+      expect(start.opacity).toBe(0);
+      expect(end.opacity).toBe(1);
+      expect(end.filter === "" || end.filter === "blur(0.00px)").toBe(true);
+      expect(end.transform === "" || /\(0\.00%\)|scale\(1\.0000\)/.test(end.transform)).toBe(true);
+    }
+    expect(carouselArrival("iris", 0.5).clipPath).toMatch(/^circle\(/);
   });
 });

@@ -48,6 +48,10 @@ export interface SourceItem {
   published?: string;
   summary?: string;
   image?: string;
+  /** Optional byline from a JSON field map (`fields.author`). */
+  author?: string;
+  /** Optional publisher / site name from a JSON field map (`fields.source`). */
+  source?: string;
 }
 
 export interface SourceLive {
@@ -77,6 +81,10 @@ export interface SourceHeadline {
   summary?: string;
   /** HTTPS still from enclosure / media:content (NASA IOTD). */
   image?: string;
+  /** Byline, when the source maps one. */
+  author?: string;
+  /** Publisher / site name, when the source maps one. */
+  origin?: string;
 }
 
 export function stripMarkup(s: string): string {
@@ -195,7 +203,10 @@ export function sourceHeadlines(
   const imageKey = bind?.imageField || "image";
   const pictured = (bind?.filter ?? "all") === "has-image" || bind?.filter === "image" || bind?.filter === "pictured";
   const out: SourceHeadline[] = [];
-  const push = (id: string, label: string, text: string, kind?: string, summary?: string, image?: string): boolean => {
+  const push = (
+    id: string, label: string, text: string, kind?: string, summary?: string, image?: string,
+    byline?: { author?: string; source?: string },
+  ): boolean => {
     const t = oneLineTitle(text);
     if (!t) return out.length >= limit;
     const href = (image || "").trim();
@@ -204,6 +215,10 @@ export function sourceHeadlines(
     const body = summary ? stripMarkup(summary).slice(0, 400) : "";
     if (body && body !== row.text) row.summary = body;
     if (href.startsWith("https://")) row.image = href.slice(0, MAX_IMAGE_HREF);
+    const author = oneLineTitle(byline?.author || "").slice(0, 120);
+    const origin = oneLineTitle(byline?.source || "").slice(0, 120);
+    if (author) row.author = author;
+    if (origin) row.origin = origin;
     out.push(row);
     return out.length >= limit;
   };
@@ -231,7 +246,7 @@ export function sourceHeadlines(
       const title = itemField(item, titleKey) || item.title || stripMarkup(item.summary || "");
       const summary = itemField(item, captionKey) || item.summary;
       const image = itemField(item, imageKey) || item.image;
-      if (push(`${live.id}:${i}`, label, title, kind, summary, image)) return out;
+      if (push(`${live.id}:${i}`, label, title, kind, summary, image, { author: item.author, source: item.source })) return out;
       taken++;
     }
     if (!live.items?.length && live.text) {

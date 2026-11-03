@@ -7,6 +7,64 @@ export interface CarouselSlide {
   label: string;
   caption?: string;
   image?: string;
+  author?: string;
+  origin?: string;
+}
+
+/** Caption placements a slide can take. */
+export const CAROUSEL_LAYOUTS = ["low-left", "high-right", "centre", "side-left", "low-right"] as const;
+/** Ways an incoming still can arrive. */
+export const CAROUSEL_TRANSITIONS = ["fade", "slide-left", "slide-up", "zoom-out", "iris", "blur"] as const;
+export type CarouselLayout = (typeof CAROUSEL_LAYOUTS)[number];
+export type CarouselTransition = (typeof CAROUSEL_TRANSITIONS)[number];
+
+function hash32(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return h >>> 0;
+}
+
+/**
+ * Layout and arrival for one showing of a still. Varies with the slide and the cycle, so a
+ * deck never settles into one fixed look (a pick that matches the last cycle's raw pick steps on).
+ */
+export function carouselVariant(id: string, cycle: number): { layout: CarouselLayout; transition: CarouselTransition } {
+  const pick = <T,>(list: readonly T[], salt: string): T => {
+    const at = hash32(`${id}\u0001${cycle}\u0001${salt}`) % list.length;
+    const prev = hash32(`${id}\u0001${cycle - 1}\u0001${salt}`) % list.length;
+    return list[at === prev ? (at + 1) % list.length : at]!;
+  };
+  return { layout: pick(CAROUSEL_LAYOUTS, "layout"), transition: pick(CAROUSEL_TRANSITIONS, "transition") };
+}
+
+/**
+ * Inline style for an incoming still `t` (0…1) of the way through its arrival.
+ * Opacity always ramps with `t`; the transition adds motion, a mask, or a blur.
+ */
+export function carouselArrival(kind: CarouselTransition, t: number): { opacity: number; transform: string; clipPath: string; filter: string } {
+  const x = Math.min(1, Math.max(0, t));
+  const e = x * x * (3 - 2 * x);
+  const out = { opacity: e, transform: "", clipPath: "", filter: "" };
+  switch (kind) {
+    case "slide-left": out.transform = `translateX(${((1 - e) * 18).toFixed(2)}%)`; break;
+    case "slide-up": out.transform = `translateY(${((1 - e) * 14).toFixed(2)}%)`; break;
+    case "zoom-out": out.transform = `scale(${(1 + (1 - e) * 0.22).toFixed(4)})`; break;
+    case "iris": out.opacity = Math.min(1, e * 3); out.clipPath = `circle(${(e * 75).toFixed(2)}% at 50% 50%)`; break;
+    case "blur": out.filter = `blur(${((1 - e) * 18).toFixed(2)}px)`; break;
+    default: break;
+  }
+  return out;
+}
+
+/** "Source · Author" overlay line; empty when the source maps neither. */
+export function carouselByline(slide: Pick<CarouselSlide, "author" | "origin">): string {
+  const origin = (slide.origin ?? "").trim();
+  const author = (slide.author ?? "").trim();
+  if (origin && author && origin.toLowerCase() !== author.toLowerCase()) return `${origin} · ${author}`;
+  return origin || author;
 }
 
 /** Bound source items — pictured rows stay on the stage. */
@@ -30,6 +88,8 @@ export function carouselSlides(headlines: SourceHeadline[], cap = FEED_SLIDE_LIM
     label: h.label,
     caption: h.summary,
     image: h.image,
+    ...(h.author ? { author: h.author } : {}),
+    ...(h.origin ? { origin: h.origin } : {}),
   }));
 }
 
