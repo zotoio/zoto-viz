@@ -264,7 +264,7 @@ import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-vi
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { applyVizWriteBatch } from "../plugins/viz-write-batch";
 import { notePackPerfPresent } from "./pack-perf-report";
-import { createHostMeshBridge, mountPaneHostMeshes, tryApplyHostMeshBridge } from "./host-mesh-bridge";
+import { createHostMeshBridge, hostMeshModelSet, mountPaneHostMeshes, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { installTileSkyShader } from "./plugin-sky-compile";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
@@ -325,7 +325,12 @@ mountWallNoticeRegion($("wall"));
 if (renderHost.software) document.body.dataset.softgl = "";
 const scene = new NetScene($("scene"), { host: renderHost });
 bootRenderScaleGpuTimer(scene, renderHost.gl);
-const hostMeshBridge = createHostMeshBridge(() => sandboxDrivenScene(), (packId) => hostMeshCanPlace(packId));
+// The third argument is the pack's host-mesh model set (Standard / HD) from its settings.
+const hostMeshBridge = createHostMeshBridge(() => sandboxDrivenScene(), (packId) => hostMeshCanPlace(packId), (spec) => {
+  const set = hostMeshModelSet(sandboxPluginConfig(spec));
+  hostMeshSetMounted.set(spec.id, set);
+  return set;
+});
 scene.retargetPanel("main");
 const panel = new Panel($("panel"), scene);
 let selectedIp: string | null = null; // the graph selection becomes the arcade views' source / device when one is entered
@@ -716,7 +721,12 @@ function mountPaneScene(id: string, paneScene: NetScene): void {
   if (pluginNeedsReview(spec)) {
     void ensureReviewed(spec, refreshPluginSignal.signal, { wait: false }).catch(() => {});
   }
-  void mountPaneHostMeshes(lane, spec, () => mosaic?.graphScene(id) === paneScene).catch(() => {});
+  void mountPaneHostMeshes(
+    lane,
+    spec,
+    () => mosaic?.graphScene(id) === paneScene,
+    hostMeshModelSet(sandboxPluginConfig(spec)),
+  ).catch(() => {});
 }
 /** Mosaic pane showing a sandboxed pack that the single sandbox is not driving. */
 function mosaicPanePreviewOnly(tileId: string): boolean {
@@ -913,8 +923,20 @@ const sandboxConfigBatcher = new SandboxConfigBatcher(
   (id) => cancelAnimationFrame(id),
 );
 
+/** Model set each pack's host meshes were last mounted with, so a settings change remounts them. */
+const hostMeshSetMounted = new Map<string, string>();
+function remountHostMeshesOnModelSet(storeId: string, config: Record<string, string>): void {
+  const spec = activePluginSpec;
+  if (!spec?.assets?.length || configStoreId(spec) !== storeId) return;
+  const set = hostMeshModelSet(config);
+  const was = hostMeshSetMounted.get(spec.id);
+  if (was === undefined || was === set) return;
+  void hostMeshBridge.mountPack(spec);
+}
+
 function scheduleSandboxSetConfig(storeId: string, config: Record<string, string>): void {
   sandboxConfigBatcher.schedule(storeId, config);
+  remountHostMeshesOnModelSet(storeId, config);
 }
 
 function cancelScheduledSandboxConfig(): void {

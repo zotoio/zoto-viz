@@ -119,6 +119,7 @@ export const PRESET_CAPS: Record<KoiPresetId, { maxKoi: number; maxParticles: nu
 
 export const CONFIG_KEYS = [
   "preset",
+  "modelSet",
   "randomise",
   "undoRandom",
   "resetSettings",

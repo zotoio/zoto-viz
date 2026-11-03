@@ -65,6 +65,16 @@ assets:
     sha256: 39e06328def10361df8dae6994277fa357ff11a3c4abf5872ed353031d32d5d2
     bytes: 106856
     triangles: 4264
+  - id: aquarium-plants-hd
+    path: assets/aquarium-plants-hd.glb
+    sha256: 4585f999a093143af3f0b236bf20c0a4730710769327f5c38980b8188e8db0cb
+    bytes: 29408
+    triangles: 3964
+  - id: aquarium-substrate-hd
+    path: assets/aquarium-substrate-hd.glb
+    sha256: a597fde6a8a63435dd714913ee5854c148f8d72f902bafd400f8f0854b769cbe
+    bytes: 27440
+    triangles: 2456
 viz:
   graphWalk: false
   idle:
