@@ -19,20 +19,15 @@ describe("4×4 wall", () => {
     localStorage.clear();
   });
 
-  it("(1) 4×4 builds 16 panes, and a repeated view gets a !n suffix", () => {
+  it("(1) 4×4 builds 16 panes of 16 different views; a repeated view never gets a !n copy", () => {
     expect(VIZ_MAX_ACTIVE_TILES).toBe(16);
-    const views = ["plugin:cores", "plugin:memory"];
-    const slots: string[] = [];
-    while (slots.length < 16) {
-      const view = views[slots.length % views.length]!;
-      slots.push(allocateMosaicTileSlot(view, slots));
-    }
+    expect(allocateMosaicTileSlot("plugin:cores", ["plugin:cores"])).toBe("plugin:cores");
+    const slots = Array.from({ length: 16 }, (_, i) => `plugin:v${i}`);
     expect(parseMosaicTiles(slots)).toHaveLength(16);
     const ids = leafIds(defaultTree(slots, "off"));
     expect(ids).toHaveLength(16);
     expect(new Set(ids).size).toBe(16);
-    expect(ids).toContain("plugin:cores!1");
-    expect(ids).toContain("plugin:memory!1");
+    expect(leafIds(defaultTree(["plugin:cores", "plugin:cores!1", "plugin:memory"], "off"))).toEqual(["plugin:cores", "plugin:memory"]);
   });
 
   it("(2) a saved 17-tile wall is refused and storage stays", () => {

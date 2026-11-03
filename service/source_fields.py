@@ -13,7 +13,7 @@ MAX_BYLINE = 120
 FIELD_KEYS = (
     "list", "title", "caption", "image", "imageFallback", "link",
     "filter", "imageTemplate", "linkTemplate", "expand", "expandCap", "id",
-    "author", "source", "published",
+    "author", "source", "published", "pageTemplate",
 )
 
 _PLACE = re.compile(r"\{([A-Za-z_][A-Za-z0-9_.]*)\}")
@@ -114,6 +114,15 @@ def item_from_record(rec: dict[str, Any], fields: dict[str, Any]) -> dict[str, s
                 row[key] = val
     if image:
         row["image"] = image
+    # Page on the publisher's own site for this record (e.g. https://botz.ai/#{cache_key}). Only
+    # when every placeholder resolves, so a missing key never yields a bare home-page link.
+    tpl = str(fields.get("pageTemplate") or "")
+    if tpl:
+        names = _PLACE.findall(tpl)
+        if all(str(dig(rec, n) or "").strip() for n in names):
+            page = _https(subst(tpl, rec))
+            if page:
+                row["page"] = page[:500]
     return row
 
 

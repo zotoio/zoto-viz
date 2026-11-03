@@ -1,5 +1,6 @@
 import type { Mosaic } from "../graph/mosaic";
 import { placedPaneSlot } from "../graph/mosaic-layout";
+import { mosaicTileViewId } from "../graph/mosaic-tile-id";
 import { consentBlockMessage, mosaicFocusSlot, mosaicSwapFrom } from "./apply-mode-mosaic";
 import { clearConsentPendingForPane, registerConsentPending } from "./consent-pending-panes";
 
@@ -72,6 +73,12 @@ export function resolvePaneSwitchSlot(
       paneId = fallback;
     }
     if (paneId === toViewId) return { ok: true, paneId, swap: false, fromViewId: paneId, toViewId };
+    // A legacy `view!n` slot already showing this view is not a change (was "Could not change that pane").
+    const want = mosaicTileViewId(toViewId);
+    if (mosaicTileViewId(paneId) === want && !mosaic.tileIds.includes(want)) {
+      return { ok: true, paneId, swap: true, fromViewId: paneId, toViewId: want };
+    }
+    if (mosaicTileViewId(paneId) === want) return { ok: true, paneId, swap: false, fromViewId: paneId, toViewId: paneId };
     return { ok: true, paneId, swap: true, fromViewId: paneId, toViewId };
   }
 

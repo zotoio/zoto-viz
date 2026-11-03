@@ -15,12 +15,12 @@ describe("mosaic tile slot ids", () => {
     expect.hasAssertions();
   });
 
-  it("round-trips pack view ids and allocates duplicate slots", () => {
+  it("round-trips pack view ids and never mints a !n copy", () => {
     expect(mosaicTileViewId("plugin:topology")).toBe("plugin:topology");
     expect(mosaicTileViewId("plugin:topology!2")).toBe("plugin:topology");
     expect(mosaicTileSlotId("plugin:topology", 2)).toBe("plugin:topology!2");
-    expect(allocateMosaicTileSlot("plugin:topology", ["plugin:topology"])).toBe("plugin:topology!1");
-    expect(allocateMosaicTileSlot("plugin:topology", ["plugin:topology", "plugin:topology!1"])).toBe("plugin:topology!2");
+    expect(allocateMosaicTileSlot("plugin:topology", ["plugin:topology"])).toBe("plugin:topology");
+    expect(allocateMosaicTileSlot("plugin:topology", ["plugin:topology", "plugin:topology!1"])).toBe("plugin:topology");
   });
 
   it("marks placed views by tile index", () => {

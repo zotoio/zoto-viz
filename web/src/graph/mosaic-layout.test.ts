@@ -61,27 +61,28 @@ describe("close / swap / assign", () => {
     expect(structureKey(swapped)).toBe(key);
   });
 
-  it("assigns tile slot ids in order and keeps duplicate pack views", () => {
+  it("assigns tile ids in order and never keeps a view twice (legacy !n normalised)", () => {
     const t = gridTree(["a", "b", "c", "d"], 2);
-    expect(leafIds(assignTiles(t, ["plugin:x", "plugin:x!1", "y"]))).toEqual(["plugin:x", "plugin:x!1", "y", "d"]);
+    expect(leafIds(assignTiles(t, ["plugin:x", "plugin:x!1", "y"], ["plugin:x", "z"]))).toEqual(["plugin:x", "z", "y", "d"]);
+    expect(leafIds(assignTiles(t, ["plugin:x", "plugin:x!1", "y"], []))).toEqual(["plugin:x", "y", "d"]);
     expect(parseMosaicTiles(["a", "", "a", "b", 1])).toEqual(["a", "b"]);
-    expect(parseMosaicTiles(["plugin:a", "plugin:a!1"])).toEqual(["plugin:a", "plugin:a!1"]);
+    expect(parseMosaicTiles(["plugin:a", "plugin:a!1"])).toEqual(["plugin:a"]);
     const long = `plugin:${"x".repeat(100)}`;
     expect(parseMosaicTiles([long])[0]?.length).toBe(96);
   });
 
-  it("replaces one pane and copies a view already on the wall", () => {
+  it("replaces one pane and swaps with a pane already showing the view", () => {
     expect(nextPaneTiles(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
-    expect(nextPaneTiles(["a", "b", "c"], "a", "c")).toEqual(["c!1", "b", "c"]);
+    expect(nextPaneTiles(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
     expect(nextPaneTiles(["a", "b"], "a", "a")).toEqual(["a", "b"]);
-    expect(nextPaneTiles(["a", "b"], "a", "b")).toEqual(["b!1", "b"]);
+    expect(nextPaneTiles(["a", "b"], "a", "b")).toEqual(["b", "a"]);
     expect(nextPaneTiles(["a", "b"], "z", "x")).toEqual(["a", "b"]);
   });
 
   it("places and moves tile slots", () => {
     expect(placePaneTileView(["a", "b", "c"], "b", "x")).toEqual(["a", "x", "c"]);
     expect(movePaneTileView(["a", "b", "c"], "a", "c")).toEqual(["c", "b", "a"]);
-    expect(placePaneTileView(["plugin:x", "b"], "b", "plugin:x")).toEqual(["plugin:x", "plugin:x!1"]);
+    expect(placePaneTileView(["plugin:x", "b"], "b", "plugin:x")).toEqual(["b", "plugin:x"]);
   });
 
   it("mosaicPaneIdsWithViewChange lists replaced and swapped panes only", () => {

@@ -75,8 +75,8 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     expect(settingsViewDrawerRoot(settings).querySelectorAll(".plugin-pack-scope-note")).toHaveLength(0);
   });
 
-  it("shows pack scope note after second pack tile is placed via slot picker", async () => {
-    const { spec, settings, mosaic, bindThisView } = mountLive();
+  it("placing the pack on a second pane via slot picker swaps (one pack tile, no scope note)", async () => {
+    const { settings, mosaic, bindThisView } = mountLive();
     applyMosaicTiles(settings, mosaic, [...WALL4]);
     bindThisView(PACK);
     settings.openView(PACK);
@@ -84,8 +84,9 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     const { layer, g } = await editGain(settings);
     pickMosaicSlot(settings, 1, PACK);
     await editGain(settings, "7", true);
-    const note = settingsViewDrawerRoot(settings).querySelector(".plugin-pack-scope-note");
-    expect(note?.textContent).toBe(`Changes apply to all 2 ${spec.packName} tiles on this wall.`);
+    expect(mosaic.tileIds.filter((id) => id.startsWith(PACK))).toEqual([PACK]);
+    expect(settingsViewDrawerRoot(settings).querySelectorAll(".plugin-pack-scope-note")).toHaveLength(0);
+    void layer; void g;
   });
 
   it("keeps pack scope notes in sync after replacing a non-pack tile via slot picker", async () => {
@@ -95,13 +96,13 @@ describe("duplicate slot shared config > scope note follows live tile count whil
     settings.openView(PACK);
     await raf();
     await editGain(settings);
-    pickMosaicSlot(settings, 3, "plugin:topology");
+    pickMosaicSlot(settings, 1, "plugin:topology");
     await raf();
     settings.openView(PACK);
     await raf();
     expect(gain(settings).value).toBe("7");
-    const text = settingsViewDrawerRoot(settings).querySelector(".plugin-pack-scope-note")?.textContent ?? "";
-    expect(Number(/all (\d+)/.exec(text)?.[1] ?? 0)).toBeGreaterThanOrEqual(2);
+    // Legacy `!n` copies are normalised to one pack tile on load: never a duplicate.
+    expect(mosaic.tileIds.filter((id) => id.startsWith(PACK))).toEqual([PACK]);
   });
 
   it("vertical layout patch does not rebuild the view drawer while editing", async () => {

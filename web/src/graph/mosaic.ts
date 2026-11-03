@@ -10,12 +10,15 @@ import type { Device, StateMsg } from "../core/types";
 import { applyPaneChrome, takeTheme, type Theme } from "../core/themes";
 import { cycleSkyPool, type BackdropKind } from "./backdrop";
 import { hostSkyForFailedTile } from "./tile-sky-fallback";
+import { setMosaicViewKeys } from "./mosaic-tile-id";
+import { remapSavedViewId } from "../core/saved-view-id";
 import {
   inspectPaneStartup, nextGraphTile, nextHostSky, paneRecovery,
 } from "./pane-health";
 import {
   assignTiles, clampRatio, closeLeaf, defaultTree, leafIds, mosaicPaneIdsWithViewChange, nextPaneTiles, nextPaneTilesForPicker, parseMosaicNode,
   parseMosaicTiles, structureKey, swapLeaves, type MosaicDir, type MosaicNode,
+  setMosaicViewPool,
 } from "./mosaic-layout";
 import { fillViewSelect, isPickerHidden, lookForMode, mergeLook, tileDisplayName } from "../plugins/plugin";
 import { unavailablePackForView, unavailableTileNotice } from "../plugins/plugin-unavailable";
@@ -241,6 +244,26 @@ export function mosaicPanePool(): string[] {
     ...modes.filter((m) => m.standalone).map((m) => m.id),
   ];
 }
+
+setMosaicViewPool(() => mosaicPanePool());
+// Same underlying view under another id or caption (plugin instance default, retired alias, host
+// engine vs plugin:engine) counts as a duplicate.
+setMosaicViewKeys((viewId) => {
+  const v = remapSavedViewId(viewId);
+  const raw = v.startsWith("plugin:") ? v.slice("plugin:".length) : v;
+  const known = allModes().some((row) => row.id === v) || !!hostEngine(raw) || !!hostEngine(v);
+  // An unknown id falls back to some default mode in mosaicPaneMode: never alias it to that.
+  if (!known) return [`id:${v}`];
+  const m = mosaicPaneMode(v);
+  const keys = [`id:${v}`, `id:${m.id}`];
+  if (m.pluginId) {
+    const inst = v.startsWith("plugin:") ? v.slice("plugin:".length).split(":")[1] : "";
+    keys.push(`pack:${m.pluginId}:${inst && inst !== m.pluginId ? inst : ""}`);
+  }
+  const cap = viewCaption(m).trim().toLowerCase();
+  if (cap) keys.push(`cap:${cap}`);
+  return keys;
+});
 
 function panePool(): string[] {
   return mosaicPanePool();

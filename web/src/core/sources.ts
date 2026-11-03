@@ -52,6 +52,8 @@ export interface SourceItem {
   author?: string;
   /** Optional publisher / site name from a JSON field map (`fields.source`). */
   source?: string;
+  /** This record's page on the source's own site (`fields.pageTemplate`, e.g. a botz.ai permalink). */
+  page?: string;
 }
 
 export interface SourceLive {
@@ -85,6 +87,8 @@ export interface SourceHeadline {
   author?: string;
   /** Publisher / site name, when the source maps one. */
   origin?: string;
+  /** HTTPS page for this item on the source's own site (carousel "open" button). */
+  page?: string;
 }
 
 /** Decode the HTML entities feeds leave in plain-text titles ("read &amp; write"). */
@@ -217,7 +221,7 @@ export function sourceHeadlines(
   const out: SourceHeadline[] = [];
   const push = (
     id: string, label: string, text: string, kind?: string, summary?: string, image?: string,
-    byline?: { author?: string; source?: string },
+    byline?: { author?: string; source?: string; page?: string },
   ): boolean => {
     const t = oneLineTitle(decodeEntities(text));
     if (!t) return out.length >= limit;
@@ -231,6 +235,8 @@ export function sourceHeadlines(
     const origin = oneLineTitle(decodeEntities(byline?.source || "")).slice(0, 120);
     if (author) row.author = author;
     if (origin) row.origin = origin;
+    const page = (byline?.page || "").trim();
+    if (page.startsWith("https://")) row.page = page.slice(0, 500);
     out.push(row);
     return out.length >= limit;
   };
@@ -258,7 +264,7 @@ export function sourceHeadlines(
       const title = itemField(item, titleKey) || item.title || stripMarkup(item.summary || "");
       const summary = itemField(item, captionKey) || item.summary;
       const image = itemField(item, imageKey) || item.image;
-      if (push(`${live.id}:${i}`, label, title, kind, summary, image, { author: item.author, source: item.source })) return out;
+      if (push(`${live.id}:${i}`, label, title, kind, summary, image, { author: item.author, source: item.source, page: item.page })) return out;
       taken++;
     }
     if (!live.items?.length && live.text) {
