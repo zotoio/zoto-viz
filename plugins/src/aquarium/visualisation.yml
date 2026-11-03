@@ -145,6 +145,7 @@ config:
     min: 0
     max: 600
     hint: "Debug only: seconds between eats for a test capture. 0 = off (normal rare rate)."
+    randomise: false
   - key: sp_neon
     label: neon tetra
     type: boolean
