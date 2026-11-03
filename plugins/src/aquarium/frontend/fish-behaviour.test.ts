@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { VizTalkerSample } from "../../../sdk/viz-contract";
 import { AquariumSim, parseAquariumOptions } from "./aquarium";
 import { FRESH_TRAITS, REEF_TRAITS, stepSchool, TANK, type SwimFish, type SwimWorld } from "./fish-behaviour";
 
@@ -111,12 +112,12 @@ describe("fish behaviour", () => {
 
 describe("aquarium sim feeds the host real motion", () => {
   it("moves slotted fish around and exposes turn rate + phase per slot", () => {
-    const talkers = Array.from({ length: 5 }, (_, i) => ({ id: `10.0.0.${i}`, rate: 20 + i * 30, role: "lan" }));
+    const talkers: VizTalkerSample[] = Array.from({ length: 5 }, (_, i) => ({ id: `10.0.0.${i}`, rate: 20 + i * 30, role: "lan" }));
     const sim = new AquariumSim(parseAquariumOptions({ preset: "planted", fishCount: "5" }));
     const start: number[] = [];
     let turned = 0;
     for (let i = 0; i < 1800; i++) {
-      sim.advance({ t: i / 60, dt: 1 / 60, audio: 0, talkers: talkers as never, packets: [], demo: false });
+      sim.advance({ t: i / 60, dt: 1 / 60, audio: 0, talkers, packets: [], demo: false });
       if (i === 0) for (let k = 0; k < 20; k++) start.push(sim.slot1[k]!);
       turned += sim.fishMotion().turn.reduce((s, r) => s + Math.abs(r), 0);
     }
