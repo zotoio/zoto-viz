@@ -8,6 +8,7 @@ import {
   carouselByline,
   carouselCaptionParts,
   carouselVariant,
+  stillFit,
   carouselSlides,
   headlinesFromSources,
   type CarouselSlide,
@@ -30,6 +31,7 @@ export class CarouselView extends Stage3D {
   private readonly capBody: HTMLElement;
   private readonly capMeta: HTMLElement;
   private layoutKey = "";
+  private fitKey = "";
   /** Shown while the bound source serves its own bundled demo stills (`demo: true`). */
   readonly sampleEl: HTMLElement;
   private slides: CarouselSlide[] = [];
@@ -154,10 +156,27 @@ export class CarouselView extends Stage3D {
     this.paintCaption(capSlide);
     if (capSlide) this.applyLayout(capSlide.id, fade >= 0.5 ? this.cycleN + 1 : this.cycleN);
     this.capEl.style.opacity = (fade < 0.5 ? 1 - fade * 2 : (fade - 0.5) * 2).toFixed(3);
+    this.fitStills();
     this.camOrbit.target.set(0, 1.05, 0);
     this.camOrbit.radius = 4;
     this.camOrbit.theta = 0;
     this.camOrbit.phi = Math.PI / 2;
+  }
+
+  /** Cover or contain each still for the panel's current shape; re-run only when either changes. */
+  private fitStills(): void {
+    const bw = this.stillEl.clientWidth;
+    const bh = this.stillEl.clientHeight;
+    const key = `${bw}x${bh}|${this.imgA.naturalWidth}x${this.imgA.naturalHeight}|${this.imgB.naturalWidth}x${this.imgB.naturalHeight}|${this.front === this.imgA ? "a" : "b"}|${baseSrc(this.front)}`;
+    if (key === this.fitKey) return;
+    this.fitKey = key;
+    for (const el of [this.imgA, this.imgB]) {
+      el.dataset.fit = stillFit(el.naturalWidth, el.naturalHeight, bw, bh);
+    }
+    const frontFit = this.front.dataset.fit ?? "cover";
+    this.stillEl.dataset.fit = frontFit;
+    const src = baseSrc(this.front);
+    this.stillEl.style.setProperty("--still-bg", frontFit === "contain" && src ? `url("${src.replace(/"/g, "%22")}")` : "none");
   }
 
   /** Incoming still: the slide's varied arrival (slide, zoom, iris, blur, fade). */

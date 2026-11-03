@@ -133,3 +133,11 @@ describe("sourceHeadlines", () => {
     expect(texts).toContain("HN:Show HN");
   });
 });
+
+describe("decodeEntities", () => {
+  it("decodes feed entities in titles", async () => {
+    const { decodeEntities } = await import("./sources");
+    expect(decodeEntities("read &amp; write &quot;x&quot; &#39;y&#39; &#8212;")).toBe("read & write \"x\" 'y' —");
+    expect(decodeEntities("&amp;lt;")).toBe("&lt;");
+  });
+});

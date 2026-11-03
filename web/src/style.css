@@ -194,12 +194,32 @@ body[data-softgl] .brand::after {
   overflow: hidden;
   background: #07090f;
   pointer-events: none;
+  /* Captions size off the panel, not the window: a mosaic tile gets tile-sized type. */
+  container-type: size;
+  container-name: still;
 }
+/* Mosaic tiles sit under their own pane chrome; the global bar offset does not apply. */
+:is(#carousel, .arcade.carousel).mosaic-live .carousel-still { inset: 0; }
+/* Top-anchored captions clear the pane's own header row (picker + look/max/close). */
+:is(#carousel, .arcade.carousel).mosaic-live .carousel-still[data-layout="high-right"] .carousel-caption { padding-top: 2.6rem; }
+/* Blurred cover of the current still behind a contain-fit picture: no bare letterbox bars. */
+:is(#carousel, .arcade.carousel) .carousel-still::before {
+  content: "";
+  position: absolute;
+  inset: -6%;
+  background: var(--still-bg, none) center / cover no-repeat;
+  filter: blur(28px) brightness(0.55) saturate(1.1);
+  opacity: 0;
+  transition: opacity 0.8s ease;
+}
+:is(#carousel, .arcade.carousel) .carousel-still[data-fit="contain"]::before { opacity: 1; }
 :is(#carousel, .arcade.carousel) .carousel-still img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
+  /* Fit to height: carousel.ts picks cover (wider still, sides cropped) or contain (narrower
+     still, sides padded over the blurred copy) so the picture always spans the full height. */
   object-fit: cover;
   object-position: center;
   transform-origin: center center;
@@ -207,6 +227,7 @@ body[data-softgl] .brand::after {
   opacity: 0;
   pointer-events: none;
 }
+:is(#carousel, .arcade.carousel) .carousel-still img[data-fit="contain"] { object-fit: contain; object-position: center; }
 :is(#carousel, .arcade.carousel) canvas:not(.look) { opacity: 0; }
 :is(#carousel, .arcade.carousel) .carousel-caption {
   position: absolute;
@@ -215,55 +236,85 @@ body[data-softgl] .brand::after {
   bottom: 0;
   z-index: 3;
   box-sizing: border-box;
-  padding: 4.5rem 5vw 1.8rem;
+  max-height: 100%;
+  overflow: hidden;
+  padding: clamp(1.5rem, 9cqh, 4.5rem) clamp(0.8rem, 5cqi, 4rem) clamp(0.7rem, 4cqh, 1.8rem);
   pointer-events: none;
-  background: linear-gradient(180deg, transparent 0%, rgba(7, 9, 15, 0.55) 42%, rgba(7, 9, 15, 0.92) 100%);
+  background: linear-gradient(180deg, transparent 0%, rgba(7, 9, 15, 0.6) 38%, rgba(7, 9, 15, 0.94) 100%);
   color: #f4e8c8;
-  text-shadow: 0 1px 10px #000, 0 0 24px #000;
+  text-shadow: 0 1px 8px #000, 0 0 20px #000;
+  overflow-wrap: anywhere;
+  hyphens: auto;
 }
 :is(#carousel, .arcade.carousel) .carousel-caption-title {
-  display: block;
-  font: 750 clamp(1.7rem, 4.6vw, 3.6rem)/1.12 ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: -0.02em;
-  max-width: 72rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  overflow: hidden;
+  font: 750 clamp(0.95rem, min(5.4cqi, 8.5cqh), 3.6rem)/1.14 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.015em;
+  max-width: min(72rem, 100%);
+  text-wrap: balance;
 }
 :is(#carousel, .arcade.carousel) .carousel-caption-body {
-  display: block;
-  margin-top: 0.65rem;
-  font: 500 clamp(1.05rem, 2.1vw, 1.7rem)/1.4 ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: 0.01em;
-  max-width: 58rem;
-  max-height: 8.4rem;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
+  margin-top: 0.5em;
+  font: 500 clamp(0.75rem, min(2.4cqi, 4.2cqh), 1.6rem)/1.35 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.01em;
+  max-width: min(58rem, 100%);
 }
 :is(#carousel, .arcade.carousel) .carousel-caption-body[hidden] { display: none; }
 :is(#carousel, .arcade.carousel) .carousel-caption-meta {
   display: block;
-  margin-bottom: 0.55rem;
-  font: 650 clamp(0.85rem, 1.4vw, 1.15rem)/1.3 ui-sans-serif, system-ui, sans-serif;
-  letter-spacing: 0.14em;
+  margin-bottom: 0.5em;
+  font: 650 clamp(0.62rem, min(1.5cqi, 3cqh), 1.1rem)/1.3 ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
   color: #ffc56b;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 :is(#carousel, .arcade.carousel) .carousel-caption-meta[hidden] { display: none; }
-:is(#carousel, .arcade.carousel) .carousel-caption { transition: padding 0.6s ease, text-align 0.6s ease; }
 :is(#carousel, .arcade.carousel) .carousel-still[data-layout="high-right"] .carousel-caption {
-  top: 0; bottom: auto; padding: 1.8rem 5vw 4.5rem; text-align: right;
+  top: 0; bottom: auto; text-align: right;
+  padding: clamp(0.7rem, 4cqh, 1.8rem) clamp(0.8rem, 5cqi, 4rem) clamp(1.5rem, 9cqh, 4.5rem);
   display: flex; flex-direction: column; align-items: flex-end;
-  background: linear-gradient(0deg, transparent 0%, rgba(7, 9, 15, 0.55) 42%, rgba(7, 9, 15, 0.92) 100%);
+  background: linear-gradient(0deg, transparent 0%, rgba(7, 9, 15, 0.6) 38%, rgba(7, 9, 15, 0.94) 100%);
 }
 :is(#carousel, .arcade.carousel) .carousel-still[data-layout="centre"] .carousel-caption {
   top: 0; display: flex; flex-direction: column; justify-content: center; align-items: center;
-  text-align: center; padding: 0 10vw;
-  background: radial-gradient(ellipse at center, rgba(7, 9, 15, 0.78) 0%, rgba(7, 9, 15, 0.35) 55%, transparent 80%);
+  text-align: center; padding: 0 clamp(0.8rem, 9cqi, 8rem);
+  background: radial-gradient(ellipse 75% 60% at center, rgba(7, 9, 15, 0.86) 0%, rgba(7, 9, 15, 0.55) 60%, rgba(7, 9, 15, 0.2) 100%);
 }
 :is(#carousel, .arcade.carousel) .carousel-still[data-layout="side-left"] .carousel-caption {
-  top: 0; right: auto; width: min(42rem, 46vw); display: flex; flex-direction: column; justify-content: center;
-  padding: 0 3vw 0 5vw;
-  background: linear-gradient(90deg, rgba(7, 9, 15, 0.92) 0%, rgba(7, 9, 15, 0.6) 70%, transparent 100%);
+  top: 0; right: auto; width: min(42rem, 52cqi); display: flex; flex-direction: column; justify-content: center;
+  padding: 0 clamp(0.6rem, 3cqi, 2.5rem) 0 clamp(0.8rem, 5cqi, 4rem);
+  background: linear-gradient(90deg, rgba(7, 9, 15, 0.94) 0%, rgba(7, 9, 15, 0.7) 70%, transparent 100%);
 }
 :is(#carousel, .arcade.carousel) .carousel-still[data-layout="low-right"] .carousel-caption {
   text-align: right; display: flex; flex-direction: column; align-items: flex-end;
+}
+/* Narrow or short panels: side and centre placements would squeeze the headline; fall back
+   to a full-width band (top or bottom keeps the variety). */
+@container still (max-width: 560px) {
+  :is(#carousel, .arcade.carousel) .carousel-still[data-layout="side-left"] .carousel-caption,
+  :is(#carousel, .arcade.carousel) .carousel-still[data-layout="centre"] .carousel-caption {
+    top: auto; bottom: 0; right: 0; width: auto; justify-content: flex-end; align-items: flex-start; text-align: left;
+    padding: clamp(1.5rem, 9cqh, 4.5rem) clamp(0.8rem, 5cqi, 4rem) clamp(0.7rem, 4cqh, 1.8rem);
+    background: linear-gradient(180deg, transparent 0%, rgba(7, 9, 15, 0.6) 38%, rgba(7, 9, 15, 0.94) 100%);
+  }
+  :is(#carousel, .arcade.carousel) .carousel-caption-title { font-size: clamp(0.9rem, 7cqi, 1.6rem); }
+}
+@container still (max-height: 260px) {
+  :is(#carousel, .arcade.carousel) .carousel-caption-body { display: none; }
+  :is(#carousel, .arcade.carousel) .carousel-caption-title { -webkit-line-clamp: 2; line-clamp: 2; }
 }
 body.arcade #scene { pointer-events: none; }
 body.arcade #scene canvas { pointer-events: none; }

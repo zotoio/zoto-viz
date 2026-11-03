@@ -87,6 +87,18 @@ export interface SourceHeadline {
   origin?: string;
 }
 
+/** Decode the HTML entities feeds leave in plain-text titles ("read &amp; write"). */
+export function decodeEntities(s: string): string {
+  return s
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, "\"")
+    .replace(/&#0*39;|&apos;/g, "'")
+    .replace(/&#(\d{1,6});/g, (_, n: string) => String.fromCodePoint(Math.min(0x10ffff, Number(n))))
+    .replace(/&amp;/g, "&");
+}
+
 export function stripMarkup(s: string): string {
   return s
     .replace(/<[^>]+>/g, " ")
@@ -207,7 +219,7 @@ export function sourceHeadlines(
     id: string, label: string, text: string, kind?: string, summary?: string, image?: string,
     byline?: { author?: string; source?: string },
   ): boolean => {
-    const t = oneLineTitle(text);
+    const t = oneLineTitle(decodeEntities(text));
     if (!t) return out.length >= limit;
     const href = (image || "").trim();
     if (pictured && !href.startsWith("https://")) return out.length >= limit;
@@ -215,8 +227,8 @@ export function sourceHeadlines(
     const body = summary ? stripMarkup(summary).slice(0, 400) : "";
     if (body && body !== row.text) row.summary = body;
     if (href.startsWith("https://")) row.image = href.slice(0, MAX_IMAGE_HREF);
-    const author = oneLineTitle(byline?.author || "").slice(0, 120);
-    const origin = oneLineTitle(byline?.source || "").slice(0, 120);
+    const author = oneLineTitle(decodeEntities(byline?.author || "")).slice(0, 120);
+    const origin = oneLineTitle(decodeEntities(byline?.source || "")).slice(0, 120);
     if (author) row.author = author;
     if (origin) row.origin = origin;
     out.push(row);

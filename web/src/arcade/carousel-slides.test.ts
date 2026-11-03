@@ -5,6 +5,7 @@ import {
   carouselArrival,
   carouselByline,
   carouselVariant,
+  stillFit,
   carouselCaption,
   carouselCaptionParts,
   carouselSlides,
@@ -136,5 +137,19 @@ describe("carousel-slides", () => {
       expect(end.transform === "" || /\(0\.00%\)|scale\(1\.0000\)/.test(end.transform)).toBe(true);
     }
     expect(carouselArrival("iris", 0.5).clipPath).toMatch(/^circle\(/);
+  });
+});
+
+describe("stillFit (fit to height)", () => {
+  it("crops the sides when the still is wider than the panel", () => {
+    expect(stillFit(1792, 1024, 1400, 900)).toBe("cover");
+    expect(stillFit(1792, 1024, 360, 640)).toBe("cover");
+  });
+  it("pads the sides when the still is narrower than the panel", () => {
+    expect(stillFit(1792, 1024, 1400, 598)).toBe("contain");
+    expect(stillFit(800, 1200, 1400, 740)).toBe("contain");
+  });
+  it("defaults to cover before the still has loaded", () => {
+    expect(stillFit(0, 0, 800, 600)).toBe("cover");
   });
 });
