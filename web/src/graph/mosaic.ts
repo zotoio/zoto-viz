@@ -426,7 +426,14 @@ export class Mosaic {
         pane.querySelector(".mosaic-pane-preview-backdrop")?.remove();
         continue;
       }
-      if (existing) continue;
+      if (existing) {
+        // Panes are reused across views (dice, pane pick): keep the backdrop name on this pane's
+        // own view, not the one it was first built for (Blob Mesh showed Marble Run's).
+        const nameEl = pane.querySelector(".mosaic-pane-preview-name");
+        const want = this.previewName(id);
+        if (nameEl && nameEl.textContent !== want) nameEl.textContent = want;
+        continue;
+      }
       // Without its sandbox the pack's sky has no data (Koi's comes out near-white), so the
       // pane shows the theme background and the pack's name behind the chrome and caption.
       const backdrop = document.createElement("div");

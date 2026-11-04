@@ -1541,12 +1541,17 @@ async function installPluginSky(
   const signal = ctl.signal();
   const waitKey = skyWaitKey(target, paneId);
   if (target.pluginSkyDrawn !== spec.id) beginSkyWait(waitKey, target, spec, paneId, signal);
+  // Weak: the abort signal can outlive the pane (refreshPluginSignal), and a strong ref here kept
+  // every dropped pane's NetScene and DOM alive.
+  const targetRef = new WeakRef(target);
   const disposeSky = () => {
     // A newer sync took this load over; its own abort (not this one) decides.
     if (ctl.signal() !== signal || !ctl.current()) return;
-    target.setPluginShader(null);
-    skyInstalled.delete(target);
-    if (target === scene) skyLoaded = "";
+    const t = targetRef.deref();
+    if (!t) return;
+    t.setPluginShader(null);
+    skyInstalled.delete(t);
+    if (t === scene) skyLoaded = "";
   };
   addModeSwitchAbortListener(signal, disposeSky, { once: true });
   try {
