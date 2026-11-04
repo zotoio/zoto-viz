@@ -10,11 +10,9 @@ type FakeHost = {
   onConfig?: (c: Record<string, string>) => void;
 };
 
-const g: { zoto?: FakeHost } = globalThis;
-
 describe("koi-pond boot", () => {
   afterEach(() => {
-    delete g.zoto;
+    Reflect.deleteProperty(globalThis, "zoto");
     vi.resetModules();
   });
 
@@ -24,7 +22,7 @@ describe("koi-pond boot", () => {
       writeBuffer: vi.fn(),
       writeUniform: vi.fn(),
     };
-    g.zoto = host;
+    Reflect.set(globalThis, "zoto", host);
     await import("./index");
     const seen = new Map<number, Set<string>>();
     for (let i = 0; i < 30; i++) {
