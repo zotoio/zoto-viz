@@ -3,6 +3,10 @@ import { Panel } from "../ui/panel";
 import { allModes, arcadeSlotFor, defaultCatalogMode, defaultOpts, hostEngine, modeById, type ViewMode } from "../core/modes";
 import { flagMissingLayoutViews } from "./layout-missing-views";
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";
+import { StateStream } from "./ws-stream";
+import { installGlobalErrorReporting, startPageHealth } from "./page-health";
+import { sharedAudioInUse } from "../audio/audio-manager";
+import { streamConfigFromSettings } from "./recovery-config";
 import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
@@ -281,6 +285,10 @@ import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
 
 ignoreResizeLoopError();
+if (!import.meta.env.VITEST) {
+  installGlobalErrorReporting();
+  startPageHealth(sharedAudioInUse);
+}
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -3604,19 +3612,21 @@ function applyStats(m: StateMsg): void {
 
 function connect(): void {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws`);
   const dot = $("conn");
-  ws.onopen = () => {
-    dot.classList.add("ok");
-    void bootSession().then(() => profiles?.recover());
-  };
-  ws.onmessage = (ev) => {
-    const m = JSON.parse(ev.data) as StateMsg;
-    if (m.type !== "state") return;
-    feed(m);
-  };
-  ws.onclose = () => { dot.classList.remove("ok"); setTimeout(connect, 2000); };
-  ws.onerror = () => ws.close();
+  const stream = new StateStream(
+    { url: `${proto}://${location.host}/ws?proto=delta` },
+    {
+      onOpen: () => {
+        dot.classList.add("ok");
+        void bootSession().then(() => profiles?.recover());
+      },
+      onClose: () => { dot.classList.remove("ok"); },
+      onState: (m) => feed(m as unknown as StateMsg),
+      onLog: (t) => console.info(`zoto-viz ${t}`),
+    },
+    streamConfigFromSettings(),
+  );
+  stream.start();
 }
 
 if (!import.meta.env.VITEST) {
