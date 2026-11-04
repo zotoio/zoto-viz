@@ -5,6 +5,7 @@ import {
   STEP_ORDER, type CertInfo, type ForensicsJob, type IdentityData, type MdnsData, type NetbiosData, type PortsData, type Step,
   type StepName, type TlsData, type UpnpData,
 } from "../core/types";
+import { visiblePoll } from "../core/visible-poll";
 
 export function safeHttpUrl(raw: string): string | null {
   try {
@@ -37,6 +38,8 @@ export class ForensicsView {
   private ip: string | null = null;
   private job: ForensicsJob | null = null;
   private timer: number | null = null;
+  /** skipped while the tab is hidden; one catch-up poll on return */
+  private readonly pollVisible = visiblePoll(() => { void this.poll(); });
   private inflight = false;
   /** <details> sections the user opened/closed, remembered across re-renders */
   private openSections = new Set<string>(["summary", "ports", "mdns", "upnp", "hostscripts"]);
@@ -113,7 +116,7 @@ export class ForensicsView {
   }
 
   private ensurePolling(): void {
-    if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
+    if (this.timer === null) this.timer = window.setInterval(this.pollVisible, POLL_MS);
   }
 
   private async poll(): Promise<void> {
