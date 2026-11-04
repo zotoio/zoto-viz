@@ -646,14 +646,12 @@ function paneAspect(tileId: string): number | undefined {
 }
 function panePixels(tileId: string): number | undefined {
   const el = mosaic?.graphScene(tileId)?.viewEl;
-  const dpr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : 1;
-  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0) * dpr * dpr;
+  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
   return a > 0 ? a : undefined;
 }
 function stagePresentPixels(): number | undefined {
   const el = $("scene");
-  const dpr = typeof devicePixelRatio === "number" && devicePixelRatio > 0 ? devicePixelRatio : 1;
-  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0) * dpr * dpr;
+  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
   return a > 0 ? a : undefined;
 }
 
