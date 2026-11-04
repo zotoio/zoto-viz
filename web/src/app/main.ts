@@ -269,7 +269,8 @@ import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-vi
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { applyVizWriteBatch } from "../plugins/viz-write-batch";
 import { notePackPerfPresent } from "./pack-perf-report";
-import { createHostMeshBridge, hostMeshModelSet, mountPaneHostMeshes, tryApplyHostMeshBridge } from "./host-mesh-bridge";
+import { PaneSizeCache } from "./pane-size-cache";
+import { applyPaneHostMeshSlot, createHostMeshBridge, hostMeshModelSet, mountPaneHostMeshes, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { installTileSkyShader } from "./plugin-sky-compile";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
@@ -569,6 +570,10 @@ const tileSandboxes = new TileSandboxes<PluginSandbox>({
   noticeHost: () => mosaic,
   noteWrite: (tileId) => tileHealth?.noteSandboxWrite(tileId),
   forgetSandboxWrites: (tileId) => tileHealth?.forgetSandboxWrites(tileId),
+  hostMeshWrite: (tileId, spec, slot, data) => {
+    const pane = mosaic?.on ? mosaic.graphScene(tileId) : null;
+    applyPaneHostMeshSlot(pane?.hostMeshLane, spec, vizContractFor(spec), slot, data);
+  },
 });
 /** #233: panes the shared sandbox's UBO reaches (a pane with its own sandbox draws its own). */
 function sharedUboPanes(): { tileIds: readonly string[]; graphScene: (id: string) => NetScene | null } | null {
@@ -638,21 +643,16 @@ function paneSkyTime(_tileId: string): number | undefined {
   // pluginClock deltas (fluid-dyn) would freeze on it.
   return scene.skyTime();
 }
+/** Pane sizes from a ResizeObserver, not a clientWidth read per pane per frame. */
+const paneSizes = new PaneSizeCache();
 function paneAspect(tileId: string): number | undefined {
-  const el = mosaic?.graphScene(tileId)?.viewEl;
-  const w = el?.clientWidth ?? 0;
-  const h = el?.clientHeight ?? 0;
-  return w > 0 && h > 0 ? w / h : undefined;
+  return paneSizes.aspect(mosaic?.graphScene(tileId)?.viewEl);
 }
 function panePixels(tileId: string): number | undefined {
-  const el = mosaic?.graphScene(tileId)?.viewEl;
-  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
-  return a > 0 ? a : undefined;
+  return paneSizes.pixels(mosaic?.graphScene(tileId)?.viewEl);
 }
 function stagePresentPixels(): number | undefined {
-  const el = $("scene");
-  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
-  return a > 0 ? a : undefined;
+  return paneSizes.pixels($("scene"));
 }
 
 const presentDriveDeps = {

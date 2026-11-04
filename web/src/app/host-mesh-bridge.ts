@@ -34,6 +34,21 @@ export function tryApplyHostMeshBridge(
   bridge.applySlotBuffer(data);
 }
 
+/** A pane sandbox's host-mesh slot write into that pane's own lane (same slot window as the bridge). */
+export function applyPaneHostMeshSlot(
+  lane: Pick<HostMeshLane, "applySlotBuffer"> | null | undefined,
+  spec: PluginView,
+  contract: VizPluginContract | undefined,
+  slot: number,
+  data: number[],
+): boolean {
+  if (!lane || !spec.assets?.length) return false;
+  const base = hostMeshBufferSlot(contract);
+  if (slot < base || slot >= base + hostMeshSlotCount(contract)) return false;
+  lane.applySlotBuffer(data);
+  return true;
+}
+
 /** Suffix of an asset id that is the HD alternative of the asset without it (`koi-ogon-hd`). */
 export const HD_ASSET_SUFFIX = "-hd";
 export type HostMeshModelSet = "standard" | "hd";
