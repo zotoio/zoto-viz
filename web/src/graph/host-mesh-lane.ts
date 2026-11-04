@@ -27,6 +27,13 @@ export function disposeHostMeshObject3D(root: THREE.Object3D): number {
   let disposes = 0;
   const closedBitmaps = new Set<object>();
   root.traverse((o) => {
+    // scenery-owned cleanup (e.g. marble-run's instanced shells/cores) and instance buffers
+    const own = o.userData?.dispose as (() => void) | undefined;
+    if (typeof own === "function") {
+      own();
+      o.userData.dispose = undefined;
+    }
+    if ((o as THREE.InstancedMesh).isInstancedMesh) (o as THREE.InstancedMesh).dispose();
     const mesh = o as THREE.Mesh;
     if (mesh.isMesh) {
       if (mesh.geometry) {

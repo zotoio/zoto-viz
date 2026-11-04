@@ -33,10 +33,31 @@ export const MR_SLOT = {
   failed: 19,
   lead: 20,
   queued: 21,
+  view: 22, // marble display scale: larger in the wide/orbit overview, 1 in chase/follow
+  idle: 23, // 1 while frames come from the viz.idle fixture
+  lowFps: 24, // 1 while frames run under ~30 fps
 } as const;
 
 /** Fail hue (Zoto Fail red) for marbles carried while sys.failed is over the threshold. */
 const FAIL_HUE = 0.004;
+
+/** Display scale of marbles in the wide/orbit overview, where real-size glass is a few pixels. */
+export const OVERVIEW_MARBLE_SCALE = 1.7;
+export function marbleViewScale(mode: string): number {
+  return mode === "chase" || mode === "follow" ? 1 : OVERVIEW_MARBLE_SCALE;
+}
+/** fps hook: below ~30 fps (frame dt EMA) the host drops the inner glass cores, halving marble draws. */
+export function lowFpsFor(dtEma: number): boolean {
+  return dtEma > 1 / 30;
+}
+/** idle hook: demo (viz.idle) frames run the lift at its calm base speed. */
+export function liftSpeedFor(rateEma: number, reduced: boolean, idle: boolean): number {
+  if (reduced) return 0.4;
+  return idle ? 0.42 : 0.42 + Math.min(0.5, rateEma / 400);
+}
+let dtEma = 1 / 60;
+let viewScale = OVERVIEW_MARBLE_SCALE;
+let idleFlag = 0;
 const QUEUE_CAP = 96;
 
 let track: TrackPath | null = null;
@@ -136,8 +157,12 @@ export function ingestFrame(frame: VizDataFrame): void {
   // speed by rate: the lift runs faster when packets arrive faster
   rateEma += ((pkts.length / dt) - rateEma) * Math.min(1, dt * 0.5);
   const reduced = opts.reducedMotion === "on";
-  s.liftSpeed = reduced ? 0.4 : 0.42 + Math.min(0.5, rateEma / 400);
+  idleFlag = frame.demo ? 1 : 0;
+  s.liftSpeed = liftSpeedFor(rateEma, reduced, idleFlag === 1);
+  dtEma += ((frame.dt > 0 ? frame.dt : SIM_DT) - dtEma) * 0.1;
   s.step(dt, marbleWorkBudget().maxSimStepsPerFrame);
+  const vmode = reduced ? "wide" : opts.cameraMode;
+  viewScale += (marbleViewScale(vmode) - viewScale) * (1 - Math.exp(-dt * 3));
   const decay = Math.exp(-dt * 5);
   bellLevel.v = Math.min(1.5, bellLevel.v * decay + s.bellHits);
   s.bellHits = 0;
@@ -271,6 +296,9 @@ export function packMarbleSlots(frame: VizDataFrame): Float32Array[] {
   h[MR_SLOT.failed] = isFrameFailed(frame) ? 1 : 0;
   h[MR_SLOT.lead] = s.leadIndex();
   h[MR_SLOT.queued] = qLen;
+  h[MR_SLOT.view] = viewScale;
+  h[MR_SLOT.idle] = idleFlag;
+  h[MR_SLOT.lowFps] = lowFpsFor(dtEma) ? 1 : 0;
   for (let m = 0; m < MR_MARBLE_SLOTS; m++) slots[1 + m]!.fill(0);
   for (let i = 0; i < s.count; i++) {
     const buf = slots[MR_MARBLE_SLOT0 + Math.floor(i / MR_MARBLES_PER_SLOT)]!;
