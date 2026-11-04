@@ -13,6 +13,7 @@ import {
   layoutDevicePxRatio,
   onLayoutDevicePxRatioChange,
 } from "../graph/render-host-device-px-ratio";
+import { visiblePoll } from "../core/visible-poll";
 export type { ChatRole, TranscriptTurn } from "./chat";
 
 const POLL_MS = 800;
@@ -120,6 +121,8 @@ export class LiveFeed {
   private cfg: FeedConfig = { ...DEFAULT_FEED };
   private graphBase = "";
   private timer: number | null = null;
+  /** skipped while the tab is hidden; one catch-up poll on return */
+  private readonly pollVisible = visiblePoll(() => { void this.poll(); });
   private inflight = false;
   private lastT = 0;
   private lines: Line[] = [];
@@ -306,7 +309,7 @@ export class LiveFeed {
 
   private start(): void {
     if (this.timer !== null) return;
-    this.timer = window.setInterval(() => void this.poll(), POLL_MS);
+    this.timer = window.setInterval(this.pollVisible, POLL_MS);
     this.raf = requestAnimationFrame(this.loop);
     void this.poll();
   }

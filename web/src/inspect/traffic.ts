@@ -3,6 +3,7 @@ import { rIp, rName, rText, redaction } from "../core/redact";
 import { displayName, fmtBytes, idsOf, type Packet, type TrafficMsg } from "../core/types";
 import { decodePacket } from "./decode";
 import { TraceModal } from "./trace";
+import { visiblePoll } from "../core/visible-poll";
 
 const POLL_MS = 2000;
 
@@ -18,6 +19,8 @@ export class TrafficView {
   /** when set, the view is scoped to the conversation ip <-> peer */
   private peer: string | null = null;
   private timer: number | null = null;
+  /** skipped while the tab is hidden; one catch-up poll on return */
+  private readonly pollVisible = visiblePoll(() => { void this.poll(); });
   private last: TrafficMsg | null = null;
   private filter = "";
   private paused = false;
@@ -93,7 +96,7 @@ export class TrafficView {
       this.renderScope();
     }
     this.el.hidden = false;
-    if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
+    if (this.timer === null) this.timer = window.setInterval(this.pollVisible, POLL_MS);
     void this.poll();
   }
 

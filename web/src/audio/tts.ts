@@ -1,4 +1,5 @@
 /** Play s16le PCM as it arrives (ElevenLabs / Kokoro / Piper). */
+import { acquireSharedAudio, releaseSharedAudio, withTimeout } from "./audio-manager";
 
 export function pcmSampleRate(h: Headers): number {
   const n = Number(h.get("X-Zoto-Viz-Rate") || "");
@@ -23,31 +24,46 @@ export function concatBytes(a: Uint8Array, b: Uint8Array): Uint8Array<ArrayBuffe
   return o;
 }
 
-export async function playPcmStream(r: Response, signal?: AbortSignal): Promise<void> {
-  if (!r.body || typeof AudioContext === "undefined") return;
+/** A stream read that delivers nothing for this long is treated as stalled and abandoned. */
+export const TTS_STALL_MS = 10_000;
+
+/**
+ * Play a PCM response on the shared AudioContext (never one context per utterance: a hung
+ * resume or stalled read used to skip the close and leak a real-time audio thread each time).
+ */
+export async function playPcmStream(
+  r: Response,
+  signal?: AbortSignal,
+  opts: { stallMs?: number } = {},
+): Promise<void> {
+  if (!r.body) return;
+  if (signal?.aborted) return;
   const rate = pcmSampleRate(r.headers);
-  const ctx = new AudioContext();
   const reader = r.body.getReader();
+  const ctx = await acquireSharedAudio();
+  if (!ctx) {
+    void reader.cancel().catch(() => undefined);
+    return;
+  }
   const sources: AudioBufferSourceNode[] = [];
   let leftover: Uint8Array<ArrayBuffer> = new Uint8Array(0);
   let next = ctx.currentTime + 0.05;
   const min = Math.max(2, Math.floor(rate * 0.08) * 2);
+  const stallMs = opts.stallMs ?? TTS_STALL_MS;
 
   const stop = () => {
     for (const s of sources) {
       try { s.stop(); } catch { /* already stopped */ }
+      try { s.disconnect(); } catch { /* already disconnected */ }
     }
     void reader.cancel().catch(() => undefined);
-    if (ctx.state !== "closed") void ctx.close();
   };
-  if (signal?.aborted) { stop(); return; }
   const onAbort = () => stop();
   signal?.addEventListener("abort", onAbort);
 
   try {
-    await ctx.resume();
     while (!signal?.aborted) {
-      const { value, done } = await reader.read();
+      const { value, done } = await withTimeout(reader.read(), stallMs, "TTS stream read");
       if (value?.byteLength) {
         const chunk = new Uint8Array(value.byteLength);
         chunk.set(value);
@@ -67,9 +83,14 @@ export async function playPcmStream(r: Response, signal?: AbortSignal): Promise<
       const early = () => { window.clearTimeout(id); resolve(); };
       signal?.addEventListener("abort", early, { once: true });
     });
+  } catch {
+    stop();
   } finally {
     signal?.removeEventListener("abort", onAbort);
-    if (ctx.state !== "closed") void ctx.close();
+    for (const s of sources) {
+      try { s.disconnect(); } catch { /* already disconnected */ }
+    }
+    releaseSharedAudio();
   }
 }
 

@@ -47,6 +47,8 @@ from . import hn_rain_stills
 from . import live
 from . import logbuf
 from . import pack_perf
+from . import page_health
+from . import state_delta
 from . import mcp as plugin_mcp
 from . import plugin_local
 from . import plugin_migration
@@ -1942,32 +1944,80 @@ async def plugin_watch_loop(app: web.Application) -> None:
         await asyncio.sleep(2.5)
 
 
+def _ws_meta(app: web.Application) -> dict[web.WebSocketResponse, dict[str, Any]]:
+    """Per-socket stream options: {"delta": bool, "paused": bool, "need_full": bool}."""
+    return app.setdefault("ws_meta", {})  # type: ignore[no-any-return]
+
+
 async def broadcast_loop(app: web.Application) -> None:
     from . import signals
 
     state: State = app["state"]
+    seq = 0
+    prev: Any = None
     while True:
         signals.observe_capture(state)
         clients: set[web.WebSocketResponse] = app["clients"]
         if clients:
             # refresh=True so a 1s cache does not freeze the socket on a fast tick.
             snap = publish_state(state, refresh=True)
-            msg = json.dumps({"type": "state", **snap})
-            await asyncio.gather(*(ws.send_str(msg) for ws in list(clients)), return_exceptions=True)
+            seq += 1
+            meta = _ws_meta(app)
+            full_msg: str | None = None
+            delta_msg: str | None = None
+            sends = []
+            for ws in list(clients):
+                m = meta.get(ws) or {}
+                if m.get("paused"):
+                    continue
+                if m.get("delta") and not m.get("need_full") and prev is not None:
+                    if delta_msg is None:
+                        patch = state_delta.diff(prev, snap)
+                        delta_msg = json.dumps({"type": "delta", "seq": seq, "base": seq - 1, "patch": patch})
+                    sends.append(ws.send_str(delta_msg))
+                else:
+                    if full_msg is None:
+                        full_msg = json.dumps({"type": "state", "seq": seq, **snap})
+                    sends.append(ws.send_str(full_msg))
+                    m["need_full"] = False
+            # deep copy so in-place state mutation cannot hide a change from the next diff
+            prev = json.loads(full_msg) if full_msg is not None else json.loads(json.dumps(snap))
+            prev.pop("type", None)
+            prev.pop("seq", None)
+            app["ws_seq"] = seq
+            await asyncio.gather(*sends, return_exceptions=True)
+        else:
+            prev = None
         await asyncio.sleep(1)
 
 
 async def ws_handler(request: web.Request) -> web.WebSocketResponse:
     ws = web.WebSocketResponse(heartbeat=20)
     await ws.prepare(request)
+    meta = _ws_meta(request.app)
+    # delta clients start with a full frame on the next tick (they need a seq-aligned base)
+    meta[ws] = {"delta": state_delta.wants_delta(request.query), "paused": False, "need_full": True}
     request.app["clients"].add(ws)
     log(f"client connected ({len(request.app['clients'])})")
     try:
-        await ws.send_str(json.dumps({"type": "state", **publish_state(request.app["state"])}))
-        async for _ in ws:
-            pass
+        if not meta[ws]["delta"]:
+            await ws.send_str(json.dumps({"type": "state", **publish_state(request.app["state"])}))
+        async for msg in ws:
+            if msg.type != web.WSMsgType.TEXT:
+                continue
+            try:
+                cmd = json.loads(msg.data)
+            except ValueError:
+                continue
+            kind = cmd.get("type") if isinstance(cmd, dict) else None
+            if kind == "pause":
+                meta[ws]["paused"] = True
+            elif kind in ("resume", "resync"):
+                meta[ws]["paused"] = False
+                meta[ws]["need_full"] = True
     finally:
         request.app["clients"].discard(ws)
+        meta.pop(ws, None)
         log(f"client disconnected ({len(request.app['clients'])})")
     return ws
 
@@ -2101,6 +2151,7 @@ async def on_startup(app: web.Application) -> None:
         asyncio.create_task(cert_probe_loop(state, pool)),
         asyncio.create_task(housekeeping_loop(state)),
         asyncio.create_task(broadcast_loop(app)),
+        asyncio.create_task(page_health.watchdog_loop(app)),
         asyncio.create_task(plugin_watch_loop(app)),
         asyncio.create_task(local_drop_watch_loop(app)),
         asyncio.create_task(sources_poll_loop(app)),
@@ -2199,6 +2250,9 @@ def make_app(
     app.router.add_get("/api/state", api_state)
     app.router.add_get("/api/pack-perf", pack_perf.api_pack_perf_get)
     app.router.add_post("/api/pack-perf", pack_perf.api_pack_perf_post)
+    app.router.add_post("/api/page/heartbeat", page_health.api_heartbeat)
+    app.router.add_post("/api/page/error", page_health.api_error)
+    app.router.add_get("/api/page/health", page_health.api_health)
     app.router.add_get("/api/traffic", api_traffic)
     app.router.add_get("/api/payload", api_payload)
     app.router.add_get("/api/rf/watch", api_rf_watch)

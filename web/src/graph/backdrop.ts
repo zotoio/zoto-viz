@@ -1133,14 +1133,20 @@ export class Backdrop {
     const fail = (): void => {
       a.removeEventListener("error", fail);
       a.removeEventListener("loadeddata", ok);
+      // never cached, so nothing else will release it: drop the media player now
+      releasePhotoVideoElement(a);
       if (gen !== this.photoLoadGen) return;
       onMiss();
     };
     const ok = (): void => {
       a.removeEventListener("error", fail);
       a.removeEventListener("loadeddata", ok);
-      if (gen !== this.photoLoadGen) return;
+      if (gen !== this.photoLoadGen) {
+        releasePhotoVideoElement(a);
+        return;
+      }
       if (a.videoWidth <= 0) {
+        releasePhotoVideoElement(a);
         onMiss();
         return;
       }

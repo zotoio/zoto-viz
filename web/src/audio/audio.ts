@@ -8,6 +8,7 @@ import { askUserMedia } from "../ui/media-ask";
 import { queryMicPermissionState } from "./mic-permission";
 import { captureMic } from "./mic-device";
 import { micCaptureAllowed } from "./want";
+import { closeAudioContext, createAudioContext } from "./audio-manager";
 
 /**
  * Log-spaced 0–1 bands from an analyser byte spectrum (dB, low frequency first).
@@ -80,7 +81,11 @@ export class AudioPulse {
         for (const t of stream.getTracks()) t.stop();
         return;
       }
-      const ctx = new AudioContext();
+      const ctx = createAudioContext();
+      if (!ctx) {
+        for (const t of stream.getTracks()) t.stop();
+        return;
+      }
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -113,7 +118,7 @@ export class AudioPulse {
       for (const t of this.stream.getTracks()) t.stop();
       this.stream = null;
     }
-    void this.ctx?.close();
+    closeAudioContext(this.ctx);
     this.ctx = null;
     this.analyser = null;
     this.bins = null;

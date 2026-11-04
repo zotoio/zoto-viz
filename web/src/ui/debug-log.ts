@@ -1,6 +1,7 @@
 import { apiFetch } from "../core/http";
 import { nearBottom } from "./feed";
 import { bindFloatPanel } from "./float-drag";
+import { visiblePoll } from "../core/visible-poll";
 
 export const DEBUG_STORE = "zoto-viz.debugLogs";
 const POLL_MS = 800;
@@ -69,6 +70,8 @@ export class DebugLog {
   private after = 0;
   private seenStats = new Set<string>();
   private timer = 0;
+  /** skipped while the tab is hidden; one catch-up pull on return */
+  private readonly pollVisible = visiblePoll(() => { void this.pull(); });
   private on = false;
   private stickCursor = true;
   private stick = true;
@@ -120,7 +123,7 @@ export class DebugLog {
   private start(): void {
     if (this.timer) return;
     void this.pull();
-    this.timer = window.setInterval(() => { void this.pull(); }, POLL_MS);
+    this.timer = window.setInterval(this.pollVisible, POLL_MS);
   }
 
   private stop(): void {
