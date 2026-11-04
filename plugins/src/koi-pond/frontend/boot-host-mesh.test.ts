@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../sdk/viz-contract";
+import type { VizDataFrame } from "../../../sdk/viz-contract";
+import { demoFrame } from "./koi-pond";
 
-type Host = {
+type FakeHost = {
   getConfig: () => Record<string, string>;
   writeBuffer: ReturnType<typeof vi.fn>;
   writeUniform: ReturnType<typeof vi.fn>;
@@ -9,40 +10,34 @@ type Host = {
   onConfig?: (c: Record<string, string>) => void;
 };
 
-const talkers = [
-  { id: "10.0.0.1", rate: 180, role: "gateway" },
-  { id: "10.0.0.42", rate: 120, role: "lan" },
-];
-const frame = (t: number): VizDataFrame => ({
-  t, dt: 1 / 60, audio: 0.2, talkers, packets: [], sys: EMPTY_SYS_TELEMETRY,
-} as unknown as VizDataFrame);
+const g: { zoto?: FakeHost } = globalThis;
 
 describe("koi-pond boot", () => {
   afterEach(() => {
-    delete (globalThis as { zoto?: unknown }).zoto;
+    delete g.zoto;
     vi.resetModules();
   });
 
   it("writes moving host-mesh slots over N frames with no onConfig post (koi swim)", async () => {
-    const host: Host = {
+    const host: FakeHost = {
       getConfig: () => ({ modelGlb: "host" }),
       writeBuffer: vi.fn(),
       writeUniform: vi.fn(),
     };
-    (globalThis as { zoto?: unknown }).zoto = host;
+    g.zoto = host;
     await import("./index");
-    const seen = new Map<number, string[]>();
+    const seen = new Map<number, Set<string>>();
     for (let i = 0; i < 30; i++) {
-      host.onFrame!(frame(1 + i / 10));
-      for (const [slot, data] of host.writeBuffer.mock.calls as [number, ArrayLike<number>][]) {
-        if (slot < 3) continue;
-        const k = Array.from(data).join(",");
-        (seen.get(slot) ?? seen.set(slot, []).get(slot)!).push(k);
+      host.onFrame?.(demoFrame(1 + i / 10));
+      for (const [slot, data] of host.writeBuffer.mock.calls) {
+        if (typeof slot !== "number" || slot < 3) continue;
+        const k = Array.prototype.join.call(data, ",");
+        if (!seen.has(slot)) seen.set(slot, new Set());
+        seen.get(slot)?.add(k);
       }
       host.writeBuffer.mockClear();
     }
     expect(seen.size).toBeGreaterThan(0);
-    const advanced = [...seen.values()].some((v) => new Set(v).size > 1);
-    expect(advanced).toBe(true);
+    expect([...seen.values()].some((v) => v.size > 1)).toBe(true);
   });
 });
