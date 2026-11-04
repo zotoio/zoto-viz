@@ -1,4 +1,4 @@
-/** Photoreal aquarium — host frame drives fish, packets, and SYS murk. */
+/** Aquarium — host frame drives fish, packets, and SYS murk; the host draws the Blender scape and fish from slots 0..3. */
 import type { VizDataFrame } from "../../../sdk/viz-contract";
 
 import {
@@ -9,8 +9,7 @@ import {
   type AquariumOptions,
 } from "./aquarium";
 import { PackModelSlotController } from "../../../sdk/pack-model-slot";
-import { shouldWriteHostMeshMatrix, syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
-import { writeAquariumHostMeshSlots } from "./host-mesh-drive";
+import { syncPackModelHostMeshAssets } from "../../../sdk/pack-host-mesh";
 import { getVizZoto } from "../../../sdk/viz-zoto";
 
 const host = getVizZoto();
@@ -26,6 +25,7 @@ sim.mountTile();
 const buf0 = new Float32Array(64);
 const buf1 = new Float32Array(64);
 const buf2 = new Float32Array(64);
+const buf3 = new Float32Array(64);
 
 const actionLatch = { reset: false, randomise: false, undo: false };
 
@@ -66,6 +66,11 @@ if (typeof window !== "undefined" && typeof window.addEventListener === "functio
   window.addEventListener("blur", clear);
 }
 
+// The pane's aspect and pixel area (measured by the host each frame) size the tank.
+host.onPresent = (tick) => {
+  sim.setPane(tick.aspect, tick.pixels);
+};
+
 host.onConfig = (cfg) => {
   applyLiveConfig(cfg);
 };
@@ -83,9 +88,9 @@ host.onFrame = (frame: VizDataFrame) => {
   host.writeBuffer(0, buf0);
   host.writeBuffer(1, buf1);
   host.writeBuffer(2, buf2);
-  if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
-    writeAquariumHostMeshSlots(host.writeBuffer, buf0, buf1, frame.t, undefined, sim.fishMotion());
-  }
+  // slot 3: follow camera + per-fish fin phase / turn / size for the host's instanced fish
+  buf3.set(packed.slot3);
+  host.writeBuffer(3, buf3);
   if (packed.particleCount > 0) {
     host.writeParticles(
       packed.particles.subarray(0, packed.particleCount * 4),

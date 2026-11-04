@@ -7,12 +7,12 @@ mappings:
     default: —
     clamp: max fish per preset / plugin.yml maxParticles
   - field: talkers[].rate
-    effect: fish vigour, swim speed, body scale; rate-ranked slots (#22 rules)
+    effect: fish vigour, swim speed and tail-beat amplitude; rate-ranked slots (#22 rules)
     default: 0
     clamp: 0..1 via rate/220; 2 s hold, 1.2× challenger, empty slot fill, release on talker leave
   - field: talkers[].role
-    effect: species pick (gateway → largest enabled species)
-    default: hash bucket
+    effect: species family (lan → small schooling fish, internet → mid-size, gateway → the showpiece); id hash picks within the family
+    default: hash over all enabled species
     clamp: enabled species set from config
   - field: packets[].proto
     effect: plankton/bubble tint hash
