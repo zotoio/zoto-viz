@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { VizTalkerSample } from "../../../sdk/viz-contract";
 import FRAG from "../sky/fragment.glsl?raw";
 import FRONT from "./index.ts?raw";
 import VIS from "../visualisation.yml?raw";
@@ -6,6 +7,8 @@ import PLUGIN from "../plugin.yml?raw";
 import MAPPING from "../data-mapping.yml?raw";
 import {
   AQUARIUM_WORK_BUDGET,
+  AQU_SLOT,
+  AQU_SLOT3,
   AquariumSim,
   CONFIG_KEYS,
   DEFAULT_OPTIONS,
@@ -36,7 +39,11 @@ import {
   tileInternalResScale,
   unpackFishMeta,
 } from "./aquarium";
-import { AQU_HOST_MESH_ASSETS, AQU_REEF_SPECIES_TO_ASSET, AQU_SPECIES_TO_ASSET } from "./host-mesh-drive";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { createHash } from "node:crypto";
+import { fishTemplate } from "./fish-behaviour";
 import { buildIdleVizFrame } from "./fixtures/idle-viz-frame";
 import type { VizSysTelemetry } from "../../../sdk/viz-contract";
 import { probePluginSkyCompile, wrapPluginSky } from "./sky-test-harness";
@@ -156,7 +163,7 @@ describe("aquarium shipped pack", () => {
       const def = block.match(/default: (\S+)/)?.[1] ?? "";
       const flip = /true|false/.test(def)
         ? (def === "true" ? "false" : "true")
-        : key === "water"
+        : key === "water" || key === "tankType"
           ? "reef"
           : key === "lighting"
             ? "moonlight"
@@ -417,6 +424,8 @@ describe("aquarium shipped pack", () => {
     const slots = sim.talkerSlotsSnapshot().map((s) => s?.id);
     expect(slots).toContain("mega");
     sim.advance(frame({ t: TALKER_SLOT_HOLD_S + 0.5, talkers: [high, mega] }));
+    // the departed talker's fish fades out (shrinks away) rather than vanishing, then is gone
+    for (let i = 1; i <= 150; i++) sim.advance(frame({ t: TALKER_SLOT_HOLD_S + 0.5 + i / 60, talkers: [high, mega] }));
     expect(sim.fishBodiesCount()).toBe(2);
     expect(sim.fishSpeciesById().has("low")).toBe(false);
   });
@@ -472,30 +481,49 @@ describe("aquarium shipped pack", () => {
     expect(sim.particleScratch).toBe(scratch);
   });
 
-  it("host mesh maps cory and cichlid to appended GLB indices 8 and 9", () => {
-    expect(AQU_HOST_MESH_ASSETS[8]).toBe("fish-cory");
-    expect(AQU_HOST_MESH_ASSETS[9]).toBe("fish-cichlid");
-    expect(AQU_SPECIES_TO_ASSET).toEqual([7, 2, 6, 8, 5, 9, 3]);
-    expect(AQU_REEF_SPECIES_TO_ASSET[0]).toBe(4);
-    expect(PLUGIN).toContain("fish-cory.glb");
-    expect(PLUGIN).toContain("fish-cichlid.glb");
+  it("ships one Blender scape GLB whose sha, size and parts match plugin.yml and the species", () => {
+    const glb = readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../assets/aquarium-scape.glb"));
+    const sha = createHash("sha256").update(glb).digest("hex");
+    expect(PLUGIN).toContain(`sha256: ${sha}`);
+    expect(PLUGIN).toContain(`bytes: ${glb.length}`);
+    expect(PLUGIN).toContain("hostMeshSlot: 7");
+    const jsonLen = glb.readUInt32LE(12);
+    const gltf = JSON.parse(glb.subarray(20, 20 + jsonLen).toString("utf8")) as { nodes: { name?: string }[]; extensionsUsed?: string[] };
+    const names = new Set(gltf.nodes.map((n) => n.name));
+    expect(gltf.extensionsUsed).toContain("EXT_meshopt_compression");
+    for (const part of ["substrate", "fresh-rocks", "fresh-driftwood", "fresh-plant-vallisneria", "fresh-plant-rotala", "reef-rocks", "reef-coral-staghorn", "reef-coral-brain", "reef-coral-fan", "reef-anemone"]) {
+      expect(names.has(part), part).toBe(true);
+    }
+    for (let sp = 0; sp < 7; sp++) expect(names.has(`fish-${fishTemplate(sp, false)}`)).toBe(true);
+    for (let sp = 0; sp < 6; sp++) expect(names.has(`fish-${fishTemplate(sp, true)}`)).toBe(true);
+    expect(glb.length).toBeLessThan(800_000);
+  });
+
+  it("slot3 carries per-fish fin phase, turn and size in slot1 order, and the follow camera only in follow", () => {
+    const talkers: VizTalkerSample[] = Array.from({ length: 6 }, (_, i) => ({ id: `10.0.1.${i}`, rate: 30 + i * 20, role: "lan" }));
+    const frame = (t: number) => ({ t, dt: 1 / 60, audio: 0, talkers, packets: [], demo: false });
+    const sim = new AquariumSim(parseAquariumOptions({ preset: "planted", fishCount: "6", camera: "drift" }));
+    for (let i = 0; i < 120; i++) sim.advance(frame(i / 60));
+    expect(sim.slot3[AQU_SLOT3.follow]).toBe(0);
+    expect(sim.slot3[AQU_SLOT3.phase0]).toBeGreaterThan(0);
+    expect(sim.slot3[AQU_SLOT3.grow0]).toBeCloseTo(1);
+    const s3 = sim.slot3;
+    applyLiveFollow(sim, "follow");
+    for (let i = 120; i < 240; i++) sim.advance(frame(i / 60));
+    expect(sim.slot3).toBe(s3);
+    expect(sim.slot3[AQU_SLOT3.follow]).toBe(1);
+    expect(sim.slot0[AQU_SLOT.camera]).toBe(3);
+    const ti = sim.slot3[AQU_SLOT3.target]!;
+    expect(ti).toBeGreaterThanOrEqual(0);
+    // the eye sits near the followed fish (slot1 x, y, z of fish ti)
+    const fx = sim.slot1[ti * 4]!, fy = sim.slot1[ti * 4 + 1]!, fz = sim.slot1[ti * 4 + 2]!;
+    const d = Math.hypot(sim.slot3[AQU_SLOT3.eye]! - fx, sim.slot3[AQU_SLOT3.eye + 1]! - fy, sim.slot3[AQU_SLOT3.eye + 2]! - fz);
+    expect(d).toBeLessThan(1.0);
+    expect(sim.slot3[AQU_SLOT3.fov]).toBeGreaterThan(30);
   });
 });
 
-describe("aquarium fish turn rate for the host", () => {
-  it("reports a smoothed yaw rate per fish and ignores slot jumps", async () => {
-    const { FishTurnTracker } = await import("./host-mesh-drive");
-    const tr = new FishTurnTracker();
-    tr.frame(0);
-    expect(tr.rate(0, 0)).toBe(0);
-    let r = 0;
-    for (let i = 1; i <= 60; i++) {
-      tr.frame(i / 60);
-      r = tr.rate(0, i * (1.5 / 60));
-    }
-    expect(r).toBeGreaterThan(1.3);
-    expect(r).toBeLessThan(1.6);
-    tr.frame(61 / 60);
-    expect(Math.abs(tr.rate(0, 3))).toBeLessThan(r);
-  });
-});
+function applyLiveFollow(sim: AquariumSim, camera: string): void {
+  const cfg = { preset: "planted", fishCount: "6", camera };
+  applyConfigActions(sim, cfg, parseAquariumOptions(cfg));
+}

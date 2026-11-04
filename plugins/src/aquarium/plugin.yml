@@ -1,88 +1,38 @@
 id: aquarium
 name: Aquarium
-version: 1
-hint: Photoreal tank — talkers are fish, packets are bubbles and plankton, SYS failures cloud the water.
+version: 2
+hint: Planted or reef tank built in Blender — talkers are schooling fish, packets are bubbles and plankton, SYS failures cloud the water; follow camera drifts with one fish.
 description: >-
-  Glass tank and its contents are meshes (fish, plants, gravel). The sky is the
-  room behind the tank. Data mapping is declared in
-  data-mapping.yml (talkers→fish by id, packets→particles, sys.failed→tank murk).
-  Per-frame work budget (counts): raymarch steps 72, fish instances ≤16, particles ≤16,
-  draw calls 1 (host plugin sky). Caps match viz below.
+  The aquascape and every fish species are one Blender-built GLB (blender/build_scape.py,
+  meshopt-compressed): sand, seiryu stone, driftwood with java fern, vallisneria, rotala and moss
+  for fresh water; live rock, staghorn, brain coral, sea fans and an anemone for reef. The host
+  instances the fish (a travelling-wave swim bend, no bones), rising air-stone bubbles and
+  caustics on the sand; the sky is the room behind the tank. Data mapping is declared in
+  data-mapping.yml (talkers→fish by id, packets→bubbles and plankton, sys.failed→tank murk).
+  Per-frame work budget (counts): fish instances ≤16, particles ≤24, sim catch-up steps ≤6.
+  Camera follow drifts alongside one fish and eases over to another that swims close by.
   QE idle-failed: host idle fixture with sys.failed above FAIL_MURK_THRESHOLD — tank murk + fail band.
-  Corner species legend and high-contrast fish colours stay readable on 2×2 / 4×4 wall tiles.
 capabilities:
   - viz.read
   - viz.write
   - config.read
 assets:
-  - id: aquarium-plants
-    path: assets/aquarium-plants.glb
-    sha256: 9f029e86b6e9c72c8a51a14252b782e2c7f09d1780d86759fade524959fa6999
-    bytes: 87520
-    triangles: 4608
-  - id: aquarium-substrate
-    path: assets/aquarium-substrate.glb
-    sha256: a7b40d1830d584d7d6268a2964c5839288c4c8c29f0a1363b07221691603a2eb
-    bytes: 1208172
-    triangles: 10070
-  - id: fish-angelfish
-    path: assets/fish-angelfish.glb
-    sha256: ebdd087c98a1cd724aef430e50a1dfa36761ca7465a7342950492d3523ecccbe
-    bytes: 91132
-    triangles: 4044
-  - id: fish-betta
-    path: assets/fish-betta.glb
-    sha256: f443d0e61a2696fed0c6946af1746c18a993c5e7027bd4bd354bd3e889d5493f
-    bytes: 121976
-    triangles: 4084
-  - id: fish-clownfish
-    path: assets/fish-clownfish.glb
-    sha256: 5fca55c57cfc5aa1cad61b57a92e9a4c8b34f493929289a2e47b114826fd0b95
-    bytes: 97504
-    triangles: 3972
-  - id: fish-discus
-    path: assets/fish-discus.glb
-    sha256: 6ad411ba5114f4e8ac5f516d057568aa50be1510745f9a19d1bc5388db14761a
-    bytes: 152792
-    triangles: 5036
-  - id: fish-guppy
-    path: assets/fish-guppy.glb
-    sha256: 6a0911c88a64cb4243b7693f209e5a7e8f72312a64e2cb44f344b5f99a8cbc0b
-    bytes: 144272
-    triangles: 3716
-  - id: fish-neon-tetra
-    path: assets/fish-neon-tetra.glb
-    sha256: 58723a4172f5791b28eb4a9c104edd081472fb87f3a59af52cd1f76aa3c63c22
-    bytes: 85140
-    triangles: 3740
-  - id: fish-cory
-    path: assets/fish-cory.glb
-    sha256: 0216b95bf57c62e72e57678c3fd135f7db6b7e632c34cfbae9f0404f8bcf3502
-    bytes: 135748
-    triangles: 4432
-  - id: fish-cichlid
-    path: assets/fish-cichlid.glb
-    sha256: 39e06328def10361df8dae6994277fa357ff11a3c4abf5872ed353031d32d5d2
-    bytes: 106856
-    triangles: 4264
-  - id: aquarium-plants-hd
-    path: assets/aquarium-plants-hd.glb
-    sha256: 9afa40fb6a78431eb85492c556ad2bdadb88a658e2b9d8ed35be449048e9773b
-    bytes: 1032048
-    triangles: 11982
-  - id: aquarium-substrate-hd
-    path: assets/aquarium-substrate-hd.glb
-    sha256: 735d4edbd6501a107aa9fcfe4b05f25b59bc8fb8c6fd8d7a1dfe0e22e462c2ac
-    bytes: 3359600
-    triangles: 53766
+  - id: aquarium-scape
+    path: assets/aquarium-scape.glb
+    sha256: 3d9c5480db075b0a4ddeecaa41b553917a3317e5aa53354c82200f37ccaaf32b
+    bytes: 609528
+    triangles: 46662
 viz:
   graphWalk: false
+  # present ticks carry the pane aspect and pixel area: the tank is sized to its pane
+  presentTick: true
   idle:
     fixture: host
   maxBuffers: 8
   maxBufferFloats: 64
-  hostMeshSlot: 3
-  hostMeshSlotCount: 6
+  # slot 3 is the follow camera + fish motion; only slot 7 is parsed as a host mesh packet
+  hostMeshSlot: 7
+  hostMeshSlotCount: 1
   maxParticles: 24
   uniforms:
     - uTime

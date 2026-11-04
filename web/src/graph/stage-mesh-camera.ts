@@ -36,6 +36,20 @@ const AQ_FRAME_MARGIN = 1.08;
  * front never looks huge or outside the glass. Drift sways a little; hold sits still.
  */
 export function aquariumStagePose(read: StageSlotReader, viewAspect?: number): StageMeshPose {
+  // follow camera (slot3: [0] on, [1..3] eye, [4..6] aim, [7] fov) from the pack
+  if (read(3, 0) >= 0.5) {
+    const fov = read(3, 7);
+    const vfov = fov > 10 && fov < 100 ? fov : AQUARIUM_FOV;
+    const aspect = viewAspect !== undefined && Number.isFinite(viewAspect) && viewAspect > 0.1 ? viewAspect : 16 / 9;
+    // portrait panes widen the vertical fov so a fish still fits across
+    const t = Math.tan((vfov * Math.PI) / 360) / Math.min(1, aspect);
+    return {
+      position: [read(3, 1), read(3, 2), read(3, 3)],
+      target: [read(3, 4), read(3, 5), read(3, 6)],
+      near: 0.02,
+      fov: Math.min(100, (2 * Math.atan(t) * 180) / Math.PI),
+    };
+  }
   const mode = read(0, 8);
   const phase = read(0, 9);
   const w = read(0, 12);
@@ -45,7 +59,13 @@ export function aquariumStagePose(read: StageSlotReader, viewAspect?: number): S
     ? viewAspect
     : w > 1 && h > 1 ? w / h : 1.6;
   const t = Math.tan((AQUARIUM_FOV * Math.PI) / 360);
-  const dist = Math.max((AQ_HALF_H * AQ_FRAME_MARGIN) / t, (AQ_HALF_W * AQ_FRAME_MARGIN) / (t * aspect));
+  // The pack sizes the tank to the pane (slot3[11] = glass half width, front aspect = pane aspect),
+  // so the front glass is framed edge to edge with no letterboxing. Older packs: fixed tank + margin.
+  const hw = read(3, 11);
+  const sized = hw > 0.3 && hw < 5;
+  const halfW = sized ? hw : AQ_HALF_W;
+  const margin = sized ? 1 : AQ_FRAME_MARGIN;
+  const dist = Math.max((AQ_HALF_H * margin) / t, (halfW * margin) / (t * aspect));
   let x = 0;
   let y = 0.02;
   const z = AQ_FRONT_Z + dist;

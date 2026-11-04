@@ -84,7 +84,7 @@ export interface TileSandboxLike {
   /** Graph nodes for a graph.read pack (PluginSandbox.tick: posts only when the pack declares graph.read). */
   tick?(nodes: readonly { id: string; rate: number; role: string }[]): void;
   /** Per-frame present tick (PluginSandbox.deliverPresentTick: posts only to a viz.presentTick pack). */
-  deliverPresentTick?(frameMs: number, tileId: string, pluginClock?: number, aspect?: number): void;
+  deliverPresentTick?(frameMs: number, tileId: string, pluginClock?: number, aspect?: number, pixels?: number): void;
 }
 
 /** The pane scene a tile's own writes land on. */
@@ -261,11 +261,12 @@ export class TileSandboxes<S extends TileSandboxLike> {
     frameMs: number,
     clockFor?: (tileId: string) => number | undefined,
     aspectFor?: (tileId: string) => number | undefined,
+    pixelsFor?: (tileId: string) => number | undefined,
   ): number {
     let n = 0;
     for (const [tileId, e] of this.byTile) {
       if (!e.ready || e.spec.viz?.presentTick !== true || !e.sandbox.deliverPresentTick) continue;
-      e.sandbox.deliverPresentTick(frameMs, e.spec.id, clockFor?.(tileId), aspectFor?.(tileId));
+      e.sandbox.deliverPresentTick(frameMs, e.spec.id, clockFor?.(tileId), aspectFor?.(tileId), pixelsFor?.(tileId));
       n += 1;
     }
     return n;
