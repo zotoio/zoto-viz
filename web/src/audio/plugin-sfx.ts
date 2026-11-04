@@ -9,6 +9,7 @@ import {
   type BrOptions,
   type BrSfx,
 } from "../../../plugins/src/backrooms/frontend/director";
+import { closeAudioContext, createAudioContext } from "./audio-manager";
 
 /** Backrooms sound bed, driven by the same director track as the sky. Host-side so the iframe never owns audio. */
 
@@ -166,7 +167,7 @@ export class PluginSfx {
     this.noise = null;
     this.loadedRev = "";
     this.hydrate = null;
-    if (ctx) void ctx.close();
+    if (ctx) closeAudioContext(ctx);
   }
 
   private fadeBeds(g: Record<Bed, number> | null): void {
@@ -181,8 +182,9 @@ export class PluginSfx {
   }
 
   private ensure(): void {
-    if (this.ctx || typeof AudioContext === "undefined") return;
-    const ctx = new AudioContext();
+    if (this.ctx) return;
+    const ctx = createAudioContext();
+    if (!ctx) return;
     const master = ctx.createGain();
     master.gain.value = this.masterVolume;
     master.connect(ctx.destination);

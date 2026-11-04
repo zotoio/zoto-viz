@@ -1,4 +1,5 @@
 import { soundAllowed } from "../audio/sound";
+import { closeAudioContext, createAudioContext } from "../audio/audio-manager";
 
 /**
  * Synthesized CPU Doom SFX. Original envelopes — not ripped from any WAD.
@@ -16,7 +17,8 @@ export class DoomSfx {
     if (!soundAllowed()) return;
     if (typeof AudioContext === "undefined") return;
     if (!this.ctx || this.ctx.state === "closed") {
-      const ctx = new AudioContext();
+      const ctx = createAudioContext();
+      if (!ctx) return;
       const master = ctx.createGain();
       master.gain.value = 0.38;
       master.connect(ctx.destination);
@@ -32,7 +34,7 @@ export class DoomSfx {
     this.ctx = null;
     this.master = null;
     this.noise = null;
-    if (ctx && ctx.state !== "closed") void ctx.close();
+    closeAudioContext(ctx);
   }
 
   fire(): void {
