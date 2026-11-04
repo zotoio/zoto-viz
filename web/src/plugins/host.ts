@@ -605,7 +605,7 @@ export class PluginSandbox {
   /**
    * One {@link VizPresentTick} per sandbox per display frame (mosaic tiles share a sandbox).
    */
-  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number, aspect?: number): void {
+  deliverPresentTick(frameMs: number, tileId: string, pluginClock?: number, aspect?: number, pixels?: number): void {
     if (!this.caps.includes("viz.write") || !this.vizContract?.presentTick || !this.hostPort) return;
     if (frameMs === this.lastPresentFrameMs) return;
     this.lastPresentFrameMs = frameMs;
@@ -616,6 +616,8 @@ export class PluginSandbox {
     else delete tick.pluginClock;
     if (aspect != null && Number.isFinite(aspect) && aspect > 0) tick.aspect = aspect;
     else delete tick.aspect;
+    if (pixels != null && Number.isFinite(pixels) && pixels > 0) tick.pixels = pixels;
+    else delete tick.pixels;
     this.postToFramePort({ source: HOST_SOURCE, type: "present", tick });
   }
 
