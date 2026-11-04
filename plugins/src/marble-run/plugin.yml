@@ -3,7 +3,7 @@ name: Marble Run
 version: 2
 hint: A wood-and-brass marble run modelled in Blender — every packet rides a glass marble down the spiral, switchbacks, xylophone, loop and funnel, then back up the screw lift. Colour is protocol, size is bytes, lift speed is packet rate.
 description: >-
-  The track is a Blender-built GLB (blender/build_track.py → assets/marble-track.glb) drawn
+  The track is a Blender-built GLB (blender/build_track.py, then gltfpack -cc -kn -km -ke for meshopt compression → assets/marble-track.glb) drawn
   by the host mesh lane; glass marbles are one host instanced mesh fed from viz slots 1..3.
   The sandbox sim (frontend/sim.ts) rolls marbles along the exported centre path
   (frontend/track-data.ts) under gravity with rail friction, drag and 1-D contacts; the
@@ -18,9 +18,9 @@ capabilities:
 assets:
   - id: marble-track
     path: assets/marble-track.glb
-    sha256: 130a8f2bf1cc6b76b66f5f5b9c07ee606ea2f70333b3ecb4f4241c6f03fd188e
-    bytes: 722132
-    triangles: 38532
+    sha256: 85f9d13b53b630fade697ccfc1c7ac65d457e20d35b847bd9797aba4f83b70bf
+    bytes: 158680
+    triangles: 38592
 viz:
   graphWalk: false
   contract: 2

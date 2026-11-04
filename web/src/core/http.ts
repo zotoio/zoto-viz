@@ -78,7 +78,8 @@ export function setSandboxAssetTokenForTests(token: string): void {
  * operator prompt on a tokenless LAN viewer.
  */
 export function hasWriteSession(): boolean {
-  return !!csrf;
+  // authenticated LAN operators get no csrf from /api/session; their stored bearer is the write session
+  return !!csrf || !!readOperator();
 }
 
 export function noteCsrf(r: Response): void {

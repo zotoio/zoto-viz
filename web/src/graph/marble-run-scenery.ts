@@ -16,6 +16,8 @@ const S_COUNT = 8;
 const S_BELL = 9;
 const S_XYLO0 = 10;
 const S_AUDIO = 18;
+const S_VIEW = 22;
+const S_LOW_FPS = 24;
 
 export type SlotReader = (slot: number, index: number) => number;
 
@@ -131,6 +133,9 @@ export function buildMarbleRunScenery(): MarbleRunScenery {
 
   const update = (read: SlotReader, dt: number): void => {
     const n = Math.max(0, Math.min(MARBLE_RUN_MAX, Math.round(read(0, S_COUNT))));
+    const vs = read(0, S_VIEW);
+    const view = Number.isFinite(vs) && vs >= 1 && vs <= 3 ? vs : 1;
+    cores.visible = read(0, S_LOW_FPS) !== 1;
     for (let i = 0; i < n; i++) {
       const slot = FIRST_SLOT + Math.floor(i / PER_SLOT);
       const o = (i % PER_SLOT) * 4;
@@ -150,10 +155,10 @@ export function buildMarbleRunScenery(): MarbleRunScenery {
       }
       prev[i * 3] = x; prev[i * 3 + 1] = y; prev[i * 3 + 2] = z; had[i] = 1;
       v3.set(x, y, z);
-      sc.setScalar(radius);
+      sc.setScalar(radius * view);
       m4.compose(v3, rot[i]!, sc);
       shells.setMatrixAt(i, m4);
-      sc.setScalar(radius * 0.97);
+      sc.setScalar(radius * 0.97 * view);
       m4.compose(v3, rot[i]!, sc);
       cores.setMatrixAt(i, m4);
       if (lastLook[i] !== look) {
