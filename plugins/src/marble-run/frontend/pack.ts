@@ -1,313 +1,293 @@
+/**
+ * Marble Run pack: packets become glass marbles on a Blender-modelled track. The host draws the
+ * track GLB and the instanced marbles (web/src/graph/marble-run-scenery.ts); this module runs the
+ * sim and writes the marble positions, the camera and the strike accents into the viz slots.
+ *
+ * Slot 0 (MR_SLOT): header, camera, accents. Slots 1..3: 16 marbles each as x, y, z, look,
+ * where look = radius in mm + hue (0..1) for a lit marble, or -radius in mm for clear glass.
+ */
+
 import type { VizDataFrame, VizPacketSample } from "../../../sdk/viz-contract";
-import {
-  MARBLE_DATA_MAPPING,
-  ZOTO_FAIL_RGB,
-  hash01,
-  marblePackWorkBudget,
-  parseMarbleOptions,
-  type MarbleOptions,
-} from "./config";
-import { jarIndexForRouteKey, MarbleSim, SIM_DT, trackPieceCount } from "./sim";
-import { applyPackWorkBudget, marbleWorkBudget, resetPackWorkBudget } from "./work-budget";
+import { MARBLE_DATA_MAPPING, ZOTO_FAIL_RGB, hash01, parseMarbleOptions, type MarbleOptions } from "./config";
+import { MarbleSim, SIM_DT, TrackPath } from "./sim";
+import { applyPackWorkBudget, marbleWorkBudget, parseMarbleWorkBudgetYaml, resetPackWorkBudget } from "./work-budget";
 
 export type { VizDataFrame, VizPacketSample };
+export { MARBLE_DATA_MAPPING, ZOTO_FAIL_RGB, applyPackWorkBudget, marbleWorkBudget, parseMarbleWorkBudgetYaml, resetPackWorkBudget };
 
-export { MARBLE_DATA_MAPPING, ZOTO_FAIL_RGB };
-export {
-  applyPackWorkBudget,
-  marbleWorkBudget,
-  parseMarbleWorkBudgetYaml,
-  resetPackWorkBudget,
-} from "./work-budget";
-
-export type MarbleIngestStats = {
-  consumedPackets: number;
-  poolFull: number;
-};
-
-export const MR_SLOT0 = 64;
+export const MR_MARBLE_SLOT0 = 1;
+export const MR_MARBLE_SLOTS = 3;
 export const MR_MARBLES_PER_SLOT = 16;
 export const MR_MARBLE_FLOATS = 4;
+export const MR_MAX_MARBLES = MR_MARBLE_SLOTS * MR_MARBLES_PER_SLOT;
 
 export const MR_SLOT = {
   mark: 0,
-  seedNorm: 1,
-  simTime: 2,
-  jarCount: 3,
-  jar0: 4,
-  cameraMode: 12,
-  camX: 13,
-  camY: 14,
-  camZ: 15,
-  aimX: 16,
-  aimY: 17,
-  aimZ: 18,
-  followId: 19,
-  rejectGlow: 20,
-  demo: 21,
-  reduced: 22,
-  material: 23,
-  complexity: 24,
-  metric: 25,
-  activeCount: 26,
-  drawCalls: 27,
-  failR: 28,
-  failG: 29,
-  failB: 30,
-  hudSkip: 31,
-  labelPack0: 32,
+  camX: 1, camY: 2, camZ: 3,
+  aimX: 4, aimY: 5, aimZ: 6,
+  fov: 7,
+  count: 8,
+  bell: 9,
+  xylo0: 10, // 8 bars: 10..17
+  audio: 18,
+  failed: 19,
+  lead: 20,
+  queued: 21,
 } as const;
 
-const LABEL_CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.- ";
+/** Fail hue (Zoto Fail red) for marbles carried while sys.failed is over the threshold. */
+const FAIL_HUE = 0.004;
+const QUEUE_CAP = 96;
 
-function encodeLabel(text: string, out: number[], offset: number, maxChars: number): void {
-  const upper = text.toUpperCase().slice(0, maxChars);
-  for (let i = 0; i < maxChars; i++) {
-    const ch = upper[i] ?? " ";
-    const code = LABEL_CHARS.indexOf(ch);
-    out[offset + i] = code >= 0 ? code / (LABEL_CHARS.length - 1) : 0;
-  }
-}
-
-function metricLabel(opts: MarbleOptions, frame: VizDataFrame): string {
-  const metric = frame.demo ? "demo" : "proto";
-  return `marble-run · ${opts.preset} · ${metric}`;
-}
-
-function marbleRadius(size: number, field: number, opts: MarbleOptions): number {
-  if (opts.sizeField === "field") return 0.028 + field * 0.05;
-  const clamped = Math.min(1500, Math.max(32, size));
-  return 0.025 + (clamped / 1500) * 0.055;
-}
+let track: TrackPath | null = null;
+let sim: MarbleSim | null = null;
+let opts: MarbleOptions = parseMarbleOptions();
+const queueHue = new Float32Array(QUEUE_CAP);
+const queueR = new Float32Array(QUEUE_CAP);
+let qHead = 0;
+let qLen = 0;
+let hudSkipCount = 0;
+let lastIngest = { consumedPackets: 0, queueFull: 0 };
+const bellLevel = { v: 0 };
+const xyloLevel = new Float32Array(8);
+let rateEma = 0;
+let camPhase = 0;
+const camPos = new Float32Array(3);
+const camAim = new Float32Array(3);
+const tmp = new Float32Array(3);
+const slots: Float32Array[] = Array.from({ length: 1 + MR_MARBLE_SLOTS }, () => new Float32Array(64));
 
 export function marbleHueForPacket(pkt: VizPacketSample): number {
   return hash01(pkt.proto || "ip");
 }
 
-export function jarRouteKey(pkt: VizPacketSample, opts: MarbleOptions): string {
-  if (opts.destField === "hash") return `h:${hash01(pkt.proto).toFixed(8)}`;
-  return pkt.proto;
+export function isFrameFailed(frame: VizDataFrame, o: MarbleOptions = opts): boolean {
+  return (frame.sys?.failed ?? 0) >= o.failThreshold;
 }
 
-export function isFrameFailed(frame: VizDataFrame, opts: MarbleOptions): boolean {
-  return (frame.sys?.failed ?? 0) >= opts.failThreshold;
+/** Marble radius (m): 15–20 mm from packet bytes or the normalised field. */
+export function marbleRadius(pkt: VizPacketSample, o: MarbleOptions = opts): number {
+  const f = o.sizeField === "field" ? Math.min(1, Math.max(0, pkt.field)) : (Math.min(1500, Math.max(32, pkt.size)) - 32) / 1468;
+  return 0.015 + f * 0.005;
 }
 
-let sim: MarbleSim | null = null;
-let opts: MarbleOptions | null = null;
+export function marbleOptions(): MarbleOptions { return opts; }
+export function marbleHudSkipCount(): number { return hudSkipCount; }
+export function marbleIngestStats(): { consumedPackets: number; queueFull: number } { return lastIngest; }
+export function marbleQueueLength(): number { return qLen; }
 
-function marbleOpts(): MarbleOptions {
-  if (!opts) opts = parseMarbleOptions();
-  return opts;
-}
-let dropCooldown = 0;
-let hudSkipCount = 0;
-let lastIngest: MarbleIngestStats = { consumedPackets: 0, poolFull: 0 };
-
-export function marbleHudSkipCount(): number {
-  return hudSkipCount;
-}
-
-export function marbleIngestStats(): MarbleIngestStats {
-  return lastIngest;
-}
-
-export function marbleOptions(): MarbleOptions {
-  return marbleOpts();
+export function marbleSim(): MarbleSim {
+  if (!sim) {
+    track ??= new TrackPath();
+    sim = new MarbleSim(MR_MAX_MARBLES, track);
+    sim.recolor = (i) => {
+      if (!sim) return;
+      if (qLen > 0) {
+        sim.hue[i] = queueHue[qHead]!;
+        sim.radius[i] = queueR[qHead]!;
+        qHead = (qHead + 1) % QUEUE_CAP;
+        qLen--;
+      } else {
+        sim.hue[i] = -1;
+        sim.radius[i] = 0.017;
+      }
+    };
+    sim.setCount(Math.min(opts.maxMarbles, MR_MAX_MARBLES));
+  }
+  return sim;
 }
 
 export function setMarbleOptions(next: MarbleOptions): void {
   opts = next;
-  if (!sim) sim = new MarbleSim(opts);
-  else sim.setOptions(opts);
-}
-
-export function marbleSim(): MarbleSim {
-  const o = marbleOpts();
-  if (!sim) sim = new MarbleSim(o);
-  return sim;
+  sim?.setCount(Math.min(opts.maxMarbles, MR_MAX_MARBLES));
 }
 
 export function disposeMarblePack(): void {
-  sim?.dispose();
   sim = null;
-  dropCooldown = 0;
-  hudSkipCount = 0;
-  lastIngest = { consumedPackets: 0, poolFull: 0 };
-  opts = null;
+  qHead = 0; qLen = 0; hudSkipCount = 0; rateEma = 0; camPhase = 0;
+  camState.init = false; camState.target = -1; camState.fov = WIDE_FOV; camState.sinceCut = 0;
+  bellLevel.v = 0; xyloLevel.fill(0);
+  lastIngest = { consumedPackets: 0, queueFull: 0 };
+  opts = parseMarbleOptions();
 }
 
-function spawnFromPacket(s: MarbleSim, frame: VizDataFrame, pkt: VizPacketSample): boolean {
-  const o = marbleOpts();
-  const routeKey = jarRouteKey(pkt, o);
-  const hue = marbleHueForPacket(pkt);
-  const radius = marbleRadius(pkt.size, pkt.field, o);
-  const failed = isFrameFailed(frame, o);
-  return s.spawn(hue, radius, routeKey, failed);
+function enqueue(hue: number, r: number): boolean {
+  if (qLen >= QUEUE_CAP) return false;
+  const at = (qHead + qLen) % QUEUE_CAP;
+  queueHue[at] = hue; queueR[at] = r; qLen++;
+  return true;
 }
 
+/** Advance the run by one host frame and queue this frame's packets as marble colours. */
 export function ingestFrame(frame: VizDataFrame): void {
-  const o = marbleOpts();
   const s = marbleSim();
-  s.setOptions(o);
-  s.stepFrame(frame.dt > 0 ? frame.dt : SIM_DT);
-  dropCooldown -= frame.dt > 0 ? frame.dt : SIM_DT;
-  const pkts = frame.packets;
+  const dt = frame.dt > 0 ? Math.min(frame.dt, 0.1) : SIM_DT;
   const cap = marbleWorkBudget().maxPacketsPerFrame;
-  let consumedPackets = 0;
-  let poolFull = 0;
+  const failed = isFrameFailed(frame);
+  let consumed = 0, full = 0;
+  const pkts = frame.packets ?? [];
+  const take = Math.min(pkts.length, cap);
+  if (pkts.length > cap) hudSkipCount += pkts.length - cap;
+  for (let i = 0; i < take; i++) {
+    const p = pkts[i]!;
+    if (enqueue(failed ? FAIL_HUE : marbleHueForPacket(p), marbleRadius(p))) consumed++;
+    else full++;
+  }
+  // speed by rate: the lift runs faster when packets arrive faster
+  rateEma += ((pkts.length / dt) - rateEma) * Math.min(1, dt * 0.5);
+  const reduced = opts.reducedMotion === "on";
+  s.liftSpeed = reduced ? 0.4 : 0.42 + Math.min(0.5, rateEma / 400);
+  s.step(dt, marbleWorkBudget().maxSimStepsPerFrame);
+  const decay = Math.exp(-dt * 5);
+  bellLevel.v = Math.min(1.5, bellLevel.v * decay + s.bellHits);
+  s.bellHits = 0;
+  for (let k = 0; k < xyloLevel.length; k++) {
+    xyloLevel[k] = Math.min(1.5, xyloLevel[k]! * decay + (s.xyloHits[k] ?? 0));
+    if (k < s.xyloHits.length) s.xyloHits[k] = 0;
+  }
+  lastIngest = { consumedPackets: consumed, queueFull: full };
+  updateCamera(s, dt, frame.audio);
+}
 
-  if (pkts.length && !frame.demo) {
-    const capped = Math.max(0, pkts.length - cap);
-    hudSkipCount += capped;
-    const take = Math.min(pkts.length, cap);
-    for (let i = 0; i < take; i++) {
-      const pkt = pkts[i]!;
-      if (spawnFromPacket(s, frame, pkt)) consumedPackets++;
-      else poolFull++;
+const WIDE_POS = [0.15, 1.05, 4.15];
+const WIDE_AIM = [0.12, 0.78, 0.15];
+/** Chase cam: distance behind and height above the marble on the path, look-ahead distance (m). */
+export const CHASE_BACK = 0.34;
+export const CHASE_UP = 0.11;
+export const CHASE_AHEAD = 0.3;
+const CHASE_FOV = 58;
+const WIDE_FOV = 36;
+/** Spring stiffness (rad/s) of the critically damped camera spring. */
+const CAM_OMEGA = 5;
+
+/** Camera state: spring position/velocity for eye and aim, the chased marble, and the fov. */
+export const camState = {
+  pos: new Float32Array(3),
+  vel: new Float32Array(3),
+  aim: new Float32Array(3),
+  aimVel: new Float32Array(3),
+  fov: WIDE_FOV,
+  target: -1,
+  /** Frames since the last hard cut (tests). */
+  sinceCut: 0,
+  init: false,
+};
+const want = new Float32Array(6);
+
+/**
+ * Pick the marble to chase: keep the current one while it is on the run; once it reaches the
+ * lift (or there is none), take the marble that most recently left the lift top.
+ */
+export function chaseTarget(s: MarbleSim, current: number): number {
+  if (current >= 0 && current < s.count && !s.track.onLift(s.s[current]!)) return current;
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < s.count; i++) {
+    if (s.track.onLift(s.s[i]!)) continue;
+    const d = s.track.wrap(s.s[i]! - s.track.liftEnd);
+    if (d < bestD) { bestD = d; best = i; }
+  }
+  return best;
+}
+
+function spring(x: Float32Array, v: Float32Array, o: number, target: Float32Array, to: number, dt: number): void {
+  const w = CAM_OMEGA;
+  for (let k = 0; k < 3; k++) {
+    const err = x[k]! - target[to + k]!;
+    v[k] = v[k]! + (-2 * w * v[k]! - w * w * err) * dt;
+    x[k] = x[k]! + v[k]! * dt;
+  }
+  void o;
+}
+
+function cut(): void {
+  camState.pos[0] = want[0]!; camState.pos[1] = want[1]!; camState.pos[2] = want[2]!;
+  camState.aim[0] = want[3]!; camState.aim[1] = want[4]!; camState.aim[2] = want[5]!;
+  camState.vel.fill(0); camState.aimVel.fill(0);
+  camState.sinceCut = 0;
+}
+
+function updateCamera(s: MarbleSim, dt: number, audio: number): void {
+  const mode = opts.reducedMotion === "on" ? "wide" : opts.cameraMode;
+  camPhase += dt * 0.05;
+  want[0] = WIDE_POS[0]!; want[1] = WIDE_POS[1]!; want[2] = WIDE_POS[2]!;
+  want[3] = WIDE_AIM[0]!; want[4] = WIDE_AIM[1]!; want[5] = WIDE_AIM[2]!;
+  let fov = WIDE_FOV;
+  let hard = false;
+  if (mode === "chase") {
+    const next = chaseTarget(s, camState.target);
+    if (next !== camState.target) hard = true; // new marble (or none): cut, never swoop through the board
+    camState.target = next;
+    if (next >= 0) {
+      const sm = s.s[next]!;
+      // eye sits on the path behind the marble, raised above the rails: it rides the track, so it
+      // never cuts through the structure the marble itself just passed
+      s.track.sample(sm - CHASE_BACK, want, 0);
+      want[1] = want[1]! + CHASE_UP;
+      s.track.sample(sm + CHASE_AHEAD, want, 3);
+      fov = CHASE_FOV;
     }
-  } else if (frame.demo && dropCooldown <= 0) {
-    const phase = frame.t % 4;
-    const proto = ["tcp", "udp", "dns", "tls"][Math.floor(phase)]!;
-    const pkt: VizPacketSample = { proto, size: 128, field: 0.5 };
-    const hue = marbleHueForPacket(pkt);
-    const radius = 0.035 + 0.02 * Math.sin(frame.t * 0.7);
-    const failed = isFrameFailed(frame, o);
-    if (s.spawn(hue, radius, jarRouteKey(pkt, o), failed)) {
-      consumedPackets = 1;
-      dropCooldown = 0.4;
+  } else if (mode === "orbit") {
+    const a = Math.sin(camPhase * 2) * 0.55;
+    want[0] = want[3]! + Math.sin(a) * 4.0; want[2] = want[5]! + Math.cos(a) * 4.0; want[1] = 1.15;
+  } else if (mode === "follow") {
+    const lead = s.leadIndex();
+    if (lead >= 0) {
+      s.track.sample(s.s[lead]!, tmp);
+      want[3] = want[3]! * 0.55 + tmp[0]! * 0.45; want[4] = want[4]! * 0.55 + tmp[1]! * 0.45; want[5] = want[5]! * 0.55 + tmp[2]! * 0.45;
+      want[0] = want[3]! * 0.4 + Math.sin(camPhase) * 0.25; want[1] = want[4]! + 0.45; want[2] = 2.7;
     }
+  } else {
+    want[0] = want[0]! + Math.sin(camPhase) * 0.12;
   }
-
-  lastIngest = { consumedPackets, poolFull };
+  if (mode !== "chase") camState.target = -1;
+  if (!camState.init || hard) {
+    cut();
+    camState.init = true;
+  } else {
+    const h = Math.min(dt, 0.05);
+    spring(camState.pos, camState.vel, 0, want, 0, h);
+    spring(camState.aim, camState.aimVel, 0, want, 3, h);
+    camState.sinceCut++;
+  }
+  camState.fov += (fov - camState.fov) * (hard ? 1 : Math.min(1, dt * 4));
+  camPos[0] = camState.pos[0]!; camPos[1] = camState.pos[1]!; camPos[2] = camState.pos[2]!;
+  camAim[0] = camState.aim[0]!; camAim[1] = camState.aim[1]!; camAim[2] = camState.aim[2]!;
+  void audio;
 }
 
-function reducedFlag(o: MarbleOptions): number {
-  if (o.reducedMotion === "on") return 1;
-  if (o.reducedMotion === "off") return 0;
-  return 0.5;
-}
-
-function cameraPose(s: MarbleSim, o: MarbleOptions, t: number): { cx: number; cy: number; cz: number; ax: number; ay: number; az: number; follow: number } {
-  const lead = s.leadMarble();
-  const u = lead?.u ?? 0.35 + 0.1 * Math.sin(t * 0.15);
-  const reduced = reducedFlag(o) >= 0.5;
-  const mode = reduced ? "wide" : o.cameraMode;
-  const trackY = 1.2 + Math.sin(u * 6.283) * 0.35;
-  const trackX = -1.8 + u * 3.6;
-  const trackZ = Math.cos(u * 9.42) * 0.45;
-  if (mode === "wide") {
-    return { cx: 0, cy: 2.4, cz: 4.2, ax: 0, ay: 1.1, az: 0, follow: -1 };
-  }
-  if (mode === "orbit") {
-    const ang = t * 0.08;
-    return {
-      cx: Math.sin(ang) * 4.5,
-      cy: 2.1 + Math.sin(t * 0.05) * 0.1,
-      cz: Math.cos(ang) * 4.5,
-      ax: trackX * 0.3,
-      ay: trackY,
-      az: trackZ,
-      follow: -1,
-    };
-  }
-  const pull = 0.35 + 0.25 * (1 - Math.cos(Math.min(1, u) * 3.14159));
-  return {
-    cx: trackX - 0.6 * pull,
-    cy: trackY + 0.35 + pull * 0.2,
-    cz: trackZ + 1.1 + pull * 1.6,
-    ax: trackX,
-    ay: trackY,
-    az: trackZ,
-    follow: lead?.id ?? -1,
-  };
-}
-
-export function packMarbleSlots(frame: VizDataFrame): { slot0: number[]; slot1: number[] } {
+/** Fill the slot buffers (reused every frame). */
+export function packMarbleSlots(frame: VizDataFrame): Float32Array[] {
   const s = marbleSim();
-  const o = marbleOpts();
-  const slot0 = new Array<number>(MR_SLOT0).fill(0);
-  const slot1 = new Array<number>(MR_MARBLES_PER_SLOT * MR_MARBLE_FLOATS).fill(0);
-  slot0[MR_SLOT.mark] = 1;
-  slot0[MR_SLOT.seedNorm] = (o.seed % 10000) / 10000;
-  slot0[MR_SLOT.simTime] = s.time();
-  slot0[MR_SLOT.jarCount] = o.jarCount;
-  const jars = s.jarFills();
-  for (let i = 0; i < 8; i++) {
-    slot0[MR_SLOT.jar0 + i] = jars[i]?.fill ?? 0;
+  const h = slots[0]!;
+  h.fill(0);
+  h[MR_SLOT.mark] = 1;
+  h[MR_SLOT.camX] = camPos[0]!; h[MR_SLOT.camY] = camPos[1]!; h[MR_SLOT.camZ] = camPos[2]!;
+  h[MR_SLOT.aimX] = camAim[0]!; h[MR_SLOT.aimY] = camAim[1]!; h[MR_SLOT.aimZ] = camAim[2]!;
+  h[MR_SLOT.fov] = camState.fov;
+  h[MR_SLOT.count] = s.count;
+  h[MR_SLOT.bell] = Math.min(1, bellLevel.v);
+  for (let k = 0; k < 8; k++) h[MR_SLOT.xylo0 + k] = Math.min(1, xyloLevel[k]!);
+  h[MR_SLOT.audio] = Math.max(0, Math.min(1, frame.audio || 0));
+  h[MR_SLOT.failed] = isFrameFailed(frame) ? 1 : 0;
+  h[MR_SLOT.lead] = s.leadIndex();
+  h[MR_SLOT.queued] = qLen;
+  for (let m = 0; m < MR_MARBLE_SLOTS; m++) slots[1 + m]!.fill(0);
+  for (let i = 0; i < s.count; i++) {
+    const buf = slots[MR_MARBLE_SLOT0 + Math.floor(i / MR_MARBLES_PER_SLOT)]!;
+    const o = (i % MR_MARBLES_PER_SLOT) * MR_MARBLE_FLOATS;
+    s.track.sample(s.s[i]!, buf, o);
+    const mm = Math.round(s.radius[i]! * 1000);
+    const hue = s.hue[i]!;
+    buf[o + 3] = hue < 0 ? -mm : mm + Math.min(0.999, hue);
+    // marbles ride above the path centre by the difference from the design radius
+    buf[o + 1] = buf[o + 1]! + (s.radius[i]! - 0.018);
   }
-  const cam = cameraPose(s, o, frame.t);
-  slot0[MR_SLOT.cameraMode] = o.cameraMode === "follow" ? 0 : o.cameraMode === "wide" ? 1 : 2;
-  slot0[MR_SLOT.camX] = cam.cx;
-  slot0[MR_SLOT.camY] = cam.cy;
-  slot0[MR_SLOT.camZ] = cam.cz;
-  slot0[MR_SLOT.aimX] = cam.ax;
-  slot0[MR_SLOT.aimY] = cam.ay;
-  slot0[MR_SLOT.aimZ] = cam.az;
-  slot0[MR_SLOT.followId] = cam.follow;
-  const failActive = s.bodies().some((m) => m.active && m.failed);
-  slot0[MR_SLOT.rejectGlow] = failActive ? 0.85 + 0.15 * Math.sin(frame.t * 2.2) : 0.25;
-  slot0[MR_SLOT.demo] = frame.demo ? 1 : 0;
-  slot0[MR_SLOT.reduced] = reducedFlag(o);
-  slot0[MR_SLOT.material] = { walnut: 0, oak: 1, "brass-glass": 2, bamboo: 3 }[o.materialTheme];
-  slot0[MR_SLOT.complexity] = o.complexity;
-  slot0[MR_SLOT.metric] = frame.demo ? 0 : hash01(metricLabel(o, frame));
-  const active = s.bodies().filter((m) => m.active);
-  slot0[MR_SLOT.activeCount] = active.length;
-  slot0[MR_SLOT.drawCalls] = s.work.drawCalls;
-  slot0[MR_SLOT.failR] = ZOTO_FAIL_RGB[0];
-  slot0[MR_SLOT.failG] = ZOTO_FAIL_RGB[1];
-  slot0[MR_SLOT.failB] = ZOTO_FAIL_RGB[2];
-  slot0[MR_SLOT.hudSkip] = hudSkipCount;
-  encodeLabel(metricLabel(o, frame), slot0, MR_SLOT.labelPack0, 24);
-
-  let mi = 0;
-  for (const m of active) {
-    if (mi >= MR_MARBLES_PER_SLOT) break;
-    const base = mi * MR_MARBLE_FLOATS;
-    const u = m.flying > 0 ? m.u : m.u;
-    slot1[base] = -1.8 + u * 3.6 + m.flyVx * m.flying;
-    slot1[base + 1] = 1.15 + Math.sin(u * 6.283) * 0.35 + m.flyVy * m.flying;
-    slot1[base + 2] = Math.cos(u * 9.42) * 0.45 + m.flyVz * m.flying;
-    slot1[base + 3] = m.hue + (m.failed ? 0.001 : 0) + m.radius * 0.01;
-    mi++;
-  }
-
-  return { slot0, slot1 };
+  return slots;
 }
 
-export function workWithinBudget(o: MarbleOptions = marbleOpts()): boolean {
-  const s = marbleSim();
-  const w = s.work;
-  const budget = marblePackWorkBudget();
-  return (
-    w.drawCalls <= budget.maxDrawCalls
-    && w.triangles <= budget.maxTriangles
-    && w.instances <= Math.min(o.maxMarbles, budget.maxInstances)
-    && w.gpuBytes <= budget.maxGpuBytes
-  );
-}
-
-export function trackPiecesForPreset(o: MarbleOptions): number {
-  return trackPieceCount(o.complexity, o.seed);
-}
-
-export function marbleDeterminismDigest(t: number, o: MarbleOptions): number {
-  disposeMarblePack();
-  setMarbleOptions(o);
-  const frame: VizDataFrame = {
-    t,
-    dt: SIM_DT,
-    audio: 0.1,
-    packets: [{ proto: "tcp", size: 400, field: 0.5 }],
-    rf: [],
-    talkers: [],
-    headlines: [],
-    demo: true,
-  };
-  for (let i = 0; i < 120; i++) ingestFrame({ ...frame, t: i * SIM_DT, dt: SIM_DT });
-  const { slot0, slot1 } = packMarbleSlots({ ...frame, t });
-  let h = 0;
-  for (const v of [...slot0, ...slot1]) h = (h * 31 + Math.round(v * 1e5)) | 0;
-  return h;
+/** Decode a marble look float (for the host and tests). */
+export function decodeMarbleLook(look: number): { radius: number; hue: number } {
+  if (look < 0) return { radius: -look / 1000, hue: -1 };
+  const mm = Math.floor(look);
+  return { radius: mm / 1000, hue: look - mm };
 }

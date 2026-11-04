@@ -2,6 +2,7 @@ import type { PluginView } from "../plugins/plugin";
 import type { VizPluginContract } from "../plugins/viz-host";
 import { HostMeshLane, type HostMeshAssetDecl, type HostMeshMotionProfile } from "../graph/host-mesh-lane";
 import { buildAquariumTank } from "../graph/aquarium-tank";
+import { buildMarbleRunScenery } from "../graph/marble-run-scenery";
 import {
   encodeHostMeshSlotPacket,
   hostMeshMatrixYawPos,
@@ -195,6 +196,10 @@ export function pinPackContents(lane: MeshPinLane, packId: string, set: HostMesh
     pinAquariumContents(lane, set);
   } else if (packId === "koi-pond") {
     pinKoiContents(lane);
+  } else if (packId === "marble-run") {
+    // the Blender track sits at the origin in metres; marbles are instanced scenery fed from slots
+    lane.setScenery(buildMarbleRunScenery().root);
+    lane.applySlotBuffer(encodeHostMeshSlotPacket(0, [{ matrix: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }]));
   }
 }
 

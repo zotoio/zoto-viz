@@ -1,23 +1,35 @@
 id: marble-run
 name: Marble Run
-version: 1
-hint: Procedural wood-and-glass marble run — each packet drops a marble; colour is protocol, size is bytes, branches sort by destination into filling jars. Failures fly to the Zoto Fail reject tray.
+version: 2
+hint: A wood-and-brass marble run modelled in Blender — every packet rides a glass marble down the spiral, switchbacks, xylophone, loop and funnel, then back up the screw lift. Colour is protocol, size is bytes, lift speed is packet rate.
 description: >-
-  Deterministic marble-run viz. Live packets and flows spawn marbles at the top;
-  track layout comes from seed and complexity. Data-to-effect mapping is declared
-  in visualisation.yml dataMapping and enforced in frontend/pack.ts. Per-frame work
-  caps are in visualisation.yml workBudget. Idle host fixture keeps demo marbles
-  flowing with label metric "demo".
+  The track is a Blender-built GLB (blender/build_track.py → assets/marble-track.glb) drawn
+  by the host mesh lane; glass marbles are one host instanced mesh fed from viz slots 1..3.
+  The sandbox sim (frontend/sim.ts) rolls marbles along the exported centre path
+  (frontend/track-data.ts) under gravity with rail friction, drag and 1-D contacts; the
+  screw lift admits one marble per thread pitch. Packets queue colours for marbles leaving
+  the lift top; with no traffic marbles run as clear glass. Data mapping is declared in
+  visualisation.yml dataMapping; per-frame caps in workBudget. Idle host fixture keeps
+  demo packets flowing.
 capabilities:
   - viz.read
   - viz.write
   - config.read
+assets:
+  - id: marble-track
+    path: assets/marble-track.glb
+    sha256: 130a8f2bf1cc6b76b66f5f5b9c07ee606ea2f70333b3ecb4f4241c6f03fd188e
+    bytes: 722132
+    triangles: 38532
 viz:
   graphWalk: false
   contract: 2
   maxBuffers: 4
   maxBufferFloats: 64
   maxParticles: 0
+  # marble slots are 1..3; the host mesh lane only pins the track, never reads a slot
+  hostMeshSlot: 7
+  hostMeshSlotCount: 1
   uniforms:
     - uTime
     - uOpacity
