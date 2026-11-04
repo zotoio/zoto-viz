@@ -27,7 +27,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 from service import access, live, plugins
 from tests.pack_asset_test_util import HOST, NULL, SESSION, make_test_app, pack_url
 
-ASSET_PACKS = ("aquarium", "host-mesh-demo", "koi-pond", "rocket-car-soccer")
+ASSET_PACKS = ("aquarium", "host-mesh-demo", "koi-pond", "marble-run", "rocket-car-soccer")
 ZOTO_PRE_KEY = ("rocket-car-soccer", "host-mesh-demo")
 MUTATE = {**HOST, access.HEADER: SESSION}
 
@@ -99,7 +99,7 @@ def _save_pre_key_record(pid: str) -> dict[str, Any]:
     return row
 
 
-def test_shipped_asset_packs_are_exactly_the_four() -> None:
+def test_shipped_asset_packs_are_exactly_these() -> None:
     plugins.reset_scan_memo()
     rows = plugins.scan()["plugins"]
     with_assets = sorted(r["id"] for r in rows if r.get("assets"))
