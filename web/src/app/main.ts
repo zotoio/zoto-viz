@@ -1529,6 +1529,8 @@ function fetchSkyOnce(id: string, hash?: string): Promise<string> {
 /** Tiles' installed sky (packKey) and in-flight sky loads, so each sky is requested once per tile. */
 const skyInstalled = new WeakMap<NetScene, string>();
 const skyLoads = new SkyLoads<NetScene>();
+/** The current sky-abort listener per tile (see installPluginSky). */
+const skyAbortListeners = new WeakMap<NetScene, { signal: AbortSignal; fn: () => void }>();
 
 async function installPluginSky(
   target: NetScene,
@@ -1541,18 +1543,26 @@ async function installPluginSky(
   const signal = ctl.signal();
   const waitKey = skyWaitKey(target, paneId);
   if (target.pluginSkyDrawn !== spec.id) beginSkyWait(waitKey, target, spec, paneId, signal);
-  // Weak: the abort signal can outlive the pane (refreshPluginSignal), and a strong ref here kept
-  // every dropped pane's NetScene and DOM alive.
+  // Weak: the abort signal can outlive the pane (refreshPluginSignal), and a strong ref here (to
+  // the target, or to its SkyLoadCtl, whose closures hold the target) kept every dropped pane's
+  // NetScene and DOM alive.
   const targetRef = new WeakRef(target);
+  const ctlRef = new WeakRef(ctl);
   const disposeSky = () => {
-    // A newer sync took this load over; its own abort (not this one) decides.
-    if (ctl.signal() !== signal || !ctl.current()) return;
+    const c = ctlRef.deref();
     const t = targetRef.deref();
-    if (!t) return;
+    if (!c || !t) return;
+    // A newer sync took this load over; its own abort (not this one) decides.
+    if (c.signal() !== signal || !c.current()) return;
     t.setPluginShader(null);
     skyInstalled.delete(t);
     if (t === scene) skyLoaded = "";
   };
+  // One live abort listener per tile: a re-install replaces the previous one instead of stacking
+  // another on a long-lived signal every view switch.
+  const prevSky = skyAbortListeners.get(target);
+  if (prevSky) removeModeSwitchAbortListener(prevSky.signal, prevSky.fn);
+  skyAbortListeners.set(target, { signal, fn: disposeSky });
   addModeSwitchAbortListener(signal, disposeSky, { once: true });
   try {
     recordPluginSkyLoad({ packId: spec.id, packKey: packKey, isShaderPack: true, look: lookOpts });
