@@ -1,15 +1,15 @@
 id: blob-mesh
 name: Blob Mesh
 version: 1
-hint: 90s-style metaballs. Each blob is one of your busiest devices, and the busier it is, the bigger it grows and the more it melts into its neighbours.
+hint: Lumen Reef. Each device is a glowing cell on a slow spring drift (wired calm, Wi-Fi swaying, Bluetooth loose); traffic between devices grows membrane bridges that merge the cells and carry light pulses.
 capabilities:
   - viz.read
   - viz.write
 viz:
   graphWalk: false
   contract: 2
-  maxBuffers: 1
-  maxBufferFloats: 32
+  maxBuffers: 4
+  maxBufferFloats: 64
   maxParticles: 0
   uniforms:
     - uTime
