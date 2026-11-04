@@ -12,6 +12,8 @@ import { TileSandboxes, type TileSandboxLike } from "./tile-sandboxes";
  * mesh lane, so the koi kept their pinned poses. Pane host-mesh slots now go to that pane's lane.
  */
 
+type Asset = NonNullable<PluginView["assets"]>[number];
+type Batch = Parameters<NonNullable<PluginHostHandlers["writeBatch"]>>[0];
 type Sb = TileSandboxLike & { readyPack: string; handlers?: PluginHostHandlers };
 
 function koiSpec(): PluginView {
@@ -21,7 +23,7 @@ function koiSpec(): PluginView {
     hash: "h-koi",
     has_frontend: true,
     capabilities: ["viz.read", "viz.write"],
-    assets: [{ id: "koi-kohaku", path: "assets/koi.glb" }] as unknown as PluginView["assets"],
+    assets: [mockPartial<Asset>({ id: "koi-kohaku", path: "assets/koi.glb" })],
     viz: mockPartial<NonNullable<PluginView["viz"]>>({ contract: 2, maxBuffers: 8, maxBufferFloats: 64, hostMeshSlot: 3, hostMeshSlotCount: 2 }),
   });
 }
@@ -43,14 +45,14 @@ describe("pane sandboxes drive their pane's host mesh lane", () => {
     await new Promise((r) => setTimeout(r, 0));
     const h = sbs[0]!.handlers!;
     h.writeBuffer!(3, new Array(64).fill(0.5));
-    h.writeBatch?.({ buffers: [{ slot: 4, data: new Array(64).fill(0.25) }], uniforms: [] } as never);
+    h.writeBatch?.(mockPartial<Batch>({ buffers: [{ slot: 4, data: new Array(64).fill(0.25) }], uniforms: [] }));
     expect(writes).toEqual([["plugin:koi-pond", "koi-pond", 3], ["plugin:koi-pond", "koi-pond", 4]]);
   });
 
   it("applyPaneHostMeshSlot applies only the pack's host-mesh slot window", () => {
     const lane = { applySlotBuffer: vi.fn() };
     const spec = koiSpec();
-    const c = spec.viz as never;
+    const c = spec.viz;
     expect(applyPaneHostMeshSlot(lane, spec, c, 2, [1])).toBe(false);
     expect(applyPaneHostMeshSlot(lane, spec, c, 3, [1])).toBe(true);
     expect(applyPaneHostMeshSlot(lane, spec, c, 4, [1])).toBe(true);
@@ -69,8 +71,8 @@ describe("pane sandboxes drive their pane's host mesh lane", () => {
     for (const id of packs) {
       const y = readFileSync(resolve(root, id, "plugin.yml"), "utf8");
       const slot = Number(/hostMeshSlot:\s*(\d+)/.exec(y)![1]);
-      const spec = mockPartial<PluginView>({ id, assets: [{ id: "a" }] as unknown as PluginView["assets"] });
-      const contract = { hostMeshSlot: slot, hostMeshSlotCount: 1 } as never;
+      const spec = mockPartial<PluginView>({ id, assets: [mockPartial<Asset>({ id: "a" })] });
+      const contract = mockPartial<NonNullable<PluginView["viz"]>>({ hostMeshSlot: slot, hostMeshSlotCount: 1 });
       const seen: number[] = [];
       const lane = { applySlotBuffer: (d: ArrayLike<number>) => { seen.push(d[0]!); } };
       for (let t = 0; t < 30; t++) applyPaneHostMeshSlot(lane, spec, contract, slot, [t * 0.1]);
