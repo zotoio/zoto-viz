@@ -45,6 +45,11 @@ host.onConfig = (cfg) => {
   applyLiveConfig(cfg);
 };
 
+// Boot from the config the host already holds: without this the model slot stays procedural until
+// a config change arrives, so no host-mesh slots are written and the koi hold their pinned poses.
+const bootCfg = host.getConfig?.();
+if (bootCfg) applyLiveConfig(bootCfg);
+
 host.onFrame = (frame: VizDataFrame) => {
   const { w, h } = tileSize;
   const packed = sim.advance(frame, w, h);
