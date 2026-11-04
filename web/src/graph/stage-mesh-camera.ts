@@ -99,7 +99,33 @@ export function rocketCarStagePose(read: StageSlotReader): StageMeshPose {
   return { position: [x, y, z], target: [x + fx, y + fy, z + fz], near: 0.1 };
 }
 
+/** Marble-run fallback pose (the whole board) before the pack's first frame. */
+const MARBLE_WIDE: StageMeshPose = { position: [0.15, 1.05, 4.15], target: [0.12, 0.78, 0.15], near: 0.03, fov: 36 };
+
+/**
+ * Marble-run camera from the pack (slot0: 1..3 position, 4..6 target, 7 fov). The board is
+ * ~3.3 m wide, so on a wide pane the camera backs off until it fits horizontally.
+ */
+export function marbleRunStagePose(read: StageSlotReader, viewAspect?: number): StageMeshPose {
+  let pose = MARBLE_WIDE;
+  if (read(0, 0) >= 0.5) {
+    const fov = read(0, 7);
+    pose = {
+      position: [read(0, 1), read(0, 2), read(0, 3)],
+      target: [read(0, 4), read(0, 5), read(0, 6)],
+      near: 0.03,
+      fov: fov > 10 && fov < 100 ? fov : 36,
+    };
+  }
+  const aspect = viewAspect !== undefined && Number.isFinite(viewAspect) && viewAspect > 0.1 ? viewAspect : 16 / 9;
+  if (aspect >= 1) return pose;
+  // portrait panes: widen the vertical fov so the run's width still fits
+  const t = Math.tan(((pose.fov ?? 36) * Math.PI) / 360) / aspect;
+  return { ...pose, fov: Math.min(100, (2 * Math.atan(t) * 180) / Math.PI) };
+}
+
 export function stageMeshPose(packId: string, read: StageSlotReader, viewAspect?: number): StageMeshPose | null {
+  if (packId === "marble-run") return marbleRunStagePose(read, viewAspect);
   if (packId === "aquarium") return aquariumStagePose(read, viewAspect);
   if (packId === "koi-pond") return koiStagePose(read);
   if (packId === "rocket-car-soccer") return rocketCarStagePose(read);

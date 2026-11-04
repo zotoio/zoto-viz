@@ -1,5 +1,5 @@
 import { vizWallMs } from "../core/viz-clock";
-import type { MonoMs } from "../core/viz-time";
+import { monoMs, type MonoMs } from "../core/viz-time";
 
 /** Reused wall parts for every nixie tile on the wall (one formatter path). */
 export const nixieWallPartsScratch = { h: 0, m: 0, s: 0 };
@@ -48,7 +48,7 @@ export function fillRealWallPartsScratch(wallMs?: number): typeof nixieWallParts
 
 let flagStartH = 0;
 let flagStartM = 0;
-let flagAnchorMono: MonoMs = 0 as MonoMs;
+let flagAnchorMono: MonoMs = monoMs(0);
 let flagWallActive = false;
 
 export function setDevWallFlagClock(h: number, m: number, anchorMono: MonoMs): void {

@@ -13,19 +13,19 @@ look:
   gridOpacity: 0
 dataMapping:
   - field: packets[].proto
-    effect: marble hue (protocol hash)
+    effect: marble colour (protocol hash)
     default: tcp
     clamp: hash01
   - field: packets[].size
-    effect: marble radius
+    effect: marble size (15-20 mm)
     default: 128
     clamp: 6..48
   - field: packets[].field
-    effect: marble radius when sizeField=field
+    effect: marble size when sizeField=field
     default: 0.5
     clamp: 0..1
   - field: sys.failed
-    effect: reject tray when above failThreshold
+    effect: marbles carry Zoto Fail red when above failThreshold
     default: 0
     clamp: 0..1
 workBudget:
@@ -85,10 +85,11 @@ config:
     type: select
     default: follow
     values:
-      - [follow, Follow marble]
+      - [follow, Follow marble (framed)]
+      - [chase, Chase cam (ride behind one marble)]
       - [wide, Wide workshop]
       - [orbit, Slow orbit]
-    hint: Follow eases behind the lead marble then pulls back. Reduced motion forces wide.
+    hint: Follow keeps the board framed around the lead marble. Chase rides behind one marble looking down the track, cuts wide while it climbs the lift, then picks up the next one. Reduced motion forces wide.
   - key: jarCount
     label: collection jars
     type: number

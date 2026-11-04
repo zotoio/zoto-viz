@@ -7,7 +7,7 @@
  *  - a soft self-reload backstop after N hours, at a quiet moment (no input, nothing speaking).
  */
 import { liveAudioContexts } from "../audio/audio-manager";
-import { apiFetch } from "../core/http";
+import { apiFetch, hasWriteSession } from "../core/http";
 import { recoveryConfig, type RecoveryConfig } from "./recovery-config";
 
 const PAGE_ID = (() => {
@@ -166,6 +166,8 @@ export function startPageHealth(isBusy: () => boolean = () => false): void {
       guardedReload(`soft reload after ${cfg.softReloadAfterH} h`);
       return;
     }
+    // no write session yet (or a tokenless LAN viewer): skip rather than prompt for a token
+    if (!hasWriteSession()) return;
     try {
       const r = await apiFetch("/api/page/heartbeat", {
         method: "POST",

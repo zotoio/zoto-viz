@@ -2,39 +2,37 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { beforeEach, describe, expect, it } from "vitest";
-import { CONSERVATIVE_WORK_BUDGET } from "../../../sdk/host-init-context";
-import { clampManifestWorkBudgetToCeilings } from "../../../sdk/manifest-work-budget";
-import ceilings from "../../../../service/policy/work-budget-ceilings.json";
 import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../sdk/viz-contract";
 import {
   MARBLE_DATA_MAPPING,
-  MARBLE_DEFAULTS,
-  hash01,
   parseMarbleOptions,
 } from "./config";
 import {
+  MR_MARBLE_FLOATS,
+  MR_MARBLES_PER_SLOT,
+  MR_MARBLE_SLOT0,
+  MR_MAX_MARBLES,
+  MR_SLOT,
   applyPackWorkBudget,
+  camState,
+  chaseTarget,
+  decodeMarbleLook,
   disposeMarblePack,
   ingestFrame,
   isFrameFailed,
-  jarRouteKey,
-  marbleDeterminismDigest,
-  marbleHueForPacket,
   marbleHudSkipCount,
+  marbleHueForPacket,
   marbleIngestStats,
+  marbleQueueLength,
   marbleSim,
   marbleWorkBudget,
   packMarbleSlots,
   parseMarbleWorkBudgetYaml,
   resetPackWorkBudget,
   setMarbleOptions,
-  workWithinBudget,
-  MR_SLOT,
-  MR_SLOT0,
-  MR_MARBLES_PER_SLOT,
-  MR_MARBLE_FLOATS,
 } from "./pack";
-import { jarIndexForRouteKey, MarbleSim, SIM_DT, trackPieceCount } from "./sim";
+import { LIFT_PITCH, MarbleSim, SIM_DT, TAG, TrackPath } from "./sim";
+import { TRACK } from "./track-data";
 import { probePluginSkyCompile, wrapPluginSky } from "./sky-probe";
 
 const frontendDir = path.dirname(fileURLToPath(import.meta.url));
@@ -42,203 +40,253 @@ const packRoot = path.resolve(frontendDir, "..");
 const FRAG = readFileSync(path.join(packRoot, "sky/fragment.glsl"), "utf8");
 const PLUGIN = readFileSync(path.join(packRoot, "plugin.yml"), "utf8");
 const VIS = readFileSync(path.join(packRoot, "visualisation.yml"), "utf8");
+const GLB = readFileSync(path.join(packRoot, "assets/marble-track.glb"));
 
 const TRADEMARKS = ["minecraft", "mojang", "rocket league", "psyonix"];
 
 function liveFrame(over: Partial<VizDataFrame> = {}): VizDataFrame {
-  return {
-    t: 0,
-    dt: SIM_DT,
-    audio: 0,
-    packets: [],
-    rf: [],
-    talkers: [],
-    headlines: [],
-    sys: { ...EMPTY_SYS_TELEMETRY, failed: 0 },
-    ...over,
-  };
+  return { t: 0, dt: SIM_DT, audio: 0, packets: [], rf: [], talkers: [], headlines: [], sys: { ...EMPTY_SYS_TELEMETRY, failed: 0 }, ...over };
 }
 
-function shippedWorkBudget() {
-  return parseMarbleWorkBudgetYaml(VIS);
+function run(sim: MarbleSim, seconds: number, dt = SIM_DT): void {
+  for (let t = 0; t < seconds; t += dt) sim.step(dt, 4);
 }
 
 describe("marble-run shipped pack", () => {
   beforeEach(() => {
     disposeMarblePack();
     resetPackWorkBudget();
-    applyPackWorkBudget(shippedWorkBudget());
+    applyPackWorkBudget(parseMarbleWorkBudgetYaml(VIS));
   });
 
-  it("declares mapping, work budget in yaml, and compiles sky", () => {
+  it("declares mapping, work budget, the track asset, and compiles the sky", () => {
     expect(PLUGIN).toContain("id: marble-run");
+    expect(PLUGIN).toMatch(/idle:\n\s+fixture: host/);
     expect(VIS).toMatch(/workBudget/);
-    expect(VIS).toMatch(/dataMapping/);
     expect(MARBLE_DATA_MAPPING.length).toBe(4);
-    const fromYaml = parseMarbleWorkBudgetYaml(VIS);
-    expect(fromYaml).toEqual(marbleWorkBudget());
-    expect(fromYaml.maxPacketsPerFrame).toBe(8);
+    expect(parseMarbleWorkBudgetYaml(VIS)).toEqual(marbleWorkBudget());
     const blob = `${PLUGIN}\n${VIS}\n${FRAG}`.toLowerCase();
     for (const mark of TRADEMARKS) expect(blob.includes(mark)).toBe(false);
     const wrapped = wrapPluginSky(FRAG);
     expect("error" in wrapped).toBe(false);
     if ("error" in wrapped) return;
-    expect(wrapped.frag).toContain("zotoVizSlots");
     expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
-  it("is deterministic for pinned seed and preset", () => {
-    const o = parseMarbleOptions({ preset: "workshop", seed: "4242" });
-    const a = marbleDeterminismDigest(3.5, o);
-    const b = marbleDeterminismDigest(3.5, o);
-    expect(a).toBe(b);
-    const c = marbleDeterminismDigest(3.5, { ...o, seed: 8801 });
-    expect(c).not.toBe(a);
+  it("ships a GLB whose size and digest match plugin.yml", async () => {
+    expect(GLB.subarray(0, 4).toString("latin1")).toBe("glTF");
+    const bytes = Number(/bytes: (\d+)/.exec(PLUGIN)?.[1]);
+    expect(GLB.length).toBe(bytes);
+    expect(GLB.length).toBeLessThan(1_500_000);
+    const { createHash } = await import("node:crypto");
+    expect(PLUGIN).toContain(createHash("sha256").update(GLB).digest("hex"));
+    const json = JSON.parse(GLB.subarray(20, 20 + GLB.readUInt32LE(12)).toString("utf8")) as { nodes: { name: string }[] };
+    const names = json.nodes.map((n) => n.name);
+    for (const part of ["rails", "lift-thread", "funnel", "bell", "xylo-bar-0", "xylo-bar-7", "base"]) expect(names).toContain(part);
   });
+});
 
-  it("600-frame row: integrate runs exactly maxSimStepsPerFrame per frame on ingest path", () => {
-    resetPackWorkBudget();
-    expect(marbleWorkBudget()).toEqual(CONSERVATIVE_WORK_BUDGET);
-    ingestFrame(liveFrame({ dt: 0.25 }));
-    expect(marbleSim().integrateStepsLastFrame()).toBe(CONSERVATIVE_WORK_BUDGET.maxSimStepsPerFrame);
-
-    const hostDelivers = clampManifestWorkBudgetToCeilings(
-      { ...shippedWorkBudget(), maxSimStepsPerFrame: 99 },
-      ceilings,
-    );
-    applyPackWorkBudget(hostDelivers);
-    expect(marbleWorkBudget().maxSimStepsPerFrame).toBe(4);
-
-    const steps: number[] = [];
-    for (let i = 0; i < 600; i++) {
-      ingestFrame({
-        ...liveFrame(),
-        t: i * 0.016,
-        dt: 0.25,
-        demo: true,
-      });
-      steps.push(marbleSim().integrateStepsLastFrame());
+describe("track data (Blender export)", () => {
+  it("is a closed, evenly sampled loop with every piece", () => {
+    const tr = new TrackPath();
+    expect(tr.n).toBe(TRACK.tags.length);
+    expect(tr.length).toBeGreaterThan(12);
+    let maxGap = 0;
+    for (let i = 0; i < tr.n; i++) {
+      const j = (i + 1) % tr.n;
+      maxGap = Math.max(maxGap, Math.hypot(tr.px[j]! - tr.px[i]!, tr.py[j]! - tr.py[i]!, tr.pz[j]! - tr.pz[i]!));
     }
-    expect(steps).toEqual(Array(600).fill(4));
+    // no tears: neighbours (including the wrap from the lift bottom back) are one step apart
+    expect(maxGap).toBeLessThan(TRACK.step * 2.5);
+    const tags = new Set(Array.from(tr.tag));
+    for (const t of ["lift", "spiral", "zigzag", "xylo", "loop", "bell", "funnel"] as const) expect(tags.has(TAG[t])).toBe(true);
+    expect(tr.xyloS).toHaveLength(8);
+    // the lift climbs and the run descends overall
+    const top = tr.index(tr.liftEnd - 0.001), bottom = tr.index(tr.liftStart);
+    expect(tr.py[top]! - tr.py[bottom]!).toBeGreaterThan(1.3);
   });
 
-  it("caps live packets at maxPacketsPerFrame with exact consumed and HUD skip counts", () => {
-    setMarbleOptions(parseMarbleOptions({ maxMarbles: "48" }));
-    const cap = marbleWorkBudget().maxPacketsPerFrame;
-    const packets = Array.from({ length: 500 }, (_, i) => ({
-      proto: `p${i % 17}`,
-      size: 64 + (i % 200),
-      field: (i % 100) / 100,
-    }));
-    ingestFrame(liveFrame({ t: 0, dt: 0, demo: false, packets }));
-    expect(marbleIngestStats().consumedPackets).toBe(8);
-    expect(marbleHudSkipCount()).toBe(492);
-    expect(marbleSim().bodies().filter((m) => m.active).length).toBe(8);
-    const { slot0 } = packMarbleSlots(liveFrame({ t: 0, demo: false }));
-    expect(slot0[MR_SLOT.hudSkip]).toBe(492);
+  it("rejects malformed data", () => {
+    expect(() => new TrackPath({ ...TRACK, tags: TRACK.tags.slice(1) })).toThrow(/bad data/);
   });
+});
 
-  it("demo frames never leave the board blank while marbles are in flight", () => {
-    setMarbleOptions(MARBLE_DEFAULTS);
-    let peakActive = 0;
-    let peakSlotEnergy = 0;
-    for (let i = 0; i < 240; i++) {
-      const t = i * SIM_DT;
-      ingestFrame(liveFrame({ t, demo: true }));
-      const { slot0, slot1 } = packMarbleSlots(liveFrame({ t, demo: true }));
-      expect(slot0[MR_SLOT.mark]).toBe(1);
-      const active = slot0[MR_SLOT.activeCount]!;
-      peakActive = Math.max(peakActive, active);
-      const slotEnergy = slot1.reduce((s, v) => s + Math.abs(v), 0);
-      peakSlotEnergy = Math.max(peakSlotEnergy, slotEnergy);
-      if (active > 0) {
-        expect(slotEnergy).toBeGreaterThan(0);
+describe("marble sim", () => {
+  it("rolls marbles round the whole run and back up the lift", () => {
+    const sim = new MarbleSim(8);
+    sim.setCount(8);
+    const start = Float64Array.from(sim.s);
+    let laps = 0;
+    const prev = Float64Array.from(sim.s);
+    for (let f = 0; f < 60 * 90; f++) {
+      sim.step(SIM_DT, 4);
+      for (let i = 0; i < sim.count; i++) {
+        if (sim.s[i]! < prev[i]! - sim.track.length / 2) laps++;
+        prev[i] = sim.s[i]!;
       }
     }
-    expect(peakActive).toBeGreaterThan(0);
-    expect(peakSlotEnergy).toBeGreaterThan(0);
-    const { slot0 } = packMarbleSlots(liveFrame({ t: 240 * SIM_DT, demo: true }));
-    expect(slot0[MR_SLOT.demo]).toBe(1);
-    const headerSum = slot0.reduce((s, v) => s + Math.abs(v), 0);
-    expect(headerSum).toBeGreaterThan(2);
+    expect(laps).toBeGreaterThanOrEqual(8);
+    expect(Array.from(sim.s)).not.toEqual(Array.from(start));
   });
 
-  it("keeps work counts under caps for every preset at pinned seed", () => {
-    const presets = ["workshop", "glass-tower", "chaos-funnel", "calm-spiral"] as const;
-    for (const preset of presets) {
-      disposeMarblePack();
-      const o = parseMarbleOptions({ preset, seed: "4242", complexity: "5", maxMarbles: "48" });
-      setMarbleOptions(o);
-      for (let i = 0; i < 240; i++) {
-        ingestFrame(liveFrame({
-          t: i * SIM_DT,
-          demo: true,
-          packets: [{ proto: "tcp", size: 900, field: 0.7 }],
-        }));
-      }
-      expect(workWithinBudget(o)).toBe(true);
-      expect(trackPieceCount(o.complexity, o.seed)).toBeLessThan(30);
+  it("speeds up downhill and holds the lift speed on the lift", () => {
+    const sim = new MarbleSim(1);
+    sim.setCount(1);
+    sim.s[0] = sim.track.liftEnd + 0.02;
+    sim.v[0] = 0.2;
+    run(sim, 1.2);
+    expect(sim.v[0]).toBeGreaterThan(0.3);
+    sim.s[0] = sim.track.liftStart + 0.3;
+    sim.step(SIM_DT, 4);
+    expect(sim.v[0]).toBeCloseTo(sim.liftSpeed, 5);
+  });
+
+  it("keeps marbles apart and admits one per lift pitch", () => {
+    const sim = new MarbleSim(24);
+    sim.setCount(24);
+    for (let f = 0; f < 60 * 30; f++) {
+      sim.step(SIM_DT, 4);
+      const on: number[] = [];
+      for (let i = 0; i < sim.count; i++) if (sim.track.onLift(sim.s[i]!)) on.push(sim.s[i]!);
+      on.sort((a, b) => a - b);
+      for (let k = 1; k < on.length; k++) expect(on[k]! - on[k - 1]!).toBeGreaterThan(LIFT_PITCH * 0.9);
     }
+    const s = Array.from(sim.s.subarray(0, sim.count)).sort((a, b) => a - b);
+    for (let k = 1; k < s.length; k++) expect(s[k]! - s[k - 1]!).toBeGreaterThan(0.03);
   });
 
-  it("live packets spawn visible marbles; failure path lights reject glow", () => {
-    setMarbleOptions(parseMarbleOptions({ destField: "proto", failThreshold: "0.5" }));
-    ingestFrame(liveFrame({
-      t: 1,
-      demo: false,
-      packets: [
-        { proto: "tcp", size: 400, field: 0.62 },
-        { proto: "udp", size: 96, field: 0.38 },
-      ],
-    }));
-    expect(marbleSim().bodies().filter((m) => m.active).length).toBe(2);
-
-    disposeMarblePack();
-    setMarbleOptions(parseMarbleOptions({ failThreshold: "0.5" }));
-    ingestFrame(liveFrame({
-      t: 1,
-      demo: false,
-      packets: [{ proto: "tcp", size: 400, field: 0.9 }],
-      sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.9 },
-    }));
-    expect(marbleSim().bodies().some((m) => m.active && m.failed)).toBe(true);
-    const { slot0 } = packMarbleSlots(liveFrame({ t: 1, demo: false }));
-    expect(slot0[MR_SLOT.rejectGlow]).toBeGreaterThan(0.7);
-
-    const frame = liveFrame({
-      t: 1,
-      demo: false,
-      packets: [{ proto: "tcp", size: 64, field: 0.05 }],
-      sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.1 },
-    });
-    disposeMarblePack();
-    setMarbleOptions(parseMarbleOptions({ failThreshold: "0.8" }));
-    ingestFrame(frame);
-    expect(isFrameFailed(frame, parseMarbleOptions({ failThreshold: "0.8" }))).toBe(false);
+  it("strikes the bell and the xylophone", () => {
+    const sim = new MarbleSim(6);
+    sim.setCount(6);
+    let bell = 0, xylo = 0;
+    for (let f = 0; f < 60 * 60; f++) {
+      sim.step(SIM_DT, 4);
+      bell += sim.bellHits; sim.bellHits = 0;
+      for (let k = 0; k < sim.xyloHits.length; k++) { xylo += sim.xyloHits[k]!; sim.xyloHits[k] = 0; }
+    }
+    expect(bell).toBeGreaterThan(3);
+    expect(xylo).toBeGreaterThan(3 * 8);
   });
 
-  it("stable jar routing and protocol hue", () => {
-    const o = parseMarbleOptions({ jarCount: "6", destField: "proto" });
-    const proto = "dns";
-    const jar = jarIndexForRouteKey(jarRouteKey({ proto, size: 1, field: 0.5 }, o), o.jarCount);
-    setMarbleOptions(o);
-    ingestFrame(liveFrame({ t: 0, demo: false, packets: [{ proto, size: 200, field: 0.6 }] }));
-    expect(marbleSim().bodies().find((m) => m.active)?.jar).toBe(jar);
-    const pkt = { proto: "tls", size: 1, field: 0.5 };
-    expect(marbleHueForPacket(pkt)).toBe(hash01("tls"));
+  it("is deterministic", () => {
+    const a = new MarbleSim(16); a.setCount(16); run(a, 20);
+    const b = new MarbleSim(16); b.setCount(16); run(b, 20);
+    expect(a.digest()).toBe(b.digest());
   });
 
-  it("fixed timestep sim respects catch-up cap from work budget", () => {
-    const sim = new MarbleSim(parseMarbleOptions({ maxMarbles: "16" }));
-    sim.stepFrame(0.5);
+  it("bounds integrate steps by the work budget", () => {
+    const sim = new MarbleSim(4); sim.setCount(4);
+    sim.step(0.25, 4);
     expect(sim.integrateStepsLastFrame()).toBe(4);
-    sim.dispose();
+    sim.step(1 / 240, 4);
+    expect(sim.integrateStepsLastFrame()).toBe(1);
+  });
+});
+
+describe("marble pack data mapping", () => {
+  beforeEach(() => {
+    disposeMarblePack();
+    resetPackWorkBudget();
+    applyPackWorkBudget(parseMarbleWorkBudgetYaml(VIS));
   });
 
-  it("packs slot geometry contract", () => {
-    setMarbleOptions(MARBLE_DEFAULTS);
-    const { slot0, slot1 } = packMarbleSlots(liveFrame({ t: 0, demo: true }));
-    expect(slot0.length).toBe(MR_SLOT0);
-    expect(slot1.length).toBe(MR_MARBLES_PER_SLOT * MR_MARBLE_FLOATS);
+  it("queues packet colours and caps packets per frame", () => {
+    const pkts = Array.from({ length: 20 }, (_, i) => ({ proto: i % 2 ? "udp" : "tcp", size: 1500, field: 0.5 }));
+    ingestFrame(liveFrame({ packets: pkts }));
+    expect(marbleIngestStats().consumedPackets).toBe(8);
+    expect(marbleHudSkipCount()).toBe(12);
+    expect(marbleQueueLength()).toBeGreaterThan(0);
+  });
+
+  it("colours marbles leaving the lift from the queue, Zoto Fail red when failing", () => {
+    setMarbleOptions(parseMarbleOptions({ maxMarbles: "16" }));
+    const tcp = marbleHueForPacket({ proto: "tcp", size: 64, field: 0 });
+    let lit = 0;
+    for (let f = 0; f < 60 * 25; f++) {
+      ingestFrame(liveFrame({ t: f * SIM_DT, packets: f % 10 === 0 ? [{ proto: "tcp", size: 64, field: 0 }] : [] }));
+    }
+    const s = marbleSim();
+    for (let i = 0; i < s.count; i++) if (Math.abs(s.hue[i]! - tcp) < 1e-6) lit++;
+    expect(lit).toBeGreaterThan(0);
+    const failing = liveFrame({ sys: { ...EMPTY_SYS_TELEMETRY, failed: 0.9 } });
+    expect(isFrameFailed(failing)).toBe(true);
+  });
+
+  it("packs the slot contract the host scenery reads", () => {
+    setMarbleOptions(parseMarbleOptions({ maxMarbles: "40" }));
+    ingestFrame(liveFrame());
+    const slots = packMarbleSlots(liveFrame());
+    expect(slots).toHaveLength(4);
+    for (const b of slots) expect(b.length).toBe(64);
+    const h = slots[0]!;
+    expect(h[MR_SLOT.mark]).toBe(1);
+    expect(h[MR_SLOT.count]).toBe(40);
+    expect(h[MR_SLOT.fov]).toBeGreaterThan(20);
+    expect(MR_MAX_MARBLES).toBe(48);
+    const m = slots[MR_MARBLE_SLOT0 + 2]!;
+    const o = (39 % MR_MARBLES_PER_SLOT) * MR_MARBLE_FLOATS;
+    expect(Math.abs(m[o]!) + Math.abs(m[o + 1]!) + Math.abs(m[o + 2]!)).toBeGreaterThan(0);
+    expect(decodeMarbleLook(m[o + 3]!).radius).toBeGreaterThan(0.01);
+    expect(decodeMarbleLook(18.25)).toEqual({ radius: 0.018, hue: 0.25 });
+    expect(decodeMarbleLook(-17)).toEqual({ radius: 0.017, hue: -1 });
+  });
+
+  it("does not reallocate slot buffers between frames", () => {
+    ingestFrame(liveFrame());
+    const a = packMarbleSlots(liveFrame());
+    ingestFrame(liveFrame());
+    const b = packMarbleSlots(liveFrame());
+    expect(b[0]).toBe(a[0]);
+    expect(b[1]).toBe(a[1]);
+  });
+});
+
+describe("chase camera", () => {
+  beforeEach(() => {
+    disposeMarblePack();
+    resetPackWorkBudget();
+    applyPackWorkBudget(parseMarbleWorkBudgetYaml(VIS));
+    setMarbleOptions(parseMarbleOptions({ cameraMode: "chase", maxMarbles: "12" }));
+  });
+
+  it("is a selectable camera mode", () => {
+    expect(parseMarbleOptions({ cameraMode: "chase" }).cameraMode).toBe("chase");
+    expect(VIS).toMatch(/\[chase, /);
+  });
+
+  it("springs smoothly behind its marble and looks down the track", () => {
+    let maxStep = 0;
+    const prev = new Float32Array(3);
+    for (let f = 0; f < 60 * 20; f++) {
+      prev.set(camState.pos);
+      ingestFrame(liveFrame({ t: f * SIM_DT }));
+      if (camState.sinceCut > 0) maxStep = Math.max(maxStep, Math.hypot(camState.pos[0]! - prev[0]!, camState.pos[1]! - prev[1]!, camState.pos[2]! - prev[2]!));
+    }
+    const s = marbleSim();
+    const t = camState.target;
+    expect(t).toBeGreaterThanOrEqual(0);
+    expect(s.track.onLift(s.s[t]!)).toBe(false);
+    const p = new Float32Array(3);
+    s.track.sample(s.s[t]!, p);
+    const d = Math.hypot(camState.pos[0]! - p[0]!, camState.pos[1]! - p[1]!, camState.pos[2]! - p[2]!);
+    expect(d).toBeLessThan(0.9);
+    expect(d).toBeGreaterThan(0.05);
+    // between cuts the eye never jumps more than marble speed allows (spring, no teleports)
+    expect(maxStep).toBeLessThan(0.08);
+    expect(camState.fov).toBeGreaterThan(50);
+  });
+
+  it("switches to the next marble once its marble reaches the lift", () => {
+    ingestFrame(liveFrame());
+    const s = marbleSim();
+    const first = camState.target;
+    expect(first).toBeGreaterThanOrEqual(0);
+    s.s[first] = s.track.liftStart + 0.05;
+    const next = chaseTarget(s, first);
+    expect(next).not.toBe(first);
+    expect(s.track.onLift(s.s[next]!)).toBe(false);
+    ingestFrame(liveFrame());
+    expect(camState.target).toBe(next);
+    expect(camState.sinceCut).toBe(0);
   });
 });

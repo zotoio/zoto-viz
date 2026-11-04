@@ -55,10 +55,16 @@ export type StreamDeps = {
 
 export type StreamHandlers = {
   onState: (msg: Record<string, unknown>) => void;
-  onOpen?: () => void;
+  /** `reconnect` is false for the first open of this stream. */
+  onOpen?: (reconnect: boolean) => void;
   onClose?: () => void;
   onLog?: (text: string) => void;
 };
+
+/** Before a socket's first frame the stale limit is this many times `staleMs` (page load can stall). */
+export const FIRST_FRAME_STALE_FACTOR = 4;
+/** A stale timer this late (ms) is a main-thread stall, not a dead socket. */
+export const STALL_TOLERANCE_MS = 1000;
 
 export function backoffDelay(attempt: number, cfg: StreamConfig, random: () => number): number {
   const exp = Math.min(cfg.backoffMaxMs, cfg.backoffBaseMs * 2 ** Math.max(0, attempt));
@@ -76,6 +82,10 @@ export class StateStream {
   private retryTimer: unknown = null;
   private stopped = false;
   private paused = false;
+  /** True once the current socket delivered a frame; the stale check only runs after that. */
+  private gotFrame = false;
+  /** Opens so far (0 before the first); handlers see whether an open is a reconnect. */
+  private opens = 0;
   readonly cfg: StreamConfig;
   private readonly d: Required<Omit<StreamDeps, "doc">> & { doc: StreamDeps["doc"] };
 
@@ -122,11 +132,16 @@ export class StateStream {
     const ws = this.d.makeSocket(this.d.url);
     this.ws = ws;
     this.seq = -1;
+    this.gotFrame = false;
+    // a replacement socket starts unpaused on the server; mirror that here (Codex P2)
+    this.paused = false;
     ws.onopen = () => {
       this.lastMsgAt = this.d.now();
-      this.armStale();
+      // Page load can block the main thread for many seconds, so the normal stale check waits
+      // for this socket's first frame. Until then only a generous first-frame deadline applies.
+      this.armStale(this.cfg.staleMs * FIRST_FRAME_STALE_FACTOR);
       if (this.hidden()) this.sendCmd("pause");
-      this.h.onOpen?.();
+      this.h.onOpen?.(this.opens++ > 0);
     };
     ws.onmessage = (ev) => this.onMessage(ev.data);
     ws.onerror = () => ws.close();
@@ -167,14 +182,23 @@ export class StateStream {
     }
   };
 
-  private armStale(): void {
+  private armStale(ms = this.cfg.staleMs): void {
     if (this.staleTimer !== null) this.d.clearTimeout(this.staleTimer);
+    const armedAt = this.d.now();
     this.staleTimer = this.d.setTimeout(() => {
       this.staleTimer = null;
       if (!this.ws) return;
-      if (this.paused) { this.armStale(); return; }
+      if (this.paused) { this.armStale(ms); return; }
+      // A timer that fires well past its deadline means the page's main thread stalled (boot,
+      // a heavy view switch), not the socket: frames are queued behind the stall. Look again.
+      if (this.d.now() - armedAt - ms > STALL_TOLERANCE_MS) {
+        this.lastMsgAt = Math.max(this.lastMsgAt, this.d.now() - ms / 2);
+        this.armStale(ms);
+        return;
+      }
+      const limit = this.gotFrame ? this.cfg.staleMs : this.cfg.staleMs * FIRST_FRAME_STALE_FACTOR;
       const idle = this.d.now() - this.lastMsgAt;
-      if (idle >= this.cfg.staleMs) {
+      if (idle >= limit) {
         this.h.onLog?.(`ws: no frame for ${idle} ms; reconnecting`);
         const ws = this.ws;
         ws.close();
@@ -182,12 +206,16 @@ export class StateStream {
         if (this.ws === ws) ws.onclose?.();
         return;
       }
-      this.armStale();
-    }, this.cfg.staleMs);
+      this.armStale(this.gotFrame ? this.cfg.staleMs : ms);
+    }, ms);
   }
 
   private onMessage(data: string): void {
     this.lastMsgAt = this.d.now();
+    if (!this.gotFrame) {
+      this.gotFrame = true;
+      this.armStale();
+    }
     let m: Record<string, unknown>;
     try { m = JSON.parse(data) as Record<string, unknown>; } catch { return; }
     if (m.type === "state") {

@@ -3610,14 +3610,23 @@ function applyStats(m: StateMsg): void {
   $("active").textContent = String(m.stats.active_flows);
 }
 
+/** Minimum gap between session re-boots on socket reconnects. */
+const SESSION_REBOOT_MS = 60_000;
+let lastSessionBoot = 0;
+
 function connect(): void {
   const proto = location.protocol === "https:" ? "wss" : "ws";
   const dot = $("conn");
   const stream = new StateStream(
     { url: `${proto}://${location.host}/ws?proto=delta` },
     {
-      onOpen: () => {
+      onOpen: (reconnect) => {
         dot.classList.add("ok");
+        // A reconnect re-boots the session at most once per SESSION_REBOOT_MS, so a flapping
+        // socket backs off instead of looping /api/session and profile recovery.
+        const now = Date.now();
+        if (reconnect && now - lastSessionBoot < SESSION_REBOOT_MS) return;
+        lastSessionBoot = now;
         void bootSession().then(() => profiles?.recover());
       },
       onClose: () => { dot.classList.remove("ok"); },

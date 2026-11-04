@@ -26,6 +26,7 @@ function rig(cfg = {}) {
   const doc: VisDoc & { l: Set<() => void> } = { visibilityState: "visible", l,
     addEventListener(_: string, f: () => void) { l.add(f); }, removeEventListener(_: string, f: () => void) { l.delete(f); } };
   const states: Record<string, unknown>[] = [];
+  const opens: boolean[] = [];
   const s = new StateStream({
     url: "ws://x/ws?proto=delta",
     makeSocket: () => { const k = new FakeSock(); socks.push(k); return k; },
@@ -34,18 +35,20 @@ function rig(cfg = {}) {
     now: () => now,
     random: () => 0.5,
     doc,
-  }, { onState: (m) => states.push(m) }, cfg);
+  }, { onState: (m) => states.push(m), onOpen: (r) => opens.push(r) }, cfg);
   const advance = (ms: number) => {
     const end = now + ms;
     for (;;) {
       timers.sort((a, b) => a.at - b.at);
       const t = timers[0];
       if (!t || t.at > end) break;
-      timers.shift(); now = t.at; t.fn();
+      timers.shift(); now = Math.max(now, t.at); t.fn();
     }
     now = end;
   };
-  return { s, socks, states, advance, doc, setVisible(v: DocumentVisibilityState) { doc.visibilityState = v; for (const f of doc.l) f(); } };
+  /** Main-thread stall: time passes and no timer can run until it ends. */
+  const stall = (ms: number) => { now += ms; };
+  return { s, socks, states, opens, advance, stall, doc, setVisible(v: DocumentVisibilityState) { doc.visibilityState = v; for (const f of doc.l) f(); } };
 }
 
 describe("backoffDelay", () => {
@@ -133,5 +136,74 @@ describe("applyPatch", () => {
     expect(applyPatch([1, 2, 3], { $a: 1, $i: {} })).toEqual([1]);
     expect(applyPatch([1], { $a: 3, $i: { "2": { $r: 7 } } })).toEqual([1, null, 7]);
     expect(applyPatch({ x: 1 }, null)).toEqual({ x: 1 });
+  });
+});
+
+describe("StateStream stale check (PR #330 follow-up)", () => {
+  it("does not reconnect before the first frame within the first-frame grace", () => {
+    const r = rig();
+    r.s.start();
+    r.socks[0]!.open();
+    r.advance(DEFAULT_STREAM_CONFIG.staleMs * 3);
+    expect(r.socks[0]!.closed).toBe(false);
+    expect(r.socks).toHaveLength(1);
+  });
+
+  it("still gives up on a socket that never sends a frame", () => {
+    const r = rig();
+    r.s.start();
+    r.socks[0]!.open();
+    r.advance(DEFAULT_STREAM_CONFIG.staleMs * 4 + 10);
+    expect(r.socks[0]!.closed).toBe(true);
+  });
+
+  it("arms the normal stale check after the first frame", () => {
+    const r = rig();
+    r.s.start();
+    r.socks[0]!.open();
+    r.socks[0]!.msg({ type: "state", seq: 1, a: 1 });
+    r.advance(DEFAULT_STREAM_CONFIG.staleMs * 2 + 10);
+    expect(r.socks[0]!.closed).toBe(true);
+  });
+
+  it("treats a late timer as a main-thread stall, not a dead socket", () => {
+    const r = rig();
+    r.s.start();
+    r.socks[0]!.open();
+    r.socks[0]!.msg({ type: "state", seq: 1, a: 1 });
+    r.stall(13_000);
+    r.advance(1);
+    expect(r.socks[0]!.closed).toBe(false);
+    r.socks[0]!.msg({ type: "delta", seq: 2, base: 1, patch: null });
+    r.advance(DEFAULT_STREAM_CONFIG.staleMs - 100);
+    expect(r.socks[0]!.closed).toBe(false);
+  });
+
+  it("tells onOpen whether it is a reconnect", () => {
+    const r = rig();
+    r.s.start();
+    r.socks[0]!.open();
+    r.socks[0]!.drop();
+    r.advance(60_000);
+    r.socks[1]!.open();
+    expect(r.opens).toEqual([false, true]);
+  });
+
+  it("clears the pause state on a replacement socket (Codex P2)", () => {
+    const r = rig();
+    r.s.start();
+    r.socks[0]!.open();
+    r.socks[0]!.msg({ type: "state", seq: 1, a: 1 });
+    r.setVisible("hidden");
+    r.socks[0]!.drop();
+    r.setVisible("visible");
+    r.advance(60_000);
+    const k = r.socks[1]!;
+    k.open();
+    expect(k.sent.some((m) => m.includes("pause"))).toBe(false);
+    // unpaused: a silent replacement socket is detected as stale again
+    k.msg({ type: "state", seq: 5, a: 2 });
+    r.advance(DEFAULT_STREAM_CONFIG.staleMs * 2 + 10);
+    expect(k.closed).toBe(true);
   });
 });
