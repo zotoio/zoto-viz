@@ -53,13 +53,31 @@ export function buildAquariumTank(): THREE.Group {
     metalness: 0.15,
   });
 
-  group.add(pane([HX * 2, HY * 2, TH], waterBack, [0, 0, -HZ]));
-  group.add(pane([TH, HY * 2, HZ * 2], glass, [-HX, 0, 0]));
-  group.add(pane([TH, HY * 2, HZ * 2], glass, [HX, 0, 0]));
-  group.add(pane([HX * 2, TH, HZ * 2], floor, [0, -HY, 0]));
-  group.add(pane([HX * 2, TH, HZ * 2], glass, [0, HY, 0]));
-  group.add(pane([HX * 2 + TH, TH * 1.4, TH * 1.4], lip, [0, -HY, HZ]));
-  group.add(pane([HX * 2 + TH, TH * 1.4, TH * 1.4], lip, [0, HY, HZ]));
+  // Panes running along x stretch with the tank length (thin glass / trim, so no visible
+  // distortion); the end panes move. Fish and decor are never scaled.
+  const along = [
+    pane([HX * 2, HY * 2, TH], waterBack, [0, 0, -HZ]),
+    pane([HX * 2, TH, HZ * 2], floor, [0, -HY, 0]),
+    pane([HX * 2, TH, HZ * 2], glass, [0, HY, 0]),
+    pane([HX * 2 + TH, TH * 1.4, TH * 1.4], lip, [0, -HY, HZ]),
+    pane([HX * 2 + TH, TH * 1.4, TH * 1.4], lip, [0, HY, HZ]),
+  ];
+  const left = pane([TH, HY * 2, HZ * 2], glass, [-HX, 0, 0]);
+  const right = pane([TH, HY * 2, HZ * 2], glass, [HX, 0, 0]);
+  group.add(...along, left, right);
+  group.userData.halfW = HX;
+  group.userData.setHalfW = (hw: number) => {
+    if (!(hw > 0.1) || Math.abs(hw - (group.userData.halfW as number)) < 1e-5) return;
+    group.userData.halfW = hw;
+    for (const m of along) m.scale.x = hw / HX;
+    left.position.x = -hw;
+    right.position.x = hw;
+  };
+  /** Freshwater: slightly tannin-stained green water; reef: clear blue. */
+  group.userData.setWater = (reef: boolean) => {
+    waterBack.color.setHex(reef ? 0x0b4f7c : 0x233a22);
+    waterBack.emissive.setHex(reef ? 0x06304e : 0x1a2410);
+  };
   const puff = buildEatPuff();
   group.add(puff.root);
   group.userData.onSlots = (read: (slot: number, index: number) => number, dt: number) =>

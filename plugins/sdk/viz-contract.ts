@@ -33,6 +33,11 @@ export interface VizPresentTick {
    * decision; do not use `innerWidth`/`innerHeight` alone in the iframe.
    */
   aspect?: number;
+  /**
+   * Device-pixel area (w * h) of the same stage tile, so a pack can size its world to the
+   * pane (a 5120x1440 wall gets a bigger scene than a small mosaic pane).
+   */
+  pixels?: number;
 }
 
 export interface VizPacketSample {

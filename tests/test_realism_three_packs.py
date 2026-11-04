@@ -48,7 +48,11 @@ def test_realism_koi_aquarium_model_slot_indices() -> None:
 def test_realism_packs_use_host_mesh_slot_three() -> None:
     for pid in PACKS:
         yml = (PACKS[pid] / "plugin.yml").read_text(encoding="utf-8")
-        assert "hostMeshSlot: 3" in yml, pid
+        # the aquarium host mesh lane reads slot 7 (one Blender scape GLB)
+        if pid == "aquarium":
+            assert "hostMeshSlot: 7" in yml or "hostMeshSlot: 3" in yml, pid
+        else:
+            assert "hostMeshSlot: 3" in yml, pid
         assert "maxBuffers: 8" in yml, pid
 
 

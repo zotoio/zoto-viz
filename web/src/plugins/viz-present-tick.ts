@@ -13,6 +13,8 @@ export interface PresentDriveBinding {
   tileId: string;
   pluginClock: () => number;
   stageAspect: () => number;
+  /** Device-pixel area of the stage, when known. */
+  stagePixels?: () => number | undefined;
 }
 
 /** `VizPresentTick.tileId`: catalog pack id only. */
@@ -25,6 +27,7 @@ export function presentDriveBindingForPlugin(
   spec: { id: string; viz?: VizPluginContract } | null,
   pluginClock: () => number,
   stageAspect: () => number,
+  stagePixels?: () => number | undefined,
 ): PresentDriveBinding | null {
   if (!spec) return null;
   return {
@@ -33,6 +36,7 @@ export function presentDriveBindingForPlugin(
     tileId: presentTickTileId(spec.id),
     pluginClock,
     stageAspect,
+    stagePixels,
   };
 }
 
@@ -58,6 +62,7 @@ export function deliverPluginPresentTick(binding: PresentDriveBinding | null, fr
     binding.tileId,
     binding.pluginClock(),
     binding.stageAspect(),
+    binding.stagePixels?.(),
   );
   notePackPresentDelivery(binding.tileId);
 }

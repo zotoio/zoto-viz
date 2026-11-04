@@ -644,11 +644,22 @@ function paneAspect(tileId: string): number | undefined {
   const h = el?.clientHeight ?? 0;
   return w > 0 && h > 0 ? w / h : undefined;
 }
+function panePixels(tileId: string): number | undefined {
+  const el = mosaic?.graphScene(tileId)?.viewEl;
+  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
+  return a > 0 ? a : undefined;
+}
+function stagePresentPixels(): number | undefined {
+  const el = $("scene");
+  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
+  return a > 0 ? a : undefined;
+}
 
 const presentDriveDeps = {
   sandbox,
   pluginClock: () => scene.skyTime(),
   stageAspect: stagePresentAspect,
+  stagePixels: stagePresentPixels,
 };
 
 function refreshPluginDriveForMode(spec: PluginView | null, modeId: string): void {
@@ -662,7 +673,7 @@ addPresentListener((ts) => {
   notePackPerfPresent(ts, presentInterval);
   deliverPluginPresentTick(presentDrive, ts);
   // #235: pane sandboxes running a viz.presentTick pack get their own tick (pane clock + aspect).
-  if (tileSandboxes.size > 0) tileSandboxes.presentTick(ts, paneSkyTime, paneAspect);
+  if (tileSandboxes.size > 0) tileSandboxes.presentTick(ts, paneSkyTime, paneAspect, panePixels);
   if (mode.pluginId === "backrooms") {
     pluginSfx.syncBackroomsViewConfig(currentOpts);
     pluginSfx.setBackrooms(scene.skyTime());

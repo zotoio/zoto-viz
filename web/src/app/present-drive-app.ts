@@ -17,6 +17,7 @@ export type PresentDriveDeps = {
   sandbox: PluginSandbox;
   pluginClock: () => number;
   stageAspect: () => number;
+  stagePixels?: () => number | undefined;
 };
 
 export function refreshPluginDriveState(
@@ -30,6 +31,7 @@ export function refreshPluginDriveState(
     spec,
     deps.pluginClock,
     deps.stageAspect,
+    deps.stagePixels,
   );
 }
 
