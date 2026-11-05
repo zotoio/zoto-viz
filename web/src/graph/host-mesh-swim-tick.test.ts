@@ -3,9 +3,21 @@ import * as THREE from "three";
 import { HostMeshLane, normalizeSwimClipStart } from "./host-mesh-lane";
 import { encodeHostMeshSlotPacket, hostMeshMatrixYawPos } from "../../../plugins/sdk/host-mesh-frame";
 
+type LiveRow = {
+  action: THREE.AnimationAction;
+  mixer: THREE.AnimationMixer;
+};
+
+type TemplateRow = {
+  id: string;
+  kind: string;
+  template: THREE.Object3D;
+  swimClip: THREE.AnimationClip;
+  loadOk: boolean;
+};
+
 function swimClipWithTail(): THREE.AnimationClip {
   const times = new Float32Array([0, 0.5, 1]);
-  // Quaternion keys that actually change (unlike the shipped constant KoiTail track).
   const values = new Float32Array([
     0, 0, 0, 1,
     0, 0.2, 0, Math.sqrt(1 - 0.04),
@@ -25,15 +37,15 @@ function makeKoiRoot(): THREE.Object3D {
 }
 
 describe("HostMeshLane swim tick advances AnimationAction.time", () => {
-  it("moves action.time across frames (not stuck at 0)", async () => {
+  it("moves action.time across frames (not stuck at 0)", () => {
     const lane = new HostMeshLane();
-    const priv = lane as unknown as {
-      templates: Map<string, { id: string; kind: string; template: THREE.Object3D; swimClip: THREE.AnimationClip; loadOk: boolean }>;
-      skinnedLive: Map<string, { action: THREE.AnimationAction; mixer: THREE.AnimationMixer }[]>;
-    };
+    // Private maps via Reflect — no `as unknown as` (#192 cast guard).
+    const templates = Reflect.get(lane, "templates") as Map<string, TemplateRow>;
+    const skinnedLive = Reflect.get(lane, "skinnedLive") as Map<string, LiveRow[]>;
+
     lane.setAssetOrder(["koi"]);
     const clip = swimClipWithTail();
-    priv.templates.set("koi", {
+    templates.set("koi", {
       id: "koi",
       kind: "skinned",
       template: makeKoiRoot(),
@@ -41,8 +53,10 @@ describe("HostMeshLane swim tick advances AnimationAction.time", () => {
       loadOk: true,
     });
     const matrix = hostMeshMatrixYawPos(0, 0, 0, 0, 1);
-    lane.applySlotBuffer(encodeHostMeshSlotPacket(0, [{ matrix, extras: { animTime: 0.1, param1: 0, param2: 0, flags: 0 } }]));
-    const row = priv.skinnedLive.get("koi")![0]!;
+    lane.applySlotBuffer(
+      encodeHostMeshSlotPacket(0, [{ matrix, extras: { animTime: 0.1, param1: 0, param2: 0, flags: 0 } }]),
+    );
+    const row = skinnedLive.get("koi")![0]!;
     expect(row.action.time).toBeCloseTo(0.1, 5);
 
     lane.tick(0.25);
