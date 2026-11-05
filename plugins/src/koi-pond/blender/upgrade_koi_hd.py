@@ -349,33 +349,44 @@ def build_textured_scape():
             B.f(rows[i][j], rows[i+1][j], rows[i+1][j+1], rows[i][j+1])
     B.flush("substrate", M_PEB)
 
-    # Natural stone bank — irregular rocks around the rim (NO continuous torus/ring).
+    # Natural stone bank — a few shoreline CLUMPS only (never a full circular hoop).
     B = Builder()
-    random_bank = [
-        # (angle, radial jitter, rx, ry, rz, seed)
-        (i / 28 * math.pi * 2, 0.92 + 0.08 * math.sin(i * 2.7), 0.07 + 0.04 * abs(math.sin(i * 1.3)),
-         0.045 + 0.025 * abs(math.cos(i * 0.9)), 0.06 + 0.03 * abs(math.sin(i * 1.7)), 3.1 + i * 0.37)
-        for i in range(28)
+    clumps = [
+        # (center_angle, spread_rad, count, base_r)
+        (0.35, 0.55, 7, 0.95),
+        (2.0, 0.45, 6, 1.00),
+        (3.6, 0.60, 8, 0.93),
+        (5.1, 0.40, 5, 0.98),
     ]
-    for ang, rad, rx, ry, rz, seed in random_bank:
-        cx = math.cos(ang) * rad; cz = math.sin(ang) * rad
-        bm2 = bmesh.new(); bmesh.ops.create_icosphere(bm2, subdivisions=2, radius=1.0)
-        idx = {}
-        for v in bm2.verts:
-            d = v.co.normalized()
-            n1 = math.sin(d.x * 5 + seed) + math.cos(d.z * 4.2)
-            r = 1.0 + 0.22 * math.sin(n1)
-            p = Vector((d.x * rx * r, d.y * ry * r, d.z * rz * r))
-            if d.y < -0.2: p.y *= 0.4  # settle into bank
-            y = -0.02 + p.y + ry * 0.4
-            idx[v] = B.v(G(cx + p.x, y, cz + p.z), (0.5 + d.x * 0.5, 0.5 + d.z * 0.5))
-        for f in bm2.faces:
-            B.f(*[idx[v] for v in f.verts])
-        bm2.free()
-    # A few larger accent boulders on the bank (still not a ring)
+    stone_i = 0
+    for cang, spread, count, base_r in clumps:
+        for k in range(count):
+            ang = cang + (k / max(1, count - 1) - 0.5) * spread
+            jitter = 0.04 * math.sin(stone_i * 2.3)
+            rad = base_r + jitter + 0.03 * math.cos(k * 1.7)
+            rx = 0.06 + 0.05 * abs(math.sin(stone_i * 1.1))
+            ry = 0.04 + 0.03 * abs(math.cos(stone_i * 0.8))
+            rz = 0.05 + 0.04 * abs(math.sin(stone_i * 1.4))
+            seed = 4.2 + stone_i * 0.41
+            cx = math.cos(ang) * rad; cz = math.sin(ang) * rad
+            bm2 = bmesh.new(); bmesh.ops.create_icosphere(bm2, subdivisions=2, radius=1.0)
+            idx = {}
+            for v in bm2.verts:
+                d = v.co.normalized()
+                n1 = math.sin(d.x * 5 + seed) + math.cos(d.z * 4.2)
+                r = 1.0 + 0.22 * math.sin(n1)
+                p = Vector((d.x * rx * r, d.y * ry * r, d.z * rz * r))
+                if d.y < -0.2: p.y *= 0.4
+                y = -0.02 + p.y + ry * 0.4
+                idx[v] = B.v(G(cx + p.x, y, cz + p.z), (0.5 + d.x * 0.5, 0.5 + d.z * 0.5))
+            for f in bm2.faces:
+                B.f(*[idx[v] for v in f.verts])
+            bm2.free()
+            stone_i += 1
+    # Two larger accent boulders (not forming a ring)
     for ang, rad, rx, ry, rz, seed in [
-        (0.4, 1.02, 0.12, 0.08, 0.10, 11.0), (2.1, 1.05, 0.14, 0.09, 0.11, 12.5),
-        (3.8, 1.00, 0.11, 0.07, 0.09, 14.0), (5.2, 1.04, 0.13, 0.085, 0.10, 15.5),
+        (0.5, 1.02, 0.13, 0.09, 0.11, 11.0),
+        (3.4, 1.00, 0.12, 0.08, 0.10, 14.0),
     ]:
         cx = math.cos(ang) * rad; cz = math.sin(ang) * rad
         bm2 = bmesh.new(); bmesh.ops.create_icosphere(bm2, subdivisions=3, radius=1.0)
