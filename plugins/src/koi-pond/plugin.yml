@@ -18,8 +18,8 @@ capabilities:
 assets:
   - id: koi-pond-scape
     path: assets/koi-pond-scape.glb
-    sha256: 3720f695744fc434e1954d9da22699838e5408601f7eb8e70a7876a5fe157b61
-    bytes: 782020
+    sha256: 584c3a5a30cb7ac01cab8afa23c7594b8adbd54c901cd426275516032660635e
+    bytes: 781144
     triangles: 15108
   - id: koi-kohaku
     path: assets/koi-kohaku.glb
