@@ -1,7 +1,8 @@
 /**
- * Koi pond host scenery: planar-reflective water, stone basin/kerb, fountain jet, and
- * bloom-driven lotus accents. Fish / pads / rocks stay as host-mesh GLB instances; this
- * group is parented via {@link HostMeshLane.setScenery} the same way aquarium glass is.
+ * Koi pond host scenery: planar-reflective water + fountain jet over the Blender
+ * scape (plugins/src/koi-pond/assets/koi-pond-scape.glb). The scape is pinned as
+ * host-mesh asset 0 (basin, kerb, substrate, fountain, flowering lilies, rocks);
+ * this group finds it under the lane — same pattern as aquarium glass/caustics.
  */
 import * as THREE from "three";
 import { Reflector } from "three/addons/objects/Reflector.js";
@@ -19,6 +20,20 @@ const _pos = new THREE.Vector3();
 const _quat = new THREE.Quaternion();
 const _scl = new THREE.Vector3();
 
+function patchVertexColors(root: THREE.Object3D): void {
+  root.traverse((c) => {
+    const mesh = c as THREE.Mesh;
+    if (!mesh.isMesh) return;
+    const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+    for (const mat of mats) {
+      const m = mat as THREE.MeshStandardMaterial;
+      if (!m || m.vertexColors) continue;
+      m.vertexColors = true;
+      m.needsUpdate = true;
+    }
+  });
+}
+
 export function buildKoiPondScenery(): KoiPondScenery {
   const root = new THREE.Group();
   root.name = "koi-pond-scenery";
@@ -29,27 +44,7 @@ export function buildKoiPondScenery(): KoiPondScenery {
   sun.target.position.set(0, 0, 0);
   root.add(hemi, sun, sun.target);
 
-  const bed = new THREE.Mesh(
-    new THREE.CylinderGeometry(1.05, 1.08, 0.08, 48),
-    new THREE.MeshStandardMaterial({ color: 0x2a3538, roughness: 0.92 }),
-  );
-  bed.position.y = -0.06;
-  bed.name = "koi-basin-bed";
-  root.add(bed);
-
-  const kerbMat = new THREE.MeshStandardMaterial({ color: 0x6a6a68, roughness: 0.82 });
-  const kerb = new THREE.Group();
-  kerb.name = "koi-basin-kerb";
-  for (let i = 0; i < 24; i++) {
-    const a = (i / 24) * Math.PI * 2;
-    const stone = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6), kerbMat);
-    stone.position.set(Math.cos(a) * 1.02, 0.03, Math.sin(a) * 1.02);
-    stone.scale.set(1.2, 0.7, 0.9);
-    kerb.add(stone);
-  }
-  root.add(kerb);
-
-  // Real planar reflection of rocks / fish / sky above the pond.
+  // Planar reflection of the Blender scape / fish / sky.
   const reflector = new Reflector(new THREE.CircleGeometry(0.98, 64), {
     clipBias: 0.003,
     textureWidth: 1024,
@@ -61,7 +56,6 @@ export function buildKoiPondScenery(): KoiPondScenery {
   reflector.name = "koi-water-reflector";
   root.add(reflector);
 
-  // Transmissive tint layer so the water reads wet and ripples slightly (vertex bob).
   const tintMat = new THREE.MeshPhysicalMaterial({
     color: 0x1a6a72,
     metalness: 0.02,
@@ -98,22 +92,6 @@ export function buildKoiPondScenery(): KoiPondScenery {
   tint.renderOrder = 2;
   root.add(tint);
 
-  const pedestal = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.08, 0.11, 0.18, 16),
-    new THREE.MeshStandardMaterial({ color: 0x8a8a86, roughness: 0.7 }),
-  );
-  pedestal.position.set(0, 0.1, 0);
-  pedestal.name = "koi-fountain-pedestal";
-  root.add(pedestal);
-
-  const bowl = new THREE.Mesh(
-    new THREE.CylinderGeometry(0.16, 0.14, 0.04, 20),
-    new THREE.MeshStandardMaterial({ color: 0x7a7a76, roughness: 0.65 }),
-  );
-  bowl.position.set(0, 0.2, 0);
-  bowl.name = "koi-fountain-bowl";
-  root.add(bowl);
-
   const dropGeo = new THREE.SphereGeometry(0.012, 6, 4);
   const dropMat = new THREE.MeshPhysicalMaterial({
     color: 0xdff6ff,
@@ -130,54 +108,44 @@ export function buildKoiPondScenery(): KoiPondScenery {
   jet.name = "koi-fountain-jet";
   root.add(jet);
 
-  const lotusMat = new THREE.MeshStandardMaterial({
-    color: 0xf2a0c0,
-    emissive: 0x4a2030,
-    emissiveIntensity: 0.25,
-    roughness: 0.55,
-    side: THREE.DoubleSide,
-  });
-  const lotuses: THREE.Mesh[] = [];
-  const lotusPos = [
-    [0.35, 0.35],
-    [-0.4, 0.2],
-    [0.15, -0.45],
-    [-0.25, -0.3],
-  ];
-  for (let i = 0; i < lotusPos.length; i++) {
-    const [x, z] = lotusPos[i]!;
-    const flower = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.08, 8), lotusMat.clone());
-    flower.position.set(x, 0.04, z);
-    flower.name = `koi-lotus-${i}`;
-    flower.visible = false;
-    root.add(flower);
-    lotuses.push(flower);
-  }
-
   const phases = Float32Array.from({ length: FOUNTAIN_DROPLETS }, (_, i) => i / FOUNTAIN_DROPLETS);
+
+  let lane: THREE.Object3D | null = null;
+  let scapeReady = false;
+
+  const findScape = (): void => {
+    const parent = root.parent;
+    if (!parent) return;
+    if (scapeReady && lane === parent) return;
+    lane = parent;
+    let found = false;
+    lane.traverse((o) => {
+      if (o === root || root.children.includes(o)) return;
+      const n = o.name || "";
+      if (
+        n === "substrate" ||
+        n === "basin-kerb" ||
+        n === "fountain" ||
+        n === "pond-rocks" ||
+        n.startsWith("lily-pad") ||
+        n.startsWith("lotus-bloom") ||
+        n === "koi-pond-scape"
+      ) {
+        found = true;
+        patchVertexColors(o);
+      }
+    });
+    scapeReady = found;
+  };
 
   const update = (read: SlotReader, dt: number): void => {
     uTime.value += Math.max(0, dt);
+    findScape();
     const murk = read(0, 2);
     const clarity = read(0, 1);
-    const bloomOn = read(0, 9);
-    const lotusN = Math.max(0, Math.min(lotuses.length, Math.round(read(0, 7))));
-    const traffic = read(0, 29);
-    const bloom = bloomOn > 0.5 ? Math.max(0.15, Math.min(1, 0.35 + traffic)) : 0.08;
 
     tintMat.opacity = 0.3 + clarity * 0.25 - murk * 0.2;
     tintMat.color.setRGB(0.05 + murk * 0.08, 0.35 - murk * 0.15, 0.4 - murk * 0.1);
-
-    for (let i = 0; i < lotuses.length; i++) {
-      const m = lotuses[i]!;
-      const on = i < lotusN;
-      m.visible = on;
-      if (!on) continue;
-      const s = 0.55 + bloom * 0.9;
-      m.scale.setScalar(s);
-      m.position.y = 0.03 + bloom * 0.05;
-      (m.material as THREE.MeshStandardMaterial).emissiveIntensity = 0.15 + bloom * 0.45;
-    }
 
     const t = uTime.value;
     for (let i = 0; i < FOUNTAIN_DROPLETS; i++) {
