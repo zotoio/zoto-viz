@@ -140,9 +140,11 @@ type LiveRigid = {
 type LiveSkinned = {
   root: THREE.Object3D;
   mixer: THREE.AnimationMixer;
+  /** Playing swim action — tick seeks {@link THREE.AnimationAction.time} so the clip advances. */
+  action: THREE.AnimationAction;
   animOffset: number;
   clipDuration: number;
-  /** Aquarium HD only: bones the procedural fin beat and turn bend drive. */
+  /** Aquarium / koi HD: bones or nodes the procedural fin beat and turn bend drive. */
   hd?: HdFishRig;
 };
 
@@ -151,7 +153,7 @@ type LiveSkinned = {
  * set) adds a fin beat, a median-fin ripple, a spine bend into turns and a brighter tank lamp.
  * `standard` is the baked clip only, unchanged.
  */
-export type HostMeshMotionProfile = "standard" | "aquarium-hd";
+export type HostMeshMotionProfile = "standard" | "aquarium-hd" | "koi-hd";
 
 /** Rig bones of the designer fish: root → spine_01..03 → tail_01..02 run nose to tail; head carries the pectorals. */
 const FISH_BEND_CHAIN = ["spine_01", "spine_02", "spine_03", "tail_01", "tail_02"] as const;
@@ -231,12 +233,25 @@ export function applyHdFishMotion(root: THREE.Object3D, rig: HdFishRig, t: numbe
 
 function findHdFishRig(root: THREE.Object3D, phase: number, turnRate: number): HdFishRig | undefined {
   const chain = FISH_BEND_CHAIN.map((n) => root.getObjectByName(n) ?? null);
-  if (!chain.some(Boolean)) return undefined;
+  if (chain.some(Boolean)) {
+    return {
+      chain,
+      head: root.getObjectByName("head") ?? null,
+      finL: root.getObjectByName("fin_pectoral_L") ?? null,
+      finR: root.getObjectByName("fin_pectoral_R") ?? null,
+      phase,
+      turnRate,
+      bend: fishTurnBend(turnRate),
+    };
+  }
+  // Blenderwright HD koi: separate mesh parts (no skin), wagged by node rotations.
+  const koiChain = ["KoiRear", "KoiTail"].map((n) => root.getObjectByName(n) ?? null);
+  if (!koiChain.some(Boolean)) return undefined;
   return {
-    chain,
-    head: root.getObjectByName("head") ?? null,
-    finL: root.getObjectByName("fin_pectoral_L") ?? null,
-    finR: root.getObjectByName("fin_pectoral_R") ?? null,
+    chain: [null, null, null, koiChain[0], koiChain[1]],
+    head: root.getObjectByName("KoiHead") ?? null,
+    finL: root.getObjectByName("KoiFinL") ?? null,
+    finR: root.getObjectByName("KoiFinR") ?? null,
     phase,
     turnRate,
     bend: fishTurnBend(turnRate),
@@ -536,15 +551,16 @@ export class HostMeshLane {
     this.assetOrder = [];
   }
 
-  /** Advance skinned swim clips. */
+  /** Advance skinned / node-swim clips so {@link THREE.AnimationAction.time} moves (not only mixer.time). */
   tick(dtSec: number): void {
     if (dtSec <= 0 || !Number.isFinite(dtSec)) return;
     this.clockSec += dtSec;
     this.finUniforms.uFinTime.value = this.clockSec;
     for (const list of this.skinnedLive.values()) {
       for (const row of list) {
-        row.mixer.time =
-          row.animOffset + this.clockSec * (row.clipDuration > 0 ? 1 : 0);
+        const dur = row.clipDuration > 0 ? row.clipDuration : 1;
+        // Seek the playing action. Setting mixer.time alone left action.time at 0 forever.
+        row.action.time = ((row.animOffset + this.clockSec) % dur + dur) % dur;
         row.mixer.update(0);
         const turn = this.driftDecor(row.root, dtSec);
         if (row.hd) {
@@ -657,15 +673,17 @@ export class HostMeshLane {
       root.updateMatrixWorld(true);
       const mixer = new THREE.AnimationMixer(root);
       const action = mixer.clipAction(tpl.swimClip);
+      action.setLoop(THREE.LoopRepeat, Infinity);
       action.play();
       const clipDuration = tpl.swimClip.duration > 0 ? tpl.swimClip.duration : 1;
-      const animOffset = inst.extras.animTime % clipDuration;
+      const animOffset = ((inst.extras.animTime % clipDuration) + clipDuration) % clipDuration;
+      action.time = animOffset;
       this.group.add(root);
       // Sandbox fish carry their yaw rate in param1; pinned decor (flags 1) uses param1 as a phase.
-      const hd = this.motion === "aquarium-hd"
+      const hd = this.motion === "aquarium-hd" || this.motion === "koi-hd"
         ? findHdFishRig(root, inst.extras.animTime * 3.1 + i, (inst.extras.flags & 1) === 0 ? inst.extras.param1 : 0)
         : undefined;
-      list.push({ root, mixer, animOffset, clipDuration, hd });
+      list.push({ root, mixer, action, animOffset, clipDuration, hd });
     }
     this.skinnedLive.set(assetId, list);
   }

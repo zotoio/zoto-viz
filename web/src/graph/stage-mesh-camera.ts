@@ -81,8 +81,23 @@ export function aquariumStagePose(read: StageSlotReader, viewAspect?: number): S
   };
 }
 
-/** Koi shader look-at camera (it does not use vDir). Vertical fov matches focal length 1.2. */
-export function koiStagePose(read: StageSlotReader): StageMeshPose {
+/**
+ * Koi stage camera. Slot3 follow (same layout as aquarium): [0] on, [1..3] eye, [4..6] aim, [7] fov.
+ * When follow is off, top/angled drift matches the pond sky shader.
+ */
+export function koiStagePose(read: StageSlotReader, viewAspect?: number): StageMeshPose {
+  if (read(3, 0) >= 0.5) {
+    const fov = read(3, 7);
+    const vfov = fov > 10 && fov < 100 ? fov : KOI_FOV;
+    const aspect = viewAspect !== undefined && Number.isFinite(viewAspect) && viewAspect > 0.1 ? viewAspect : 16 / 9;
+    const tt = Math.tan((vfov * Math.PI) / 360) / Math.min(1, aspect);
+    return {
+      position: [read(3, 1), read(3, 2), read(3, 3)],
+      target: [read(3, 4), read(3, 5), read(3, 6)],
+      near: 0.05,
+      fov: Math.min(100, (2 * Math.atan(tt) * 180) / Math.PI),
+    };
+  }
   const camAng = read(0, 17);
   const phase = read(0, 18);
   const tilt = camAng < 0.5 ? 0.02 : 0.22;
@@ -147,7 +162,7 @@ export function marbleRunStagePose(read: StageSlotReader, viewAspect?: number): 
 export function stageMeshPose(packId: string, read: StageSlotReader, viewAspect?: number): StageMeshPose | null {
   if (packId === "marble-run") return marbleRunStagePose(read, viewAspect);
   if (packId === "aquarium") return aquariumStagePose(read, viewAspect);
-  if (packId === "koi-pond") return koiStagePose(read);
+  if (packId === "koi-pond") return koiStagePose(read, viewAspect);
   if (packId === "rocket-car-soccer") return rocketCarStagePose(read);
   return null;
 }

@@ -45,7 +45,7 @@ type LanePrivate = {
   templates: Map<string, unknown>;
   skinnedLive: Map<
     string,
-    { root: THREE.Object3D; mixer: THREE.AnimationMixer; animOffset: number; clipDuration: number }[]
+    { root: THREE.Object3D; mixer: THREE.AnimationMixer; action: THREE.AnimationAction; animOffset: number; clipDuration: number }[]
   >;
 };
 
@@ -212,9 +212,13 @@ describe("host mesh lane", () => {
     for (let i = 0; i < M_LIVE_MIXERS; i++) {
       const root = new THREE.Group();
       lane.group.add(root);
+      const mixer = new THREE.AnimationMixer(root);
+      const action = mixer.clipAction(new THREE.AnimationClip("swim", 1, []));
+      action.play();
       liveRows.push({
         root,
-        mixer: new THREE.AnimationMixer(root),
+        mixer,
+        action,
         animOffset: 0,
         clipDuration: 1,
       });

@@ -2,6 +2,7 @@ import type { PluginView } from "../plugins/plugin";
 import type { VizPluginContract } from "../plugins/viz-host";
 import { HostMeshLane, type HostMeshAssetDecl, type HostMeshMotionProfile } from "../graph/host-mesh-lane";
 import { buildAquariumScenery } from "../graph/aquarium-scenery";
+import { buildKoiPondScenery } from "../graph/koi-pond-scenery";
 import { buildMarbleRunScenery } from "../graph/marble-run-scenery";
 import {
   encodeHostMeshSlotPacket,
@@ -59,7 +60,9 @@ export function hostMeshDeclsForSet(decls: HostMeshAssetDecl[], set: HostMeshMod
 
 /** Fin beat, turn bend and the brighter lamp are the aquarium HD set's; every other mount is the baked clip. */
 export function hostMeshMotionProfile(packId: string | undefined, set: HostMeshModelSet): HostMeshMotionProfile {
-  return packId === "aquarium" && set === "hd" ? "aquarium-hd" : "standard";
+  if (packId === "aquarium" && set === "hd") return "aquarium-hd";
+  if (packId === "koi-pond" && set === "hd") return "koi-hd";
+  return "standard";
 }
 
 export type HostMeshBridge = {
@@ -124,6 +127,7 @@ export function pinPackContents(lane: MeshPinLane, packId: string, set: HostMesh
   if (packId === "aquarium") {
     pinAquariumContents(lane);
   } else if (packId === "koi-pond") {
+    lane.setScenery(buildKoiPondScenery().root);
     pinKoiContents(lane);
   } else if (packId === "marble-run") {
     // the Blender track sits at the origin in metres; marbles are instanced scenery fed from slots
