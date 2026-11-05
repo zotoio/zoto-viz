@@ -1095,6 +1095,8 @@ export class KoiPondSim {
       if (k.yawVel > turnCap) k.yawVel = turnCap;
       if (k.yawVel < -turnCap) k.yawVel = -turnCap;
       k.yaw += k.yawVel * dt;
+      while (k.yaw > Math.PI) k.yaw -= Math.PI * 2;
+      while (k.yaw < -Math.PI) k.yaw += Math.PI * 2;
 
       // Head-first only: speed rides the nose; no sideways/backwards velocity.
       const cruise = (0.085 + k.vigor * 0.09) * speedMul;
