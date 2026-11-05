@@ -404,22 +404,25 @@ def build_textured_scape():
         bm2.free()
     B.flush("bank-stones", M_STONE)
 
-    # fountain
+    # Fountain spout — stacked natural stones (NOT a circular bowl/torus).
     B = Builder()
-    for i in range(20):
-        a0=i/20*math.pi*2; a1=(i+1)/20*math.pi*2
-        def p(a,r,y): return G(math.cos(a)*r,y,math.sin(a)*r)
-        for (r0,r1,y0,y1) in [(0.0,0.09,0.0,0.16),(0.09,0.16,0.16,0.20)]:
-            if r0<1e-6:
-                c=B.v(G(0,y0,0),(0.5,0.5)); v1=B.v(p(a0,r1,y0),(0,0)); v2=B.v(p(a1,r1,y0),(1,0))
-                v3=B.v(p(a0,r1,y1),(0,1)); v4=B.v(p(a1,r1,y1),(1,1)); top=B.v(G(0,y1,0),(0.5,1))
-                B.f(c,v1,v2); B.f(v1,v3,v4,v2); B.f(top,v4,v3)
-            else:
-                v00=B.v(p(a0,r0,y0),(0,0)); v10=B.v(p(a1,r0,y0),(1,0))
-                v11=B.v(p(a1,r1,y0),(1,0.3)); v01=B.v(p(a0,r1,y0),(0,0.3))
-                t00=B.v(p(a0,r0,y1),(0,0.7)); t10=B.v(p(a1,r0,y1),(1,0.7))
-                t11=B.v(p(a1,r1,y1),(1,1)); t01=B.v(p(a0,r1,y1),(0,1))
-                B.f(v00,v10,v11,v01); B.f(t00,t01,t11,t10); B.f(v00,t00,t10,v10); B.f(v01,v11,t11,t01)
+    for si, (rx, ry, rz, yoff, seed) in enumerate([
+        (0.07, 0.05, 0.06, 0.02, 1.1),
+        (0.05, 0.06, 0.05, 0.09, 2.2),
+        (0.035, 0.05, 0.035, 0.15, 3.3),
+    ]):
+        bm2 = bmesh.new(); bmesh.ops.create_icosphere(bm2, subdivisions=2, radius=1.0)
+        idx = {}
+        for v in bm2.verts:
+            d = v.co.normalized()
+            n1 = math.sin(d.x * 5 + seed)
+            r = 1.0 + 0.2 * math.sin(n1)
+            p = Vector((d.x * rx * r, d.y * ry * r, d.z * rz * r))
+            if d.y < -0.2: p.y *= 0.5
+            idx[v] = B.v(G(p.x, yoff + p.y + ry * 0.3, p.z), (0.5 + d.x * 0.5, 0.5 + d.z * 0.5))
+        for f in bm2.faces:
+            B.f(*[idx[v] for v in f.verts])
+        bm2.free()
     B.flush("fountain", M_STONE)
 
     # rocks
