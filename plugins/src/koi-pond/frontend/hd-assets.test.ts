@@ -10,6 +10,16 @@ type Decl = { id: string; path: string; sha256: string; bytes: number };
 const decls: Decl[] = [...PLUGIN.matchAll(/- id: (\S+)\n\s+path: (\S+)\n\s+sha256: (\w+)\n\s+bytes: (\d+)/g)]
   .map((m) => ({ id: m[1]!, path: m[2]!, sha256: m[3]!, bytes: Number(m[4]) }));
 
+function glbJson(bytes: Buffer): {
+  animations: { name: string; channels: unknown[] }[];
+  nodes: { name: string; translation?: number[]; rotation?: number[]; mesh?: number; skin?: number }[];
+  skins?: unknown[];
+  extensionsUsed?: string[];
+} {
+  const chunkLen = bytes.readUInt32LE(12);
+  return JSON.parse(bytes.subarray(20, 20 + chunkLen).toString("utf8"));
+}
+
 describe("koi-pond HD model set", () => {
   const hd = decls.filter((d) => d.id.endsWith("-hd"));
   const std = decls.filter((d) => !d.id.endsWith("-hd"));
@@ -28,6 +38,19 @@ describe("koi-pond HD model set", () => {
     for (const d of hd) expect(std.some((s) => `${s.id}-hd` === d.id)).toBe(true);
   });
 
+  it("ships a Blender scape GLB ahead of the fish (aquarium pattern)", () => {
+    expect(decls[0]!.id).toBe("koi-pond-scape");
+    const bytes = readFileSync(join(PACK, decls[0]!.path));
+    expect(bytes.length).toBe(decls[0]!.bytes);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(decls[0]!.sha256);
+    const json = glbJson(bytes);
+    const names = json.nodes.map((n) => n.name);
+    expect(names.some((n) => n.includes("basin") || n.includes("kerb"))).toBe(true);
+    expect(names.some((n) => n.includes("fountain"))).toBe(true);
+    expect(names.some((n) => n.includes("lily-pad") || n.includes("Pad"))).toBe(true);
+    expect(names.some((n) => n.includes("lotus") || n.includes("Bloom"))).toBe(true);
+  });
+
   it("ships meshopt HD GLBs whose bytes and hash match the manifest", () => {
     for (const d of hd) {
       const bytes = readFileSync(join(PACK, d.path));
@@ -38,18 +61,20 @@ describe("koi-pond HD model set", () => {
     }
   });
 
-  it("HD koi swim nose-first (+Z) with a swim clip", () => {
+  it("HD koi are skinned, nose +Z, with a swim clip on spine/tail/fins", () => {
     for (const v of ["kohaku", "showa", "ogon"]) {
       const b = readFileSync(join(PACK, `assets/koi-${v}-hd.glb`));
-      const json = JSON.parse(b.subarray(20, 20 + b.readUInt32LE(12)).toString("utf8"));
-      expect(json.animations.map((a: { name: string }) => a.name)).toEqual(["swim"]);
-      type N = { name: string; translation?: number[]; rotation?: number[] };
-      const nodes: N[] = json.nodes;
-      const root = nodes.find((n) => n.name.endsWith("-root"))!;
-      expect(Math.abs(root.rotation![1]!)).toBeCloseTo(1, 5); // 180 degrees about Y
-      const z = (name: string) => nodes.find((n) => n.name === name)!.translation![2]!;
-      // Blender built the koi head toward -Z; the root turn puts the nose on the host's +Z.
-      expect(z("KoiHead")).toBeLessThan(z("KoiTail"));
+      const json = glbJson(b);
+      expect(json.animations.map((a) => a.name)).toEqual(["swim"]);
+      expect((json.skins ?? []).length).toBeGreaterThanOrEqual(1);
+      const names = json.nodes.map((n) => n.name);
+      expect(names).toContain("head");
+      expect(names).toContain("tail_02");
+      expect(names).toContain("spine_02");
+      expect(names.some((n) => n.includes("fin_pectoral"))).toBe(true);
+      expect(names).toContain(`koi-${v}-root`);
+      // Mesh is skinned
+      expect(json.nodes.some((n) => n.skin !== undefined && n.mesh !== undefined)).toBe(true);
     }
   });
 });

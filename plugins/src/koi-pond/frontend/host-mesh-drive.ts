@@ -8,8 +8,12 @@ import { KOI_SLOT, unpackKoiMeta } from "./koi-pond";
 /** Must match plugin.yml `viz.hostMeshSlot` — slot 3 is reserved for follow cam. */
 export const KOI_HOST_MESH_BASE_SLOT = 4;
 
-/** Must match plugin.yml `assets:` order. */
+/**
+ * Must match plugin.yml `assets:` order (standard ids). Index 0 is the Blender scape
+ * (pinned once by the host); live packets drive fish at 1..3.
+ */
 export const KOI_HOST_MESH_ASSETS = [
+  "koi-pond-scape",
   "koi-kohaku",
   "koi-showa",
   "koi-ogon",
@@ -20,13 +24,14 @@ export const KOI_HOST_MESH_ASSETS = [
 export const KOI_HOST_MESH_SLOT_COUNT = 4;
 const perSlot = maxHostMeshInstancesPerSlot();
 
+/** Pattern → fish asset index (scape is 0). */
 const PATTERN_TO_ASSET: Record<number, number> = {
-  0: 0,
-  1: 0,
-  2: 1,
-  3: 2,
-  4: 2,
-  5: 1,
+  0: 1,
+  1: 1,
+  2: 2,
+  3: 3,
+  4: 3,
+  5: 2,
 };
 
 function chunkInstances<T>(items: T[]): T[][] {
@@ -49,9 +54,7 @@ export function writeKoiHostMeshSlots(
     byAsset.set(assetIndex, list);
   };
 
-  // lily pads stay as host-mesh; rocks/basin come from host scenery (keeps packets ≤4 slots).
-  push(3, hostMeshMatrixYawPos(0.55, 0.01, 0.5, 0.4, 0.32), 0);
-
+  // Pads / rocks / basin live in the Blender scape (asset 0). Packets only drive fish.
   const koiCount = Math.round(Number(slot0[KOI_SLOT.koiCount]) || 0);
   let metaIdx = 0;
   for (let fi = 0, n = 0; n < koiCount && fi + 3 < slot1.length; fi += 4, n++) {
@@ -62,8 +65,7 @@ export function writeKoiHostMeshSlots(
     const metaPacked = Number(slot0[KOI_SLOT.koiMeta0 + metaIdx]) || 0;
     metaIdx++;
     const { pattern, vigor } = unpackKoiMeta(metaPacked);
-    const assetIndex = PATTERN_TO_ASSET[pattern] ?? 0;
-    // Slow swim cycle — no snappy fin/body phase (pairs with host koi-hd pace).
+    const assetIndex = PATTERN_TO_ASSET[pattern] ?? 1;
     const phase = clock * (0.32 + vigor * 0.12) + metaIdx * 0.37;
     push(assetIndex, hostMeshMatrixYawPos(x, 0.04 + wiggle * 0.25, z, yaw, 0.48), phase);
   }
