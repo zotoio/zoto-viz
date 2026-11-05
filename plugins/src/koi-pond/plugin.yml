@@ -18,9 +18,9 @@ capabilities:
 assets:
   - id: koi-pond-scape
     path: assets/koi-pond-scape.glb
-    sha256: 1c9922ea827c15b674363dbcf7034a3d876e06ffaa4ab35374dc5e33ec83e4a4
-    bytes: 150768
-    triangles: 9160
+    sha256: 41f54000a9cb4c2898f77932b2335cf1518947fe22f5cde6c0751c66433dafdf
+    bytes: 786552
+    triangles: 15908
   - id: koi-kohaku
     path: assets/koi-kohaku.glb
     sha256: d9fc3a5cca789f3c6e1ad5ee0e694a5f1dfcfa9f5044960a923f2383f9b9d021
@@ -48,19 +48,19 @@ assets:
     triangles: 9216
   - id: koi-kohaku-hd
     path: assets/koi-kohaku-hd.glb
-    sha256: b63d9337e4d780e827eb993c4e76e7edd330d6df7d8cf43f4ce50f4c8abd1cee
-    bytes: 48972
-    triangles: 3520
+    sha256: 800ee79092c6d42310128f306784f52a1473a2531974078fa43f7a081fcd188d
+    bytes: 394804
+    triangles: 35256
   - id: koi-showa-hd
     path: assets/koi-showa-hd.glb
-    sha256: 9f8219dcf9ee39043a686178859dc3de049fcd99ec2432798d350ffc74d8d4a9
-    bytes: 48364
-    triangles: 3520
+    sha256: 93ee1f1cd2ff8bd871d7474e11b7e77a7f5250c3feefeedcb5cf2f80bcf743b4
+    bytes: 411428
+    triangles: 35256
   - id: koi-ogon-hd
     path: assets/koi-ogon-hd.glb
-    sha256: 86fa26e53445b36cc3998ae102db237eef741a539bdb7d5ffde52872e7610b08
-    bytes: 50304
-    triangles: 3520
+    sha256: f2a139a71ad4e1fc0c5072dbca72f247e4fa21db302474e3b5db263ccb3bced4
+    bytes: 453148
+    triangles: 35256
   - id: lily-pads-hd
     path: assets/lily-pads-hd.glb
     sha256: 7710a0a2754cb8313383319c811e4877d97a681f89f8e119d18553315bcc89be

@@ -12,8 +12,9 @@ const decls: Decl[] = [...PLUGIN.matchAll(/- id: (\S+)\n\s+path: (\S+)\n\s+sha25
 
 function glbJson(bytes: Buffer): {
   animations: { name: string; channels: unknown[] }[];
-  nodes: { name: string; translation?: number[]; rotation?: number[]; mesh?: number; skin?: number }[];
+  nodes: { name?: string; translation?: number[]; rotation?: number[]; mesh?: number; skin?: number }[];
   skins?: unknown[];
+  images?: unknown[];
   extensionsUsed?: string[];
 } {
   const chunkLen = bytes.readUInt32LE(12);
@@ -38,43 +39,48 @@ describe("koi-pond HD model set", () => {
     for (const d of hd) expect(std.some((s) => `${s.id}-hd` === d.id)).toBe(true);
   });
 
-  it("ships a Blender scape GLB ahead of the fish (aquarium pattern)", () => {
+  it("ships a Blender scape GLB with natural bank (no kerb ring) and flowering lilies", () => {
     expect(decls[0]!.id).toBe("koi-pond-scape");
     const bytes = readFileSync(join(PACK, decls[0]!.path));
     expect(bytes.length).toBe(decls[0]!.bytes);
     expect(createHash("sha256").update(bytes).digest("hex")).toBe(decls[0]!.sha256);
     const json = glbJson(bytes);
-    const names = json.nodes.map((n) => n.name);
-    expect(names.some((n) => n.includes("basin") || n.includes("kerb"))).toBe(true);
+    const names = json.nodes.map((n) => n.name || "");
+    expect(names.some((n) => n.includes("bank-stones") || n.includes("pond-rocks"))).toBe(true);
+    expect(names.some((n) => /kerb|basin-kerb/i.test(n))).toBe(false);
     expect(names.some((n) => n.includes("fountain"))).toBe(true);
-    expect(names.some((n) => n.includes("lily-pad") || n.includes("Pad"))).toBe(true);
-    expect(names.some((n) => n.includes("lotus") || n.includes("Bloom"))).toBe(true);
+    expect(names.some((n) => n.includes("lily-pad"))).toBe(true);
+    expect(names.some((n) => n.includes("lotus-bloom"))).toBe(true);
+    expect((json.images ?? []).length).toBeGreaterThanOrEqual(2);
   });
 
   it("ships meshopt HD GLBs whose bytes and hash match the manifest", () => {
     for (const d of hd) {
       const bytes = readFileSync(join(PACK, d.path));
       expect(bytes.length).toBe(d.bytes);
-      expect(bytes.length).toBeLessThan(400_000);
+      expect(bytes.length).toBeLessThan(900_000); // textured PBR HD
       expect(createHash("sha256").update(bytes).digest("hex")).toBe(d.sha256);
       expect(bytes.toString("latin1")).toContain("EXT_meshopt_compression");
     }
   });
 
-  it("HD koi are skinned, nose +Z, with a swim clip on spine/tail/fins", () => {
+  it("HD koi are textured, skinned, headed, with a swim clip on spine/tail/fins", () => {
     for (const v of ["kohaku", "showa", "ogon"]) {
       const b = readFileSync(join(PACK, `assets/koi-${v}-hd.glb`));
       const json = glbJson(b);
-      expect(json.animations.map((a) => a.name)).toEqual(["swim"]);
+      expect(json.animations.map((a) => a.name)).toContain("swim");
       expect((json.skins ?? []).length).toBeGreaterThanOrEqual(1);
-      const names = json.nodes.map((n) => n.name);
+      expect((json.images ?? []).length).toBeGreaterThanOrEqual(2);
+      const names = json.nodes.map((n) => n.name || "");
       expect(names).toContain("head");
       expect(names).toContain("tail_02");
       expect(names).toContain("spine_02");
+      expect(names).toContain("root");
       expect(names.some((n) => n.includes("fin_pectoral"))).toBe(true);
-      expect(names).toContain(`koi-${v}-root`);
-      // Mesh is skinned
       expect(json.nodes.some((n) => n.skin !== undefined && n.mesh !== undefined)).toBe(true);
+      // Swim drives body/tail/fin rotations (gltfpack may drop constant T/S tracks)
+      const swim = json.animations.find((a) => a.name === "swim")!;
+      expect(swim.channels.length).toBeGreaterThanOrEqual(7);
     }
   });
 });
