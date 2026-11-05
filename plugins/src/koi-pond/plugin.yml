@@ -70,11 +70,11 @@ viz:
   graphWalk: false
   idle:
     fixture: host
-  maxBuffers: 10
+  maxBuffers: 8
   maxBufferFloats: 64
   # slot 3 = occasional follow cam (same layout as aquarium); host meshes start at 4
   hostMeshSlot: 4
-  hostMeshSlotCount: 6
+  hostMeshSlotCount: 4
   maxParticles: 36
   uniforms:
     - uTime

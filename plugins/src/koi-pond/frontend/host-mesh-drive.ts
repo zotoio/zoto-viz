@@ -17,7 +17,7 @@ export const KOI_HOST_MESH_ASSETS = [
   "pond-rocks",
 ] as const;
 
-export const KOI_HOST_MESH_SLOT_COUNT = 6;
+export const KOI_HOST_MESH_SLOT_COUNT = 4;
 const perSlot = maxHostMeshInstancesPerSlot();
 
 const PATTERN_TO_ASSET: Record<number, number> = {
@@ -49,7 +49,7 @@ export function writeKoiHostMeshSlots(
     byAsset.set(assetIndex, list);
   };
 
-  push(4, hostMeshMatrixYawPos(0, 0, 0, 0.3, 0.9), 0);
+  // lily pads stay as host-mesh; rocks/basin come from host scenery (keeps packets ≤4 slots).
   push(3, hostMeshMatrixYawPos(0.55, 0.01, 0.5, 0.4, 0.32), 0);
 
   const koiCount = Math.round(Number(slot0[KOI_SLOT.koiCount]) || 0);
