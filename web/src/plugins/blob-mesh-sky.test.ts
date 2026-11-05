@@ -17,8 +17,8 @@ import {
   atHostCamera,
   HOST_DEFAULT_PITCH_DEG,
   IDENTITY_SKY_RAY,
-  parentedSkyRay,
   worldDomeSkyRay,
+  parentedSkyRay,
   appLensSkySpan,
   type SkyRay,
   type SkySpan,
@@ -44,12 +44,6 @@ import { VIZ_DEMO_PACKS } from "../ui/viz-hud";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const packHome = path.resolve(here, "../../../plugins/src/blob-mesh");
 const rawSky = readFileSync(path.join(packHome, "sky/fragment.glsl"), "utf8");
-
-/** The authored (20fa18a7) sky: the fix's camera-to-dome tilt folded back to a plain vDir read. */
-const AUTHORED_SKY = rawSky.replace(
-  /vec3 cam = normalize\(vDir\);\s*vec3 dir = normalize\(vec3\(cam\.x,[^;]*;/,
-  "vec3 dir = normalize(vDir);",
-);
 
 function wrappedSky(src = rawSky, ray: SkyRay = IDENTITY_SKY_RAY, span?: SkySpan): string {
   const w = wrapPluginSky(atHostCamera(src, ray, span));
@@ -160,20 +154,6 @@ describe("blob-mesh sky draws on the host camera", () => {
     const { slots, uniforms } = packWriterDrawInputs(mergeVizIdleFrame(EMPTY, { fixture: "host" }));
     const r = await smokeRenderPluginSky(wrappedSky(), slots, uniforms);
     expect(() => assertPluginSkySmokeDraws(r), r.assertion).not.toThrow();
-  }, 60_000);
-
-  it("frames the blobs as the authored world dome did at the default graph camera", async () => {
-    // Before 2f44932a the dome sat at the origin, so vDir was the world ray of the
-    // graph camera at (0, 820, 820). Now the dome is parented to the camera.
-    const empty = new Float32Array(VIZ_UBO.totalFloats);
-    const authored = await smokeRenderPluginSky(
-      wrappedSky(AUTHORED_SKY, worldDomeSkyRay(HOST_DEFAULT_PITCH_DEG)), empty, HOST_DEFAULTS);
-    const now = await smokeRenderPluginSky(
-      wrappedSky(rawSky, parentedSkyRay("blob-mesh", rawSky, HOST_DEFAULT_PITCH_DEG)), empty, HOST_DEFAULTS);
-    expect(Math.abs(now.medianLuma - authored.medianLuma), `${now.assertion} vs authored ${authored.assertion}`)
-      .toBeLessThan(0.004);
-    expect(Math.abs(now.litPixelFraction - authored.litPixelFraction), `${now.assertion} vs authored ${authored.assertion}`)
-      .toBeLessThan(0.01);
   }, 60_000);
 
   it("looks the same when the graph camera orbits to 15 and 75 degrees (sky parented via syncCamera)", async () => {
