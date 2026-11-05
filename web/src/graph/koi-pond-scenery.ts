@@ -45,8 +45,24 @@ export function buildKoiPondScenery(): KoiPondScenery {
   root.add(hemi, sun, sun.target);
 
   // Planar reflection of the Blender scape / fish / sky.
-  // Soft irregular water disc (not a hard ring) — reflections of bank/fish/sky.
-  const reflector = new Reflector(new THREE.CircleGeometry(1.05, 96), {
+  /** Irregular shoreline polygon — avoids a hard circular hoop from above. */
+  const waterShape = (() => {
+    const s = new THREE.Shape();
+    const N = 48;
+    for (let i = 0; i <= N; i++) {
+      const a = (i / N) * Math.PI * 2;
+      const r = 0.92 + 0.10 * Math.sin(a * 3.0) + 0.06 * Math.cos(a * 5.0) + 0.04 * Math.sin(a * 7.0 + 0.6);
+      const x = Math.cos(a) * r;
+      const y = Math.sin(a) * r;
+      if (i === 0) s.moveTo(x, y);
+      else s.lineTo(x, y);
+    }
+    return s;
+  })();
+  const waterGeo = new THREE.ShapeGeometry(waterShape, 48);
+
+  // Reflections of bank/fish/sky — irregular edge, no torus kerb.
+  const reflector = new Reflector(waterGeo.clone(), {
     clipBias: 0.002,
     textureWidth: 2048,
     textureHeight: 2048,
@@ -86,8 +102,9 @@ export function buildKoiPondScenery(): KoiPondScenery {
         ].join("\n"),
       );
   };
-  tintMat.customProgramCacheKey = () => "zoto-koi-water-tint";
-  const tint = new THREE.Mesh(new THREE.CircleGeometry(1.05, 96), tintMat);
+  tintMat.customProgramCacheKey = () => "zoto-koi-water-tint-irregular";
+  // ShapeGeometry already in XY; rotate flat onto XZ like the reflector.
+  const tint = new THREE.Mesh(waterGeo, tintMat);
   tint.rotation.x = -Math.PI / 2;
   tint.position.y = 0.012;
   tint.name = "koi-water-tint";
