@@ -3,7 +3,7 @@ name: Koi Pond
 version: 1
 hint: Tranquil pond — talkers are koi, destinations are lily pads and lotus blooms.
 description: >-
-  Top-down koi pond (procedural GLSL). Data mapping is declared in
+  Koi pond with host-mesh fish, reflective water scenery, and an occasional follow camera. Data mapping is declared in
   data-mapping.yml (talkers→koi, packets→ripples, sys.failed→murk).
   Talkers map to koi by id with #22 slot hysteresis; roles pick colour patterns;
   packet events spawn ripples. Endpoints
@@ -70,9 +70,10 @@ viz:
   graphWalk: false
   idle:
     fixture: host
-  maxBuffers: 8
+  maxBuffers: 10
   maxBufferFloats: 64
-  hostMeshSlot: 3
+  # slot 3 = occasional follow cam (same layout as aquarium); host meshes start at 4
+  hostMeshSlot: 4
   hostMeshSlotCount: 6
   maxParticles: 36
   uniforms:
