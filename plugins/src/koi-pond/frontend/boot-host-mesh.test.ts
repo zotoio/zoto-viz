@@ -28,7 +28,7 @@ describe("koi-pond boot", () => {
     for (let i = 0; i < 30; i++) {
       host.onFrame?.(demoFrame(1 + i / 10));
       for (const [slot, data] of host.writeBuffer.mock.calls) {
-        if (typeof slot !== "number" || slot < 3) continue;
+        if (typeof slot !== "number" || slot < 4) continue;
         const k = Array.prototype.join.call(data, ",");
         if (!seen.has(slot)) seen.set(slot, new Set());
         seen.get(slot)?.add(k);

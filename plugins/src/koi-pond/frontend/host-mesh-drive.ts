@@ -3,8 +3,10 @@ import {
   hostMeshMatrixYawPos,
   maxHostMeshInstancesPerSlot,
 } from "../../../sdk/host-mesh-frame";
-import { PACK_HOST_MESH_SLOT } from "../../../sdk/pack-host-mesh";
 import { KOI_SLOT, unpackKoiMeta } from "./koi-pond";
+
+/** Must match plugin.yml `viz.hostMeshSlot` — slot 3 is reserved for follow cam. */
+export const KOI_HOST_MESH_BASE_SLOT = 4;
 
 /** Must match plugin.yml `assets:` order. */
 export const KOI_HOST_MESH_ASSETS = [
@@ -61,7 +63,8 @@ export function writeKoiHostMeshSlots(
     metaIdx++;
     const { pattern, vigor } = unpackKoiMeta(metaPacked);
     const assetIndex = PATTERN_TO_ASSET[pattern] ?? 0;
-    const phase = clock * (0.85 + vigor * 0.35) + metaIdx * 0.37;
+    // Slow swim cycle — no snappy fin/body phase (pairs with host koi-hd pace).
+    const phase = clock * (0.32 + vigor * 0.12) + metaIdx * 0.37;
     push(assetIndex, hostMeshMatrixYawPos(x, 0.04 + wiggle * 0.25, z, yaw, 0.48), phase);
   }
 
@@ -71,9 +74,9 @@ export function writeKoiHostMeshSlots(
       packets.push(encodeHostMeshSlotPacket(assetIndex, part));
     }
   }
-  let slot = PACK_HOST_MESH_SLOT;
+  let slot = KOI_HOST_MESH_BASE_SLOT;
   for (const data of packets) {
-    if (slot >= PACK_HOST_MESH_SLOT + KOI_HOST_MESH_SLOT_COUNT) break;
+    if (slot >= KOI_HOST_MESH_BASE_SLOT + KOI_HOST_MESH_SLOT_COUNT) break;
     writeBuffer(slot, data);
     slot += 1;
   }
