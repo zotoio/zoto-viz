@@ -45,25 +45,27 @@ export function buildKoiPondScenery(): KoiPondScenery {
   root.add(hemi, sun, sun.target);
 
   // Planar reflection of the Blender scape / fish / sky.
-  const reflector = new Reflector(new THREE.CircleGeometry(0.98, 64), {
-    clipBias: 0.003,
-    textureWidth: 1024,
-    textureHeight: 1024,
-    color: 0x3a8a92,
+  // Soft irregular water disc (not a hard ring) — reflections of bank/fish/sky.
+  const reflector = new Reflector(new THREE.CircleGeometry(1.05, 96), {
+    clipBias: 0.002,
+    textureWidth: 2048,
+    textureHeight: 2048,
+    color: 0x2a6a72,
   });
   reflector.rotation.x = -Math.PI / 2;
-  reflector.position.y = 0.008;
+  reflector.position.y = 0.006;
   reflector.name = "koi-water-reflector";
   root.add(reflector);
 
   const tintMat = new THREE.MeshPhysicalMaterial({
-    color: 0x1a6a72,
-    metalness: 0.02,
-    roughness: 0.12,
-    transmission: 0.35,
-    thickness: 0.2,
+    color: 0x146068,
+    metalness: 0.04,
+    roughness: 0.06,
+    transmission: 0.55,
+    thickness: 0.35,
+    ior: 1.333,
     transparent: true,
-    opacity: 0.45,
+    opacity: 0.38,
     depthWrite: false,
     side: THREE.DoubleSide,
   });
@@ -79,13 +81,13 @@ export function buildKoiPondScenery(): KoiPondScenery {
           "{",
           "  float w1 = sin(transformed.x * 9.0 + uKoiTime * 1.6);",
           "  float w2 = sin(transformed.z * 11.0 - uKoiTime * 1.3);",
-          "  transformed.y += 0.01 * (w1 * 0.6 + w2 * 0.4);",
+          "  transformed.y += 0.016 * (w1 * 0.55 + w2 * 0.45);",
           "}",
         ].join("\n"),
       );
   };
   tintMat.customProgramCacheKey = () => "zoto-koi-water-tint";
-  const tint = new THREE.Mesh(new THREE.CircleGeometry(0.98, 64), tintMat);
+  const tint = new THREE.Mesh(new THREE.CircleGeometry(1.05, 96), tintMat);
   tint.rotation.x = -Math.PI / 2;
   tint.position.y = 0.012;
   tint.name = "koi-water-tint";
@@ -125,6 +127,7 @@ export function buildKoiPondScenery(): KoiPondScenery {
       if (
         n === "substrate" ||
         n === "basin-kerb" ||
+        n === "bank-stones" ||
         n === "fountain" ||
         n === "pond-rocks" ||
         n.startsWith("lily-pad") ||
