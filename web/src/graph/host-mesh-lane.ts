@@ -201,33 +201,49 @@ function rotateBoneWorldAxis(bone: THREE.Object3D, worldAxis: THREE.Vector3, ang
  * the turn (tail lags toward the inside, head leads), the caudal end beats harder, and the
  * pectorals row. Exported for tests.
  */
-export function applyHdFishMotion(root: THREE.Object3D, rig: HdFishRig, t: number, dt: number): void {
+/** Swim-cycle rate scale: aquarium HD stays lively; koi HD is slow and smooth. */
+export type HdFishMotionPace = "aquarium" | "koi";
+
+const HD_PACE = {
+  aquarium: { beat: 9.5, flap: 6.2, bendLerp: 8, amp: 1 },
+  koi: { beat: 3.2, flap: 2.4, bendLerp: 3.2, amp: 0.72 },
+} as const;
+
+export function applyHdFishMotion(
+  root: THREE.Object3D,
+  rig: HdFishRig,
+  t: number,
+  dt: number,
+  pace: HdFishMotionPace = "aquarium",
+): void {
+  const p = HD_PACE[pace];
   const target = fishTurnBend(rig.turnRate);
-  rig.bend += (target - rig.bend) * Math.min(1, Math.max(0, dt) * 8);
+  rig.bend += (target - rig.bend) * Math.min(1, Math.max(0, dt) * p.bendLerp);
   root.updateMatrixWorld(true);
   root.getWorldQuaternion(_qp);
   _up.set(0, 1, 0).applyQuaternion(_qp);
   _fwd.set(0, 0, 1).applyQuaternion(_qp);
   const up = _up.clone();
   const fwd = _fwd.clone();
-  const beat = t * 9.5 + rig.phase;
+  const beat = t * p.beat + rig.phase;
   rig.chain.forEach((bone, i) => {
     if (!bone) return;
     // Tail-side bones turn the opposite way to the nose: with root mid-body that curls the
     // whole fish into a C toward the inside of the turn.
-    const tailBeat = i >= 3 ? Math.sin(beat - i * 1.1) * (i === 3 ? 0.16 : 0.26) : Math.sin(beat - i * 1.1) * 0.04;
+    const raw = i >= 3 ? (i === 3 ? 0.16 : 0.26) : 0.04;
+    const tailBeat = Math.sin(beat - i * 1.1) * raw * p.amp;
     rotateBoneWorldAxis(bone, up, -rig.bend * FISH_BEND_WEIGHTS[i]! + tailBeat);
   });
-  if (rig.head) rotateBoneWorldAxis(rig.head, up, rig.bend * 0.22);
-  const flap = Math.sin(t * 6.2 + rig.phase * 1.3);
-  const row = Math.sin(t * 6.2 + rig.phase * 1.3 + 1.2);
+  if (rig.head) rotateBoneWorldAxis(rig.head, up, rig.bend * 0.22 * p.amp);
+  const flap = Math.sin(t * p.flap + rig.phase * 1.3);
+  const row = Math.sin(t * p.flap + rig.phase * 1.3 + 1.2);
   if (rig.finL) {
-    rotateBoneWorldAxis(rig.finL, fwd, 0.42 * flap);
-    rotateBoneWorldAxis(rig.finL, up, 0.3 * row);
+    rotateBoneWorldAxis(rig.finL, fwd, 0.42 * flap * p.amp);
+    rotateBoneWorldAxis(rig.finL, up, 0.3 * row * p.amp);
   }
   if (rig.finR) {
-    rotateBoneWorldAxis(rig.finR, fwd, -0.42 * flap);
-    rotateBoneWorldAxis(rig.finR, up, -0.3 * row);
+    rotateBoneWorldAxis(rig.finR, fwd, -0.42 * flap * p.amp);
+    rotateBoneWorldAxis(rig.finR, up, -0.3 * row * p.amp);
   }
 }
 
@@ -560,12 +576,20 @@ export class HostMeshLane {
       for (const row of list) {
         const dur = row.clipDuration > 0 ? row.clipDuration : 1;
         // Seek the playing action. Setting mixer.time alone left action.time at 0 forever.
-        row.action.time = ((row.animOffset + this.clockSec) % dur + dur) % dur;
+        // Koi HD plays the baked swim slowly so fins/body never look snappy.
+        const clipRate = this.motion === "koi-hd" ? 0.45 : 1;
+        row.action.time = ((row.animOffset + this.clockSec * clipRate) % dur + dur) % dur;
         row.mixer.update(0);
         const turn = this.driftDecor(row.root, dtSec);
         if (row.hd) {
           if (turn !== undefined) row.hd.turnRate = turn;
-          applyHdFishMotion(row.root, row.hd, this.clockSec, dtSec);
+          applyHdFishMotion(
+            row.root,
+            row.hd,
+            this.clockSec,
+            dtSec,
+            this.motion === "koi-hd" ? "koi" : "aquarium",
+          );
         }
       }
     }
