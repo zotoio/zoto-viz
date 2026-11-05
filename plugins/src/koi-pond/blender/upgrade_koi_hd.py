@@ -197,10 +197,11 @@ def upgrade_fish(variety: str):
     if "head" not in [b.name for b in arm.data.bones]:
         raise RuntimeError(f"{variety}: missing head bone")
     enhance_body_material(mesh)
-    # Mild densify for HD (1 level) — keep under budget
-    densify_mesh(mesh, levels=1)
+    # Do NOT subdiv-apply on a skinned mesh — it collapses head weights/topology
+    # ("headless" koi). Keep the watertight textured source density; HD gain is
+    # PBR + improved swim Action.
     after_geo = mesh_integrity(mesh)
-    print(f"[{variety}] after densify", after_geo)
+    print(f"[{variety}] after enhance", after_geo)
     rewrite_swim(arm)
     # Parent cleanup: keep armature + mesh
     out = os.path.join(ASSETS, f"koi-{variety}-hd.glb")
