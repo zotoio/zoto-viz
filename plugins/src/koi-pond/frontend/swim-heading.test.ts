@@ -7,31 +7,28 @@ function wrap(a: number): number {
   return a;
 }
 
+type KoiBodyView = { vx: number; vz: number; yaw: number; x: number; z: number };
+
+/** Private `koi` map — Reflect, no `as unknown as` (#192 cast guard). */
+function koiBodies(sim: KoiPondSim): Iterable<KoiBodyView> {
+  const map = Reflect.get(sim, "koi") as Map<string, KoiBodyView>;
+  return map.values();
+}
+
 describe("koi head-first swim + pond coverage", () => {
   it("yaw stays aligned with velocity (no sideways/backwards drift)", () => {
     const sim = new KoiPondSim(
       parseKoiPondOptions({ swimSpeed: "0.38", schooling: "0.25", followCam: "false" }),
     );
-    // warm up
     for (let i = 0; i < 120; i++) sim.advance(demoFrame(i / 60), 1280, 800);
     let checked = 0;
-    for (let i = 0; i < 180; i++) {
-      const packed = sim.advance(demoFrame(2 + i / 60), 1280, 800);
-      const n = Math.round(packed.slot0[24] || 0); // koiCount
-      for (let f = 0; f < n; f++) {
-        const base = f * 4;
-        // reconstruct approx velocity from consecutive frames via yaw/nose
-        const yaw = packed.slot1[base + 3]!;
-        // sample body fields from sim internals
-      }
-    }
-    // Direct body check
-    for (const k of (sim as unknown as { koi: Map<string, { vx: number; vz: number; yaw: number }> }).koi.values()) {
+    for (let i = 0; i < 180; i++) sim.advance(demoFrame(2 + i / 60), 1280, 800);
+    for (const k of koiBodies(sim)) {
       const spd = Math.hypot(k.vx, k.vz);
       if (spd < 0.01) continue;
       const velYaw = Math.atan2(k.vx, k.vz);
       const err = Math.abs(wrap(velYaw - k.yaw));
-      expect(err).toBeLessThan(0.35); // ~20° — soft spring, never sideways/backwards
+      expect(err).toBeLessThan(0.35);
       checked++;
     }
     expect(checked).toBeGreaterThan(2);
@@ -45,13 +42,12 @@ describe("koi head-first swim + pond coverage", () => {
     for (let i = 0; i < 900; i++) {
       sim.advance(demoFrame(i / 60), 1280, 800);
       if (i % 15 !== 0) continue;
-      for (const k of (sim as unknown as { koi: Map<string, { x: number; z: number }> }).koi.values()) {
+      for (const k of koiBodies(sim)) {
         const cx = Math.floor((k.x + 1.3) / 0.45);
         const cz = Math.floor((k.z + 1.2) / 0.45);
         cells.add(`${cx},${cz}`);
       }
     }
-    // A clustered school would occupy ~2–4 cells; exploration should visit many.
     expect(cells.size).toBeGreaterThanOrEqual(10);
   });
 });
