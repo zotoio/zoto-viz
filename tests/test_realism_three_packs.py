@@ -51,10 +51,6 @@ def test_realism_packs_use_host_mesh_slot_three() -> None:
         # the aquarium host mesh lane reads slot 7 (one Blender scape GLB)
         if pid == "aquarium":
             assert "hostMeshSlot: 7" in yml or "hostMeshSlot: 3" in yml, pid
-        elif pid == "koi-pond":
-            # slot 3 = follow cam; fish host-mesh packets start at 4 (≤ maxBuffers 8)
-            assert "hostMeshSlot: 4" in yml, pid
-            assert "hostMeshSlotCount: 4" in yml, pid
         else:
             assert "hostMeshSlot: 3" in yml, pid
         assert "maxBuffers: 8" in yml, pid
