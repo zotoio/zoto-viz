@@ -34,6 +34,15 @@ describe("stage mesh camera", () => {
     }
   });
 
+  it("koi follow: slot3 follow on {0,1} only, not host-mesh v2 header on slot3 (legacy slot3 mesh + new slot4 mesh)", () => {
+    const meshOn3 = slots({ "3:0": 2, "3:1": 99, "0:17": 1, "0:18": 0.2 });
+    const drift = koiStagePose(meshOn3);
+    expect(drift.target).toEqual([0, 0, 0]);
+    const follow = koiStagePose(slots({ "3:0": 1, "3:1": 0.4, "3:2": 0.5, "3:3": 1.1, "3:4": 0, "3:5": 0, "3:6": 0.2, "3:7": 44 }));
+    expect(follow.position[0]).toBeCloseTo(0.4, 5);
+    expect(follow.fov).toBeCloseTo(44, 1);
+  });
+
   it("pulls the koi camera down onto the pond", () => {
     const pose = koiStagePose(slots({ "0:17": 0, "0:18": 0 }));
     expect(pose.position[1]).toBeCloseTo(1.37);
