@@ -976,17 +976,6 @@ def merge_workflow_label_event(timeline: list[dict]) -> list[dict]:
     return [*timeline, row]
 
 
-def push_at_from_ci_event() -> datetime | None:
-    """Fail-closed server timestamp when issue timeline omits push commits (common on synchronize)."""
-    action = os.environ.get("PACK_BOUNDARY_EVENT_ACTION", "")
-    if action not in ("synchronize", "opened", "reopened", "ready_for_review"):
-        return None
-    updated = os.environ.get("PACK_BOUNDARY_PR_UPDATED_AT", "").strip()
-    if not updated:
-        return None
-    return parse_github_timestamp(updated)
-
-
 def load_pr_review_context(
     repo: str, issue_number: int, token: str
 ) -> tuple[set[str], list[dict], datetime | None]:
@@ -1000,8 +989,6 @@ def load_pr_review_context(
         timeline = fetch_labeled_events(repo, issue_number, token)
     timeline = merge_workflow_label_event(timeline)
     push_at = last_push_at_from_timeline(timeline)
-    if push_at is None:
-        push_at = push_at_from_ci_event()
     return labels, timeline, push_at
 
 
@@ -1067,8 +1054,6 @@ def run_host_change_gate(
     push_at = last_push_at if last_push_at is not None else last_push_at_from_timeline(
         timeline
     )
-    if push_at is None:
-        push_at = push_at_from_ci_event()
     review_at = host_reviewed_labeled_at(timeline, labels)
 
     if review_at is None or push_at is None or push_at >= review_at:
