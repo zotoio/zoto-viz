@@ -122,6 +122,11 @@ export interface TileSandboxDeps<S extends TileSandboxLike> {
   /** A write from the tile's own sandbox (tile-health counts it for that tile only). */
   noteWrite?: (tileId: string) => void;
   /** #242 N5: the tile's sandbox went (drop or restart): tile-health forgets its write counts for it. */
+  /**
+   * A pane sandbox's buffer write, after the UBO: host-mesh slots go to that pane's own mesh lane
+   * (koi, aquarium, marble run). Without this a pane only ever showed the pinned poses.
+   */
+  hostMeshWrite?: (tileId: string, spec: PluginView, slot: number, data: number[]) => void;
   forgetSandboxWrites?: (tileId: string) => void;
 }
 
@@ -316,7 +321,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
       abort: new AbortController(),
       retry,
     };
-    sandbox.handlers = this.handlersFor(tileId, writer);
+    sandbox.handlers = this.handlersFor(tileId, writer, spec);
     this.byTile.set(tileId, entry);
     const label = spec.name ?? spec.id;
     registerPackAssetRetry(tileId, label, retry);
@@ -360,13 +365,16 @@ export class TileSandboxes<S extends TileSandboxLike> {
     if (JSON.stringify(now) !== e.bootConfig) e.sandbox.setConfig(now);
   }
 
-  private handlersFor(tileId: string, writer: VizBufferWriter | null): PluginHostHandlers {
+  private handlersFor(tileId: string, writer: VizBufferWriter | null, spec?: PluginView): PluginHostHandlers {
     const target = (): TileSandboxTarget | null => this.deps.target(tileId);
     const note = (): void => this.deps.noteWrite?.(tileId);
     return {
       writeBuffer: (slot, data) => {
         note();
-        if (writer?.writeBuffer(slot, data).ok) target()?.setPluginUboBuffer(writer.ubo);
+        if (writer?.writeBuffer(slot, data).ok) {
+          target()?.setPluginUboBuffer(writer.ubo);
+          if (spec) this.deps.hostMeshWrite?.(tileId, spec, slot, data);
+        }
       },
       writeUniform: (name, value) => {
         note();
@@ -388,6 +396,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
             target()?.setPluginUniform(name, value);
           },
         });
+        if (spec) for (const b of batch.buffers) this.deps.hostMeshWrite?.(tileId, spec, b.slot, b.data);
       },
     };
   }

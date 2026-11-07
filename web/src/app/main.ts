@@ -269,7 +269,8 @@ import { reconcileMosaicTilesWithMode, resolveRestoredViewMode } from "./boot-vi
 import { smokeBackroomsWallClock } from "../core/smoke-harness";
 import { applyVizWriteBatch } from "../plugins/viz-write-batch";
 import { notePackPerfPresent } from "./pack-perf-report";
-import { createHostMeshBridge, hostMeshModelSet, mountPaneHostMeshes, tryApplyHostMeshBridge } from "./host-mesh-bridge";
+import { PaneSizeCache } from "./pane-size-cache";
+import { applyPaneHostMeshSlot, createHostMeshBridge, hostMeshModelSet, mountPaneHostMeshes, tryApplyHostMeshBridge } from "./host-mesh-bridge";
 import { recordPluginSkyLoad } from "./plugin-sky-load-meta";
 import { installTileSkyShader } from "./plugin-sky-compile";
 import { warnPluginSkyConsent } from "./plugin-sky-consent-notice";
@@ -569,6 +570,10 @@ const tileSandboxes = new TileSandboxes<PluginSandbox>({
   noticeHost: () => mosaic,
   noteWrite: (tileId) => tileHealth?.noteSandboxWrite(tileId),
   forgetSandboxWrites: (tileId) => tileHealth?.forgetSandboxWrites(tileId),
+  hostMeshWrite: (tileId, spec, slot, data) => {
+    const pane = mosaic?.on ? mosaic.graphScene(tileId) : null;
+    applyPaneHostMeshSlot(pane?.hostMeshLane, spec, vizContractFor(spec), slot, data);
+  },
 });
 /** #233: panes the shared sandbox's UBO reaches (a pane with its own sandbox draws its own). */
 function sharedUboPanes(): { tileIds: readonly string[]; graphScene: (id: string) => NetScene | null } | null {
@@ -638,21 +643,16 @@ function paneSkyTime(_tileId: string): number | undefined {
   // pluginClock deltas (fluid-dyn) would freeze on it.
   return scene.skyTime();
 }
+/** Pane sizes from a ResizeObserver, not a clientWidth read per pane per frame. */
+const paneSizes = new PaneSizeCache();
 function paneAspect(tileId: string): number | undefined {
-  const el = mosaic?.graphScene(tileId)?.viewEl;
-  const w = el?.clientWidth ?? 0;
-  const h = el?.clientHeight ?? 0;
-  return w > 0 && h > 0 ? w / h : undefined;
+  return paneSizes.aspect(mosaic?.graphScene(tileId)?.viewEl);
 }
 function panePixels(tileId: string): number | undefined {
-  const el = mosaic?.graphScene(tileId)?.viewEl;
-  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
-  return a > 0 ? a : undefined;
+  return paneSizes.pixels(mosaic?.graphScene(tileId)?.viewEl);
 }
 function stagePresentPixels(): number | undefined {
-  const el = $("scene");
-  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
-  return a > 0 ? a : undefined;
+  return paneSizes.pixels($("scene"));
 }
 
 const presentDriveDeps = {
@@ -1529,6 +1529,8 @@ function fetchSkyOnce(id: string, hash?: string): Promise<string> {
 /** Tiles' installed sky (packKey) and in-flight sky loads, so each sky is requested once per tile. */
 const skyInstalled = new WeakMap<NetScene, string>();
 const skyLoads = new SkyLoads<NetScene>();
+/** The current sky-abort listener per tile (see installPluginSky). */
+const skyAbortListeners = new WeakMap<NetScene, { signal: AbortSignal; fn: () => void }>();
 
 async function installPluginSky(
   target: NetScene,
@@ -1541,13 +1543,26 @@ async function installPluginSky(
   const signal = ctl.signal();
   const waitKey = skyWaitKey(target, paneId);
   if (target.pluginSkyDrawn !== spec.id) beginSkyWait(waitKey, target, spec, paneId, signal);
+  // Weak: the abort signal can outlive the pane (refreshPluginSignal), and a strong ref here (to
+  // the target, or to its SkyLoadCtl, whose closures hold the target) kept every dropped pane's
+  // NetScene and DOM alive.
+  const targetRef = new WeakRef(target);
+  const ctlRef = new WeakRef(ctl);
   const disposeSky = () => {
+    const c = ctlRef.deref();
+    const t = targetRef.deref();
+    if (!c || !t) return;
     // A newer sync took this load over; its own abort (not this one) decides.
-    if (ctl.signal() !== signal || !ctl.current()) return;
-    target.setPluginShader(null);
-    skyInstalled.delete(target);
-    if (target === scene) skyLoaded = "";
+    if (c.signal() !== signal || !c.current()) return;
+    t.setPluginShader(null);
+    skyInstalled.delete(t);
+    if (t === scene) skyLoaded = "";
   };
+  // One live abort listener per tile: a re-install replaces the previous one instead of stacking
+  // another on a long-lived signal every view switch.
+  const prevSky = skyAbortListeners.get(target);
+  if (prevSky) removeModeSwitchAbortListener(prevSky.signal, prevSky.fn);
+  skyAbortListeners.set(target, { signal, fn: disposeSky });
   addModeSwitchAbortListener(signal, disposeSky, { once: true });
   try {
     recordPluginSkyLoad({ packId: spec.id, packKey: packKey, isShaderPack: true, look: lookOpts });
@@ -2508,6 +2523,7 @@ mosaic = new Mosaic({
   },
   // #242 N3: a removed pane's own sandbox unloads now; the present listener's sync stays the backstop.
   onPaneDrop: (id) => tileSandboxes.drop(id),
+  onPaneViewElRelease: (el) => paneSizes.forget(el),
   onPaneScene: (id, paneScene) => mountPaneScene(id, paneScene),
   onPanePick: (from, to) => pickMosaicPane(from, to),
   paneCog: (id) => makeViewCogButton({

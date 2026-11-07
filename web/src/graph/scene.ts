@@ -5073,7 +5073,7 @@ export class NetScene implements HostedView, RenderScalePane {
     this.lumaProbe.reset();
     this.dropSkyConfirm();
     this.backdrop.setPluginShader(null);
-    this.controls.dispose();
+    disposeOrbitControls(this.controls);
     if (this.host) {
       this.host.remove(this);
       this.container.classList.remove("hosted");
@@ -5096,6 +5096,22 @@ export class NetScene implements HostedView, RenderScalePane {
   }
   deviceOf(ip: string): Device | undefined { return this.nodes.get(this.resolve(ip))?.device; }
   get selectedIp(): string | null { return this.selected?.id ?? null; }
+}
+
+/**
+ * OrbitControls.connect() puts its ctrl-key interceptors on `document`, but disconnect() removes
+ * them from `domElement.getRootNode()`. A mosaic pane is detached before its scene is disposed, so
+ * that root is the detached subtree and the document listeners kept every dropped pane's scene
+ * (labels, canvas, lane) alive. Remove them from the document explicitly.
+ */
+export function disposeOrbitControls(c: { dispose(): void; domElement: Element | null }): void {
+  c.dispose();
+  const doc = c.domElement?.ownerDocument;
+  if (!doc) return;
+  for (const [type, key] of [["keydown", "_interceptControlDown"], ["keyup", "_interceptControlUp"]] as const) {
+    const fn: unknown = Reflect.get(c, key);
+    if (typeof fn === "function") doc.removeEventListener(type, fn as EventListener, { capture: true });
+  }
 }
 
 function ownRenderer(container: HTMLElement, opts: {

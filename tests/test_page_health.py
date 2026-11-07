@@ -97,3 +97,26 @@ def test_sweep_stale_logs_once():
     assert ph.sweep_stale(app, now=120) == []
     assert ph.sweep_stale(app, now=200) == ["w"]
     assert ph.sweep_stale(app, now=300) == []
+
+
+def test_growth_flags_heap_and_audio_leaks_within_window() -> None:
+    from service.page_health import PageRow, Thresholds, evaluate
+
+    th = Thresholds(max_heap_growth_mb=100, max_audio_ctx_growth=3, growth_window_sec=600)
+    row = PageRow()
+    assert evaluate(row, {"heapMb": 100, "audioContexts": 0}, th, 1000.0) == ""
+    assert evaluate(row, {"heapMb": 150, "audioContexts": 1}, th, 1100.0) == ""
+    assert "heap grew" in evaluate(row, {"heapMb": 260, "audioContexts": 1}, th, 1200.0)
+    row2 = PageRow()
+    evaluate(row2, {"heapMb": 100, "audioContexts": 0}, th, 0.0)
+    assert "audio contexts grew 3" in evaluate(row2, {"heapMb": 100, "audioContexts": 3}, th, 60.0)
+
+
+def test_growth_window_rebases_so_slow_steady_pages_stay_healthy() -> None:
+    from service.page_health import PageRow, Thresholds, evaluate
+
+    th = Thresholds(max_heap_growth_mb=100, growth_window_sec=600)
+    row = PageRow()
+    for i in range(10):
+        # +60 MB per window: under the per-window limit every time
+        assert evaluate(row, {"heapMb": 100 + i * 60}, th, i * 601.0) == ""
