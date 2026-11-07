@@ -7,7 +7,12 @@
 import assert from "node:assert/strict";
 import { PNG } from "pngjs";
 import { chromium } from "playwright";
-import { screenshotBox, seedSmokeProfile, smokeProfileSettings } from "./smoke-profile-util.mjs";
+import {
+  SMOKE_STAGE_CANVAS_SELECTORS,
+  screenshotBox,
+  seedSmokeProfile,
+  smokeProfileSettings,
+} from "./smoke-profile-util.mjs";
 
 const base = process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/";
 const PRESENT_FRAMES = 30;
@@ -152,6 +157,7 @@ async function run() {
   await ctx.addInitScript(installFirstLoadProfile);
   const page = await ctx.newPage();
   page.setDefaultTimeout(120_000);
+  await page.route(/\.(woff2?|ttf|otf)(\?|$)/i, (route) => route.abort());
   page.on("console", (msg) => {
     const t = msg.text();
     if (t.includes("WebGL:")) {
@@ -222,7 +228,9 @@ async function run() {
   assert.equal(pageWebgl.length, 0, `expected zero page WebGL: console lines, got ${JSON.stringify(pageWebgl)}`);
   assert.equal(sandboxWebgl.length, 0, `expected zero sandbox WebGL: console lines, got ${JSON.stringify(sandboxWebgl)}`);
 
-  const pngBuffer = await screenshotBox(page, page.locator("#scene"));
+  // Backrooms draws on the wall render-host canvas (sandbox plugin); #scene is a transparent host shell.
+  const stageCanvas = page.locator("#wall canvas.render-host, #scene canvas").first();
+  const pngBuffer = await screenshotBox(page, stageCanvas, undefined, SMOKE_STAGE_CANVAS_SELECTORS);
   const png = PNG.sync.read(pngBuffer);
   const avg = averageCenterBlock(png.data, png.width, png.height, Math.min(png.width, png.height));
   assert.ok(!isNearBlack(avg), `stage screenshot is near-black ${JSON.stringify(avg)}`);

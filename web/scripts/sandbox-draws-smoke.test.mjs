@@ -14,7 +14,12 @@ import {
   packAssetNullOriginGetHeaders,
   packAssetUrl,
 } from "./pack-asset-smoke-util.mjs";
-import { screenshotBox, seedSmokeProfile, smokeProfileSettings } from "./smoke-profile-util.mjs";
+import {
+  SMOKE_STAGE_CANVAS_SELECTORS,
+  screenshotBox,
+  seedSmokeProfile,
+  smokeProfileSettings,
+} from "./smoke-profile-util.mjs";
 
 const base = (process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/").replace(/\/?$/, "/");
 const WAIT_MS = 120_000;
@@ -73,7 +78,7 @@ function nearBlack(rgb) {
 async function sampleScene(page) {
   // The render canvas is mounted in #wall (canvas.render-host); #scene only holds overlays now.
   const canvas = page.locator("#wall canvas.render-host, #scene canvas").first();
-  const png = PNG.sync.read(await screenshotBox(page, canvas, WAIT_MS));
+  const png = PNG.sync.read(await screenshotBox(page, canvas, WAIT_MS, SMOKE_STAGE_CANVAS_SELECTORS));
   const w = png.width;
   const h = png.height;
   return {
