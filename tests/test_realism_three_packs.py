@@ -47,16 +47,32 @@ def test_realism_koi_aquarium_model_slot_indices() -> None:
 
 def test_realism_packs_use_host_mesh_slot_three() -> None:
     for pid in PACKS:
+        if pid == "koi-pond":
+            continue  # koi layout is versioned explicitly below (legacy vs HD follow pack)
         yml = (PACKS[pid] / "plugin.yml").read_text(encoding="utf-8")
         # the aquarium host mesh lane reads slot 7 (one Blender scape GLB)
         if pid == "aquarium":
             assert "hostMeshSlot: 7" in yml or "hostMeshSlot: 3" in yml, pid
-        elif pid == "koi-pond":
-            # slot 3 = follow cam (pack); host mesh packets start at 4 (paired host+#338)
-            assert "hostMeshSlot: 4" in yml or "hostMeshSlot: 3" in yml, pid
         else:
             assert "hostMeshSlot: 3" in yml, pid
         assert "maxBuffers: 8" in yml, pid
+
+
+def test_realism_koi_legacy_host_mesh_manifest() -> None:
+    yml = (PACKS["koi-pond"] / "plugin.yml").read_text(encoding="utf-8")
+    if "hostMeshSlot: 4" in yml:
+        pytest.skip("koi pack ships HD follow layout (hostMeshSlot 4)")
+    assert "hostMeshSlot: 3" in yml, "legacy koi: follow cam uses model slot; mesh packets from slot 3"
+    assert "hostMeshSlotCount: 6" in yml
+    assert "maxBuffers: 8" in yml
+
+
+def test_realism_koi_hd_follow_host_mesh_manifest() -> None:
+    yml = (PACKS["koi-pond"] / "plugin.yml").read_text(encoding="utf-8")
+    if "hostMeshSlot: 4" not in yml:
+        pytest.skip("koi pack still on legacy hostMeshSlot 3 (main / pre-#338)")
+    assert "hostMeshSlotCount: 4" in yml, "HD follow: slot 3 reserved for follow cam; fish mesh packets use 4–7"
+    assert "maxBuffers: 8" in yml
 
 
 # Revert row: remove damped ball camera (restore fixed broadcast angles only).
