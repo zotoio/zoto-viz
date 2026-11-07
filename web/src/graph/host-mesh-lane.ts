@@ -152,7 +152,7 @@ type LiveSkinned = {
  * set) adds a fin beat, a median-fin ripple, a spine bend into turns and a brighter tank lamp.
  * `standard` is the baked clip only, unchanged.
  */
-export type HostMeshMotionProfile = "standard" | "aquarium-hd";
+export type HostMeshMotionProfile = "standard" | "aquarium-hd" | "koi-hd";
 
 /** Rig bones of the designer fish: root → spine_01..03 → tail_01..02 run nose to tail; head carries the pectorals. */
 const FISH_BEND_CHAIN = ["spine_01", "spine_02", "spine_03", "tail_01", "tail_02"] as const;
@@ -485,7 +485,7 @@ export class HostMeshLane {
   /** Set before {@link ensureAssets}: the HD fin ripple is patched into materials at load. */
   setMotionProfile(profile: HostMeshMotionProfile): void {
     this.motion = profile;
-    const hd = profile === "aquarium-hd";
+    const hd = profile === "aquarium-hd" || profile === "koi-hd";
     this.finUniforms.uFinAmp.value = hd ? 1 : 0;
     if (hd && !this.hdLights) {
       this.hdLights = buildAquariumHdLights();
@@ -687,7 +687,7 @@ export class HostMeshLane {
       const animOffset = inst.extras.animTime % clipDuration;
       this.group.add(root);
       // Sandbox fish carry their yaw rate in param1; pinned decor (flags 1) uses param1 as a phase.
-      const hd = this.motion === "aquarium-hd"
+      const hd = this.motion === "aquarium-hd" || this.motion === "koi-hd"
         ? findHdFishRig(root, inst.extras.animTime * 3.1 + i, (inst.extras.flags & 1) === 0 ? inst.extras.param1 : 0)
         : undefined;
       list.push({ root, mixer, animOffset, clipDuration, hd });
@@ -758,7 +758,7 @@ export class HostMeshLane {
       // Blender koi wag their tails that way); it plays through the same cloned-mixer path.
       const nodeSwim = !skinned && rawSwim?.name === "swim";
       const kind = (skinned || nodeSwim) && swimClip ? "skinned" : "rigid";
-      if (this.motion === "aquarium-hd" && skinned) this.patchHdFins(template);
+      if ((this.motion === "aquarium-hd" || this.motion === "koi-hd") && skinned) this.patchHdFins(template);
       return this.storeTemplate(decl.id, {
         id: decl.id,
         kind,
