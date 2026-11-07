@@ -5,6 +5,7 @@ import { clone as cloneSkinnedRoot } from "three/addons/utils/SkeletonUtils.js";
 import {
   decodeHostMeshSlotPacket,
   HOST_MESH_FRAME_V1,
+  HOST_MESH_FRAME_V3,
   hostMeshMatrixYawPos,
   type HostMeshInstanceExtras,
 } from "../../../plugins/sdk/host-mesh-frame";
@@ -149,9 +150,10 @@ type LiveSkinned = {
 /**
  * How a lane animates fish beyond their baked swim clip. `aquarium-hd` (aquarium pack, HD model
  * set) adds a fin beat, a median-fin ripple, a spine bend into turns and a brighter tank lamp.
+ * `koi-hd` is the koi-pond HD model set (baked swim clip only; no aquarium fin/lamp overlays).
  * `standard` is the baked clip only, unchanged.
  */
-export type HostMeshMotionProfile = "standard" | "aquarium-hd";
+export type HostMeshMotionProfile = "standard" | "aquarium-hd" | "koi-hd";
 
 /** Rig bones of the designer fish: root → spine_01..03 → tail_01..02 run nose to tail; head carries the pectorals. */
 const FISH_BEND_CHAIN = ["spine_01", "spine_02", "spine_03", "tail_01", "tail_02"] as const;
@@ -550,9 +552,10 @@ export class HostMeshLane {
     this.finUniforms.uFinTime.value = this.clockSec;
     for (const list of this.skinnedLive.values()) {
       for (const row of list) {
-        row.mixer.time =
-          row.animOffset + this.clockSec * (row.clipDuration > 0 ? 1 : 0);
-        row.mixer.update(0);
+        // Absolute clip phase: assignment + update(0) does not sample tracks; setTime() does.
+        row.mixer.setTime(
+          row.animOffset + this.clockSec * (row.clipDuration > 0 ? 1 : 0),
+        );
         const turn = this.driftDecor(row.root, dtSec);
         if (row.hd) {
           if (turn !== undefined) row.hd.turnRate = turn;
@@ -581,9 +584,33 @@ export class HostMeshLane {
   /**
    * Apply one sandbox host-mesh buffer slot (v2 packet or legacy 16-float matrix).
    */
+  private v3MixedByAsset = new Map<number, { matrix: Float32Array; extras: HostMeshInstanceExtras }[]>();
+
+  private flushV3MixedBatch(): void {
+    for (const [assetIndex, instances] of this.v3MixedByAsset) {
+      const assetId = this.assetOrder[assetIndex];
+      if (!assetId) continue;
+      const tpl = this.templates.get(assetId);
+      if (!tpl?.loadOk) continue;
+      if (tpl.kind === "skinned") this.applySkinnedInstances(tpl, assetId, instances);
+      else this.applyRigidInstances(tpl, assetId, instances);
+    }
+    this.v3MixedByAsset.clear();
+  }
+
   applySlotBuffer(data: ArrayLike<number>, slotAssetIndexOffset = 0): void {
     const pkt = decodeHostMeshSlotPacket(data);
     if (!pkt || pkt.instances.length === 0) return;
+    if (pkt.version === HOST_MESH_FRAME_V3 && pkt.assetIndex === 0) {
+      for (const inst of pkt.instances) {
+        const ai = inst.meshAssetIndex ?? 0;
+        const list = this.v3MixedByAsset.get(ai) ?? [];
+        list.push({ matrix: inst.matrix, extras: inst.extras });
+        this.v3MixedByAsset.set(ai, list);
+      }
+      if (pkt.v3Flush) this.flushV3MixedBatch();
+      return;
+    }
     const assetIndex =
       pkt.version === HOST_MESH_FRAME_V1 ? slotAssetIndexOffset : pkt.assetIndex;
     const assetId = this.assetOrder[assetIndex];

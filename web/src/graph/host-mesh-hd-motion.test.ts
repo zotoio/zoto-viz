@@ -82,7 +82,7 @@ describe("aquarium HD fish motion", () => {
   it("is the aquarium HD set's only", () => {
     expect(hostMeshMotionProfile("aquarium", "hd")).toBe("aquarium-hd");
     expect(hostMeshMotionProfile("aquarium", "standard")).toBe("standard");
-    expect(hostMeshMotionProfile("koi-pond", "hd")).toBe("standard");
+    expect(hostMeshMotionProfile("koi-pond", "hd")).toBe("koi-hd");
     expect(hostMeshMotionProfile(undefined, "hd")).toBe("standard");
   });
 

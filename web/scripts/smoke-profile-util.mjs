@@ -69,7 +69,11 @@ export async function screenshotBox(page, locator, timeout = 120_000, domSelecto
       }
       return null;
     }, domSelectors)
-    : await locator.boundingBox({ timeout: Math.min(timeout, 30_000) });
+    : await locator.evaluate((el) => {
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) return null;
+      return { x: r.x, y: r.y, width: r.width, height: r.height };
+    });
   assert.ok(box && box.width > 0 && box.height > 0, `no box to screenshot: ${JSON.stringify(box)}`);
   if (domSelectors) {
     const cdp = await page.context().newCDPSession(page);

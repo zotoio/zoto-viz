@@ -232,6 +232,40 @@ def test_host_change_reviewed_after_push_passes_dry_run() -> None:
     assert any("check passed" in line for line in lines)
 
 
+def test_host_change_timeline_push_fallback_from_ci_updated_at(monkeypatch) -> None:
+    push = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    review = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    monkeypatch.setenv("PACK_BOUNDARY_EVENT_ACTION", "synchronize")
+    monkeypatch.setenv("PACK_BOUNDARY_PR_UPDATED_AT", _iso(push))
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+    ]
+    code, lines = run_host_change_gate({"host-change", "host-reviewed"}, timeline)
+    assert code == 0
+    assert any("check passed" in line for line in lines)
+
+
+def test_host_change_ci_fallback_not_used_on_label_only_event(monkeypatch) -> None:
+    monkeypatch.setenv("PACK_BOUNDARY_EVENT_ACTION", "labeled")
+    monkeypatch.setenv("PACK_BOUNDARY_PR_UPDATED_AT", _iso(datetime.now(timezone.utc)))
+    code, lines = run_host_change_gate(
+        {"host-change", "host-reviewed"},
+        [
+            {
+                "event": "labeled",
+                "label": {"name": "host-reviewed"},
+                "created_at": _iso(datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)),
+            },
+        ],
+    )
+    assert code == 1
+    assert any("could not determine latest push time" in line for line in lines)
+
+
 def test_host_change_push_after_review_fails_dry_run() -> None:
     review = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
     push = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)

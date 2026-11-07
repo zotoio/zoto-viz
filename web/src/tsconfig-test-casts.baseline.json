@@ -41,7 +41,7 @@
   "web/src/graph/backdrop.test.ts": 21,
   "web/src/graph/fabric-shader.test.ts": 2,
   "web/src/graph/h1-gap-rows.test.ts": 6,
-  "web/src/graph/host-mesh-lane.test.ts": 5,
+  "web/src/graph/host-mesh-lane.test.ts": 7,
   "web/src/graph/host-uniform-bindings-171b.test.ts": 2,
   "web/src/graph/layout-core.test.ts": 1,
   "web/src/graph/letterbox-grain-stable.test.ts": 1,
