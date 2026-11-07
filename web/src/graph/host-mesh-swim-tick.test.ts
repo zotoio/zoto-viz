@@ -4,8 +4,9 @@ import { HostMeshLane, normalizeSwimClipStart } from "./host-mesh-lane";
 import { encodeHostMeshSlotPacket, hostMeshMatrixYawPos } from "../../../plugins/sdk/host-mesh-frame";
 
 type LiveRow = {
-  action: THREE.AnimationAction;
   mixer: THREE.AnimationMixer;
+  animOffset: number;
+  clipDuration: number;
 };
 
 type TemplateRow = {
@@ -57,13 +58,14 @@ describe("HostMeshLane swim tick advances AnimationAction.time", () => {
       encodeHostMeshSlotPacket(0, [{ matrix, extras: { animTime: 0.1, param1: 0, param2: 0, flags: 0 } }]),
     );
     const row = skinnedLive.get("koi")![0]!;
-    expect(row.action.time).toBeCloseTo(0.1, 5);
+    expect(row.animOffset).toBeCloseTo(0.1, 5);
+    expect(row.mixer.time).toBeCloseTo(0.1, 5);
 
     lane.tick(0.25);
-    expect(row.action.time).toBeGreaterThan(0.3);
-    const t1 = row.action.time;
+    expect(row.mixer.time).toBeGreaterThan(0.3);
+    const t1 = row.mixer.time;
     lane.tick(0.25);
-    expect(row.action.time).not.toBe(0);
-    expect(row.action.time).not.toBeCloseTo(t1, 5);
+    expect(row.mixer.time).not.toBe(0);
+    expect(row.mixer.time).not.toBeCloseTo(t1, 5);
   });
 });
