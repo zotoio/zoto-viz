@@ -7,7 +7,12 @@
 import assert from "node:assert/strict";
 import { PNG } from "pngjs";
 import { chromium } from "playwright";
-import { screenshotBox, seedSmokeProfile, smokeProfileSettings } from "./smoke-profile-util.mjs";
+import {
+  SMOKE_STAGE_CANVAS_SELECTORS,
+  screenshotBox,
+  seedSmokeProfile,
+  smokeProfileSettings,
+} from "./smoke-profile-util.mjs";
 
 const base = process.env.ZOTO_VIZ_URL || "http://127.0.0.1:7020/";
 const PRESENT_FRAMES = 30;
@@ -223,10 +228,8 @@ async function run() {
   assert.equal(sandboxWebgl.length, 0, `expected zero sandbox WebGL: console lines, got ${JSON.stringify(sandboxWebgl)}`);
 
   // Backrooms draws on the wall render-host canvas (sandbox plugin); #scene is a transparent host shell.
-  const pngBuffer = await screenshotBox(
-    page,
-    page.locator("#wall canvas.render-host, #scene canvas").first(),
-  );
+  const stageCanvas = page.locator("#wall canvas.render-host, #scene canvas").first();
+  const pngBuffer = await screenshotBox(page, stageCanvas, undefined, SMOKE_STAGE_CANVAS_SELECTORS);
   const png = PNG.sync.read(pngBuffer);
   const avg = averageCenterBlock(png.data, png.width, png.height, Math.min(png.width, png.height));
   assert.ok(!isNearBlack(avg), `stage screenshot is near-black ${JSON.stringify(avg)}`);
