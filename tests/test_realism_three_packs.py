@@ -73,15 +73,16 @@ def test_realism_koi_host_mesh_manifest_exactly_one_supported_layout() -> None:
     assert "maxBuffers: 8" in yml
 
 
-def test_realism_koi_mesh_render_cap_matches_manifest_layout() -> None:
+def test_realism_koi_hd_follow_uses_v3_mixed_mesh_packets() -> None:
     yml = (PACKS["koi-pond"] / "plugin.yml").read_text(encoding="utf-8")
-    pack = (PACKS["koi-pond"] / "frontend" / "koi-pond.ts").read_text(encoding="utf-8")
-    if "hostMeshSlot: 4" in yml:
-        assert "KOI_HOST_MESH_RENDER_CAP" in pack
-        assert "high: { maxKoi: 9" in pack
-    else:
+    if "hostMeshSlot: 4" not in yml:
         assert "hostMeshSlot: 3" in yml
-        assert "KOI_HOST_MESH_RENDER_CAP" not in pack
+        return
+    drive = (PACKS["koi-pond"] / "frontend" / "host-mesh-drive.ts").read_text(encoding="utf-8")
+    assert "encodeHostMeshSlotPacketV3Mixed" in drive
+    assert "MAX_KOI" in drive
+    pack = (PACKS["koi-pond"] / "frontend" / "koi-pond.ts").read_text(encoding="utf-8")
+    assert "high: { maxKoi: 16" in pack
 
 
 # Revert row: remove damped ball camera (restore fixed broadcast angles only).
