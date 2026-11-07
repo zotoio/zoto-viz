@@ -222,7 +222,11 @@ async function run() {
   assert.equal(pageWebgl.length, 0, `expected zero page WebGL: console lines, got ${JSON.stringify(pageWebgl)}`);
   assert.equal(sandboxWebgl.length, 0, `expected zero sandbox WebGL: console lines, got ${JSON.stringify(sandboxWebgl)}`);
 
-  const pngBuffer = await screenshotBox(page, page.locator("#scene"));
+  // Backrooms draws on the wall render-host canvas (sandbox plugin); #scene is a transparent host shell.
+  const pngBuffer = await screenshotBox(
+    page,
+    page.locator("#wall canvas.render-host, #scene canvas").first(),
+  );
   const png = PNG.sync.read(pngBuffer);
   const avg = averageCenterBlock(png.data, png.width, png.height, Math.min(png.width, png.height));
   assert.ok(!isNearBlack(avg), `stage screenshot is near-black ${JSON.stringify(avg)}`);
