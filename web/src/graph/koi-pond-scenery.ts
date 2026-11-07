@@ -71,6 +71,7 @@ export function buildKoiPondScenery(): KoiPondScenery {
   reflector.rotation.x = -Math.PI / 2;
   reflector.position.y = 0.006;
   reflector.name = "koi-water-reflector";
+  reflector.renderOrder = 3;
   root.add(reflector);
 
   const tintMat = new THREE.MeshPhysicalMaterial({
@@ -153,6 +154,19 @@ export function buildKoiPondScenery(): KoiPondScenery {
       ) {
         found = true;
         patchVertexColors(o);
+        const mesh = o as THREE.Mesh;
+        if (mesh.isMesh) {
+          const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+          for (const mat of mats) {
+            const m = mat as THREE.MeshStandardMaterial;
+            if (!m) continue;
+            m.transparent = true;
+            m.depthTest = true;
+            m.depthWrite = true;
+            m.needsUpdate = true;
+          }
+          mesh.renderOrder = 3;
+        }
       }
     });
     scapeReady = found;
