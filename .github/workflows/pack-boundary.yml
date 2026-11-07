@@ -50,6 +50,8 @@ jobs:
             "https://x-access-token:${GITHUB_TOKEN}@github.com/${HEAD_REPO}.git" \
             "${HEAD_SHA}"
           git -c protocol.file.allow=never archive --format=tar FETCH_HEAD | tar -x -C "${PR_HEAD_DIR}"
+      - id: pack-boundary-clock
+        run: echo "started_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
       - name: Enforce pack PR boundary (secure)
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -59,8 +61,7 @@ jobs:
           PACK_BOUNDARY_BASE_ROOT: ${{ github.workspace }}
           PACK_BOUNDARY_EVENT_ACTION: ${{ github.event.action }}
           PACK_BOUNDARY_EVENT_LABEL_NAME: ${{ github.event.label.name }}
-          # Label times come from the issue timeline API only (not pull_request.updated_at).
           PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ""
-          # Webhook head SHA for this run; checker also verifies via pulls API + timeline.
           PACK_BOUNDARY_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PACK_BOUNDARY_RUN_STARTED_AT: ${{ steps.pack-boundary-clock.outputs.started_at }}
         run: python3 scripts/check_pack_pr_boundary.py --secure-ci

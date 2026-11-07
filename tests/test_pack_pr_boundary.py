@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -20,12 +21,16 @@ from scripts.check_pack_pr_boundary import (
     pack_py_test_path,
     paths_from_name_status,
     paths_from_pull_files_pages,
-    push_at_for_head_sha,
+    head_ref_agreement_error,
+    head_ref_force_push_at_for_sha,
+    push_at_from_delivery_run,
+    push_evidence_at_for_head,
     run_check,
     run_host_change_gate,
     validate_catalog_py_change,
     validate_schema_py_change,
     fetch_pull_changed_files,
+    load_pr_review_context,
     validate_pull_changed_files_complete,
     validate_tsconfig_change,
 )
@@ -233,27 +238,43 @@ def test_host_change_reviewed_after_push_passes_dry_run() -> None:
     assert any("check passed" in line for line in lines)
 
 
-def test_push_at_for_head_sha_ignores_older_commits() -> None:
+def test_head_ref_force_push_uses_commit_id_not_after() -> None:
+    """Matches GitHub head_ref_force_pushed fields (commit_id + created_at)."""
     head = "a" * 40
-    old = "b" * 40
-    t_old = _iso(datetime(2026, 9, 26, 10, 0, tzinfo=timezone.utc))
-    t_new = _iso(datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc))
+    t_push = _iso(datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc))
     timeline = [
-        {"event": "committed", "commit_id": old, "created_at": t_old},
-        {"event": "committed", "commit_id": head, "created_at": t_new},
+        {
+            "id": 1,
+            "event": "head_ref_force_pushed",
+            "commit_id": head,
+            "created_at": t_push,
+            "actor": {"login": "human"},
+        },
     ]
-    push = push_at_for_head_sha(timeline, head)
-    assert push is not None
-    assert push.isoformat().startswith("2026-09-26T12:00:00")
+    assert head_ref_force_push_at_for_sha(timeline, head) is not None
 
 
-def test_host_change_review_passes_when_timeline_matches_current_head() -> None:
+def test_committed_timeline_shape_does_not_yield_push_evidence() -> None:
+    """GitHub `committed` events have sha/author/committer only (no created_at)."""
+    head = "b" * 40
+    timeline = [
+        {
+            "event": "committed",
+            "sha": head,
+            "author": {"date": "2099-01-01T00:00:00Z"},
+            "committer": {"date": "2099-01-01T00:00:00Z"},
+        },
+    ]
+    assert push_evidence_at_for_head(timeline, head) is None
+
+
+def test_host_review_passes_force_push_before_label(monkeypatch) -> None:
     head = "c" * 40
     push = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
     review = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
     timeline = [
         {
-            "event": "committed",
+            "event": "head_ref_force_pushed",
             "commit_id": head,
             "created_at": _iso(push),
         },
@@ -263,14 +284,33 @@ def test_host_change_review_passes_when_timeline_matches_current_head() -> None:
             "created_at": _iso(review),
         },
     ]
-    assert push_at_for_head_sha(timeline, head) == push
+    push_at = push_evidence_at_for_head(timeline, head)
     code, lines = run_host_change_gate(
-        {"host-change", "host-reviewed"},
-        timeline,
-        last_push_at=push_at_for_head_sha(timeline, head),
+        {"host-change", "host-reviewed"}, timeline, last_push_at=push_at
     )
     assert code == 0
     assert any("check passed" in line for line in lines)
+
+
+def test_host_review_passes_synchronize_delivery_run(monkeypatch) -> None:
+    head = "d" * 40
+    push = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    review = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    monkeypatch.setenv("PACK_BOUNDARY_EVENT_ACTION", "synchronize")
+    monkeypatch.setenv("PACK_BOUNDARY_HEAD_SHA", head)
+    monkeypatch.setenv("PACK_BOUNDARY_RUN_STARTED_AT", _iso(push))
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+    ]
+    push_at = push_evidence_at_for_head(timeline, head)
+    code, lines = run_host_change_gate(
+        {"host-change", "host-reviewed"}, timeline, last_push_at=push_at
+    )
+    assert code == 0
 
 
 def test_host_change_fails_closed_without_head_push_evidence() -> None:
@@ -285,7 +325,42 @@ def test_host_change_fails_closed_without_head_push_evidence() -> None:
     code, lines = run_host_change_gate({"host-change", "host-reviewed"}, timeline)
     assert code == 1
     assert any(HOST_REVIEW_FAIL_MESSAGE in line for line in lines)
-    assert any("no timeline committed/force-push evidence" in line for line in lines)
+    assert any("no trustworthy push evidence" in line for line in lines)
+
+
+def test_head_ref_agreement_mismatch_detected() -> None:
+    a, b = "e" * 40, "f" * 40
+    assert head_ref_agreement_error(a, b) is not None
+    assert head_ref_agreement_error(a, a) is None
+
+
+def test_load_context_integration_documented_force_push(monkeypatch) -> None:
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures/pack-boundary/timeline-force-push-reviewed.json").read_text()
+    )
+    head = fixture["head_sha"]
+
+    def fake_labels(_repo: str, _pr: int, _token: str) -> set[str]:
+        return {"host-change", "host-reviewed"}
+
+    def fake_timeline(_repo: str, _pr: int, _token: str) -> list[dict]:
+        return fixture["timeline"]
+
+    def fake_head(_repo: str, _pr: int, _token: str) -> str:
+        return head
+
+    monkeypatch.setenv("PACK_BOUNDARY_HEAD_SHA", head)
+    with patch("scripts.check_pack_pr_boundary.fetch_pull_labels", fake_labels):
+        with patch("scripts.check_pack_pr_boundary.fetch_issue_timeline", fake_timeline):
+            with patch("scripts.check_pack_pr_boundary.fetch_pull_head_sha", fake_head):
+                labels, timeline, push_at, resolved, mismatch = load_pr_review_context(
+                    "zotoio/zoto-viz", 337, "token"
+                )
+    assert mismatch is None
+    assert resolved == head
+    assert push_at is not None
+    code, lines = run_host_change_gate(labels, timeline, last_push_at=push_at)
+    assert code == 0
 
 
 def test_host_change_push_after_review_fails_dry_run() -> None:
@@ -413,9 +488,11 @@ def test_legacy_cli_looks_up_labels_when_pr_from_github_event(tmp_path, monkeypa
 
     calls: list[tuple[str, int, str]] = []
 
-    def fake_load(repo: str, pr: int, token: str) -> tuple[set[str], list, datetime | None]:
+    def fake_load(
+        repo: str, pr: int, token: str
+    ) -> tuple[set[str], list, datetime | None, str | None, str | None]:
         calls.append((repo, pr, token))
-        return (set(), [], None)
+        return (set(), [], None, None, None)
 
     with patch("scripts.check_pack_pr_boundary.load_pr_review_context", fake_load):
         with patch("scripts.check_pack_pr_boundary.git_diff_changed_paths", return_value=[]):
@@ -517,20 +594,19 @@ def test_pack_pr_editing_workflow_yaml_is_host_infra() -> None:
     assert any(PACK_PR_HOST_INFRA_FAIL in line or "host infra" in line for line in lines)
 
 
-def test_merge_workflow_label_event_appends_host_reviewed() -> None:
+def test_merge_workflow_label_event_does_not_synthesize_from_env() -> None:
     import os
 
     os.environ["PACK_BOUNDARY_EVENT_ACTION"] = "labeled"
     os.environ["PACK_BOUNDARY_EVENT_LABEL_NAME"] = "host-reviewed"
     os.environ["PACK_BOUNDARY_EVENT_LABEL_CREATED_AT"] = "2026-09-26T14:00:00Z"
     try:
-        merged = merge_workflow_label_event([])
+        merged = merge_workflow_label_event([{"event": "committed", "sha": "a" * 40}])
     finally:
         os.environ.pop("PACK_BOUNDARY_EVENT_ACTION", None)
         os.environ.pop("PACK_BOUNDARY_EVENT_LABEL_NAME", None)
         os.environ.pop("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", None)
-    assert len(merged) == 1
-    assert merged[0]["event"] == "labeled"
+    assert merged == [{"event": "committed", "sha": "a" * 40}]
 
 
 def test_fetch_pull_changed_files_rejects_non_array_page() -> None:
@@ -567,13 +643,27 @@ def test_validate_pull_changed_files_rejects_at_api_limit() -> None:
     assert f">={limit}" in err
 
 
-def test_committed_event_timestamp_ignores_committer_date() -> None:
-    from scripts.check_pack_pr_boundary import _committed_event_timestamp
-
-    assert _committed_event_timestamp({"committer": {"date": "2026-09-26T15:00:00Z"}}) is None
-    ts = _committed_event_timestamp({"created_at": "2026-09-26T14:00:00Z"})
-    assert ts is not None
-    assert ts.year == 2026
+def test_force_push_replay_after_review_fails_gate() -> None:
+    head = "9" * 40
+    review = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    replay = datetime(2026, 9, 26, 14, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+        {
+            "event": "head_ref_force_pushed",
+            "commit_id": head,
+            "created_at": _iso(replay),
+        },
+    ]
+    push_at = push_evidence_at_for_head(timeline, head)
+    code, _lines = run_host_change_gate(
+        {"host-change", "host-reviewed"}, timeline, last_push_at=push_at
+    )
+    assert code == 1
 
 
 def test_rename_lists_predecessor_for_boundary_scan() -> None:
