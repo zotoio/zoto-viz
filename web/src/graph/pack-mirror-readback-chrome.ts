@@ -2,9 +2,7 @@ import { accessSync, constants } from "node:fs";
 import { execFileSync } from "node:child_process";
 
 export const PACK_MIRROR_READBACK_CHROME_PATH = process.env.PACK_MIRROR_CHROME_PATH || "/usr/local/bin/google-chrome";
-/** Pinned in CI via browser-actions/setup-chrome; override locally when needed. */
-export const PACK_MIRROR_READBACK_CHROME_VERSION =
-  process.env.PACK_MIRROR_READBACK_CHROME_VERSION?.trim() || "148.0.7778.96";
+export const PACK_MIRROR_READBACK_CHROME_VERSION = "148.0.7778.96";
 
 function chromeVersion(): string {
   const out = execFileSync(PACK_MIRROR_READBACK_CHROME_PATH, ["--version"], { encoding: "utf8" }).trim();
