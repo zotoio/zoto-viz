@@ -67,7 +67,9 @@ def test_realism_koi_host_mesh_manifest_exactly_one_supported_layout() -> None:
     )
     hd_follow = "hostMeshSlot: 4" in yml and "hostMeshSlotCount: 4" in yml
     assert legacy or hd_follow, "koi plugin.yml must declare a supported host mesh layout"
-    assert legacy != hd_follow, f"ambiguous koi host mesh manifest (both legacy and HD): {yml!r[:240]}"
+    assert legacy != hd_follow, (
+        f"ambiguous koi host mesh manifest (both legacy and HD): {yml[:240]!r}"
+    )
     assert "maxBuffers: 8" in yml
 
 
