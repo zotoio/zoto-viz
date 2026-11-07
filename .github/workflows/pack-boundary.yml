@@ -59,5 +59,8 @@ jobs:
           PACK_BOUNDARY_BASE_ROOT: ${{ github.workspace }}
           PACK_BOUNDARY_EVENT_ACTION: ${{ github.event.action }}
           PACK_BOUNDARY_EVENT_LABEL_NAME: ${{ github.event.label.name }}
-          PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ${{ github.event.pull_request.updated_at }}
+          # Label times come from the issue timeline API only (not pull_request.updated_at).
+          PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ""
+          # Webhook head SHA for this run; checker also verifies via pulls API + timeline.
+          PACK_BOUNDARY_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: python3 scripts/check_pack_pr_boundary.py --secure-ci

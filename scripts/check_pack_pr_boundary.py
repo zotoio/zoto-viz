@@ -958,14 +958,17 @@ def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]
 
 
 def merge_workflow_label_event(timeline: list[dict]) -> list[dict]:
-    """Append labeled/unlabeled from Actions env when this run was label-driven."""
+    """Append labeled/unlabeled only when workflow supplies a trustworthy event time.
+
+    Never synthesize label times from pull_request.updated_at (non-push PR edits).
+    """
     action = os.environ.get("PACK_BOUNDARY_EVENT_ACTION", "")
     if action not in ("labeled", "unlabeled"):
         return timeline
     name = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_NAME", "")
     if not name:
         return timeline
-    created = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", "")
+    created = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", "").strip()
     if not created:
         return timeline
     row = {
@@ -974,6 +977,66 @@ def merge_workflow_label_event(timeline: list[dict]) -> list[dict]:
         "created_at": created,
     }
     return [*timeline, row]
+
+
+def _normalize_commit_sha(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) != 40:
+        return None
+    lowered = value.lower()
+    if not all(c in "0123456789abcdef" for c in lowered):
+        return None
+    return lowered
+
+
+def fetch_pull_head_sha(repo: str, pull_number: int, token: str) -> str | None:
+    """Current PR head SHA from the pulls API (server-owned head ref)."""
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}"
+    doc, _ = _github_request(url, token)
+    if not isinstance(doc, dict):
+        return None
+    head = (doc.get("head") or {}).get("sha")
+    return _normalize_commit_sha(head)
+
+
+def push_at_for_head_sha(
+    timeline: list[dict], head_sha: str | None
+) -> datetime | None:
+    """Latest trustworthy push time for the given head SHA (fail closed if no match)."""
+    want = _normalize_commit_sha(head_sha)
+    if want is None:
+        return None
+    latest: datetime | None = None
+    for item in timeline:
+        event = item.get("event")
+        if event == "committed":
+            cid = _normalize_commit_sha(item.get("commit_id") or item.get("sha"))
+            if cid != want:
+                continue
+            ts = _committed_event_timestamp(item)
+            if ts is None:
+                continue
+        elif event == "head_ref_force_pushed":
+            after = _normalize_commit_sha(item.get("after"))
+            if after != want:
+                continue
+            created = item.get("created_at")
+            if not created:
+                continue
+            ts = parse_github_timestamp(created)
+        else:
+            continue
+        if latest is None or ts > latest:
+            latest = ts
+    return latest
+
+
+def resolve_workflow_head_sha(repo: str, pull_number: int, token: str) -> str | None:
+    """Head SHA for this check: webhook head when present, else pulls API."""
+    from_env = _normalize_commit_sha(os.environ.get("PACK_BOUNDARY_HEAD_SHA", "").strip())
+    if from_env is not None:
+        return from_env
+    return fetch_pull_head_sha(repo, pull_number, token)
 
 
 def load_pr_review_context(
@@ -988,11 +1051,13 @@ def load_pr_review_context(
     except urllib.error.HTTPError:
         timeline = fetch_labeled_events(repo, issue_number, token)
     timeline = merge_workflow_label_event(timeline)
-    push_at = last_push_at_from_timeline(timeline)
+    head_sha = resolve_workflow_head_sha(repo, issue_number, token)
+    push_at = push_at_for_head_sha(timeline, head_sha)
     return labels, timeline, push_at
 
 
 def last_push_at_from_timeline(timeline: list[dict]) -> datetime | None:
+    """Legacy helper: max committed/force-push without head binding (local dry-run only)."""
     latest: datetime | None = None
     for item in timeline:
         event = item.get("event")
@@ -1051,9 +1116,7 @@ def run_host_change_gate(
         return 0, lines
 
     lines.append("pack-boundary: host-change label present; checking review gate.")
-    push_at = last_push_at if last_push_at is not None else last_push_at_from_timeline(
-        timeline
-    )
+    push_at = last_push_at
     review_at = host_reviewed_labeled_at(timeline, labels)
 
     if review_at is None or push_at is None or push_at >= review_at:
@@ -1066,7 +1129,10 @@ def run_host_change_gate(
         elif review_at is None:
             lines.append(f"  missing {HOST_REVIEWED_LABEL!r} label on the pull request")
         elif push_at is None:
-            lines.append("  could not determine latest push time from timeline")
+            lines.append(
+                "  could not determine latest push time for the current PR head "
+                "(no timeline committed/force-push evidence)"
+            )
         return 1, lines
 
     lines.append(

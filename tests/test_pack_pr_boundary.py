@@ -20,6 +20,7 @@ from scripts.check_pack_pr_boundary import (
     pack_py_test_path,
     paths_from_name_status,
     paths_from_pull_files_pages,
+    push_at_for_head_sha,
     run_check,
     run_host_change_gate,
     validate_catalog_py_change,
@@ -230,6 +231,61 @@ def test_host_change_reviewed_after_push_passes_dry_run() -> None:
     )
     assert code == 0
     assert any("check passed" in line for line in lines)
+
+
+def test_push_at_for_head_sha_ignores_older_commits() -> None:
+    head = "a" * 40
+    old = "b" * 40
+    t_old = _iso(datetime(2026, 9, 26, 10, 0, tzinfo=timezone.utc))
+    t_new = _iso(datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc))
+    timeline = [
+        {"event": "committed", "commit_id": old, "created_at": t_old},
+        {"event": "committed", "commit_id": head, "created_at": t_new},
+    ]
+    push = push_at_for_head_sha(timeline, head)
+    assert push is not None
+    assert push.isoformat().startswith("2026-09-26T12:00:00")
+
+
+def test_host_change_review_passes_when_timeline_matches_current_head() -> None:
+    head = "c" * 40
+    push = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    review = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "committed",
+            "commit_id": head,
+            "created_at": _iso(push),
+        },
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+    ]
+    assert push_at_for_head_sha(timeline, head) == push
+    code, lines = run_host_change_gate(
+        {"host-change", "host-reviewed"},
+        timeline,
+        last_push_at=push_at_for_head_sha(timeline, head),
+    )
+    assert code == 0
+    assert any("check passed" in line for line in lines)
+
+
+def test_host_change_fails_closed_without_head_push_evidence() -> None:
+    review = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+    ]
+    code, lines = run_host_change_gate({"host-change", "host-reviewed"}, timeline)
+    assert code == 1
+    assert any(HOST_REVIEW_FAIL_MESSAGE in line for line in lines)
+    assert any("no timeline committed/force-push evidence" in line for line in lines)
 
 
 def test_host_change_push_after_review_fails_dry_run() -> None:
