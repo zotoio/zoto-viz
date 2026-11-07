@@ -1,0 +1,93 @@
+{
+  "fish": {
+    "kohaku": {
+      "path": "/home/andrewv/git/zoto-viz/plugins/src/koi-pond/assets/koi-kohaku-hd.glb",
+      "integrity": {
+        "verts": 18128,
+        "faces": 35256,
+        "axis": "y",
+        "head_verts": 315,
+        "head_boundary": 46,
+        "body_band_boundary": 354,
+        "bare_head_weights": 0,
+        "has_head_bone_group": true,
+        "ok_head": true
+      },
+      "bones": [
+        "root",
+        "head",
+        "fin_pectoral_L",
+        "fin_pectoral_R",
+        "spine_01",
+        "spine_02",
+        "spine_03",
+        "tail_01",
+        "tail_02"
+      ],
+      "images": 4,
+      "bytes": 1369352,
+      "sha256": "fc299fd05a1bc13729e9d1b875340ad8322900c5c77760167e176bdab34de575"
+    },
+    "showa": {
+      "path": "/home/andrewv/git/zoto-viz/plugins/src/koi-pond/assets/koi-showa-hd.glb",
+      "integrity": {
+        "verts": 18128,
+        "faces": 35256,
+        "axis": "y",
+        "head_verts": 315,
+        "head_boundary": 46,
+        "body_band_boundary": 354,
+        "bare_head_weights": 0,
+        "has_head_bone_group": true,
+        "ok_head": true
+      },
+      "bones": [
+        "root",
+        "head",
+        "fin_pectoral_L",
+        "fin_pectoral_R",
+        "spine_01",
+        "spine_02",
+        "spine_03",
+        "tail_01",
+        "tail_02"
+      ],
+      "images": 4,
+      "bytes": 1385980,
+      "sha256": "04e5950f3a02ac8163346ec12b855c2778647c12fc45003b9fab502e02363fef"
+    },
+    "ogon": {
+      "path": "/home/andrewv/git/zoto-viz/plugins/src/koi-pond/assets/koi-ogon-hd.glb",
+      "integrity": {
+        "verts": 18128,
+        "faces": 35256,
+        "axis": "y",
+        "head_verts": 315,
+        "head_boundary": 46,
+        "body_band_boundary": 354,
+        "bare_head_weights": 0,
+        "has_head_bone_group": true,
+        "ok_head": true
+      },
+      "bones": [
+        "root",
+        "head",
+        "fin_pectoral_L",
+        "fin_pectoral_R",
+        "spine_01",
+        "spine_02",
+        "spine_03",
+        "tail_01",
+        "tail_02"
+      ],
+      "images": 4,
+      "bytes": 1427696,
+      "sha256": "7feffca016a377c16667105e61b7380e2c6ef95eda06f496c1b067528b477b4d"
+    }
+  },
+  "scape": {
+    "path": "/home/andrewv/git/zoto-viz/plugins/src/koi-pond/assets/koi-pond-scape.glb",
+    "bytes": 1034096,
+    "sha256": "c60d851a8dcd349196f089b270ea898dba8fbce4aa914fec6db4d1c051442a17"
+  }
+}

@@ -3,7 +3,7 @@ name: Koi Pond
 version: 1
 hint: Tranquil pond — talkers are koi, destinations are lily pads and lotus blooms.
 description: >-
-  Top-down koi pond (procedural GLSL). Data mapping is declared in
+  Koi pond with a Blender scape (basin, kerb, fountain, flowering lilies, rocks), skinned host-mesh koi, reflective water, and an occasional follow camera. Data mapping is declared in
   data-mapping.yml (talkers→koi, packets→ripples, sys.failed→murk).
   Talkers map to koi by id with #22 slot hysteresis; roles pick colour patterns;
   packet events spawn ripples. Endpoints
@@ -16,6 +16,11 @@ capabilities:
   - viz.write
   - config.read
 assets:
+  - id: koi-pond-scape
+    path: assets/koi-pond-scape.glb
+    sha256: 584c3a5a30cb7ac01cab8afa23c7594b8adbd54c901cd426275516032660635e
+    bytes: 781144
+    triangles: 15108
   - id: koi-kohaku
     path: assets/koi-kohaku.glb
     sha256: d9fc3a5cca789f3c6e1ad5ee0e694a5f1dfcfa9f5044960a923f2383f9b9d021
@@ -43,37 +48,38 @@ assets:
     triangles: 9216
   - id: koi-kohaku-hd
     path: assets/koi-kohaku-hd.glb
-    sha256: 18236a89096fa696b6c85ae2e6156fe4a85382372a6768a6b31f4b418b765836
-    bytes: 63732
-    triangles: 8640
+    sha256: f1ef7a7407bd1a7dfc4351fe3bf43895c414bb39ebdfa8b5007803f6c73a9b46
+    bytes: 236232
+    triangles: 5876
   - id: koi-showa-hd
     path: assets/koi-showa-hd.glb
-    sha256: ae1172a37d0f8ac1a147a5c9239ae238e614879331f3c9bbea927693fde7770f
-    bytes: 63732
-    triangles: 8640
+    sha256: dd632f6bba5f5566d33788f4e1f8fc7fe2d1f19d1a74496060d2377a9f199768
+    bytes: 252856
+    triangles: 5876
   - id: koi-ogon-hd
     path: assets/koi-ogon-hd.glb
-    sha256: 12e063d80ab08daac4c32181cc9d5ec6013382a4ad5dd3d18644ce5a26b57b3b
-    bytes: 63728
-    triangles: 8640
+    sha256: 0f071a009a00f328f498011b505ac072dba1d91a9c9200f45f845cf3df78a463
+    bytes: 294576
+    triangles: 5876
   - id: lily-pads-hd
     path: assets/lily-pads-hd.glb
-    sha256: d63ff13707ac97894903289309b575bdd2124ff54e953fb659a247e9c595879d
-    bytes: 9708
-    triangles: 124
+    sha256: 7710a0a2754cb8313383319c811e4877d97a681f89f8e119d18553315bcc89be
+    bytes: 58512
+    triangles: 3120
   - id: pond-rocks-hd
     path: assets/pond-rocks-hd.glb
-    sha256: b1fb981832d9b902e1ac31dcd7d9532a057960b69a04525b69791bb474504f6c
-    bytes: 9252
-    triangles: 320
+    sha256: 2222d173b8477a4a041e99f89cc5a81e45c80eb9544e87304f12a4ff2cca996e
+    bytes: 18116
+    triangles: 1280
 viz:
   graphWalk: false
   idle:
     fixture: host
   maxBuffers: 8
   maxBufferFloats: 64
-  hostMeshSlot: 3
-  hostMeshSlotCount: 6
+  # slot 3 = occasional follow cam; host meshes start at 4 (scape + 3 fish varieties)
+  hostMeshSlot: 4
+  hostMeshSlotCount: 4
   maxParticles: 36
   uniforms:
     - uTime
@@ -82,5 +88,6 @@ viz:
     - uBg
     - uBright
     - uOpacity
+
 frontend:
   entry: frontend/index.ts
