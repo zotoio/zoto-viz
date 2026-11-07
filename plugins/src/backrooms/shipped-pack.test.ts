@@ -219,7 +219,10 @@ describe("backrooms shipped pack", () => {
 
   it("varies the creature per episode", () => {
     const seen = new Set<string>();
-    for (let t = 0; t < 4800; t += 7) seen.add(backroomsFrame(t).creature);
+    const ep = BR_DEFAULTS.episode;
+    for (let t = ep * 0.5; t < ep * BR_CREATURES.length * 4; t += ep) {
+      seen.add(backroomsFrame(t).creature);
+    }
     for (const c of BR_CREATURES) expect(seen.has(c)).toBe(true);
   });
 
