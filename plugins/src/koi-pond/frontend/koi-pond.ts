@@ -15,6 +15,8 @@ import {
   TALKER_SLOT_HOLD_S,
   type TalkerSlot,
 } from "./talker-slots";
+import { FollowCam, FOLLOW, newFollowView, type FollowView } from "./follow-cam";
+import { newFollowEngage, stepFollowEngage, type FollowEngageState } from "./follow-engage";
 
 export {
   assignTalkerSlots,
@@ -59,6 +61,8 @@ export interface KoiPondOptions {
   rain: boolean;
   cameraAngle: CameraAngle;
   cameraDrift: boolean;
+  /** Occasional follow-a-koi camera (host stage). */
+  followCam: boolean;
   label: boolean;
   legend: boolean;
   quality: QualityLevel;
@@ -143,6 +147,7 @@ export const CONFIG_KEYS = [
   "rain",
   "cameraAngle",
   "cameraDrift",
+  "followCam",
   "label",
   "legend",
   "quality",
@@ -205,6 +210,21 @@ export const KOI_SLOT = {
   modelFlags: 52,
 } as const;
 
+/**
+ * slot3: occasional follow camera for the host stage (same layout as aquarium).
+ * [0] 1 when follow drives the view, [1..3] eye, [4..6] aim, [7] fov,
+ * [8] handoff 0..1, [9] followed koi index, [10] next index (-1 none).
+ */
+export const KOI_SLOT3 = {
+  follow: 0,
+  eye: 1,
+  aim: 4,
+  fov: 7,
+  blend: 8,
+  target: 9,
+  next: 10,
+} as const;
+
 const KOI_META_SLOTS = 16;
 const POND_TRAFFIC_SCALE = 900;
 const PAD_SLOTS = 12;
@@ -245,7 +265,7 @@ export const DEFAULT_OPTIONS: KoiPondOptions = {
   koiCap: 12,
   koiSize: 1,
   varietyMix: 0.65,
-  swimSpeed: 0.55,
+  swimSpeed: 0.38,
   schooling: 0.45,
   lilyDensity: 0.7,
   lotusCount: 4,
@@ -262,6 +282,7 @@ export const DEFAULT_OPTIONS: KoiPondOptions = {
   rain: false,
   cameraAngle: "angled",
   cameraDrift: true,
+  followCam: true,
   label: true,
   legend: true,
   quality: "medium",
@@ -412,7 +433,7 @@ export function coalescePresetConfig(
       delete out[key];
     }
   }
-  for (const key of ["bloomOnActivity", "caustics", "petalDrift", "dragonflies", "rain", "cameraDrift"] as const) {
+  for (const key of ["bloomOnActivity", "caustics", "petalDrift", "dragonflies", "rain", "cameraDrift", "followCam"] as const) {
     const presetVal = (pd as Record<string, unknown>)[key];
     if (presetVal === undefined) continue;
     const presetStr = presetVal ? "true" : "false";
@@ -502,6 +523,7 @@ export function parseKoiPondOptions(cfg?: Record<string, string> | null): KoiPon
     rain: parseBool(merged?.rain, base.rain),
     cameraAngle,
     cameraDrift: parseBool(merged?.cameraDrift, base.cameraDrift),
+    followCam: parseBool(merged?.followCam, base.followCam),
     label: parseBool(merged?.label, base.label),
     legend: parseBool(merged?.legend, base.legend),
     quality,
@@ -576,7 +598,16 @@ interface KoiBody {
   vx: number;
   vz: number;
   yaw: number;
+  /** Smoothed heading rate (rad/s) — avoids snap turns. */
+  yawVel: number;
   padIndex: number;
+  /** Explore waypoint (pond units). */
+  tx: number;
+  tz: number;
+  /** Seconds left on the current explore waypoint. */
+  tT: number;
+  /** Waypoint index around the pond ring. */
+  tour: number;
 }
 
 /** Reused step-once containers (stable identity for perf tests). */
@@ -623,6 +654,14 @@ export class KoiPondSim {
   readonly slot0 = new Float32Array(64);
   readonly slot1 = new Float32Array(64);
   readonly slot2 = new Float32Array(64);
+  readonly slot3 = new Float32Array(64);
+  readonly followView: FollowView = newFollowView(MAX_KOI);
+  readonly follow = new FollowCam();
+  /** @internal test + pack diagnostics */
+  followEngage: FollowEngageState = newFollowEngage();
+  private readonly followRand = mulberry32(0x6f15e);
+  private lastFrameDt = FIXED_SIM_DT;
+  private lastSimT = 0;
   readonly particleScratch = new Float32Array(MAX_PARTICLES * PARTICLE_STRIDE);
   private warmed = false;
   private subscriptions = 0;
@@ -864,7 +903,12 @@ export class KoiPondSim {
           vx: 0,
           vz: 0,
           yaw: h * 6.28,
+          yawVel: 0,
           padIndex: this.padIndexForHash(h, dstHash),
+          tx: (h - 0.5) * 1.2,
+          tz: ((h * 3.1) % 1 - 0.5) * 1.2,
+          tT: 0.5 + h * 2,
+          tour: Math.floor(h * 8) % 8,
         };
         this.koi.set(t.id, k);
       } else if (k) {
@@ -974,32 +1018,101 @@ export class KoiPondSim {
 
   private stepKoi(simT: number, dt: number): void {
     const school = this.opts.schooling;
-    const wander = 1 - school;
-    const speedMul = this.opts.swimSpeed * (this.opts.reducedMotion ? 0.45 : 1);
+    const wanderAmt = 1 - school;
+    // Slow pond cruise: head-first (velocity along yaw only), soft wall + koi collisions,
+    // explore ring + open water so fish cover the whole pond instead of clustering.
+    const speedMul = this.opts.swimSpeed * (this.opts.reducedMotion ? 0.35 : 0.55);
+    const maxTurn = 1.15; // rad/s heading ease — never snap
+    const bodyR = 0.14;
+    const pondX = 1.22;
+    const pondZ = 1.12;
+    const list: KoiBody[] = [];
     for (const k of this.koi.values()) {
-      if (!this.slottedIds.has(k.id)) continue;
-      const pad = this.pads[k.padIndex % this.pads.length];
-      const targetX = pad ? pad.x : 0;
-      const targetZ = pad ? pad.z : 0;
-      const orbit = school * 0.22;
-      const tx = targetX + Math.sin(simT * 0.8 + k.hash * 8) * orbit;
-      const tz = targetZ + Math.cos(simT * 0.75 + k.hash * 6) * orbit;
-      const wx = Math.sin(simT * 0.35 + k.hash * 4) * wander * 0.35;
-      const wz = Math.cos(simT * 0.32 + k.hash * 3) * wander * 0.35;
-      const ax = (tx + wx - k.x) * (0.9 + k.vigor) * dt;
-      const az = (tz + wz - k.z) * (0.9 + k.vigor) * dt;
-      k.vx = k.vx * 0.9 + ax;
-      k.vz = k.vz * 0.9 + az;
-      const spd = Math.hypot(k.vx, k.vz);
-      const maxSpd = (0.28 + k.vigor * 0.35) * speedMul;
-      if (spd > maxSpd && spd > 0) {
-        const s = maxSpd / spd;
-        k.vx *= s;
-        k.vz *= s;
+      if (this.slottedIds.has(k.id)) list.push(k);
+    }
+    for (const k of list) {
+      k.tT -= dt;
+      const nearTarget = Math.hypot(k.tx - k.x, k.tz - k.z) < 0.22;
+      if (k.tT <= 0 || nearTarget) this.pickKoiExploreTarget(k, simT);
+
+      // Desired steer: explore waypoint + light pad schooling + wander, then walls + separation.
+      let sx = k.tx - k.x;
+      let sz = k.tz - k.z;
+      const pad = this.pads[k.padIndex % Math.max(1, this.pads.length)];
+      if (pad && school > 0.05) {
+        sx += (pad.x - k.x) * school * 0.22;
+        sz += (pad.z - k.z) * school * 0.22;
       }
-      k.x = clamp(k.x + k.vx, -1.35, 1.35);
-      k.z = clamp(k.z + k.vz, -1.25, 1.25);
-      k.yaw = Math.atan2(k.vx, k.vz + 0.001);
+      const wAng = simT * (0.11 + k.hash * 0.07) + k.hash * 9;
+      sx += Math.sin(wAng) * wanderAmt * 0.35;
+      sz += Math.cos(wAng * 0.93) * wanderAmt * 0.35;
+
+      // Soft wall look-ahead along the nose — push away before clipping.
+      const look = 0.28 + Math.hypot(k.vx, k.vz) * 1.4;
+      const nx = Math.sin(k.yaw);
+      const nz = Math.cos(k.yaw);
+      const px = k.x + nx * look;
+      const pz = k.z + nz * look;
+      const wallReach = 0.22;
+      if (px > pondX - wallReach) sx -= (px - (pondX - wallReach)) * 4;
+      if (px < -pondX + wallReach) sx -= (px + (pondX - wallReach)) * 4;
+      if (pz > pondZ - wallReach) sz -= (pz - (pondZ - wallReach)) * 4;
+      if (pz < -pondZ + wallReach) sz -= (pz + (pondZ - wallReach)) * 4;
+      // Present-position wall field (corners push harder).
+      if (k.x > pondX - wallReach) sx -= 2.5;
+      if (k.x < -pondX + wallReach) sx += 2.5;
+      if (k.z > pondZ - wallReach) sz -= 2.5;
+      if (k.z < -pondZ + wallReach) sz += 2.5;
+
+      // Koi–koi soft collision / separation (same plane).
+      for (const o of list) {
+        if (o === k) continue;
+        const dx = k.x - o.x;
+        const dz = k.z - o.z;
+        const d2 = dx * dx + dz * dz;
+        const minD = bodyR * 2.1;
+        if (d2 > 1e-6 && d2 < minD * minD) {
+          const d = Math.sqrt(d2);
+          const push = ((minD - d) / minD) * 1.8;
+          sx += (dx / d) * push;
+          sz += (dz / d) * push;
+        }
+      }
+
+      if (Math.abs(sx) + Math.abs(sz) < 1e-4) {
+        sx = nx;
+        sz = nz;
+      }
+      const wantYaw = Math.atan2(sx, sz);
+      let dy = wantYaw - k.yaw;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      // Soft angular spring toward wantYaw; clamp rate so heading never snaps.
+      const yawOmega = 1.05;
+      k.yawVel += (dy * yawOmega * yawOmega - 2 * yawOmega * k.yawVel) * dt;
+      k.yawVel *= Math.exp(-0.55 * dt);
+      const turnCap = maxTurn * (0.75 + k.vigor * 0.35);
+      if (k.yawVel > turnCap) k.yawVel = turnCap;
+      if (k.yawVel < -turnCap) k.yawVel = -turnCap;
+      k.yaw += k.yawVel * dt;
+      while (k.yaw > Math.PI) k.yaw -= Math.PI * 2;
+      while (k.yaw < -Math.PI) k.yaw += Math.PI * 2;
+
+      // Head-first only: speed rides the nose; no sideways/backwards velocity.
+      const cruise = (0.085 + k.vigor * 0.09) * speedMul;
+      const turnSlow = 1 - Math.min(0.55, Math.abs(k.yawVel) / (turnCap + 1e-3) * 0.45);
+      const wallSlow =
+        Math.abs(k.x) > pondX - wallReach || Math.abs(k.z) > pondZ - wallReach ? 0.65 : 1;
+      const speed = cruise * turnSlow * wallSlow;
+      const hx = Math.sin(k.yaw);
+      const hz = Math.cos(k.yaw);
+      k.vx = hx * speed;
+      k.vz = hz * speed;
+      k.x += k.vx;
+      k.z += k.vz;
+      // Hard pond bounds (body radius inset).
+      k.x = clamp(k.x, -pondX + bodyR * 0.5, pondX - bodyR * 0.5);
+      k.z = clamp(k.z, -pondZ + bodyR * 0.5, pondZ - bodyR * 0.5);
       if (pad) pad.activity = clamp01(pad.activity + k.vigor * 0.02);
     }
     for (const pad of this.pads) pad.activity *= 0.96;
@@ -1007,6 +1120,20 @@ export class KoiPondSim {
     const target = pondBloomFromTraffic(total, this.opts.bloomOnActivity);
     this.pondBloom = clamp01(this.pondBloom * 0.9 + target * 0.12);
     for (const pad of this.pads) pad.bloom = this.pondBloom;
+  }
+
+  /** Next explore waypoint: ring around the pond + open-water jitter (covers edges and centre). */
+  private pickKoiExploreTarget(k: KoiBody, _simT: number): void {
+    k.tour = (k.tour + 1 + Math.floor(k.hash * 3)) % 8;
+    const a = (k.tour / 8) * Math.PI * 2 + k.hash * 0.7;
+    // Alternate edge rings and open-water so paths cross the whole pond.
+    const edge = (k.tour + Math.floor(k.hash * 10)) % 3 !== 0;
+    const r = edge ? 0.55 + (k.hash * 0.35) : 0.12 + ((k.hash * 5) % 1) * 0.35;
+    const pondX = 1.15;
+    const pondZ = 1.05;
+    k.tx = Math.cos(a) * r * pondX + (k.hash - 0.5) * 0.08;
+    k.tz = Math.sin(a) * r * pondZ + ((k.hash * 3) % 1 - 0.5) * 0.08;
+    k.tT = 5.5 + k.hash * 7 + k.vigor * 2;
   }
 
   private stepOnce(simT: number, hostTalkers: VizTalkerSample[]): void {
@@ -1046,19 +1173,69 @@ export class KoiPondSim {
   step(frame: VizDataFrame): void {
     const talkers = frame.talkers;
     this.ingestPackets(frame.packets);
-    this.simAccumulator += Math.min(0.1, frame.dt || FIXED_SIM_DT);
+    const frameDt = Math.min(0.1, frame.dt || FIXED_SIM_DT);
+    this.lastFrameDt = frameDt;
+    this.lastSimT = frame.t;
+    this.simAccumulator += frameDt;
     let steps = 0;
     while (this.simAccumulator >= FIXED_SIM_DT && steps < MAX_SIM_CATCHUP_STEPS) {
       this.stepOnce(frame.t, talkers);
       this.simAccumulator -= FIXED_SIM_DT;
       steps++;
     }
+    if (this.followWanted()) {
+      const engaged = stepFollowEngage(this.followEngage, frame.t, this.followRand);
+      if (engaged) {
+        this.fillFollowView();
+        this.follow.step(this.followView, frameDt);
+      } else if (this.followView.count) {
+        this.follow.reset();
+        this.followView.count = 0;
+      }
+    } else if (this.followView.count) {
+      this.followEngage.engaged = false;
+      this.followEngage.boutEnd = 0;
+      this.follow.reset();
+      this.followView.count = 0;
+    }
+  }
+
+  /** Config allows occasional follow (and motion is not reduced). */
+  followWanted(): boolean {
+    return this.opts.followCam && this.opts.cameraDrift && !this.opts.reducedMotion;
+  }
+
+  /** Follow is currently driving the stage camera this frame. */
+  followActive(): boolean {
+    return this.followWanted() && this.followEngage.engaged && this.followView.count > 0;
+  }
+
+  /** Visible koi into the follow camera's reused arrays (slot1 order). */
+  private fillFollowView(): void {
+    const v = this.followView;
+    let n = 0;
+    for (const slot of this.talkerSlots) {
+      if (!slot) continue;
+      if (n >= MAX_KOI) break;
+      const k = this.koi.get(slot.id);
+      if (!k) continue;
+      v.ids[n] = k.id;
+      v.x[n] = k.x;
+      // Gentle surface bob — slow cycle, no snappy vertical clips.
+      v.y[n] = 0.04 + Math.sin(this.lastSimT * 1.6 + k.hash * 9) * (0.03 + k.vigor * 0.02);
+      v.z[n] = k.z;
+      v.yaw[n] = k.yaw;
+      v.size[n] = 0.22 * this.opts.koiSize;
+      n++;
+    }
+    v.count = n;
   }
 
   pack(canvasW = 1280, canvasH = 800): {
     slot0: Float32Array;
     slot1: Float32Array;
     slot2: Float32Array;
+    slot3: Float32Array;
     particles: Float32Array;
     particleCount: number;
     label: string;
@@ -1161,7 +1338,8 @@ export class KoiPondSim {
       const k = this.koi.get(slot.id);
       if (!k) continue;
       s1[fi++] = k.x;
-      s1[fi++] = Math.sin(this.camPhase * 5.5 + k.hash * 9) * (0.12 + k.vigor * 0.08);
+      // Slow body bob for shader / mesh y — pairs with low swimSpeed defaults.
+      s1[fi++] = Math.sin(this.camPhase * 2.1 + k.hash * 9) * (0.08 + k.vigor * 0.05);
       s1[fi++] = k.z;
       s1[fi++] = k.yaw;
     }
@@ -1234,10 +1412,28 @@ export class KoiPondSim {
       0.18 + o.waterTint * 0.12,
     ];
     const bright = 0.7 + this.lastAudio * 0.22 - murk * 0.22;
+    const s3 = this.slot3;
+    s3.fill(0);
+    s3[KOI_SLOT3.target] = -1;
+    s3[KOI_SLOT3.next] = -1;
+    if (this.followActive()) {
+      const c = this.follow;
+      s3[KOI_SLOT3.follow] = 1;
+      for (let k = 0; k < 3; k++) {
+        s3[KOI_SLOT3.eye + k] = c.eye[k]!;
+        s3[KOI_SLOT3.aim + k] = c.aim[k]!;
+      }
+      s3[KOI_SLOT3.fov] = FOLLOW.fov;
+      s3[KOI_SLOT3.blend] = c.blend;
+      s3[KOI_SLOT3.target] = c.targetIndex(this.followView);
+      s3[KOI_SLOT3.next] = c.nextIndex(this.followView);
+    }
+
     return {
       slot0: s0,
       slot1: s1,
       slot2: s2,
+      slot3: s3,
       particles: scratch,
       particleCount: pCount,
       label,
@@ -1374,6 +1570,7 @@ export function randomKoiConfig(seed: number): Record<string, string> {
     rain: rnd() > 0.85 ? "true" : "false",
     cameraAngle: rnd() > 0.5 ? "top" : "angled",
     cameraDrift: rnd() > 0.5 ? "true" : "false",
+    followCam: rnd() > 0.35 ? "true" : "false",
     label: rnd() > 0.2 ? "true" : "false",
     legend: rnd() > 0.2 ? "true" : "false",
     quality: ["low", "medium", "high"][Math.floor(rnd() * 3)]!,
