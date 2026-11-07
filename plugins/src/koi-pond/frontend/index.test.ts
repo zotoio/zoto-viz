@@ -60,7 +60,7 @@ const frame = (over: Partial<{
   dt: 1 / 60,
   audio: 0.1,
   talkers,
-  packets: [] as { proto: string; size: number; field: number }[],
+  packets: [],
   rf: [],
   headlines: [],
   demo: false,
@@ -107,7 +107,7 @@ describe("koi-pond shipped pack", () => {
     const sim = new KoiPondSim(parseKoiPondOptions({ quality: "high", koiCap: "16" }));
     const packed = sim.advance(frame({ packets: [{ proto: "udp", size: 96, field: 0.4 }] }));
     expect(assertWorkBudgetUnderCaps(sim.lastWork, "high")).toBe(true);
-    expect(sim.lastWork.koi).toBeLessThanOrEqual(16);
+    expect(sim.lastWork.koi).toBeLessThanOrEqual(QUALITY_CAPS.high.maxKoi);
     expect(sim.lastWork.raymarchSteps).toBeLessThanOrEqual(KOI_WORK_BUDGET.raymarchSteps);
     expect(packed.particleCount).toBeLessThanOrEqual(24);
   });
@@ -224,7 +224,7 @@ describe("koi-pond shipped pack", () => {
     for (let i = 0; i < 120; i++) {
       sim.advance(frame({ t: i / 60, talkers: many }));
     }
-    expect(sim.slottedKoiCount()).toBe(16);
+    expect(sim.slottedKoiCount()).toBe(QUALITY_CAPS.high.maxKoi);
     resetAssignTalkerSlotsStats();
     const sortSpy = vi.spyOn(Array.prototype, "sort");
     for (let i = 0; i < 300; i++) {
