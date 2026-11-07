@@ -150,9 +150,10 @@ type LiveSkinned = {
 /**
  * How a lane animates fish beyond their baked swim clip. `aquarium-hd` (aquarium pack, HD model
  * set) adds a fin beat, a median-fin ripple, a spine bend into turns and a brighter tank lamp.
+ * `koi-hd` is the koi-pond HD model set (baked swim clip only; no aquarium fin/lamp overlays).
  * `standard` is the baked clip only, unchanged.
  */
-export type HostMeshMotionProfile = "standard" | "aquarium-hd";
+export type HostMeshMotionProfile = "standard" | "aquarium-hd" | "koi-hd";
 
 /** Rig bones of the designer fish: root → spine_01..03 → tail_01..02 run nose to tail; head carries the pectorals. */
 const FISH_BEND_CHAIN = ["spine_01", "spine_02", "spine_03", "tail_01", "tail_02"] as const;
