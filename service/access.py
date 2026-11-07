@@ -459,7 +459,8 @@ async def middleware(request: web.Request, handler):  # noqa: ANN001
         log_pack_asset_4xx(request, resp)
     if not lan_write(request):
         attach_csrf(request, resp)
-    if request.method in MUTATE:
+    # the page heartbeat posts every few seconds; logging each one would drown the access log
+    if request.method in MUTATE and (request.path or "") != "/api/page/heartbeat":
         sat = read_sandbox_asset_token(request)
         safe = redact_request_path(request.path or "", sat) if sat else request.path
         print(f"[monitor] {request.method} {safe} -> {getattr(resp, 'status', '?')}", flush=True)

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { VizTalkerSample } from "../../../sdk/viz-contract";
 import { AquariumSim, parseAquariumOptions } from "./aquarium";
-import { FRESH_TRAITS, REEF_TRAITS, stepSchool, TANK, type SwimFish, type SwimWorld } from "./fish-behaviour";
+import { ANEMONE_SPOT, FRESH_TRAITS, REEF_TRAITS, SPECIES_PROFILES, stepSchool, TANK, type SwimFish, type SwimWorld } from "./fish-behaviour";
 
 function fish(i: number, species: number, x = 0, z = 0): SwimFish {
   return { id: `f${i}`, species, vigor: 0.5, x, y: 0.2, z, yaw: i * 0.7, speed: 0.1, vy: 0, turnRate: 0,
@@ -130,15 +130,113 @@ describe("aquarium sim feeds the host real motion", () => {
     expect(moved / 5).toBeGreaterThan(0.2);
   });
 
-  it("host mesh drive uses the sim turn rate and phase when given", async () => {
-    const { writeAquariumHostMeshSlots, FishTurnTracker } = await import("./host-mesh-drive");
-    const { AQU_SLOT } = await import("./aquarium");
-    const s0 = new Float32Array(64); s0[AQU_SLOT.fishCount] = 1;
-    const s1 = new Float32Array(64); s1[3] = 0.3;
-    const writes: number[][] = [];
-    writeAquariumHostMeshSlots((_slot, d) => writes.push(Array.from(d)), s0, s1, 1, new FishTurnTracker(), { turn: [1.25], phase: [7.5] });
-    const flat = writes.flat();
-    expect(flat.some((v) => Math.abs(v - 1.25) < 1e-6)).toBe(true);
-    expect(flat.some((v) => Math.abs(v - 7.5) < 1e-6)).toBe(true);
+});
+
+describe("smooth, natural swimming", () => {
+  // the hardest a fish may ever turn: fastest species x dart / flee x the wall boost x top vigour
+  const maxRate = (sp: number, reef: boolean) => (reef ? REEF_TRAITS : FRESH_TRAITS)[sp]!.turn * 2.2 * 2.4 * (0.85 + 0.5 * 0.3);
+
+  it("never changes heading faster than its turn rate, and never flips direction in a frame", () => {
+    const school = [0, 0, 0, 1, 2, 3, 4, 5, 6].map((s, i) => fish(i, s, (i - 4) * 0.2, (i % 3) * 0.2 - 0.3));
+    const dt = 1 / 60;
+    let prevYaw = school.map((f) => f.yaw);
+    let prevRate = school.map(() => 0);
+    let worstRatio = 0;
+    let worstAccel = 0;
+    run(school, world({ temperament: 0.8 }), 90, () => {
+      school.forEach((f, i) => {
+        const d = Math.atan2(Math.sin(f.yaw - prevYaw[i]!), Math.cos(f.yaw - prevYaw[i]!));
+        worstRatio = Math.max(worstRatio, Math.abs(d) / dt / maxRate(f.species, false));
+        // yaw rate eases: no instant reversal from hard left to hard right
+        worstAccel = Math.max(worstAccel, Math.abs(f.turnRate - prevRate[i]!) / maxRate(f.species, false));
+      });
+      prevYaw = school.map((f) => f.yaw);
+      prevRate = school.map((f) => f.turnRate);
+    });
+    expect(worstRatio).toBeLessThanOrEqual(1 + 1e-6);
+    // at most ~8 x max rate per second of angular acceleration → < 0.14 of the max rate per frame
+    expect(worstAccel).toBeLessThan(0.15);
+  });
+
+  it("bursts and glides: speed rises and falls smoothly, the tail beat slows while gliding", () => {
+    const school = [fish(0, 2, 0, 0)];
+    let glides = 0, bursts = 0, last: boolean | undefined;
+    let maxDv = 0, prevV = school[0]!.speed;
+    let glidePhaseRate = 0, burstPhaseRate = 0, gN = 0, bN = 0, prevPhase = 0;
+    run(school, world(), 40, () => {
+      const f = school[0]!;
+      if (f.gliding !== last && f.gliding !== undefined) { if (f.gliding) glides++; else bursts++; last = f.gliding; }
+      maxDv = Math.max(maxDv, Math.abs(f.speed - prevV)); prevV = f.speed;
+      const pr = (f.phase - prevPhase) * 60; prevPhase = f.phase;
+      if (f.gliding) { glidePhaseRate += pr; gN++; } else { burstPhaseRate += pr; bN++; }
+    });
+    expect(glides).toBeGreaterThan(5);
+    expect(bursts).toBeGreaterThan(5);
+    expect(maxDv).toBeLessThan(0.02);
+    expect(glidePhaseRate / gN).toBeLessThan((burstPhaseRate / bN) * 0.5);
+  });
+
+  it("holds each species' depth band (cory low, betta high)", () => {
+    const school = [fish(0, 3, -0.3, 0), fish(1, 6, 0.3, 0)];
+    let coryY = 0, bettaY = 0, n = 0;
+    run(school, world(), 60, () => { coryY += school[0]!.y; bettaY += school[1]!.y; n++; });
+    expect(coryY / n).toBeLessThan(-0.3);
+    expect(bettaY / n).toBeGreaterThan(coryY / n + 0.5);
+  });
+
+  describe("species profiles", () => {
+    it("every species has a profile, tail beat and glide timing", () => {
+      for (const t of [...FRESH_TRAITS, ...REEF_TRAITS]) {
+        expect(t.profile).toBeTruthy();
+        expect(t.beat).toBeGreaterThan(1);
+        expect(t.glide?.length).toBe(4);
+      }
+      expect(SPECIES_PROFILES.fresh.map((p) => p.profile)).toEqual(["school", "hover", "roam", "bottom", "hover", "territorial", "territorial"]);
+      // small schooling fish beat faster than hoverers
+      expect(FRESH_TRAITS[0]!.beat!).toBeGreaterThan(FRESH_TRAITS[1]!.beat! * 2);
+    });
+
+    it("neon tetras shoal tighter than guppies", () => {
+      const spread = (sp: number) => {
+        const school = Array.from({ length: 8 }, (_, i) => fish(i, sp, (i % 4) * 0.3 - 0.45, Math.floor(i / 4) * 0.3 - 0.3));
+        let acc = 0, k = 0;
+        run(school, world({ temperament: 0 }), 40, () => {
+          if (++k % 30) return;
+          const cx = school.reduce((a, f) => a + f.x, 0) / 8, cz = school.reduce((a, f) => a + f.z, 0) / 8;
+          acc += school.reduce((a, f) => a + Math.hypot(f.x - cx, f.z - cz), 0) / 8;
+        });
+        return acc;
+      };
+      expect(spread(0)).toBeLessThan(spread(2));
+    });
+
+    it("clownfish keep near the anemone", () => {
+      const school = [0, 1].map((i) => fish(i, 0, -0.5 + i * 0.2, -0.3));
+      for (const f of school) f.aggr = false;
+      let near = 0, n = 0;
+      run(school, world({ reef: true }), 60, () => {
+        n++;
+        for (const f of school) if (Math.hypot(f.x - ANEMONE_SPOT[0], f.z - ANEMONE_SPOT[1]) < 0.4) near++;
+      });
+      expect(near / (n * 2)).toBeGreaterThan(0.6);
+    });
+
+    it("corydoras keep to the substrate but sometimes dash up", () => {
+      const school = Array.from({ length: 4 }, (_, i) => fish(i, 3, i * 0.2 - 0.3, 0));
+      let low = 0, n = 0, top = -Infinity;
+      run(school, world(), 240, () => {
+        for (const f of school) { n++; if (f.y < TANK.yMin + (TANK.yMax - TANK.yMin) * 0.3) low++; top = Math.max(top, f.y); }
+      });
+      expect(low / n).toBeGreaterThan(0.7);
+      expect(top).toBeGreaterThan(TANK.yMin + (TANK.yMax - TANK.yMin) * 0.5);
+    });
+
+    it("bettas patrol a home zone", () => {
+      const f = fish(0, 6, 0.6, 0.3);
+      f.aggr = true; f.home = 0;
+      let d = 0, n = 0;
+      run([f], world(), 60, () => { n++; d += Math.hypot(f.x - -0.45, f.z - -0.25); });
+      expect(d / n).toBeLessThan(0.55);
+    });
   });
 });

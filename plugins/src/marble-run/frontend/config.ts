@@ -7,15 +7,15 @@ export function marblePackWorkBudget(): MarbleWorkBudget {
 }
 
 export const MARBLE_DATA_MAPPING = [
-  { field: "packets[].proto", effect: "marble hue (protocol hash)", default: "tcp", clamp: "hash01" },
-  { field: "packets[].size", effect: "marble radius", default: 128, clamp: "6..48" },
-  { field: "packets[].field", effect: "marble radius when sizeField=field", default: 0.5, clamp: "0..1" },
-  { field: "sys.failed", effect: "reject tray when above failThreshold", default: 0, clamp: "0..1" },
+  { field: "packets[].proto", effect: "marble colour (protocol hash)", default: "tcp", clamp: "hash01" },
+  { field: "packets[].size", effect: "marble size (15-20 mm)", default: 128, clamp: "6..48" },
+  { field: "packets[].field", effect: "marble size when sizeField=field", default: 0.5, clamp: "0..1" },
+  { field: "sys.failed", effect: "marbles carry Zoto Fail red when above failThreshold", default: 0, clamp: "0..1" },
 ] as const;
 
 export type MarblePreset = "workshop" | "glass-tower" | "chaos-funnel" | "calm-spiral";
 export type MaterialTheme = "walnut" | "oak" | "brass-glass" | "bamboo";
-export type CameraMode = "follow" | "wide" | "orbit";
+export type CameraMode = "follow" | "chase" | "wide" | "orbit";
 export type SizeField = "bytes" | "field";
 export type DestField = "hash" | "proto";
 
@@ -72,9 +72,9 @@ export function parseMarbleOptions(raw: Record<string, string | undefined> = {})
     preset,
     seed: num(raw.seed, patch.seed ?? MARBLE_DEFAULTS.seed, 1, 999_999),
     complexity: Math.round(num(raw.complexity, patch.complexity ?? MARBLE_DEFAULTS.complexity, 1, 5)),
-    maxMarbles: Math.round(num(raw.maxMarbles, MARBLE_DEFAULTS.maxMarbles, 8, budget.maxInstances)),
+    maxMarbles: Math.round(num(raw.maxMarbles, MARBLE_DEFAULTS.maxMarbles, 8, Math.max(8, budget.maxInstances))),
     materialTheme: sel(raw.materialTheme, ["walnut", "oak", "brass-glass", "bamboo"] as const, patch.materialTheme ?? MARBLE_DEFAULTS.materialTheme),
-    cameraMode: sel(raw.cameraMode, ["follow", "wide", "orbit"] as const, patch.cameraMode ?? MARBLE_DEFAULTS.cameraMode),
+    cameraMode: sel(raw.cameraMode, ["follow", "chase", "wide", "orbit"] as const, patch.cameraMode ?? MARBLE_DEFAULTS.cameraMode),
     jarCount: Math.round(num(raw.jarCount, MARBLE_DEFAULTS.jarCount, 3, 8)),
     sizeField: sel(raw.sizeField, ["bytes", "field"] as const, MARBLE_DEFAULTS.sizeField),
     destField: sel(raw.destField, ["hash", "proto"] as const, MARBLE_DEFAULTS.destField),

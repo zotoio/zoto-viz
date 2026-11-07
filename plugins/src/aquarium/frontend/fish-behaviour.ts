@@ -30,28 +30,73 @@ export interface FishTraits {
   jitter: number;
   /** Share of this species' individuals that are territorial (guard a spot, chase and nip intruders). */
   aggro: number;
+  /** Behaviour profile (see SPECIES_PROFILES); filled from the profile table. */
+  profile?: FishProfile;
+  /** Base tail-beat frequency at cruise, Hz-ish (phase rad / s / 2pi scaled). */
+  beat?: number;
+  /** Burst-and-glide timing: burst min, burst spread, glide min, glide spread (s). Glide min 0 = never glides. */
+  glide?: readonly [number, number, number, number];
 }
+
+export type FishProfile = "school" | "territorial" | "hover" | "bottom" | "anchor" | "roam";
+
+/** Data-driven per-species behaviour profiles, in the same order as the trait tables. */
+export const SPECIES_PROFILES: {
+  fresh: readonly { name: string; profile: FishProfile; beat: number; glide: readonly [number, number, number, number] }[];
+  reef: readonly { name: string; profile: FishProfile; beat: number; glide: readonly [number, number, number, number] }[];
+} = {
+  fresh: [
+    { name: "neon", profile: "school", beat: 7.5, glide: [0.5, 0.6, 0.25, 0.35] },
+    { name: "angel", profile: "hover", beat: 2.2, glide: [0.6, 0.6, 1.4, 1.6] },
+    { name: "guppy", profile: "roam", beat: 6.5, glide: [0.5, 0.8, 0.3, 0.5] },
+    { name: "cory", profile: "bottom", beat: 5.5, glide: [0.4, 0.5, 0.6, 1.0] },
+    { name: "discus", profile: "hover", beat: 2.0, glide: [0.8, 0.8, 1.2, 1.4] },
+    { name: "cichlid", profile: "territorial", beat: 4.0, glide: [0.6, 0.8, 0.5, 0.7] },
+    { name: "betta", profile: "territorial", beat: 2.6, glide: [0.6, 0.6, 1.0, 1.2] },
+  ],
+  reef: [
+    { name: "clown", profile: "anchor", beat: 6.0, glide: [0.5, 0.5, 0.2, 0.3] },
+    { name: "tang", profile: "roam", beat: 3.2, glide: [1.0, 1.0, 0.6, 0.8] },
+    { name: "damsel", profile: "territorial", beat: 6.5, glide: [0.4, 0.5, 0.3, 0.4] },
+    { name: "goby", profile: "bottom", beat: 4.5, glide: [0.3, 0.3, 1.0, 1.6] },
+    { name: "yellowtang", profile: "roam", beat: 3.4, glide: [1.0, 1.0, 0.6, 0.8] },
+    { name: "gramma", profile: "hover", beat: 3.0, glide: [0.5, 0.5, 1.0, 1.2] },
+  ],
+};
+
+/** Where clownfish keep house (the reef anemone, glTF x / z). */
+export const ANEMONE_SPOT: readonly [number, number] = [0.35, 0.25];
 
 /** Freshwater: neon, angel, guppy, cory, discus, cichlid, betta. */
 export const FRESH_TRAITS: FishTraits[] = [
   { speed: 0.34, turn: 3.2, school: 1.0, yMin: 0.0, yMax: 0.45, dart: 0.06, rest: 0.01, plant: 0.03, curious: -0.8, jitter: 1.1, aggro: 0 },
   { speed: 0.16, turn: 1.3, school: 0.35, yMin: 0.15, yMax: 0.6, dart: 0.01, rest: 0.05, plant: 0.08, curious: 0.6, jitter: 0.5, aggro: 0.45 },
   { speed: 0.3, turn: 2.8, school: 0.6, yMin: 0.2, yMax: 0.7, dart: 0.08, rest: 0.02, plant: 0.04, curious: 0.3, jitter: 1.3, aggro: 0 },
-  { speed: 0.12, turn: 2.0, school: 0.55, yMin: -0.5, yMax: -0.38, dart: 0.03, rest: 0.08, plant: 0.1, curious: -0.2, jitter: 0.9, aggro: 0 },
+  { speed: 0.15, turn: 2.0, school: 0.45, yMin: -0.5, yMax: -0.38, dart: 0.03, rest: 0.05, plant: 0.1, curious: -0.2, jitter: 0.9, aggro: 0 },
   { speed: 0.14, turn: 1.1, school: 0.45, yMin: 0.05, yMax: 0.45, dart: 0.01, rest: 0.05, plant: 0.06, curious: 0.4, jitter: 0.4, aggro: 0.25 },
   { speed: 0.24, turn: 2.2, school: 0.1, yMin: -0.35, yMax: 0.25, dart: 0.07, rest: 0.03, plant: 0.06, curious: 0.8, jitter: 0.8, aggro: 0.85 },
   { speed: 0.13, turn: 1.5, school: 0.0, yMin: 0.35, yMax: 0.72, dart: 0.02, rest: 0.07, plant: 0.07, curious: 0.7, jitter: 0.6, aggro: 0.6 },
 ];
 
-/** Reef: clown, tang, damsel, goby, wrasse, anemone. */
+/** Reef: clown, blue tang, damsel, goby, yellow tang, royal gramma. */
 export const REEF_TRAITS: FishTraits[] = [
-  { speed: 0.18, turn: 2.4, school: 0.3, yMin: -0.25, yMax: 0.2, dart: 0.03, rest: 0.05, plant: 0.14, curious: 0.5, jitter: 1.0, aggro: 0.6 },
+  { speed: 0.18, turn: 2.4, school: 0.3, yMin: -0.25, yMax: 0.2, dart: 0.03, rest: 0.05, plant: 0.14, curious: 0.5, jitter: 1.0, aggro: 0.2 },
   { speed: 0.3, turn: 1.6, school: 0.7, yMin: 0.1, yMax: 0.65, dart: 0.02, rest: 0.01, plant: 0.03, curious: 0.2, jitter: 0.5, aggro: 0.3 },
   { speed: 0.3, turn: 3.0, school: 0.9, yMin: 0.0, yMax: 0.5, dart: 0.07, rest: 0.01, plant: 0.04, curious: -0.7, jitter: 1.2, aggro: 0.8 },
   { speed: 0.1, turn: 2.2, school: 0.0, yMin: -0.5, yMax: -0.4, dart: 0.06, rest: 0.1, plant: 0.06, curious: -0.4, jitter: 0.9, aggro: 0.1 },
-  { speed: 0.34, turn: 2.6, school: 0.4, yMin: -0.1, yMax: 0.5, dart: 0.05, rest: 0.01, plant: 0.03, curious: 0.4, jitter: 1.0, aggro: 0.35 },
+  { speed: 0.28, turn: 1.7, school: 0.5, yMin: 0.05, yMax: 0.6, dart: 0.02, rest: 0.01, plant: 0.03, curious: 0.3, jitter: 0.6, aggro: 0.2 },
   { speed: 0.08, turn: 0.9, school: 0.0, yMin: -0.45, yMax: -0.2, dart: 0.0, rest: 0.15, plant: 0.12, curious: 0.0, jitter: 0.3, aggro: 0 },
 ];
+
+function applyProfiles(t: FishTraits[], p: (typeof SPECIES_PROFILES)["fresh"]): void {
+  t.forEach((tr, i) => {
+    const q = p[i];
+    if (q) { tr.profile = q.profile; tr.beat = q.beat; tr.glide = q.glide; }
+    if (tr.profile === "territorial") tr.aggro = Math.max(tr.aggro, 0.9);
+  });
+}
+applyProfiles(FRESH_TRAITS, SPECIES_PROFILES.fresh);
+applyProfiles(REEF_TRAITS, SPECIES_PROFILES.reef);
 
 export function traitsFor(species: number, reef: boolean): FishTraits {
   const t = reef ? REEF_TRAITS : FRESH_TRAITS;
@@ -63,20 +108,35 @@ export function traitsFor(species: number, reef: boolean): FishTraits {
  * gravel (top ≈ -0.74). Front stops short of the open front so fish never swim into the lens.
  * These are the limits for the whole body; {@link swimBox} shrinks them by the fish's own size.
  */
-export const TANK = { xMin: -1.2, xMax: 1.2, yMin: -0.72, yMax: 0.78, zMin: -1.0, zMax: 0.62 } as const;
+/** The tank volume. x follows the pane (see tank-geometry.ts / setTankHalfWidth); y and z are fixed. */
+export const TANK = { xMin: -1.2, xMax: 1.2, yMin: -0.72, yMax: 0.78, zMin: -1.0, zMax: 0.62 };
 
-/** Host mesh scale of the designer fish (host-mesh-drive uses the same number). */
+/** Resize the tank's length (the pane got wider or narrower); fish ease in on the wall field. */
+export function setTankHalfWidth(halfW: number): void {
+  TANK.xMin = -halfW;
+  TANK.xMax = halfW;
+}
+
+/** Scale the Blender fish templates were built at (blender/build_scape.py builds them at full size). */
 export const FISH_MESH_SCALE = 2.0;
 /** Clear water kept between a fish's body and the glass. */
 export const WALL_GAP = 0.03;
 
-/** Measured GLB half-extents (m, before {@link FISH_MESH_SCALE}): nose-to-tail half length, half height. */
+/** Fish template half-extents (before {@link FISH_MESH_SCALE}): nose-to-tail half length, half height (fins included). */
 const MESH_BODY: Record<string, [number, number]> = {
   neon: [0.018, 0.008], angel: [0.06, 0.076], guppy: [0.02, 0.015], cory: [0.032, 0.023],
   discus: [0.075, 0.06], cichlid: [0.053, 0.025], betta: [0.037, 0.031], clown: [0.04, 0.022],
+  tang: [0.06, 0.045], damsel: [0.022, 0.014], goby: [0.03, 0.01], yellowtang: [0.05, 0.04], gramma: [0.025, 0.012],
 };
 const FRESH_MESH = ["neon", "angel", "guppy", "cory", "discus", "cichlid", "betta"];
-const REEF_MESH = ["clown", "angel", "neon", "cory", "guppy", "discus"];
+/** Reef species, in sim order (see tank-types.ts). */
+const REEF_MESH = ["clown", "tang", "damsel", "goby", "yellowtang", "gramma"];
+
+/** Template name (fish-<name> in assets/aquarium-scape.glb) for a species. */
+export function fishTemplate(species: number, reef: boolean): string {
+  const names = reef ? REEF_MESH : FRESH_MESH;
+  return names[Math.max(0, Math.min(names.length - 1, Math.round(species)))] ?? "neon";
+}
 
 /** Half length (any yaw: the horizontal body radius) and half height of a fish in tank units. */
 export function fishBody(species: number, reef: boolean): { halfLen: number; halfH: number } {
@@ -95,7 +155,7 @@ export function swimBox(species: number, reef: boolean, grow = 1) {
 }
 
 /** Trait depth bands were authored for the old -0.5..0.72 volume; map them onto the real one. */
-function bandY(v: number): number {
+export function bandY(v: number): number {
   return TANK.yMin + 0.04 + ((v + 0.5) / 1.22) * (TANK.yMax - TANK.yMin - 0.1);
 }
 
@@ -184,6 +244,21 @@ export interface SwimFish {
   /** Eaten: hidden until it hatches again. */
   eaten?: boolean;
   respawnT?: number;
+  /** Burst-and-glide: coasting now, and seconds left in this burst / glide. */
+  gliding?: boolean;
+  glideT?: number;
+  /** Fading out of the tank (talker gone / tank shrank): no regrowth. */
+  fade?: boolean;
+  /** Exploration: own coverage map (visits per cell, decaying), current target and its timer. */
+  cov?: Float32Array;
+  tx?: number;
+  tz?: number;
+  tT?: number;
+  /** Seconds left in an excursion out of the preferred depth band, and its depth. */
+  excT?: number;
+  excY?: number;
+  /** Bottom dwellers: seconds left in a surface dash. */
+  surfT?: number;
   /** 0..1 body size while a hatched fish grows; 1 when grown. */
   grow?: number;
 }
@@ -279,7 +354,7 @@ function pickMood(f: SwimFish, tr: FishTraits, w: SwimWorld, dt: number, aggr: b
   // Moods are rolled once a second-ish: scale chances by the roll window.
   const win = 1.2;
   const r2 = aggr ? (r - 0.5) * 2 : r;
-  if (r2 < tr.dart * hot * win) { f.mood = "dart"; f.moodT = 0.35 + fishRand(f) * 0.4; f.yaw += (fishRand(f) - 0.5) * 1.6; }
+  if (r2 < tr.dart * hot * win) { f.mood = "dart"; f.moodT = 0.35 + fishRand(f) * 0.4; f.wander = wrap(f.wander + (fishRand(f) - 0.5) * 1.6); } // steer into the dart, never snap the heading
   else if (r2 < (tr.dart * hot + tr.rest * (1.4 - w.temperament)) * win) { f.mood = "rest"; f.moodT = 2.5 + fishRand(f) * 4; }
   else if (r2 < (tr.dart * hot + tr.rest + tr.plant) * win) {
     f.mood = "forage"; f.moodT = 3 + fishRand(f) * 4; f.plant = Math.floor(fishRand(f) * PLANT_SPOTS.length);
@@ -308,25 +383,126 @@ function inBox(x: number, z: number, b: ReturnType<typeof swimBox>): boolean {
 }
 
 /** One fixed step for the whole school. Mutates fish in place. */
+const STEP_BY_ID = new Map<string, SwimFish>();
+const STEP_LIVE: SwimFish[] = [];
+
+/** Scape module width; the host repeats the decor every module, mirrored every other one. */
+export const SCAPE_MODULE_W = 2.44;
+/** The x of the copy of a base-module decor point nearest to `near` that is inside the tank. */
+export function nearestTileX(x0: number, near: number): number {
+  let best = x0, bd = Math.abs(x0 - near);
+  for (let k = -2; k <= 2; k++) {
+    if (!k) continue;
+    const x = (k % 2 ? -x0 : x0) + k * SCAPE_MODULE_W;
+    if (x < TANK.xMin + 0.15 || x > TANK.xMax - 0.15) continue;
+    const d = Math.abs(x - near);
+    if (d < bd) { bd = d; best = x; }
+  }
+  return best;
+}
+
+/** Scratch for {@link homeSpot} (no per-step allocation). */
+const HOME: [number, number, number] = [0, 0, 0];
+/**
+ * A territorial fish's home: the territory spots, spread across the tank's current length so on
+ * a long (ultrawide) tank the guards hold zones from end to end instead of all in the middle.
+ */
+export function homeSpot(f: SwimFish): readonly [number, number, number] {
+  const n = TERRITORY_SPOTS.length;
+  const i = (f.home ?? 0) % n;
+  const sp = TERRITORY_SPOTS[i]!;
+  const span = Math.max(0.2, TANK.xMax - TANK.xMin - 0.6);
+  // even slots along x by index, with the authored spot's offset kept as a little jitter
+  HOME[0] = TANK.xMin + 0.3 + span * ((i + 0.5) / n) + sp[0] * 0.08;
+  HOME[1] = sp[1];
+  HOME[2] = sp[2];
+  return HOME;
+}
+
+/** Exploration grid: cells across x (~0.3 wide, grows with the tank) and 4 front-to-back. */
+export const EXPLORE_NZ = 4;
+export function exploreNx(): number {
+  return Math.max(4, Math.round((TANK.xMax - TANK.xMin - 2 * EXPLORE_INSET) / 0.3));
+}
+/** The grid spans the swimmable water: the tank less a body's reach from the glass. */
+const EXPLORE_INSET = 0.12;
+export function exploreCell(x: number, z: number, nx: number): number {
+  const u = (x - TANK.xMin - EXPLORE_INSET) / Math.max(1e-6, TANK.xMax - TANK.xMin - 2 * EXPLORE_INSET);
+  const v = (z - TANK.zMin - EXPLORE_INSET) / Math.max(1e-6, TANK.zMax - TANK.zMin - 2 * EXPLORE_INSET);
+  const ix = Math.max(0, Math.min(nx - 1, Math.floor(u * nx)));
+  const iz = Math.max(0, Math.min(EXPLORE_NZ - 1, Math.floor(v * EXPLORE_NZ)));
+  return iz * nx + ix;
+}
+
+/**
+ * Novelty-seeking wander target for a fish (solitary) or a school leader: the least-visited cell
+ * of its own coverage map (visits decay, so old ground becomes interesting again), ties broken by
+ * the fish's own RNG. Followers in a school use the leader's target, so the school moves as one.
+ */
+function pickExploreTarget(f: SwimFish, cruise: number): void {
+  const nx = exploreNx();
+  const cov = f.cov!;
+  let best = -1, bestV = Infinity;
+  const r0 = Math.floor(fishRand(f) * cov.length);
+  for (let k = 0; k < cov.length; k++) {
+    const c = (r0 + k) % cov.length;
+    // prefer far cells a little so a fish crosses the tank rather than dithering next door
+    const cx = TANK.xMin + EXPLORE_INSET + ((c % nx) + 0.5) / nx * (TANK.xMax - TANK.xMin - 2 * EXPLORE_INSET);
+    const cz = TANK.zMin + EXPLORE_INSET + (Math.floor(c / nx) + 0.5) / EXPLORE_NZ * (TANK.zMax - TANK.zMin - 2 * EXPLORE_INSET);
+    const v = cov[c]! - Math.min(0.6, Math.hypot(cx - f.x, cz - f.z) * 0.25);
+    if (v < bestV) { bestV = v; best = c; }
+  }
+  const ix = best % nx, iz = Math.floor(best / nx);
+  const tx = TANK.xMin + EXPLORE_INSET + (ix + 0.2 + fishRand(f) * 0.6) / nx * (TANK.xMax - TANK.xMin - 2 * EXPLORE_INSET);
+  const tz = TANK.zMin + EXPLORE_INSET + (iz + 0.2 + fishRand(f) * 0.6) / EXPLORE_NZ * (TANK.zMax - TANK.zMin - 2 * EXPLORE_INSET);
+  f.tx = tx;
+  f.tz = tz;
+  // long enough to get there at cruise speed (a slow cory crossing an ultrawide tank needs a while)
+  f.tT = 5 + fishRand(f) * 5 + (Math.hypot(tx - f.x, tz - f.z) / Math.max(0.05, cruise)) * 1.4;
+}
+
+/** Visit the fish's cell on its own map and keep its target fresh. */
+function exploreStep(f: SwimFish, dt: number, cruise: number): void {
+  const nx = exploreNx();
+  const n = nx * EXPLORE_NZ;
+  if (!f.cov || f.cov.length !== n) { f.cov = new Float32Array(n); f.tT = 0; }
+  const cov = f.cov;
+  const decay = Math.exp(-dt / 400);
+  for (let i = 0; i < n; i++) cov[i]! *= decay;
+  cov[exploreCell(f.x, f.z, nx)]! += dt;
+  f.tT = (f.tT ?? 0) - dt;
+  if (f.tx === undefined || f.tz === undefined || f.tT <= 0 || Math.hypot(f.tx - f.x, f.tz - f.z) < 0.22) pickExploreTarget(f, cruise);
+}
+
 export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
   const motion = Math.max(0.05, Math.min(1, w.motion));
   const st = w.state;
   if (st) {
     st.t += dt;
     st.eatCool = Math.max(0, st.eatCool - dt);
-    for (const p of st.puffs) { p.age += dt; p.y += 0.02 * dt; }
-    st.puffs = st.puffs.filter((p) => p.age < PUFF_LIFE);
+    let keep = 0;
+    for (const p of st.puffs) {
+      p.age += dt; p.y += 0.02 * dt;
+      if (p.age < PUFF_LIFE) st.puffs[keep++] = p;
+    }
+    st.puffs.length = keep;
   }
-  const byId = new Map<string, SwimFish>();
-  for (const f of school) byId.set(f.id, f);
-  const live = school.filter((f) => !f.eaten);
+  // reused scratch: no per-step Map / array allocations
+  const byId = STEP_BY_ID;
+  byId.clear();
+  const live = STEP_LIVE;
+  live.length = 0;
+  for (const f of school) {
+    byId.set(f.id, f);
+    if (!f.eaten) live.push(f);
+  }
   for (const f of school) {
     if (f.eaten) {
       f.respawnT = (f.respawnT ?? RESPAWN_MIN) - dt;
       if (f.respawnT <= 0) hatch(f, w.reef);
       continue;
     }
-    if (f.grow !== undefined && f.grow < 1) f.grow = Math.min(1, f.grow + dt / HATCH_GROW);
+    if (f.grow !== undefined && f.grow < 1 && !f.fade) f.grow = Math.min(1, f.grow + dt / HATCH_GROW);
     const tr = traitsFor(f.species, w.reef);
     const aggr = isAggressive(f, w.reef);
     if (f.cool) f.cool = Math.max(0, f.cool - dt);
@@ -348,10 +524,12 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
       if (o === f) continue;
       const dx = o.x - f.x, dy = o.y - f.y, dz = o.z - f.z;
       const d2 = dx * dx + dy * dy * 2 + dz * dz;
-      if (d2 < 0.04 && d2 > 1e-8 && o.id !== f.target) {
+      // personal space grows with both bodies, so big fish do not swim through each other
+      const space = Math.max(0.2, body.halfLen + fishBody(o.species, w.reef).halfLen + 0.08);
+      if (d2 < space * space && d2 > 1e-8 && o.id !== f.target) {
         const d = Math.sqrt(d2);
-        sx -= (dx / d) * (0.2 - d) * 9;
-        sz -= (dz / d) * (0.2 - d) * 9;
+        sx -= (dx / d) * (space - d) * (9 * 0.2 / space);
+        sz -= (dz / d) * (space - d) * (9 * 0.2 / space);
         ty -= dy * 2;
       }
       if (o.species === f.species && d2 < 0.36) {
@@ -360,7 +538,7 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
       }
     }
     if (n > 0 && f.mood !== "rest" && f.mood !== "guard" && f.mood !== "chase") {
-      const k = tr.school * (1 - w.temperament * 0.5);
+      const k = tr.school * (1 - w.temperament * 0.5) * (tr.profile === "school" ? 1.7 : 1);
       sx += (ax / n) * 1.2 * k + (cx / n - f.x) * 2.2 * k;
       sz += (az / n) * 1.2 * k + (cz / n - f.z) * 2.2 * k;
       ty += (cy / n - ty) * 0.6 * k;
@@ -369,7 +547,7 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
     // Territory: a guard circles its spot and goes after a smaller (or other-species) fish that comes in.
     const hungryNow = !!st && st.eatCool <= 0 && live.length >= 3;
     if (aggr && (!w.food || hungryNow) && (f.mood === "guard" || f.mood === "cruise" || f.mood === "feed") && !f.cool) {
-      const home = TERRITORY_SPOTS[(f.home ?? 0) % TERRITORY_SPOTS.length]!;
+      const home = homeSpot(f);
       const hungry = hungryNow;
       let best: SwimFish | null = null, bestD = Infinity, bestHunt = false;
       for (const o of live) {
@@ -388,7 +566,7 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
 
     // Goals.
     if (f.mood === "guard") {
-      const home = TERRITORY_SPOTS[(f.home ?? 0) % TERRITORY_SPOTS.length]!;
+      const home = homeSpot(f);
       const dx = home[0] - f.x, dz = home[2] - f.z;
       const d = Math.hypot(dx, dz) + 1e-4;
       if (d > 0.3) { sx += (dx / d) * 2.2; sz += (dz / d) * 2.2; }
@@ -424,9 +602,12 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
       const dx = f.x - f.fleeX, dz = f.z - f.fleeZ;
       const d = Math.hypot(dx, dz) + 1e-4;
       sx += (dx / d) * 4.5 - f.x * 0.8; sz += (dz / d) * 4.5 - f.z * 0.8;
-    } else if (f.mood === "forage") {
+    } else if (f.mood === "forage" && tr.profile !== "bottom") {
+      // (bottom dwellers forage the open substrate along their exploration path instead)
       const p = PLANT_SPOTS[f.plant % PLANT_SPOTS.length]!;
-      const dx = p[0] - f.x, dz = p[2] - f.z;
+      // a long tank repeats the scape (mirrored every other module): visit the nearest copy
+      const px = nearestTileX(p[0], f.x);
+      const dx = px - f.x, dz = p[2] - f.z;
       const d = Math.hypot(dx, dz);
       if (d > 0.18) { sx += (dx / d) * 2.5; sz += (dz / d) * 2.5; }
       else { sx += -dz * 2; sz += dx * 2; } // circle the clump
@@ -444,6 +625,59 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
       if (f.mood === "inspect") ty = w.cursor.y;
     }
 
+    // Species profile: where this kind of fish wants to be when nothing else is going on.
+    const calm = f.mood === "cruise" || f.mood === "rest" || f.mood === "forage";
+    if (calm) {
+      if (tr.profile === "territorial") {
+        // patrol a loop around its own spot
+        const home = homeSpot(f);
+        const dx = home[0] - f.x, dz = home[2] - f.z;
+        const d = Math.hypot(dx, dz) + 1e-4;
+        const r = 0.28;
+        sx += (dx / d) * (d - r) * 4 + (-dz / d) * 0.9;
+        sz += (dz / d) * (d - r) * 4 + (dx / d) * 0.9;
+      } else if (tr.profile === "anchor") {
+        const dx = ANEMONE_SPOT[0] - f.x, dz = ANEMONE_SPOT[1] - f.z;
+        const d = Math.hypot(dx, dz) + 1e-4;
+        if (d > 0.16) { sx += (dx / d) * 3 * Math.min(2, d / 0.16); sz += (dz / d) * 3 * Math.min(2, d / 0.16); }
+        else { sx += -dz * 4; sz += dx * 4; }
+        ty = bMin + 0.04 + Math.sin(f.phase * 0.03) * 0.03;
+      } else if (tr.profile === "hover") {
+        // slow, upright station-keeping with a gentle vertical bob
+        ty = (bMin + bMax) / 2 + Math.sin(f.phase * 0.02 + f.wander) * (bMax - bMin) * 0.3;
+      } else if (tr.profile === "bottom") {
+        // forage along the substrate; now and then a dash to the surface for a gulp of air
+        f.surfT = Math.max(0, (f.surfT ?? 0) - dt);
+        if (f.surfT === 0 && fishRand(f) < 0.012 * dt) f.surfT = 3.2;
+        ty = f.surfT > 1.4 ? box.yMax : bMin;
+      }
+    }
+
+    // Explore: within its depth band a fish (or its school, led by the first of its kind in the
+    // school) heads for under-visited parts of the tank, end to end and front to back.
+    if (calm && tr.profile !== "anchor" && !(tr.profile === "territorial" && aggr)) {
+      let lead: SwimFish = f;
+      if (tr.profile === "school" || tr.school >= 0.2) {
+        for (const o of live) if (o.species === f.species && !o.fade) { lead = o; break; }
+      }
+      if (lead === f) exploreStep(f, dt, tr.speed);
+      if (lead.tx !== undefined && lead.tz !== undefined) {
+        const dx = lead.tx - f.x, dz = lead.tz - f.z;
+        const d = Math.hypot(dx, dz) + 1e-4;
+        const k = lead === f ? 1.6 : 1.1;
+        sx += (dx / d) * k * Math.min(1, d / 0.3 + 0.3);
+        sz += (dz / d) * k * Math.min(1, d / 0.3 + 0.3);
+      }
+    }
+    // Depth: the band is soft (the wander bob above), and now and then a fish makes a short
+    // excursion out of it before drifting home.
+    f.excT = Math.max(0, (f.excT ?? 0) - dt);
+    if (calm && f.excT === 0 && tr.profile !== "bottom" && tr.profile !== "anchor" && fishRand(f) < 0.02 * dt) {
+      f.excT = 3 + fishRand(f) * 3;
+      f.excY = box.yMin + fishRand(f) * (box.yMax - box.yMin);
+    }
+    if (f.excT > 0 && f.excY !== undefined && tr.profile !== "anchor") ty = f.excY;
+
     // Stuck: a fish that has hardly moved for a while (or sits in a corner) is kicked toward open water.
     const tau = Math.min(1, dt / 1.5);
     f.ex = f.ex === undefined ? f.x : f.ex + (f.x - f.ex) * tau;
@@ -453,8 +687,9 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
     f.stuck = (parked || here.near >= 2) ? (f.stuck ?? 0) + dt : Math.max(0, (f.stuck ?? 0) - dt * 2);
     if (f.stuck > 1.2) {
       f.stuck = 0;
-      f.goalX = (fishRand(f) - 0.5) * 0.8;
-      f.goalZ = -0.2 + (fishRand(f) - 0.5) * 0.6;
+      // out toward open water: its exploration target when it has one, else anywhere end to end
+      f.goalX = f.tx ?? TANK.xMin + 0.4 + fishRand(f) * Math.max(0.1, TANK.xMax - TANK.xMin - 0.8);
+      f.goalZ = f.tz ?? -0.2 + (fishRand(f) - 0.5) * 0.6;
       f.mood = "dart"; f.moodT = 0.9; f.target = undefined;
     }
     if (f.goalX !== undefined && f.goalZ !== undefined) {
@@ -466,7 +701,8 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
 
     // Walls: a field that pushes harder the closer the body gets, three look-ahead probes along
     // the nose and both whiskers, and a pull to the middle that wins in corners.
-    const reach = WALL_REACH + f.speed * 1.2;
+    // calm fish cruise close along the glass (real fish use the whole tank); fast ones keep more room
+    const reach = (calm ? WALL_REACH * 0.5 : WALL_REACH) + f.speed * (calm ? 0.7 : 1.2);
     const wp = wallPush(f.x, f.z, box, reach);
     let wall = 0;
     let wx = wp.px * 3, wz = wp.pz * 3;
@@ -483,7 +719,8 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
     if (wp.near > 0) wall = 1;
     const cxm = (box.xMin + box.xMax) / 2, czm = (box.zMin + box.zMax) / 2;
     const toC = Math.hypot(cxm - f.x, czm - f.z) + 1e-4;
-    const centre = wp.near >= 2 ? 4 : wall ? 1.2 : 0.25;
+    // no standing pull to the middle (it made fish cluster there); only out of walls and corners
+    const centre = wp.near >= 2 ? 4 : wall ? 1.2 : 0;
     wx += ((cxm - f.x) / toC) * centre;
     wz += ((czm - f.z) / toC) * centre;
     sx += wx; sz += wz;
@@ -492,15 +729,39 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
     // Turn toward the desired heading at a species-limited rate.
     const desired = Math.atan2(sx, sz);
     const maxTurn = tr.turn * moodTurn(f.mood) * (wall ? (wp.near >= 2 ? 2.4 : 1.8) : 1) * (0.85 + f.vigor * 0.3);
-    const dyaw = Math.max(-maxTurn * dt, Math.min(maxTurn * dt, wrap(desired - f.yaw)));
+    // The yaw rate itself eases (limited angular acceleration), so a heading never flips or twitches;
+    // it slows into the desired heading instead of overshooting.
+    const err = wrap(desired - f.yaw);
+    const wantRate = Math.max(-maxTurn, Math.min(maxTurn, err * 2.6));
+    const angAcc = maxTurn * (wall ? 8 : 4);
+    const rate = f.turnRate + Math.max(-angAcc * dt, Math.min(angAcc * dt, wantRate - f.turnRate));
+    // the rate eases down too when the limit drops (mood / wall change), inside the species ceiling
+    const ceiling = tr.turn * 2.2 * 2.4 * (0.85 + f.vigor * 0.3);
+    const dyaw = Math.max(-ceiling * dt, Math.min(ceiling * dt, rate * dt));
     f.yaw = wrap(f.yaw + dyaw);
     f.turnRate = dyaw / dt;
 
     // Speed eases toward the mood speed; tight turns (and heading into a wall) slow the fish.
     const into = Math.max(0, -(Math.sin(f.yaw) * wp.px + Math.cos(f.yaw) * wp.pz));
     const target = tr.speed * moodSpeed(f.mood) * (0.8 + f.vigor * 0.5) * (1 - Math.min(0.4, Math.abs(f.turnRate) / (tr.turn * 4))) * (1 - Math.min(0.6, into * 0.8)) * motion;
-    const ease = f.mood === "dart" || f.mood === "flee" || f.mood === "chase" ? 7 : 1.6;
-    f.speed += (target - f.speed) * Math.min(1, ease * dt);
+    // Burst-and-glide: a few tail beats of thrust, then a coast that slows on drag alone.
+    const fast = f.mood === "dart" || f.mood === "flee" || f.mood === "chase";
+    f.glideT = (f.glideT ?? fishRand(f) * 2) - dt;
+    if (f.glideT <= 0) {
+      f.gliding = !f.gliding && !fast;
+      const g = tr.glide ?? [0.7, 1.1, 0.5, 0.9];
+      if (g[2] <= 0) f.gliding = false;
+      f.glideT = f.gliding ? g[2] + fishRand(f) * g[3] : g[0] + fishRand(f) * g[1];
+    }
+    if (fast || (f.surfT ?? 0) > 0) f.gliding = false;
+    if (f.gliding) {
+      f.speed *= Math.exp(-0.9 * dt);
+    } else {
+      const ease = fast ? 7 : 1.8;
+      // limited acceleration: a dart is a quick push, not a teleport
+      const maxAcc = (fast ? 1.0 : 0.35) * dt;
+      f.speed += Math.max(-maxAcc, Math.min(maxAcc, (target * 1.12 - f.speed) * Math.min(1, ease * dt)));
+    }
     f.speed = Math.max(0.01 * motion, f.speed);
 
     // Move along the nose, but stop at the body box rather than being pushed back out of it.
@@ -515,7 +776,7 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
     }
     f.x += ux * step;
     f.z += uz * step;
-    ty = Math.max(bMin, Math.min(bMax, ty));
+    if (!((f.excT ?? 0) > 0) && !((f.surfT ?? 0) > 1.4)) ty = Math.max(bMin, Math.min(bMax, ty));
     if (f.mood === "feed" && w.food) ty = w.food.y - 0.05;
     if (f.mood === "chase" && f.target) ty = byId.get(f.target)?.y ?? ty;
     ty = Math.max(box.yMin, Math.min(box.yMax, ty));
@@ -525,12 +786,15 @@ export function stepSchool(school: SwimFish[], w: SwimWorld, dt: number): void {
     f.x = Math.max(box.xMin, Math.min(box.xMax, f.x));
     f.y = Math.max(box.yMin, Math.min(box.yMax, f.y));
     f.z = Math.max(box.zMin, Math.min(box.zMax, f.z));
-    f.phase += dt * (2 + (f.speed / Math.max(0.05, tr.speed)) * 3);
+    // Tail-beat phase: frequency follows thrust (speed), and nearly stops while gliding.
+    const base = tr.beat ?? 4;
+    const beat = f.gliding ? base * 0.12 : base * (0.55 + 0.75 * Math.min(2, f.speed / Math.max(0.05, tr.speed)));
+    f.phase += dt * beat;
   }
 }
 
 function aggrHomeFar(f: SwimFish, o: SwimFish): boolean {
-  const home = TERRITORY_SPOTS[(f.home ?? 0) % TERRITORY_SPOTS.length]!;
+  const home = homeSpot(f);
   return Math.hypot(o.x - home[0], o.z - home[2]) > 0.8;
 }
 

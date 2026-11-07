@@ -72,6 +72,16 @@ export function setSandboxAssetTokenForTests(token: string): void {
   setPackAssetTokenForTests("_sandbox", token);
 }
 
+/**
+ * True once this page holds a write session (a CSRF token from /api/session). Background
+ * writers such as the page heartbeat check this so they never start the interactive
+ * operator prompt on a tokenless LAN viewer.
+ */
+export function hasWriteSession(): boolean {
+  // authenticated LAN operators get no csrf from /api/session; their stored bearer is the write session
+  return !!csrf || !!readOperator();
+}
+
 export function noteCsrf(r: Response): void {
   const t = r.headers?.get?.("X-Zoto-Viz-Csrf");
   if (t) csrf = t;

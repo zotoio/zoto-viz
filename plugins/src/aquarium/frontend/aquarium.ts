@@ -12,7 +12,9 @@ import {
   type TalkerSlot,
 } from "./talker-slots";
 
-import { newSchoolState, puffStrength, stepSchool, TANK, type SchoolState, type SwimFish } from "./fish-behaviour";
+import { FollowCam, FOLLOW, newFollowView, type FollowView } from "./follow-cam";
+import { fishBody, newSchoolState, puffStrength, setTankHalfWidth, stepSchool, TANK, type SchoolState, type SwimFish } from "./fish-behaviour";
+import { easeHalfW, populationFor, SWIM_INSET, tankForPane, TANK_BASE_HALF_W, type TankGeometry } from "./tank-geometry";
 
 export {
   assignTalkerSlots,
@@ -30,7 +32,7 @@ export type PresetId =
   | "night_reef";
 
 export type LightingMode = "daylight" | "actinic" | "moonlight";
-export type CameraMode = "front" | "drift" | "hold";
+export type CameraMode = "front" | "drift" | "hold" | "follow";
 
 export interface AquariumOptions {
   preset: PresetId;
@@ -92,12 +94,12 @@ export const PACK_HOST_MESH_ASSET: { id: string; path: string } | undefined = un
 
 /** Every visualisation.yml config key (config.read). */
 export const CONFIG_KEYS = [
-  "preset", "randomise", "undoRandom", "resetSettings", "modelSet",
-  "water", "fishCount", "temperament", "feedingMin", "feedingTraffic",
+  "preset", "randomise", "undoRandom", "resetSettings",
+  "tankType", "water", "fishCount", "temperament", "feedingMin", "feedingTraffic",
   "lighting", "dayNight", "density", "bubbles", "camera", "seed", "label",
   "reducedMotion", "eatTestSec",
   "sp_neon", "sp_angel", "sp_guppy", "sp_cory", "sp_discus", "sp_cichlid", "sp_betta",
-  "sp_clown", "sp_tang", "sp_damsel", "sp_goby", "sp_wrasse", "sp_anemone",
+  "sp_clown", "sp_tang", "sp_damsel", "sp_goby", "sp_yellowtang", "sp_gramma",
   "modelGlb",
 ] as const;
 
@@ -118,7 +120,7 @@ export const PRESET_IDS: PresetId[] = [
 ];
 
 const FRESH_SPECIES = ["neon", "angel", "guppy", "cory", "discus", "cichlid", "betta"] as const;
-const REEF_SPECIES = ["clown", "tang", "damsel", "goby", "wrasse", "anemone"] as const;
+const REEF_SPECIES = ["clown", "tang", "damsel", "goby", "yellowtang", "gramma"] as const;
 
 export const PRESET_CAPS: Record<PresetId, { maxFish: number; maxParticles: number }> = {
   planted: { maxFish: 18, maxParticles: 16 },
@@ -163,6 +165,14 @@ export const AQU_SLOT = {
 } as const;
 
 const FISH_ATTR_SLOTS = 16;
+
+/**
+ * slot3: the follow camera and per-fish motion for the host scenery.
+ * [0] 1 when the follow camera drives the view, [1..3] eye, [4..6] aim, [7] fov,
+ * [8] handoff 0..1, [9] followed fish index, [10] next fish index (-1 none),
+ * [16 + n] fin phase, [32 + n] yaw rate (rad/s), [48 + n] body size 0..1 for fish n of slot1.
+ */
+export const AQU_SLOT3 = { follow: 0, eye: 1, aim: 4, fov: 7, blend: 8, target: 9, next: 10, halfW: 11, phase0: 16, turn0: 32, grow0: 48 } as const;
 
 /** slot2[60..63]: x, y, z, strength (0 = none) of the red puff where a fish was just eaten. */
 export const AQU_PUFF_SLOT2 = 60;
@@ -364,14 +374,16 @@ export function parseAquariumOptions(cfg?: Record<string, string> | null): Aquar
   const preset = PRESET_IDS.includes(presetRaw) ? presetRaw : DEFAULT_OPTIONS.preset;
   const base = { ...DEFAULT_OPTIONS, ...presetDefaults(preset) };
   const cap = PRESET_CAPS[preset].maxFish;
-  const waterRaw = merged?.water ?? base.water;
+  // tankType is the setting; the older `water` knob is still read when tankType is unset.
+  const tankRaw = merged?.tankType;
+  const waterRaw = tankRaw ? (tankRaw === "reef" ? "reef" : "fresh") : merged?.water ?? base.water;
   const water: WaterKind = waterRaw === "reef" ? "reef" : "fresh";
   const lightingRaw = merged?.lighting ?? base.lighting;
   const lighting: LightingMode =
     lightingRaw === "actinic" || lightingRaw === "moonlight" ? lightingRaw : "daylight";
   const cameraRaw = merged?.camera ?? base.camera;
   const camera: CameraMode =
-    cameraRaw === "front" || cameraRaw === "hold" ? cameraRaw : "drift";
+    cameraRaw === "front" || cameraRaw === "hold" || cameraRaw === "follow" ? cameraRaw : "drift";
   return {
     preset,
     water,
@@ -447,6 +459,12 @@ function enabledSpeciesIndices(opts: AquariumOptions): number[] {
   return out;
 }
 
+/** Species families by role: LAN talkers are small schooling fish, internet talkers mid-size, the gateway the showpiece. */
+const ROLE_FAMILY: Record<WaterKind, { small: number[]; mid: number[]; big: number[] }> = {
+  fresh: { small: [0, 2, 3], mid: [1, 5, 6], big: [4] },
+  reef: { small: [2, 3], mid: [0, 4, 5], big: [1] },
+};
+
 export function speciesForTalker(
   id: string,
   role: string,
@@ -454,13 +472,14 @@ export function speciesForTalker(
 ): number {
   const enabled = enabledSpeciesIndices(opts);
   const h = idHash(id);
-  if (role === "gateway") {
-    if (opts.water === "reef") return enabled.includes(1) ? 1 : enabled[0]!;
-    return enabled.includes(4) ? 4 : enabled[0]!;
+  const fam = ROLE_FAMILY[opts.water];
+  const group = role === "gateway" ? fam.big : role === "internet" ? fam.mid : role === "lan" ? fam.small : null;
+  let pool = enabled;
+  if (group) {
+    const hit = enabled.filter((s) => group.includes(s));
+    if (hit.length) pool = hit;
   }
-  if (role === "internet") return enabled[Math.min(1, enabled.length - 1)]!;
-  if (role === "lan") return enabled[0]!;
-  return enabled[Math.floor(h * enabled.length) % enabled.length]!;
+  return pool[Math.floor(h * pool.length) % pool.length]!;
 }
 
 export function vigorFromRate(rate: number): number {
@@ -497,6 +516,11 @@ export class AquariumSim {
   private feedY = 0.85;
   private trafficFeedCooldown = 0;
   private camPhase = 0;
+  /** Pane-sized tank: target geometry from the present tick, and the eased live half width. */
+  private tankGeom: TankGeometry = tankForPane(undefined, undefined);
+  private halfW = TANK_BASE_HALF_W;
+  /** Fish fading out (talker gone, or the tank got smaller): they swim off and shrink away. */
+  private readonly leaving = new Set<string>();
   /** Eat rate limit and the red puffs where a fish was eaten. */
   readonly school: SchoolState = newSchoolState();
   private packetCursor = 0;
@@ -510,6 +534,9 @@ export class AquariumSim {
   readonly slot0 = new Float32Array(64);
   readonly slot1 = new Float32Array(64);
   readonly slot2 = new Float32Array(64);
+  readonly slot3 = new Float32Array(64);
+  readonly followView: FollowView = newFollowView(MAX_FISH);
+  readonly follow = new FollowCam();
   readonly particleScratch = new Float32Array(MAX_PARTICLES * PARTICLE_STRIDE);
   private warmed = false;
   private subscriptions = 0;
@@ -531,6 +558,8 @@ export class AquariumSim {
   }
 
   setOptions(opts: AquariumOptions): void {
+    // Switching tank type rebuilds the school: no fish carries over into the other water.
+    if (opts.water !== this.opts.water) { this.fish.clear(); this.leaving.clear(); }
     this.opts = opts;
   }
 
@@ -606,11 +635,22 @@ export class AquariumSim {
   }
 
   fishSlotCap(): number {
-    return Math.min(
-      this.opts.fishCount,
-      PRESET_CAPS[this.opts.preset].maxFish,
-      MAX_FISH,
-    );
+    const base = Math.min(this.opts.fishCount, PRESET_CAPS[this.opts.preset].maxFish);
+    return Math.min(populationFor(base, this.tankGeom), MAX_FISH);
+  }
+
+  /** The pane this tank is shown in (from the host's present tick): aspect and device-pixel area. */
+  setPane(aspect: number | undefined, pixels: number | undefined): void {
+    this.tankGeom = tankForPane(aspect, pixels);
+  }
+
+  tankGeometry(): TankGeometry {
+    return this.tankGeom;
+  }
+
+  /** Live (eased) glass half width; the swim volume is SWIM_INSET inside it. */
+  tankHalfW(): number {
+    return this.halfW;
   }
 
   talkerSlotsSnapshot(): (TalkerSlot | null)[] {
@@ -637,14 +677,22 @@ export class AquariumSim {
       let f = this.fish.get(t.id);
       if (!f && inSlot) {
         const h = idHash(t.id);
+        const species = speciesForTalker(t.id, t.role, this.opts);
+        // Warm start: anywhere in the tank. Later arrivals swim in from a side edge, next to their
+        // own kind when one is in, so a school stays one group as it grows.
+        let mate: FishBody | null = null;
+        if (this.warmed) for (const o of this.fish.values()) if (o.species === species && !this.leaving.has(o.id)) { mate = o; break; }
+        const side = h < 0.5 ? -1 : 1;
+        const edgeX = side * (this.halfW - 0.25);
         f = {
           id: t.id,
-          species: speciesForTalker(t.id, t.role, this.opts),
+          species,
           vigor: vigorFromRate(t.rate),
-          x: (h - 0.5) * 1.2,
-          y: 0.1 + (h * 0.7) % 0.35,
-          z: ((h * 3.1) % 1 - 0.5) * 1.4,
-          yaw: h * 6.28,
+          x: this.warmed ? (mate ? Math.max(-this.halfW + 0.25, Math.min(this.halfW - 0.25, mate.x + (h - 0.5) * 0.2)) : edgeX) : (h - 0.5) * 2 * (this.halfW - 0.3),
+          y: mate ? mate.y : 0.1 + (h * 0.7) % 0.35,
+          z: mate ? mate.z + ((h * 7.7) % 1 - 0.5) * 0.15 : ((h * 3.1) % 1 - 0.5) * 1.4,
+          yaw: mate ? mate.yaw : this.warmed ? (side < 0 ? Math.PI / 2 : -Math.PI / 2) : h * 6.28,
+          grow: this.warmed ? 0.15 : 1,
           speed: 0.1,
           vy: 0,
           turnRate: 0,
@@ -662,8 +710,16 @@ export class AquariumSim {
         f.vigor = vigorFromRate(row.rate);
       }
     }
-    for (const id of [...this.fish.keys()]) {
-      if (!allTalkerIds.has(id)) this.fish.delete(id);
+    // Gone or unslotted fish fade out instead of vanishing; a fish slotted again comes back.
+    for (const [id, f] of this.fish) {
+      const keep = allTalkerIds.has(id) && slottedSet.has(id);
+      if (keep) {
+        if (this.leaving.delete(id)) { f.mood = "cruise"; f.fade = false; }
+      } else if (!this.leaving.has(id)) {
+        this.leaving.add(id);
+        f.fade = true;
+        f.mood = "flee"; f.fleeX = 0; f.fleeZ = f.z; f.moodT = 30; f.target = undefined;
+      }
     }
   }
 
@@ -802,6 +858,14 @@ export class AquariumSim {
     const school: FishBody[] = [];
     const byId = new Map(slotted.map((t) => [t.id, t]));
     for (const f of this.fish.values()) {
+      if (this.leaving.has(f.id)) {
+        // fade out: shrink away while swimming off toward the nearer end of the tank
+        f.grow = Math.max(0, (f.grow ?? 1) - dt / 1.6);
+        f.mood = "flee"; f.moodT = Math.max(f.moodT, 1);
+        if (f.grow <= 0.04) { this.fish.delete(f.id); this.leaving.delete(f.id); continue; }
+        school.push(f);
+        continue;
+      }
       const talker = byId.get(f.id);
       if (!talker) continue;
       f.vigor = vigorFromRate(talker.rate);
@@ -838,10 +902,12 @@ export class AquariumSim {
 
   /** Slotted fish that are in the water (an eaten fish is hidden until it hatches again). */
   visibleFishIds(): string[] {
-    return slottedTalkerIds(this.talkerSlots).filter((id) => {
+    const out = slottedTalkerIds(this.talkerSlots).filter((id) => {
       const f = this.fish.get(id);
-      return !!f && !f.eaten;
+      return !!f && !f.eaten && !this.leaving.has(id);
     });
+    for (const id of this.leaving) if (out.length < MAX_FISH && this.fish.has(id)) out.push(id);
+    return out;
   }
 
   /** The freshest eat puff (x, y, z, strength 0..1), or null when the water is clear. */
@@ -870,6 +936,8 @@ export class AquariumSim {
   }
 
   private stepOnce(simT: number, frameTalkers: VizTalkerSample[]): void {
+    this.halfW = easeHalfW(this.halfW, this.tankGeom.halfW, FIXED_SIM_DT);
+    setTankHalfWidth(this.halfW - SWIM_INSET);
     const allTalkers = this.withAmbientFish(frameTalkers);
     const allIds = new Set(allTalkers.map((t) => t.id));
     const slotted = this.slottedTalkers(allTalkers, simT);
@@ -916,12 +984,40 @@ export class AquariumSim {
       this.simAccumulator -= FIXED_SIM_DT;
       steps++;
     }
+    if (this.followActive()) {
+      this.fillFollowView();
+      this.follow.step(this.followView, frameDt);
+    } else if (this.followView.count) {
+      this.follow.reset();
+      this.followView.count = 0;
+    }
+  }
+
+  /** Follow camera is on (camera: follow, and not reduced motion). */
+  followActive(): boolean {
+    return this.opts.camera === "follow" && !this.opts.reducedMotion;
+  }
+
+  /** Visible fish into the follow camera's reused arrays (slot1 order). */
+  private fillFollowView(): void {
+    const v = this.followView;
+    let n = 0;
+    for (const id of this.visibleFishIds()) {
+      if (n >= MAX_FISH) break;
+      const f = this.fish.get(id);
+      if (!f) continue;
+      v.ids[n] = id; v.x[n] = f.x; v.y[n] = f.y; v.z[n] = f.z; v.yaw[n] = f.yaw;
+      v.size[n] = fishBody(f.species, this.opts.water === "reef").halfLen * (f.grow ?? 1);
+      n++;
+    }
+    v.count = n;
   }
 
   pack(canvasW = 1280, canvasH = 800): {
     slot0: Float32Array;
     slot1: Float32Array;
     slot2: Float32Array;
+    slot3: Float32Array;
     particles: Float32Array;
     particleCount: number;
     label: string;
@@ -950,7 +1046,7 @@ export class AquariumSim {
     s0[AQU_SLOT.murk] = murk;
     s0[AQU_SLOT.failBanner] = failBanner;
     s0[AQU_SLOT.bubbles] = o.bubbles ? 1 : 0;
-    const motion = o.reducedMotion ? 2 : o.camera === "front" ? 0 : o.camera === "hold" ? 2 : 1;
+    const motion = o.reducedMotion ? 2 : o.camera === "front" ? 0 : o.camera === "hold" ? 2 : o.camera === "follow" ? 3 : 1;
     s0[AQU_SLOT.camera] = motion;
     s0[AQU_SLOT.camPhase] = this.camPhase;
     s0[AQU_SLOT.feeding] = clamp01(this.feedActive / 9);
@@ -1014,6 +1110,34 @@ export class AquariumSim {
       s1[fi++] = f.yaw;
     }
 
+    const s3 = this.slot3;
+    s3.fill(0);
+    let mi = 0;
+    for (const id of packedIds) {
+      if (mi >= MAX_FISH) break;
+      const f = this.fish.get(id);
+      if (!f) continue;
+      s3[AQU_SLOT3.phase0 + mi] = f.phase;
+      s3[AQU_SLOT3.turn0 + mi] = Math.max(-4, Math.min(4, f.turnRate));
+      s3[AQU_SLOT3.grow0 + mi] = f.grow ?? 1;
+      mi++;
+    }
+    s3[AQU_SLOT3.target] = -1;
+    s3[AQU_SLOT3.next] = -1;
+    s3[AQU_SLOT3.halfW] = this.halfW;
+    if (this.followActive() && this.followView.count > 0) {
+      const c = this.follow;
+      s3[AQU_SLOT3.follow] = 1;
+      for (let k = 0; k < 3; k++) {
+        s3[AQU_SLOT3.eye + k] = c.eye[k]!;
+        s3[AQU_SLOT3.aim + k] = c.aim[k]!;
+      }
+      s3[AQU_SLOT3.fov] = FOLLOW.fov;
+      s3[AQU_SLOT3.blend] = c.blend;
+      s3[AQU_SLOT3.target] = c.targetIndex(this.followView);
+      s3[AQU_SLOT3.next] = c.nextIndex(this.followView);
+    }
+
     const s2 = this.slot2;
     s2.fill(0);
     let pi = 0;
@@ -1060,6 +1184,7 @@ export class AquariumSim {
       slot0: s0,
       slot1: s1,
       slot2: s2,
+      slot3: s3,
       particles: scratch,
       particleCount: pCount,
       label,

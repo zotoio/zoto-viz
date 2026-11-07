@@ -73,6 +73,7 @@ import type { VizPluginContract } from "./viz-host";
 import type { TypeSafeContract } from "./typesafe-host";
 import { parseTypeSafeContract } from "./typesafe-host";
 import { addModeSwitchAbortListener, removeModeSwitchAbortListener } from "../app/mode-switch-attempt";
+import { noteCatalogError } from "./catalog-warnings";
 
 function dimHex(hex: number, amount: number): number {
   const r = Math.round(((hex >> 16) & 255) * amount);
@@ -951,7 +952,7 @@ export async function installPlugins(): Promise<PluginView[]> {
           message: String(msg || err || e.message || ""),
         });
       }
-      console.warn("zoto-viz plugin:", e.file, err || msg);
+      noteCatalogError(e.file, String(err || msg));
     }
     const specs: PluginView[] = [];
     for (const raw of plugins) {

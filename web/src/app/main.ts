@@ -3,6 +3,10 @@ import { Panel } from "../ui/panel";
 import { allModes, arcadeSlotFor, defaultCatalogMode, defaultOpts, hostEngine, modeById, type ViewMode } from "../core/modes";
 import { flagMissingLayoutViews } from "./layout-missing-views";
 import { ago, fmtBytes, type Device, type LinkStatus, type StateMsg } from "../core/types";
+import { StateStream } from "./ws-stream";
+import { installGlobalErrorReporting, startPageHealth } from "./page-health";
+import { sharedAudioInUse } from "../audio/audio-manager";
+import { streamConfigFromSettings } from "./recovery-config";
 import { collapseByName } from "../core/collapse";
 import { rCidr, rIp, rMac, redaction } from "../core/redact";
 import { THEMES, alignThemeToColor, applyThemeChrome, themeById, themePickerGroup, themeSwatch, type Theme } from "../core/themes";
@@ -281,6 +285,10 @@ import { resumePendingConsentPaneSwitches } from "./mosaic-consent-resume";
 import { switchPaneView, type SwitchPaneViewResult } from "./switch-pane-view";
 
 ignoreResizeLoopError();
+if (!import.meta.env.VITEST) {
+  installGlobalErrorReporting();
+  startPageHealth(sharedAudioInUse);
+}
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 
@@ -636,11 +644,22 @@ function paneAspect(tileId: string): number | undefined {
   const h = el?.clientHeight ?? 0;
   return w > 0 && h > 0 ? w / h : undefined;
 }
+function panePixels(tileId: string): number | undefined {
+  const el = mosaic?.graphScene(tileId)?.viewEl;
+  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
+  return a > 0 ? a : undefined;
+}
+function stagePresentPixels(): number | undefined {
+  const el = $("scene");
+  const a = (el?.clientWidth ?? 0) * (el?.clientHeight ?? 0);
+  return a > 0 ? a : undefined;
+}
 
 const presentDriveDeps = {
   sandbox,
   pluginClock: () => scene.skyTime(),
   stageAspect: stagePresentAspect,
+  stagePixels: stagePresentPixels,
 };
 
 function refreshPluginDriveForMode(spec: PluginView | null, modeId: string): void {
@@ -654,7 +673,7 @@ addPresentListener((ts) => {
   notePackPerfPresent(ts, presentInterval);
   deliverPluginPresentTick(presentDrive, ts);
   // #235: pane sandboxes running a viz.presentTick pack get their own tick (pane clock + aspect).
-  if (tileSandboxes.size > 0) tileSandboxes.presentTick(ts, paneSkyTime, paneAspect);
+  if (tileSandboxes.size > 0) tileSandboxes.presentTick(ts, paneSkyTime, paneAspect, panePixels);
   if (mode.pluginId === "backrooms") {
     pluginSfx.syncBackroomsViewConfig(currentOpts);
     pluginSfx.setBackrooms(scene.skyTime());
@@ -3602,21 +3621,32 @@ function applyStats(m: StateMsg): void {
   $("active").textContent = String(m.stats.active_flows);
 }
 
+/** Minimum gap between session re-boots on socket reconnects. */
+const SESSION_REBOOT_MS = 60_000;
+let lastSessionBoot = 0;
+
 function connect(): void {
   const proto = location.protocol === "https:" ? "wss" : "ws";
-  const ws = new WebSocket(`${proto}://${location.host}/ws`);
   const dot = $("conn");
-  ws.onopen = () => {
-    dot.classList.add("ok");
-    void bootSession().then(() => profiles?.recover());
-  };
-  ws.onmessage = (ev) => {
-    const m = JSON.parse(ev.data) as StateMsg;
-    if (m.type !== "state") return;
-    feed(m);
-  };
-  ws.onclose = () => { dot.classList.remove("ok"); setTimeout(connect, 2000); };
-  ws.onerror = () => ws.close();
+  const stream = new StateStream(
+    { url: `${proto}://${location.host}/ws?proto=delta` },
+    {
+      onOpen: (reconnect) => {
+        dot.classList.add("ok");
+        // A reconnect re-boots the session at most once per SESSION_REBOOT_MS, so a flapping
+        // socket backs off instead of looping /api/session and profile recovery.
+        const now = Date.now();
+        if (reconnect && now - lastSessionBoot < SESSION_REBOOT_MS) return;
+        lastSessionBoot = now;
+        void bootSession().then(() => profiles?.recover());
+      },
+      onClose: () => { dot.classList.remove("ok"); },
+      onState: (m) => feed(m as unknown as StateMsg),
+      onLog: (t) => console.info(`zoto-viz ${t}`),
+    },
+    streamConfigFromSettings(),
+  );
+  stream.start();
 }
 
 if (!import.meta.env.VITEST) {

@@ -49,3 +49,5 @@ revert-proofs/**/red/*.txt
 web/.vitest/
 .venv.**
 
+plugins/src/marble-run/blender/*.png
+plugins/src/aquarium/blender/*.png

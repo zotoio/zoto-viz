@@ -171,3 +171,16 @@ describe("apiFetch CSRF", () => {
     expect(session.aiControl).toBe(false);
   });
 });
+
+describe("hasWriteSession (LAN operator)", () => {
+  it("counts a stored operator bearer as a write session without csrf", async () => {
+    const { hasWriteSession, setCsrfTokenForTests } = await import("./http");
+    setCsrfTokenForTests("");
+    setOperatorTokenForTests("");
+    expect(hasWriteSession()).toBe(false);
+    setOperatorTokenForTests("op-bearer");
+    expect(hasWriteSession()).toBe(true);
+    setOperatorTokenForTests("");
+    expect(hasWriteSession()).toBe(false);
+  });
+});

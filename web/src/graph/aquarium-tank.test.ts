@@ -1,32 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { aquariumPlantPlacements, aquariumSubstrateMatrix } from "../app/host-mesh-bridge";
 import { AQU_PUFF_X, PUFF_MAX_OPACITY, buildAquariumTank, buildEatPuff } from "./aquarium-tank";
 import type * as THREE from "three";
-
-describe("aquarium tank contents fit the glass", () => {
-  it("gravel covers the floor glass to glass in Standard and HD", () => {
-    const bounds = { standard: [-0.31, 0.31, -0.16, 0.16], hd: [-0.332, 0.31, -0.229, 0.16] } as const;
-    for (const set of ["standard", "hd"] as const) {
-      const m = aquariumSubstrateMatrix(set);
-      const [x0, x1, z0, z1] = bounds[set];
-      const wx0 = x0 * m[0]! + m[12]!, wx1 = x1 * m[0]! + m[12]!;
-      const wz0 = z0 * m[10]! + m[14]!, wz1 = z1 * m[10]! + m[14]!;
-      expect(wx0).toBeCloseTo(-1.2, 2); expect(wx1).toBeCloseTo(1.2, 2);
-      expect(wz0).toBeCloseTo(-1.0, 2); expect(wz1).toBeCloseTo(1.0, 2);
-      expect(m[13]).toBeLessThan(-0.79);
-    }
-  });
-
-  it("plant clumps stay inside the glass at any yaw", () => {
-    for (const set of ["standard", "hd"] as const) {
-      for (const p of aquariumPlantPlacements(set)) {
-        expect(Math.abs(p.x) + p.radius).toBeLessThanOrEqual(1.2 + 1e-9);
-        expect(p.z - p.radius).toBeGreaterThanOrEqual(-1.0 - 1e-9);
-        expect(p.z + p.radius).toBeLessThanOrEqual(1.0 + 1e-9);
-      }
-    }
-  });
-});
 
 describe("eat puff", () => {
   it("is hidden at zero, faint at full strength, and fades with the pack's strength", () => {

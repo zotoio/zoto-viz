@@ -123,7 +123,10 @@ def test_realism_packs_ship_glb_assets() -> None:
         assert (ROOT / "plugins" / "src" / pid / "assets").is_dir()
     if pid == "aquarium":
         aqu_yml = yml
-        assert "fish-cory" in aqu_yml
-        assert "fish-cichlid" in aqu_yml
-        assert (ROOT / "plugins" / "src" / "aquarium" / "assets" / "fish-cory.glb").is_file()
-        assert (ROOT / "plugins" / "src" / "aquarium" / "assets" / "fish-cichlid.glb").is_file()
+        # one Blender-built scape GLB carries every fish, plant, rock and coral
+        # (per-fish GLBs before the scape pack lands)
+        assets = ROOT / "plugins" / "src" / "aquarium" / "assets"
+        if "aquarium-scape" in aqu_yml:
+            assert (assets / "aquarium-scape.glb").is_file()
+        else:
+            assert "fish-cory" in aqu_yml and (assets / "fish-cory.glb").is_file()

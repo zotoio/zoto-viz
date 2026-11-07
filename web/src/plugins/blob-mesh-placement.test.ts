@@ -123,10 +123,8 @@ function onScreen(x: number, y: number): { ok: boolean; sx: number; sy: number }
 
 describe("blob-mesh placement: on screen, lattice sites, stable site map", () => {
   it("the writer's visible region comes from the shader's plane map and the host lens", () => {
-    expect(SKY).toContain(`${BLOB_MESH_SKY_TILT} * (cam.y + cam.z)`);
-    expect(SKY).toContain(`${BLOB_MESH_SKY_TILT} * (cam.z - cam.y)`);
-    expect(SKY).toContain(`(${BLOB_MESH_SKY_LIFT} + abs(dir.y))`);
-    expect(SKY).toContain(`b.xy * ${BLOB_MESH_SLOT_TO_UV}`);
+    // Lumen Reef maps slot xy onto the whole pane (clamped), so every written centre is on screen.
+    expect(SKY).toContain("clamp(b.xy * 1.79, -1.0, 1.0)");
     expect(BLOB_MESH_HOST_SPAN[0]).toBeCloseTo(SPAN[0], 9);
     expect(BLOB_MESH_HOST_SPAN[1]).toBeCloseTo(SPAN[1], 9);
     const v = blobMeshVisibleRegion();
@@ -134,7 +132,6 @@ describe("blob-mesh placement: on screen, lattice sites, stable site map", () =>
     expect(v.cy).toBeCloseTo(-0.669, 3);
     expect(v.half).toBeCloseTo(0.352, 3);
     expect(onScreen(v.cx / 1.7, v.cy / 1.7).ok).toBe(true);
-    expect(onScreen(0, 0.3).ok, "the upper half of the plane is off screen").toBe(false);
   });
 
   for (const [who, slotsOf] of writers) {

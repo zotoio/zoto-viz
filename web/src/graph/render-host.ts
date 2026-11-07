@@ -18,6 +18,9 @@
 
 import * as THREE from "three";
 import type { SoftRect } from "./software-draw";
+import { ContextLossLimiter, FrameGate, ViewErrorBudget } from "./frame-guard";
+import { recoveryConfig } from "../app/recovery-config";
+import { noteContextLoss, noteLowQuality, notePageFrame, noteViewDisabled, reportPageError } from "../app/page-health";
 import { cssHex } from "./software-draw";
 import { letterboxFillHex, letterboxInnerRect, paintLetterboxBars, type SurfaceLetterboxFill } from "./letterbox-fill";
 import { probeWebGL } from "./webgl";
@@ -87,6 +90,11 @@ export interface HostedView {
   paintSoftware?(ctx: CanvasRenderingContext2D, rect: SoftRect): void;
   /** GPU milliseconds for this pane's last draw, once the timer query resolves. */
   noteFrameCost?(ms: number): void;
+  /**
+   * Idle skip: return false when this view has nothing new to draw this frame (no animation,
+   * no new data). Views that do not implement it are always drawn.
+   */
+  needsFrame?(): boolean;
 }
 
 /** Framebuffer pixels, origin bottom-left (what `gl.readPixels` wants). */
@@ -177,6 +185,26 @@ export class RenderHost {
   private readonly frame: (ts: number) => void;
   private disposed = false;
   private pr: number;
+  private readonly recovery = recoveryConfig();
+  /** fps cap for the wall (0 = display refresh); see `setFpsCap` */
+  readonly frameGate = new FrameGate(this.recovery.fpsCap);
+  readonly viewErrors = new ViewErrorBudget<HostedView>(
+    this.recovery.viewErrorBudget,
+    (v, err, n) => {
+      const name = v.tileId ?? v.viewId ?? "view";
+      console.error(`zoto-viz render host: disabled ${name} after ${n} throwing frames`, err);
+      noteViewDisabled();
+      reportPageError("view-disabled", err, `${name} (${v.viewId ?? "?"})`);
+      this.dirty = true;
+    },
+    (v, err) => {
+      console.error(`zoto-viz render host: ${v.tileId ?? v.viewId ?? "view"} frame threw`, err);
+      reportPageError("render-frame", err, v.tileId ?? v.viewId ?? "");
+    },
+  );
+  private readonly lossLimiter = new ContextLossLimiter(this.recovery.contextLossLimit, this.recovery.contextLossWindowMs);
+  /** Pixel-ratio ceiling once repeated context loss tripped the low-quality tier (0 = none). */
+  private qualityCap = 0;
   readonly packMirrors = new PackMirrorRegistry();
   private readonly letterboxScratch = {
     box: { x: 0, y: 0, w: 0, h: 0 },
@@ -306,8 +334,11 @@ export class RenderHost {
     this.frame = (ts: number) => {
       if (this.disposed) return;
       this.raf = requestAnimationFrame(this.frame);
+      notePageFrame();
+      if (!this.frameGate.shouldDraw(ts)) return;
       this.attach();
       this.syncSize();
+      if (this.recovery.idleSkip && !this.dirty && this.idleThisFrame()) return;
       if (this.dirty) {
         this.dirty = false;
         if (!this.software) {
@@ -327,7 +358,7 @@ export class RenderHost {
       this.drewThisFrame = false;
       if (!this.glContextLost) {
         this.cacheLoseContextExt();
-        for (const v of this.views) v.hostFrame(frameTs);
+        for (const v of this.views) this.viewErrors.run(v, () => v.hostFrame(frameTs));
       }
       if (this.noticeWaitsForDraw && this.drewThisFrame && !this.glContextLost) {
         this.noticeWaitsForDraw = false;
@@ -339,6 +370,30 @@ export class RenderHost {
   }
 
   get pixelRatio(): number { return this.pr; }
+  /** Cap the wall at `fps` frames per second (0 = uncapped). */
+  setFpsCap(fps: number): void { this.frameGate.fpsCap = Math.max(0, fps || 0); }
+  get lowQuality(): boolean { return this.qualityCap > 0; }
+
+  /** Every hosted view opted in to idle skip and has nothing new to draw. */
+  private idleThisFrame(): boolean {
+    if (!this.views.length) return false;
+    for (const v of this.views) {
+      if (this.viewErrors.isDisabled(v)) continue;
+      if (typeof v.needsFrame !== "function" || v.needsFrame()) return false;
+    }
+    return true;
+  }
+
+  /** Repeated context loss: drop the backing store to the fallback pixel ratio (and keep it there). */
+  private enterLowQuality(): void {
+    if (this.qualityCap) return;
+    this.qualityCap = this.recovery.fallbackPixelRatio;
+    noteLowQuality(true);
+    const msg = `GPU context lost ${this.lossLimiter.recent}x in ${Math.round(this.recovery.contextLossWindowMs / 60000)} min; ` +
+      `dropping to pixel ratio ${this.qualityCap}`;
+    console.warn(`zoto-viz render host: ${msg}`);
+    reportPageError("context-loss-limit", msg);
+  }
   get viewCount(): number { return this.views.length; }
   get contextLost(): boolean { return this.tileShader.contextLost; }
   /**
@@ -436,6 +491,7 @@ export class RenderHost {
   remove(v: HostedView): void {
     const i = this.views.indexOf(v);
     if (i >= 0) this.views.splice(i, 1);
+    this.viewErrors.forget(v);
     this.dirty = true;
     this.markMirrorScopeDirty();
   }
@@ -475,6 +531,10 @@ export class RenderHost {
     if (this.disposed) return;
     const selfLoss = this.selfLossPending;
     this.selfLossPending = false;
+    if (!selfLoss) {
+      noteContextLoss();
+      if (this.lossLimiter.note(performance.now())) this.enterLowQuality();
+    }
     this.noticeWaitsForDraw = false;
     this.tileShader.onSharedContextLost();
     for (const v of this.views) v.hostContextLost();
@@ -532,6 +592,9 @@ export class RenderHost {
     this.dirty = true;
     this.refreshContextAntialias();
     this.markMirrorScopeDirty();
+    // a view that died on the lost context gets a fresh budget on the new one
+    this.viewErrors.reenable();
+    if (this.qualityCap && this.pr > this.qualityCap) this.setPixelRatio(this.qualityCap);
     for (const v of this.views) v.hostContextRestored();
   }
 
@@ -752,6 +815,7 @@ export class RenderHost {
 
   /** Whole-wall layout DPR (auto-tune). Backing store scales here; renderer pixel ratio stays 1. */
   setPixelRatio(pr: number): void {
+    if (this.qualityCap) pr = Math.min(pr, this.qualityCap);
     if (Math.abs(pr - this.pixelRatio) < 0.01) return;
     this.layoutDevicePxRatio = devicePxRatioFromNumber(pr);
     this.pr = devicePxRatioNumber(this.layoutDevicePxRatio);

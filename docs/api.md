@@ -15,7 +15,10 @@ Other hosts get `400` with a fixed plain-text message (the rejected name is logg
 | Path | Role |
 | --- | --- |
 | `GET /` | UI (`web/dist`) |
-| `GET /ws` | 1 Hz state snapshot |
+| `GET /ws` | 1 Hz state snapshot (`?proto=delta`: one full frame, then `delta` patches; send `pause` / `resume` / `resync`) |
+| `POST /api/page/heartbeat` | page fps / heap / live AudioContexts; reply `action: "reload"` when the watchdog says so ([recovery](resource-limits-and-recovery.md)) |
+| `POST /api/page/error` | uncaught page errors into `/api/logs` (rate-limited) |
+| `GET /api/page/health` | last heartbeat per page, watchdog thresholds |
 | `GET /api/session` | CSRF token, AI Control, plugin-Python flag |
 | `GET /api/state` | JSON snapshot |
 | `GET /api/logs?after=` | Recent `[monitor]` stderr lines (`seq`, `t`, `text`). `after` is the last seen seq |

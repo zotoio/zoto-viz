@@ -256,7 +256,8 @@ describe("a quiet network still fills the tank", () => {
     let p = sim.advance({ t: 0, dt: 1 / 60, audio: 0, talkers: mk(3), packets: [], demo: false });
     for (let i = 1; i < 30; i++) p = sim.advance({ t: i / 60, dt: 1 / 60, audio: 0, talkers: mk(3), packets: [], demo: false });
     expect(p.slot0[17]).toBe(sim.fishSlotCap());
-    for (let i = 30; i < 90; i++) p = sim.advance({ t: i / 60, dt: 1 / 60, audio: 0, talkers: mk(10), packets: [], demo: false });
+    // displaced ambient fish fade out over ~1.6 s before the count settles
+    for (let i = 30; i < 260; i++) p = sim.advance({ t: i / 60, dt: 1 / 60, audio: 0, talkers: mk(10), packets: [], demo: false });
     expect(p.slot0[17]).toBe(sim.fishSlotCap());
     const ids = sim.visibleFishIds();
     for (const t of mk(10)) expect(ids).toContain(t.id);

@@ -13,14 +13,6 @@ look:
   gridOpacity: 0
   mosaic: "off"
 config:
-  - key: modelSet
-    label: model set
-    type: select
-    values:
-      - [standard, Standard]
-      - [hd, HD]
-    default: standard
-    hint: Standard designer meshes, or the HD Blender set (assets ending -hd). Assets with no HD version stay standard.
   - key: preset
     label: preset
     type: select
@@ -47,8 +39,16 @@ config:
     type: boolean
     default: false
     hint: Reset all knobs to the selected preset defaults.
+  - key: tankType
+    label: tank type
+    type: select
+    values:
+      - [freshwater, freshwater]
+      - [reef, reef (saltwater)]
+    default: freshwater
+    hint: Freshwater (tetras, betta, angelfish, corydoras, cichlids; plants, driftwood, sand, tannin-green water) or reef (clownfish and anemone, blue and yellow tang, royal gramma, damselfish; live rock, corals, clear blue water). Never mixed; switching rebuilds the tank.
   - key: water
-    label: water
+    label: water (legacy; tank type wins)
     type: select
     values:
       - [fresh, freshwater]
@@ -118,8 +118,9 @@ config:
       - [front, front glass]
       - [drift, slow drift]
       - [hold, reduced motion hold]
+      - [follow, follow a fish]
     default: drift
-    hint: Viewing angle and motion comfort.
+    hint: Viewing angle and motion comfort. Follow drifts alongside one fish and eases over to another that swims close by.
   - key: seed
     label: seed
     type: number
@@ -193,12 +194,12 @@ config:
     label: goby
     type: boolean
     default: true
-  - key: sp_wrasse
-    label: wrasse
+  - key: sp_yellowtang
+    label: yellow tang
     type: boolean
     default: true
-  - key: sp_anemone
-    label: anemone/coral
+  - key: sp_gramma
+    label: royal gramma
     type: boolean
     default: true
   - key: modelGlb

@@ -2,6 +2,7 @@ import { escapeHtml, type NetScene } from "../graph/scene";
 import { rIp, rName, rText, redaction } from "../core/redact";
 import { displayName, fmtBytes, type Packet, type TrafficMsg, idsOf } from "../core/types";
 import { decodePayload, hexDump, hexToBytes, type PayloadMsg } from "./payload";
+import { visiblePoll } from "../core/visible-poll";
 
 const POLL_MS = 2000;
 
@@ -24,6 +25,8 @@ export class TraceModal {
   private focused = false;
   private live = true;
   private timer: number | null = null;
+  /** skipped while the tab is hidden; one catch-up poll on return */
+  private readonly pollVisible = visiblePoll(() => { void this.poll(); });
   private last: TrafficMsg | null = null;
   private inflight = false;
   /** packets as last rendered, oldest first, so a row click can find its packet */
@@ -121,7 +124,7 @@ export class TraceModal {
     this.renderHeader();
     this.el.hidden = false;
     document.body.classList.add("modal-open");
-    if (this.timer === null) this.timer = window.setInterval(() => void this.poll(), POLL_MS);
+    if (this.timer === null) this.timer = window.setInterval(this.pollVisible, POLL_MS);
     void this.poll();
     this.el.querySelector<HTMLButtonElement>(".close")!.focus();
   }
