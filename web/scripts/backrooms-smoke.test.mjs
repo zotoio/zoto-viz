@@ -157,6 +157,7 @@ async function run() {
   await ctx.addInitScript(installFirstLoadProfile);
   const page = await ctx.newPage();
   page.setDefaultTimeout(120_000);
+  await page.route(/\.(woff2?|ttf|otf)(\?|$)/i, (route) => route.abort());
   page.on("console", (msg) => {
     const t = msg.text();
     if (t.includes("WebGL:")) {
