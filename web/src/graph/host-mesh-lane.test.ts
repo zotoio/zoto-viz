@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
+import { encodeHostMeshSlotPacketV3Mixed } from "../../../plugins/sdk/host-mesh-frame";
 import * as hostMeshLane from "./host-mesh-lane";
 import { disposeHostMeshObject3D, embeddedImageTexturePlugin, HostMeshLane, normalizeSwimClipStart, showHostMeshInstance, stepAquariumDecor } from "./host-mesh-lane";
 
@@ -45,7 +46,7 @@ type LanePrivate = {
   templates: Map<string, unknown>;
   skinnedLive: Map<
     string,
-    { root: THREE.Object3D; mixer: THREE.AnimationMixer; animOffset: number; clipDuration: number }[]
+    { root: THREE.Object3D; mixer: THREE.AnimationMixer; action: THREE.AnimationAction; animOffset: number; clipDuration: number }[]
   >;
 };
 
@@ -212,9 +213,13 @@ describe("host mesh lane", () => {
     for (let i = 0; i < M_LIVE_MIXERS; i++) {
       const root = new THREE.Group();
       lane.group.add(root);
+      const mixer = new THREE.AnimationMixer(root);
+      const action = mixer.clipAction(new THREE.AnimationClip("swim", 1, []));
+      action.play();
       liveRows.push({
         root,
-        mixer: new THREE.AnimationMixer(root),
+        mixer,
+        action,
         animOffset: 0,
         clipDuration: 1,
       });
@@ -245,5 +250,37 @@ describe("host mesh lane", () => {
     const disposesAfterStale = geoDispose.mock.calls.length;
     lane.clear();
     expect(geoDispose.mock.calls.length).toBe(disposesAfterStale);
+  });
+
+  it("accumulates v3 mixed-asset packets until flush (multi-species batch)", async () => {
+    const lane = new HostMeshLane();
+    const loader = (lane as unknown as { loader: { loadAsync: (url: string) => Promise<unknown> } }).loader;
+    const makeRoot = (name: string) => {
+      const root = new THREE.Group();
+      root.name = name;
+      root.add(new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshBasicMaterial()));
+      return root;
+    };
+    vi.spyOn(loader, "loadAsync")
+      .mockResolvedValueOnce(mockGltf(makeRoot("a")))
+      .mockResolvedValueOnce(mockGltf(makeRoot("b")));
+    lane.setAssetOrder(["scape", "kohaku", "showa"]);
+    const priv = lane as unknown as LanePrivate;
+    await priv.load("pack", { id: "kohaku", path: "kohaku.glb" });
+    await priv.load("pack", { id: "showa", path: "showa.glb" });
+
+    const pktA = encodeHostMeshSlotPacketV3Mixed([
+      { assetIndex: 1, x: 0, y: 0, z: 0, yaw: 0, scale: 1, animTime: 0 },
+      { assetIndex: 2, x: 0.2, y: 0, z: 0, yaw: 0.5, scale: 1, animTime: 0.1 },
+    ]);
+    lane.applySlotBuffer(pktA);
+    expect(lane.group.children).toHaveLength(0);
+
+    const pktB = encodeHostMeshSlotPacketV3Mixed(
+      [{ assetIndex: 1, x: -0.1, y: 0, z: 0, yaw: 1, scale: 1, animTime: 0.2 }],
+      { flush: true },
+    );
+    lane.applySlotBuffer(pktB);
+    expect(lane.group.children.length).toBeGreaterThanOrEqual(2);
   });
 });
