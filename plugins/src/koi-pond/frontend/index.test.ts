@@ -60,7 +60,7 @@ const frame = (over: Partial<{
   dt: 1 / 60,
   audio: 0.1,
   talkers,
-  packets: [] as { proto: string; size: number; field: number }[],
+  packets: [],
   rf: [],
   headlines: [],
   demo: false,
