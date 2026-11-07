@@ -71,7 +71,16 @@ export async function screenshotBox(page, locator, timeout = 120_000, domSelecto
     }, domSelectors)
     : await locator.boundingBox({ timeout: Math.min(timeout, 30_000) });
   assert.ok(box && box.width > 0 && box.height > 0, `no box to screenshot: ${JSON.stringify(box)}`);
-  return page.screenshot({ type: "png", clip: box, timeout });
+  await Promise.race([
+    page.evaluate(() => document.fonts?.ready),
+    page.waitForTimeout(5_000),
+  ]);
+  return page.screenshot({
+    type: "png",
+    clip: box,
+    timeout: Math.min(timeout, 60_000),
+    animations: "disabled",
+  });
 }
 
 /** Wall render-host or legacy #scene canvas — used by browser smokes on animated packs. */
