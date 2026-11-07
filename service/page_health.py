@@ -39,6 +39,10 @@ class Thresholds:
     min_fps: float = 5
     low_fps_sec: float = 60
     stale_sec: float = 30
+    # growth: a leak shows as steady growth long before the absolute caps trip
+    max_heap_growth_mb: float = 384
+    max_audio_ctx_growth: float = 3
+    growth_window_sec: float = 900
     action: str = "flag"  # "flag" (log only) or "reload" (tell the page to reload)
 
     @classmethod
@@ -50,6 +54,9 @@ class Thresholds:
             min_fps=_f("ZOTO_VIZ_WD_MIN_FPS", 5),
             low_fps_sec=_f("ZOTO_VIZ_WD_LOW_FPS_SEC", 60),
             stale_sec=_f("ZOTO_VIZ_WD_STALE_SEC", 30),
+            max_heap_growth_mb=_f("ZOTO_VIZ_WD_MAX_HEAP_GROWTH_MB", 384),
+            max_audio_ctx_growth=_f("ZOTO_VIZ_WD_MAX_AUDIO_CTX_GROWTH", 3),
+            growth_window_sec=_f("ZOTO_VIZ_WD_GROWTH_WINDOW_SEC", 900),
             action=act if act in ("flag", "reload") else "flag",
         )
 
@@ -66,6 +73,10 @@ class PageRow:
     stale_logged: bool = False
     err_window: float = 0.0
     err_count: int = 0
+    # growth baselines: the lowest heap / audio-context count seen in the current window
+    base_at: float | None = None
+    heap_base: float | None = None
+    ac_base: float | None = None
 
 
 def _num(v: Any) -> float | None:
@@ -84,6 +95,9 @@ def evaluate(row: PageRow, beat: dict[str, Any], th: Thresholds, now: float) -> 
     heap = _num(beat.get("heapMb"))
     if heap is not None and heap > th.max_heap_mb:
         return f"heap {heap:.0f} MB > {th.max_heap_mb:.0f} MB"
+    growth = _growth(row, heap, ac, th, now)
+    if growth:
+        return growth
     fps = _num(beat.get("fps"))
     if beat.get("visible") and fps is not None and fps < th.min_fps:
         if not row.low_fps_since:
@@ -92,6 +106,22 @@ def evaluate(row: PageRow, beat: dict[str, Any], th: Thresholds, now: float) -> 
             return f"fps {fps:.1f} < {th.min_fps:g} for {now - row.low_fps_since:.0f}s"
     else:
         row.low_fps_since = 0.0
+    return ""
+
+
+def _growth(row: PageRow, heap: float | None, ac: float | None, th: Thresholds, now: float) -> str:
+    """Flag steady growth over the window (a leak), measured from the window's lowest reading."""
+    if row.base_at is None or now - row.base_at > th.growth_window_sec:
+        row.base_at, row.heap_base, row.ac_base = now, heap, ac
+        return ""
+    if heap is not None:
+        row.heap_base = heap if row.heap_base is None else min(row.heap_base, heap)
+        if heap - row.heap_base > th.max_heap_growth_mb:
+            return f"heap grew {heap - row.heap_base:.0f} MB in {now - row.base_at:.0f}s"
+    if ac is not None:
+        row.ac_base = ac if row.ac_base is None else min(row.ac_base, ac)
+        if ac - row.ac_base >= th.max_audio_ctx_growth:
+            return f"audio contexts grew {int(ac - row.ac_base)} in {now - row.base_at:.0f}s"
     return ""
 
 
