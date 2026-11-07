@@ -58,21 +58,28 @@ def test_realism_packs_use_host_mesh_slot_three() -> None:
         assert "maxBuffers: 8" in yml, pid
 
 
-def test_realism_koi_legacy_host_mesh_manifest() -> None:
+def test_realism_koi_host_mesh_manifest_exactly_one_supported_layout() -> None:
     yml = (PACKS["koi-pond"] / "plugin.yml").read_text(encoding="utf-8")
+    legacy = (
+        "hostMeshSlot: 3" in yml
+        and "hostMeshSlot: 4" not in yml
+        and "hostMeshSlotCount: 6" in yml
+    )
+    hd_follow = "hostMeshSlot: 4" in yml and "hostMeshSlotCount: 4" in yml
+    assert legacy or hd_follow, "koi plugin.yml must declare a supported host mesh layout"
+    assert legacy != hd_follow, f"ambiguous koi host mesh manifest (both legacy and HD): {yml!r[:240]}"
+    assert "maxBuffers: 8" in yml
+
+
+def test_realism_koi_mesh_render_cap_matches_manifest_layout() -> None:
+    yml = (PACKS["koi-pond"] / "plugin.yml").read_text(encoding="utf-8")
+    pack = (PACKS["koi-pond"] / "frontend" / "koi-pond.ts").read_text(encoding="utf-8")
     if "hostMeshSlot: 4" in yml:
-        pytest.skip("koi pack ships HD follow layout (hostMeshSlot 4)")
-    assert "hostMeshSlot: 3" in yml, "legacy koi: follow cam uses model slot; mesh packets from slot 3"
-    assert "hostMeshSlotCount: 6" in yml
-    assert "maxBuffers: 8" in yml
-
-
-def test_realism_koi_hd_follow_host_mesh_manifest() -> None:
-    yml = (PACKS["koi-pond"] / "plugin.yml").read_text(encoding="utf-8")
-    if "hostMeshSlot: 4" not in yml:
-        pytest.skip("koi pack still on legacy hostMeshSlot 3 (main / pre-#338)")
-    assert "hostMeshSlotCount: 4" in yml, "HD follow: slot 3 reserved for follow cam; fish mesh packets use 4–7"
-    assert "maxBuffers: 8" in yml
+        assert "KOI_HOST_MESH_RENDER_CAP" in pack
+        assert "high: { maxKoi: 9" in pack
+    else:
+        assert "hostMeshSlot: 3" in yml
+        assert "KOI_HOST_MESH_RENDER_CAP" not in pack
 
 
 # Revert row: remove damped ball camera (restore fixed broadcast angles only).
