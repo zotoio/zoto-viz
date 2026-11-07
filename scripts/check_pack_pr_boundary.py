@@ -37,6 +37,9 @@ VIZ_VALIDATE_FUNC = "test_viz_plugin_yml_validates"
 HOST_CHANGE_LABEL = "host-change"
 HOST_REVIEWED_LABEL = "host-reviewed"
 HOST_REVIEW_FAIL_MESSAGE = "host change: needs human review before merge"
+# Durable delivery stamp: Check Runs API on the PR head (survives labeled-only reruns).
+# https://docs.github.com/en/rest/checks/runs
+HEAD_DELIVERY_CHECK_NAME = "pack-boundary/head-delivery"
 MISSING_PR_NUMBER_MESSAGE = (
     "pack-boundary: FAILED — missing pull request number "
     "(set --pr N or provide pull_request.number in GITHUB_EVENT_PATH)"
@@ -639,6 +642,23 @@ def parse_github_timestamp(value: str) -> datetime:
     return datetime.fromisoformat(value).astimezone(timezone.utc)
 
 
+def _github_post(url: str, token: str, payload: dict[str, Any]) -> Any:
+    data = json.dumps(payload).encode("utf-8")
+    req = urllib.request.Request(
+        url,
+        data=data,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {token}",
+            "Accept": "application/vnd.github+json",
+            "Content-Type": "application/json",
+            "X-GitHub-Api-Version": "2022-11-28",
+        },
+    )
+    with urllib.request.urlopen(req) as resp:
+        return json.loads(resp.read())
+
+
 def _github_request(url: str, token: str) -> tuple[Any, str | None]:
     req = urllib.request.Request(
         url,
@@ -845,16 +865,44 @@ def run_secure_ci_check(
 ) -> int:
     """Required CI path: API file list + labels; file bytes only from base/PR trees."""
     try:
-        labels, timeline, push_at = load_pr_review_context(repo, pr_number, token)
+        labels, timeline, head_sha, head_err = load_pr_review_context(
+            repo, pr_number, token
+        )
     except urllib.error.HTTPError as exc:
         print(
             f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
             file=sys.stderr,
         )
         return 1
+    if head_err:
+        print(f"pack-boundary: FAILED — {head_err}", file=sys.stderr)
+        return 1
+    action = os.environ.get("PACK_BOUNDARY_EVENT_ACTION", "")
+    if action in HEAD_DELIVERY_ACTIONS and head_sha is not None:
+        run_raw = os.environ.get("PACK_BOUNDARY_GITHUB_RUN_ID", "").strip()
+        if run_raw.isdigit():
+            try:
+                record_head_delivery_check(repo, head_sha, int(run_raw), token)
+            except urllib.error.HTTPError as exc:
+                print(
+                    f"pack-boundary: FAILED — could not record head delivery check "
+                    f"({exc.code}: {exc.reason})",
+                    file=sys.stderr,
+                )
+                return 1
+    delivery_at: datetime | None = None
+    if head_sha is not None:
+        try:
+            delivery_at = fetch_head_delivery_at(repo, head_sha, token)
+        except urllib.error.HTTPError as exc:
+            print(
+                f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
+                file=sys.stderr,
+            )
+            return 1
     host_review_ok = False
     if HOST_CHANGE_LABEL in labels:
-        code, lines = run_host_change_gate(labels, timeline, last_push_at=push_at)
+        code, lines = run_host_change_gate(labels, timeline, delivery_at=delivery_at)
         emit_pack_boundary_lines(lines, printer=printer)
         if code != 0:
             return code
@@ -958,27 +1006,154 @@ def fetch_issue_timeline(repo: str, issue_number: int, token: str) -> list[dict]
 
 
 def merge_workflow_label_event(timeline: list[dict]) -> list[dict]:
-    """Append labeled/unlabeled from Actions env when this run was label-driven."""
-    action = os.environ.get("PACK_BOUNDARY_EVENT_ACTION", "")
-    if action not in ("labeled", "unlabeled"):
-        return timeline
-    name = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_NAME", "")
-    if not name:
-        return timeline
-    created = os.environ.get("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", "")
-    if not created:
-        return timeline
-    row = {
-        "event": action,
-        "label": {"name": name},
-        "created_at": created,
-    }
-    return [*timeline, row]
+    """Do not synthesize label/unlabel rows from workflow env (untrusted / incomplete).
+
+    host-reviewed review time comes only from the issue timeline or issue events API.
+    """
+    return timeline
+
+
+# GitHub issue event types:
+# - head_ref_force_pushed: commit_id + created_at (server event time)
+# - committed: sha only — no created_at; author/committer dates are not used here
+#   https://docs.github.com/en/rest/using-the-rest-api/issue-event-types
+HEAD_DELIVERY_ACTIONS = frozenset({"synchronize", "opened", "reopened", "ready_for_review"})
+
+
+def _normalize_commit_sha(value: object) -> str | None:
+    if not isinstance(value, str) or len(value) != 40:
+        return None
+    lowered = value.lower()
+    if not all(c in "0123456789abcdef" for c in lowered):
+        return None
+    return lowered
+
+
+def fetch_pull_head_sha(repo: str, pull_number: int, token: str) -> str | None:
+    """Current PR head SHA from the pulls API (server-owned head ref)."""
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/pulls/{pull_number}"
+    doc, _ = _github_request(url, token)
+    if not isinstance(doc, dict):
+        return None
+    head = (doc.get("head") or {}).get("sha")
+    return _normalize_commit_sha(head)
+
+
+def webhook_head_sha() -> str | None:
+    return _normalize_commit_sha(os.environ.get("PACK_BOUNDARY_HEAD_SHA", "").strip())
+
+
+def head_ref_agreement_error(webhook_sha: str | None, api_sha: str | None) -> str | None:
+    if webhook_sha is None or api_sha is None:
+        return None
+    if webhook_sha != api_sha:
+        return (
+            f"pull_request webhook head ({webhook_sha}) != pulls API head ({api_sha})"
+        )
+    return None
+
+
+def validate_pr_head_for_ci(
+    webhook_sha: str | None, api_sha: str | None
+) -> tuple[str | None, str | None]:
+    """Fail closed when either head ref is missing or they disagree."""
+    if api_sha is None:
+        return None, "missing pulls API head SHA"
+    if webhook_sha is None:
+        return None, "missing pull_request webhook head SHA"
+    disagree = head_ref_agreement_error(webhook_sha, api_sha)
+    if disagree:
+        return None, disagree
+    return api_sha, None
+
+
+def any_head_ref_force_push_after(
+    timeline: list[dict], review_at: datetime
+) -> bool:
+    """Any head_ref_force_pushed after review invalidates freshness (any commit_id)."""
+    for item in timeline:
+        if item.get("event") != "head_ref_force_pushed":
+            continue
+        created = item.get("created_at")
+        if not created:
+            continue
+        if parse_github_timestamp(created) > review_at:
+            return True
+    return False
+
+
+def fetch_actions_run_started_at(
+    repo: str, run_id: int, token: str
+) -> datetime | None:
+    owner, name = repo.split("/", 1)
+    url = f"https://api.github.com/repos/{owner}/{name}/actions/runs/{run_id}"
+    doc, _ = _github_request(url, token)
+    if not isinstance(doc, dict):
+        return None
+    started = doc.get("run_started_at") or doc.get("created_at")
+    if not isinstance(started, str) or not started:
+        return None
+    return parse_github_timestamp(started)
+
+
+def record_head_delivery_check(
+    repo: str, head_sha: str, run_id: int, token: str
+) -> None:
+    """Stamp head delivery via Check Runs (durable across labeled-only workflow reruns)."""
+    stamp = fetch_actions_run_started_at(repo, run_id, token)
+    if stamp is None:
+        raise ValueError("actions run missing run_started_at")
+    owner, name = repo.split("/", 1)
+    iso = stamp.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    url = f"https://api.github.com/repos/{owner}/{name}/check-runs"
+    _github_post(
+        url,
+        token,
+        {
+            "name": HEAD_DELIVERY_CHECK_NAME,
+            "head_sha": head_sha,
+            "status": "completed",
+            "conclusion": "success",
+            "started_at": iso,
+            "completed_at": iso,
+            "output": {
+                "title": "Head delivery recorded",
+                "summary": f"pack-boundary run {run_id} for {head_sha[:7]}",
+            },
+        },
+    )
+
+
+def fetch_head_delivery_at(
+    repo: str, head_sha: str, token: str
+) -> datetime | None:
+    owner, name = repo.split("/", 1)
+    from urllib.parse import quote
+
+    url = (
+        f"https://api.github.com/repos/{owner}/{name}/commits/"
+        f"{head_sha}/check-runs?check_name={quote(HEAD_DELIVERY_CHECK_NAME)}"
+    )
+    doc, _ = _github_request(url, token)
+    if not isinstance(doc, dict):
+        return None
+    latest: datetime | None = None
+    for row in doc.get("check_runs") or []:
+        if row.get("name") != HEAD_DELIVERY_CHECK_NAME:
+            continue
+        completed = row.get("completed_at")
+        if not isinstance(completed, str) or not completed:
+            continue
+        ts = parse_github_timestamp(completed)
+        if latest is None or ts > latest:
+            latest = ts
+    return latest
 
 
 def load_pr_review_context(
     repo: str, issue_number: int, token: str
-) -> tuple[set[str], list[dict], datetime | None]:
+) -> tuple[set[str], list[dict], str | None, str | None]:
     try:
         labels = fetch_pull_labels(repo, issue_number, token)
     except urllib.error.HTTPError:
@@ -988,36 +1163,10 @@ def load_pr_review_context(
     except urllib.error.HTTPError:
         timeline = fetch_labeled_events(repo, issue_number, token)
     timeline = merge_workflow_label_event(timeline)
-    push_at = last_push_at_from_timeline(timeline)
-    return labels, timeline, push_at
-
-
-def last_push_at_from_timeline(timeline: list[dict]) -> datetime | None:
-    latest: datetime | None = None
-    for item in timeline:
-        event = item.get("event")
-        if event == "head_ref_force_pushed":
-            created = item.get("created_at")
-            if not created:
-                continue
-            ts = parse_github_timestamp(created)
-        elif event == "committed":
-            ts = _committed_event_timestamp(item)
-            if ts is None:
-                continue
-        else:
-            continue
-        if latest is None or ts > latest:
-            latest = ts
-    return latest
-
-
-def _committed_event_timestamp(item: dict) -> datetime | None:
-    """Use timeline event time only — commit author/committer dates are attacker-controlled."""
-    created = item.get("created_at")
-    if created:
-        return parse_github_timestamp(created)
-    return None
+    api_head = fetch_pull_head_sha(repo, issue_number, token)
+    hook_head = webhook_head_sha()
+    head_sha, head_err = validate_pr_head_for_ci(hook_head, api_head)
+    return labels, timeline, head_sha, head_err
 
 
 def host_reviewed_labeled_at(
@@ -1043,35 +1192,49 @@ def run_host_change_gate(
     labels: set[str],
     timeline: list[dict],
     *,
+    delivery_at: datetime | None = None,
     last_push_at: datetime | None = None,
 ) -> tuple[int, list[str]]:
-    """Return exit code and log lines for host-change labelled PRs."""
+    """Return exit code and log lines for host-change labelled PRs.
+
+    ``last_push_at`` is dry-run/CLI only; secure CI passes ``delivery_at`` from Check Runs.
+    """
     lines: list[str] = []
     if HOST_CHANGE_LABEL not in labels:
         return 0, lines
 
     lines.append("pack-boundary: host-change label present; checking review gate.")
-    push_at = last_push_at if last_push_at is not None else last_push_at_from_timeline(
-        timeline
-    )
+    push_at = delivery_at if delivery_at is not None else last_push_at
     review_at = host_reviewed_labeled_at(timeline, labels)
+
+    if review_at is not None and any_head_ref_force_push_after(timeline, review_at):
+        lines.append(f"pack-boundary: FAILED — {HOST_REVIEW_FAIL_MESSAGE}")
+        lines.append(
+            "  head_ref_force_pushed after host-reviewed "
+            "(force-push or rewritten history needs a fresh review)"
+        )
+        return 1, lines
 
     if review_at is None or push_at is None or push_at >= review_at:
         lines.append(f"pack-boundary: FAILED — {HOST_REVIEW_FAIL_MESSAGE}")
         if push_at is not None and review_at is not None and push_at >= review_at:
             lines.append(
-                "  latest push is at or after host-reviewed label "
+                "  head delivery for current SHA is at or after host-reviewed "
                 "(new commits need a fresh review)"
             )
         elif review_at is None:
             lines.append(f"  missing {HOST_REVIEWED_LABEL!r} label on the pull request")
         elif push_at is None:
-            lines.append("  could not determine latest push time from timeline")
+            lines.append(
+                "  no durable head delivery check for the current PR head "
+                f"({HEAD_DELIVERY_CHECK_NAME!r} missing — run pack-boundary on "
+                "synchronize/open after push)"
+            )
         return 1, lines
 
     lines.append(
         "pack-boundary: host-change PR reviewed "
-        f"(push {push_at.isoformat()} before review {review_at.isoformat()}); "
+        f"(delivery {push_at.isoformat()} before review {review_at.isoformat()}); "
         "check passed."
     )
     return 0, lines
@@ -1179,17 +1342,25 @@ def main(argv: list[str] | None = None) -> int:
             print("pack-boundary: FAILED — PR_NUMBER must be an integer", file=sys.stderr)
             return 1
         try:
-            labels, timeline, push_at = load_pr_review_context(repo, pr_number, token)
+            labels, timeline, head_sha, head_err = load_pr_review_context(
+                repo, pr_number, token
+            )
         except urllib.error.HTTPError as exc:
             print(
                 f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
                 file=sys.stderr,
             )
             return 1
+        if head_err:
+            print(f"pack-boundary: FAILED — {head_err}", file=sys.stderr)
+            return 1
+        delivery_at = (
+            fetch_head_delivery_at(repo, head_sha, token) if head_sha else None
+        )
         host_review_ok = False
         if HOST_CHANGE_LABEL in labels:
             code, lines = run_host_change_gate(
-                labels, timeline, last_push_at=push_at
+                labels, timeline, delivery_at=delivery_at
             )
             for line in lines:
                 print(line)
@@ -1253,16 +1424,24 @@ def main(argv: list[str] | None = None) -> int:
             print("pack-boundary: FAILED — GITHUB_TOKEN is required for PR label lookup", file=sys.stderr)
             return 1
         try:
-            labels, timeline, push_at = load_pr_review_context(repo, pr_number, token)
+            labels, timeline, head_sha, head_err = load_pr_review_context(
+                repo, pr_number, token
+            )
         except urllib.error.HTTPError as exc:
             print(
                 f"pack-boundary: FAILED — GitHub API error {exc.code}: {exc.reason}",
                 file=sys.stderr,
             )
             return 1
+        if head_err:
+            print(f"pack-boundary: FAILED — {head_err}", file=sys.stderr)
+            return 1
+        delivery_at = (
+            fetch_head_delivery_at(repo, head_sha, token) if head_sha else None
+        )
         if HOST_CHANGE_LABEL in labels:
             code, lines = run_host_change_gate(
-                labels, timeline, last_push_at=push_at
+                labels, timeline, delivery_at=delivery_at
             )
             for line in lines:
                 print(line)

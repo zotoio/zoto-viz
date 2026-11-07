@@ -19,6 +19,7 @@ permissions:
   contents: read
   issues: read
   pull-requests: read
+  checks: write
 
 jobs:
   pack-boundary:
@@ -59,5 +60,7 @@ jobs:
           PACK_BOUNDARY_BASE_ROOT: ${{ github.workspace }}
           PACK_BOUNDARY_EVENT_ACTION: ${{ github.event.action }}
           PACK_BOUNDARY_EVENT_LABEL_NAME: ${{ github.event.label.name }}
-          PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ${{ github.event.pull_request.updated_at }}
+          PACK_BOUNDARY_EVENT_LABEL_CREATED_AT: ""
+          PACK_BOUNDARY_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PACK_BOUNDARY_GITHUB_RUN_ID: ${{ github.run_id }}
         run: python3 scripts/check_pack_pr_boundary.py --secure-ci
