@@ -387,6 +387,8 @@ export class Mosaic {
     onCloseLast: () => void;
     /** #242 N3: a pane left the wall. main.ts unloads the pane's own sandbox here, not at the next present. */
     onPaneDrop?: (id: string) => void;
+    /** Pane graph view element is leaving; release page-level observers (pane size cache). */
+    onPaneViewElRelease?: (el: Element) => void;
     /** A graph pane was bound to its scene (its view's mode is set). main.ts mounts the pack's own meshes here. */
     onPaneScene?: (id: string, scene: NetScene) => void;
     /** Live tile picker (consent, setMode, sky sync). When set, pane chrome uses this instead of bare assignViews. */
@@ -1084,6 +1086,8 @@ export class Mosaic {
   }
 
   private dropPane(id: string): void {
+    const leaving = this.graphScene(id);
+    if (leaving?.viewEl) this.cfg.onPaneViewElRelease?.(leaving.viewEl);
     releasePanelView(id);
     dropMosaicTileWriter(id);
     if (id === this.mainId) {
@@ -1456,7 +1460,10 @@ export class Mosaic {
   private teardown(): void {
     const gone = [...this.panes.keys()];
     syncVizTileScope([]);
-    for (const e of this.extras) e.scene.dispose();
+    for (const e of this.extras) {
+      this.cfg.onPaneViewElRelease?.(e.scene.viewEl);
+      e.scene.dispose();
+    }
     this.extras = [];
     for (const id of [...this.tileArcade.keys()]) this.releaseArcade(id);
     this.liveArcade.clear();

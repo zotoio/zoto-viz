@@ -238,6 +238,7 @@ describe("#242 part 2: a removed pane's sandbox goes at once, and its write coun
     const main = readFileSync(path.join(REPO, "web/src/app/main.ts"), "utf8");
     const mosaicCfg = main.slice(main.indexOf("mosaic = new Mosaic({"), main.indexOf("pickSuffix:", main.indexOf("mosaic = new Mosaic({")));
     expect(mosaicCfg).toContain("onPaneDrop: (id) => tileSandboxes.drop(id),");
+    expect(mosaicCfg).toContain("onPaneViewElRelease: (el) => paneSizes.forget(el),");
     const sandboxesCfg = main.slice(main.indexOf("const tileSandboxes = new TileSandboxes<PluginSandbox>({"), main.indexOf("function sharedUboPanes("));
     expect(sandboxesCfg).toContain("forgetSandboxWrites: (tileId) => tileHealth?.forgetSandboxWrites(tileId),");
   });

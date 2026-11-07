@@ -2523,6 +2523,7 @@ mosaic = new Mosaic({
   },
   // #242 N3: a removed pane's own sandbox unloads now; the present listener's sync stays the backstop.
   onPaneDrop: (id) => tileSandboxes.drop(id),
+  onPaneViewElRelease: (el) => paneSizes.forget(el),
   onPaneScene: (id, paneScene) => mountPaneScene(id, paneScene),
   onPanePick: (from, to) => pickMosaicPane(from, to),
   paneCog: (id) => makeViewCogButton({
