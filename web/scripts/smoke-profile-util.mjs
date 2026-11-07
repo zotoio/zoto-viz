@@ -51,13 +51,7 @@ export async function seedSmokeProfile(base, settings) {
  */
 export async function screenshotBox(page, locator, timeout = 120_000) {
   await locator.waitFor({ state: "visible", timeout });
-  // Do not use locator.boundingBox(): it waits for the element to stop moving, and packs such as
-  // Backrooms chase the camera every frame so the stage never becomes "stable" on CI software GL.
-  const box = await locator.evaluate((el) => {
-    const r = el.getBoundingClientRect();
-    if (r.width <= 0 || r.height <= 0) return null;
-    return { x: r.x, y: r.y, width: r.width, height: r.height };
-  });
-  assert.ok(box, `no box to screenshot: ${JSON.stringify(box)}`);
+  const box = await locator.boundingBox({ timeout });
+  assert.ok(box && box.width > 0 && box.height > 0, `no box to screenshot: ${JSON.stringify(box)}`);
   return page.screenshot({ type: "png", clip: box, timeout });
 }
