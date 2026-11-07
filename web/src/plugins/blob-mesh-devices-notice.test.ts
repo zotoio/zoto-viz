@@ -179,7 +179,7 @@ describe("blob-mesh over-budget devices notice (#173)", () => {
 describe("blob-mesh pack hint copy (UX Pro)", () => {
   it("says devices, not talkers or blobs-as-talkers", () => {
     const hint = MANIFEST.match(/^hint: (.*)$/m)?.[1];
-    expect(hint).toBe("90s-style metaballs. Each blob is one of your busiest devices, and the busier it is, the bigger it grows and the more it melts into its neighbours.");
+    expect(hint).toMatch(/^Lumen Reef\. Each device is a glowing cell/);
     expect(hint).not.toMatch(/talker/i);
   });
 });
