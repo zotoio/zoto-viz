@@ -222,6 +222,7 @@ const ANIM_NUM_PHYSICS: [keyof DreamAnim, Bound][] = [
   ["drag", DREAM_BOUNDS.drag],
   ["centerPull", DREAM_BOUNDS.centerPull],
   ["stringAmt", DREAM_BOUNDS.stringAmt],
+  ["edgeUndulate", DREAM_BOUNDS.edgeUndulate],
 ];
 
 const ANIM_BOOL_MOTION: (keyof DreamAnim)[] = [

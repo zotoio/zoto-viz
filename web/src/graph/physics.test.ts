@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { DEFAULT_DREAM } from "./scene";
 import {
   applyTrafficNeighbours,
   clampParticleCap,
+  edgeBend,
+  edgeUndulate,
   easePhysToward,
   hottestTrafficKeys,
   MAGNET_FIELDS,
@@ -151,5 +154,65 @@ describe("easePhysToward", () => {
     expect(live.swirl).toBeCloseTo(0.8, 3);
     expect(live.stringAmt).toBeCloseTo(1, 3);
     expect(easePhysToward(live, want, 0.05)).toBe(false);
+  });
+});
+
+describe("edge undulation: live cables, not rods", () => {
+  const A: [number, number, number] = [0, 0, 0];
+  const B: [number, number, number] = [120, 10, 30];
+  const len = Math.hypot(120, 10, 30);
+  const cap = Math.min(len * 0.045, 9);
+  const at = (t: number, time: number, seed = 0.37, amt = 1) => edgeUndulate(...A, ...B, t, time, seed, amt);
+  const mag = (v: [number, number, number]) => Math.hypot(v[0], v[1], v[2]);
+
+  it("is on by default", () => {
+    expect(DEFAULT_DREAM.edgeUndulate).toBeGreaterThan(0);
+  });
+
+  it("keeps both ends on their nodes, and is still at 0", () => {
+    for (const time of [0, 1.3, 7.9]) {
+      expect(mag(at(0, time))).toBeLessThan(1e-9);
+      expect(mag(at(1, time))).toBeLessThan(1e-9);
+      expect(mag(at(0.5, time, 0.37, 0))).toBe(0);
+    }
+  });
+
+  it("stays inside its amplitude and moves across the cable, not along it", () => {
+    const ex = 120 / len, ey = 10 / len, ez = 30 / len;
+    for (let time = 0; time < 12; time += 0.37) {
+      for (const t of [0.2, 0.5, 0.8]) {
+        const d = at(t, time);
+        expect(mag(d)).toBeLessThanOrEqual(cap + 1e-9);
+        expect(Math.abs(d[0] * ex + d[1] * ey + d[2] * ez)).toBeLessThan(1e-9);
+      }
+    }
+  });
+
+  it("moves slowly and smoothly: small per frame, visible over seconds", () => {
+    let maxStep = 0;
+    let lo = Infinity;
+    let hi = -Infinity;
+    let prev = at(0.5, 0);
+    for (let f = 1; f <= 6 * 60; f++) {
+      const d = at(0.5, f / 60);
+      maxStep = Math.max(maxStep, Math.hypot(d[0] - prev[0], d[1] - prev[1], d[2] - prev[2]));
+      const s = d[0] + d[1] + d[2];
+      lo = Math.min(lo, s);
+      hi = Math.max(hi, s);
+      prev = d;
+    }
+    expect(maxStep).toBeLessThan(cap * 0.03);
+    expect(hi - lo).toBeGreaterThan(cap * 0.5);
+  });
+
+  it("sways each edge out of step with its neighbours, and the same whichever end comes first", () => {
+    const s1 = edgeBend("cpu1", "zoto");
+    const s2 = edgeBend("cpu2", "zoto");
+    const d1 = at(0.5, 3.2, s1);
+    const d2 = at(0.5, 3.2, s2);
+    expect(Math.hypot(d1[0] - d2[0], d1[1] - d2[1], d1[2] - d2[2])).toBeGreaterThan(cap * 0.05);
+    const fwd = edgeUndulate(...A, ...B, 0.3, 2.1, s1, 1);
+    const rev = edgeUndulate(...B, ...A, 0.7, 2.1, s1, 1);
+    for (let k = 0; k < 3; k++) expect(rev[k]).toBeCloseTo(fwd[k]!, 9);
   });
 });

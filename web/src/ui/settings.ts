@@ -186,7 +186,7 @@ export class Settings {
     partAmt: Slider; partBusy: Slider; partQuiet: Slider; partPeak: Slider; partCap: Slider; partSpeed: Slider; partSize: Slider;
     magnetSelf: Slider; magnetGateway: Slider; magnetLan: Slider; magnetLocal: Slider; magnetInternet: Slider; magnetMulticast: Slider;
     magnetCross: Slider; magnetRange: Slider; magnetTraffic: Slider; gravity: Slider; swirl: Slider; chargeAmt: Slider; spring: Slider; linkSpan: Slider;
-    drag: Slider; centerPull: Slider; stringAmt: Slider;
+    drag: Slider; centerPull: Slider; stringAmt: Slider; edgeUndulate: Slider;
     physPulse: Toggle; partPulse: Toggle;
   } | null = null;
   private feedUi: {
@@ -1662,6 +1662,12 @@ export class Settings {
       format: (v) => `${v}%`,
       onInput: (v) => { this.anim.stringAmt = v / 100; this.persistAnim(); },
     });
+    const edgeUndulate = new Slider({
+      label: "undulate", title: "a slow wave along every edge, each out of step with its neighbours (0 = still cables)",
+      min: 0, max: 100, step: 5, value: Math.round(this.anim.edgeUndulate * 100),
+      format: (v) => `${v}%`,
+      onInput: (v) => { this.anim.edgeUndulate = v / 100; this.persistAnim(); },
+    });
     const partAmt = new Slider({
       label: "density", title: "how many traffic sparks ride the edges",
       min: 0, max: 200, step: 5, value: Math.round(this.anim.partAmt * 100),
@@ -1718,7 +1724,7 @@ export class Settings {
     });
     const magnetWrap = lookBlock("magnets", null, magnetSelf, magnetGateway, magnetLan, magnetLocal, magnetInternet, magnetMulticast, magnetCross, magnetTraffic, magnetRange);
     magnetWrap.querySelector(".look-head")!.appendChild(physPulse.el);
-    const fieldWrap = lookBlock("field", null, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt);
+    const fieldWrap = lookBlock("field", null, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt, edgeUndulate);
     const sparkWrap = lookBlock("sparks", null, partAmt, partBusy, partQuiet, partPeak, partCap, partSpeed, partSize);
     sparkWrap.querySelector(".look-head")!.appendChild(partPulse.el);
     const physSec = document.createElement("section");
@@ -1777,7 +1783,7 @@ export class Settings {
       labels, shown, nodes, edges, edgeOpacity, glowAmt, glowSpeed, autoTune,
       partAmt, partBusy, partQuiet, partPeak, partCap, partSpeed, partSize,
       magnetSelf, magnetGateway, magnetLan, magnetLocal, magnetInternet, magnetMulticast,
-      magnetCross, magnetRange, magnetTraffic, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt,
+      magnetCross, magnetRange, magnetTraffic, gravity, swirl, chargeAmt, spring, linkSpan, drag, centerPull, stringAmt, edgeUndulate,
       physPulse, partPulse,
     };
     sec.querySelector(".reset")!.addEventListener("click", () => {
@@ -2780,6 +2786,7 @@ export class Settings {
     ui.drag.value = Math.round(a.drag * 100);
     ui.centerPull.value = Math.round(a.centerPull * 100);
     ui.stringAmt.value = Math.round(a.stringAmt * 100);
+    ui.edgeUndulate.value = Math.round(a.edgeUndulate * 100);
     ui.physPulse.checked = a.audioPhysics;
     ui.partPulse.checked = a.audioParts;
   }
@@ -2884,6 +2891,7 @@ export class Settings {
     localStorage.setItem(`${p}.anim.drag`, String(a.drag));
     localStorage.setItem(`${p}.anim.centerPull`, String(a.centerPull));
     localStorage.setItem(`${p}.anim.stringAmt`, String(a.stringAmt));
+    localStorage.setItem(`${p}.anim.edgeUndulate`, String(a.edgeUndulate));
     localStorage.setItem(`${p}.anim.audioPhysics`, a.audioPhysics ? "1" : "0");
     this.onAnimChange(a);
     this.cfg.onPersist?.();
@@ -3229,6 +3237,7 @@ function loadAnim(prefix: string): DreamAnim {
     drag: n("drag", d.drag, B.drag.min, B.drag.max),
     centerPull: n("centerPull", d.centerPull, B.centerPull.min, B.centerPull.max),
     stringAmt: n("stringAmt", d.stringAmt, B.stringAmt.min, B.stringAmt.max),
+    edgeUndulate: n("edgeUndulate", d.edgeUndulate, B.edgeUndulate.min, B.edgeUndulate.max),
     audioPhysics: localStorage.getItem(`${prefix}.anim.audioPhysics`) === "1",
   });
 }

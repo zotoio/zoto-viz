@@ -321,6 +321,7 @@ function pickAnim(raw: unknown): Partial<DreamAnim> | undefined {
     drag: DREAM_BOUNDS.drag,
     centerPull: DREAM_BOUNDS.centerPull,
     stringAmt: DREAM_BOUNDS.stringAmt,
+    edgeUndulate: DREAM_BOUNDS.edgeUndulate,
   };
   for (const [k, b] of Object.entries(bound)) {
     const n = Number(s[k]);
