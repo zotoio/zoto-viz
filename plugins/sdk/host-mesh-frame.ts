@@ -4,6 +4,11 @@
  */
 
 export const HOST_MESH_FRAME_V2 = 2;
+/**
+ * Compact yaw+pos batch (≤4 instances per 64-float slot). data[1]=0 marks mixed-asset fish rows
+ * (per-instance asset index); data[1]>0 is a single-asset batch like v2 routing.
+ */
+export const HOST_MESH_FRAME_V3 = 3;
 /** Legacy single-asset 16-float matrix (host-mesh-demo). */
 export const HOST_MESH_FRAME_V1 = 1;
 
@@ -11,6 +16,12 @@ export const HOST_MESH_MATRIX_FLOATS = 16;
 export const HOST_MESH_EXTRAS_FLOATS = 4;
 export const HOST_MESH_INSTANCE_STRIDE = HOST_MESH_MATRIX_FLOATS + HOST_MESH_EXTRAS_FLOATS;
 export const HOST_MESH_HEADER_FLOATS = 3;
+
+/** Per fish instance in a v3 packet: assetIndex, x, y, z, yaw, scale, animTime */
+export const HOST_MESH_V3_INSTANCE_FLOATS = 7;
+export const HOST_MESH_V3_MAX_INSTANCES = Math.floor(
+  (64 - HOST_MESH_HEADER_FLOATS) / HOST_MESH_V3_INSTANCE_FLOATS,
+);
 
 export type HostMeshInstanceExtras = {
   animTime: number;
@@ -24,12 +35,46 @@ export type HostMeshInstanceExtras = {
 export type HostMeshSlotPacket = {
   version: number;
   assetIndex: number;
-  instances: { matrix: Float32Array; extras: HostMeshInstanceExtras }[];
+  instances: { matrix: Float32Array; extras: HostMeshInstanceExtras; meshAssetIndex?: number }[];
+  v3Flush?: boolean;
 };
 
 export function maxHostMeshInstancesPerSlot(slotFloats = 64): number {
   const room = slotFloats - HOST_MESH_HEADER_FLOATS;
   return Math.max(0, Math.floor(room / HOST_MESH_INSTANCE_STRIDE));
+}
+
+export type HostMeshV3Instance = {
+  assetIndex: number;
+  x: number;
+  y: number;
+  z: number;
+  yaw: number;
+  scale?: number;
+  animTime?: number;
+};
+
+/** Mixed-asset v3: up to four fish per slot (HD koi: four slots × four fish = sixteen). */
+export function encodeHostMeshSlotPacketV3Mixed(
+  instances: HostMeshV3Instance[],
+  opts?: { flush?: boolean },
+): number[] {
+  const count = Math.min(HOST_MESH_V3_MAX_INSTANCES, instances.length);
+  const route = opts?.flush ? 2 : 0;
+  const out: number[] = [HOST_MESH_FRAME_V3, route, count];
+  for (let i = 0; i < count; i++) {
+    const inst = instances[i]!;
+    out.push(
+      inst.assetIndex,
+      inst.x,
+      inst.y,
+      inst.z,
+      inst.yaw,
+      inst.scale ?? 1,
+      inst.animTime ?? 0,
+    );
+  }
+  return out;
 }
 
 export function encodeHostMeshSlotPacket(
@@ -57,6 +102,36 @@ export function decodeHostMeshSlotPacket(
 ): HostMeshSlotPacket | null {
   if (data.length < HOST_MESH_HEADER_FLOATS) return null;
   const version = Math.round(Number(data[0]));
+  if (version === HOST_MESH_FRAME_V3) {
+    const routeAsset = Math.round(Number(data[1]));
+    if (routeAsset !== 0 && routeAsset !== 2) return null;
+    const count = Math.min(HOST_MESH_V3_MAX_INSTANCES, Math.round(Number(data[2])));
+    const need = HOST_MESH_HEADER_FLOATS + count * HOST_MESH_V3_INSTANCE_FLOATS;
+    if (data.length < need || count < 0) return null;
+    const instances: HostMeshSlotPacket["instances"] = [];
+    let o = HOST_MESH_HEADER_FLOATS;
+    for (let i = 0; i < count; i++) {
+      const meshAssetIndex = Math.round(Number(data[o]) || 0);
+      const x = Number(data[o + 1]) || 0;
+      const y = Number(data[o + 2]) || 0;
+      const z = Number(data[o + 3]) || 0;
+      const yaw = Number(data[o + 4]) || 0;
+      const scale = Number(data[o + 5]) || 1;
+      const animTime = Number(data[o + 6]) || 0;
+      instances.push({
+        matrix: new Float32Array(hostMeshMatrixYawPos(x, y, z, yaw, scale)),
+        extras: { animTime, param1: 0, param2: 0, flags: 0 },
+        meshAssetIndex,
+      });
+      o += HOST_MESH_V3_INSTANCE_FLOATS;
+    }
+    return {
+      version,
+      assetIndex: 0,
+      instances,
+      ...(routeAsset === 2 ? { v3Flush: true as const } : {}),
+    };
+  }
   if (version === HOST_MESH_FRAME_V2) {
     const assetIndex = Math.round(Number(data[1]));
     const count = Math.min(maxInstances, Math.round(Number(data[2])));

@@ -47,6 +47,8 @@ def test_realism_koi_aquarium_model_slot_indices() -> None:
 
 def test_realism_packs_use_host_mesh_slot_three() -> None:
     for pid in PACKS:
+        if pid == "koi-pond":
+            continue  # koi layout is versioned explicitly below (legacy vs HD follow pack)
         yml = (PACKS[pid] / "plugin.yml").read_text(encoding="utf-8")
         # the aquarium host mesh lane reads slot 7 (one Blender scape GLB)
         if pid == "aquarium":
@@ -54,6 +56,33 @@ def test_realism_packs_use_host_mesh_slot_three() -> None:
         else:
             assert "hostMeshSlot: 3" in yml, pid
         assert "maxBuffers: 8" in yml, pid
+
+
+def test_realism_koi_host_mesh_manifest_exactly_one_supported_layout() -> None:
+    yml = (PACKS["koi-pond"] / "plugin.yml").read_text(encoding="utf-8")
+    legacy = (
+        "hostMeshSlot: 3" in yml
+        and "hostMeshSlot: 4" not in yml
+        and "hostMeshSlotCount: 6" in yml
+    )
+    hd_follow = "hostMeshSlot: 4" in yml and "hostMeshSlotCount: 4" in yml
+    assert legacy or hd_follow, "koi plugin.yml must declare a supported host mesh layout"
+    assert legacy != hd_follow, (
+        f"ambiguous koi host mesh manifest (both legacy and HD): {yml[:240]!r}"
+    )
+    assert "maxBuffers: 8" in yml
+
+
+def test_realism_koi_hd_follow_uses_v3_mixed_mesh_packets() -> None:
+    yml = (PACKS["koi-pond"] / "plugin.yml").read_text(encoding="utf-8")
+    if "hostMeshSlot: 4" not in yml:
+        assert "hostMeshSlot: 3" in yml
+        return
+    drive = (PACKS["koi-pond"] / "frontend" / "host-mesh-drive.ts").read_text(encoding="utf-8")
+    assert "encodeHostMeshSlotPacketV3Mixed" in drive
+    assert "MAX_KOI" in drive
+    pack = (PACKS["koi-pond"] / "frontend" / "koi-pond.ts").read_text(encoding="utf-8")
+    assert "high: { maxKoi: 16" in pack
 
 
 # Revert row: remove damped ball camera (restore fixed broadcast angles only).

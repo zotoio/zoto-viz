@@ -2,6 +2,7 @@ import type { PluginView } from "../plugins/plugin";
 import type { VizPluginContract } from "../plugins/viz-host";
 import { HostMeshLane, type HostMeshAssetDecl, type HostMeshMotionProfile } from "../graph/host-mesh-lane";
 import { buildAquariumScenery } from "../graph/aquarium-scenery";
+import { buildKoiPondScenery } from "../graph/koi-pond-scenery";
 import { buildMarbleRunScenery } from "../graph/marble-run-scenery";
 import {
   encodeHostMeshSlotPacket,
@@ -59,7 +60,9 @@ export function hostMeshDeclsForSet(decls: HostMeshAssetDecl[], set: HostMeshMod
 
 /** Fin beat, turn bend and the brighter lamp are the aquarium HD set's; every other mount is the baked clip. */
 export function hostMeshMotionProfile(packId: string | undefined, set: HostMeshModelSet): HostMeshMotionProfile {
-  return packId === "aquarium" && set === "hd" ? "aquarium-hd" : "standard";
+  if (packId === "aquarium" && set === "hd") return "aquarium-hd";
+  if (packId === "koi-pond" && set === "hd") return "koi-hd";
+  return "standard";
 }
 
 export type HostMeshBridge = {
@@ -85,17 +88,20 @@ const IDENTITY_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 
 /** Designer koi are ~1.6 m long; the pond camera sits about 1.7 m from the water. */
 const KOI_FISH_SCALE = 0.48;
-const KOI_LILY_SCALE = 0.32;
-const KOI_ROCK_SCALE = 0.9;
 
+/**
+ * Asset 0 = Blender scape (identity). Assets 1..3 = kohaku/showa/ogon fish seeds until
+ * the pack starts writing live host-mesh packets. Pads/rocks/basin come from the scape.
+ */
 function pinKoiContents(lane: MeshPinLane): void {
+  lane.applySlotBuffer(encodeHostMeshSlotPacket(0, [{ matrix: IDENTITY_MATRIX }]));
   const fish: [number, number, number, number, number][] = [
-    [0, -0.55, 0.04, 0.15, 0.4],
-    [0, 0.35, 0.05, -0.4, 2.1],
-    [1, 0.1, 0.04, 0.45, -0.8],
-    [1, -0.2, 0.06, -0.55, 1.4],
-    [2, 0.6, 0.03, 0.2, -1.6],
-    [2, -0.7, 0.05, -0.15, 0.2],
+    [1, -0.55, 0.04, 0.15, 0.4],
+    [1, 0.35, 0.05, -0.4, 2.1],
+    [2, 0.1, 0.04, 0.45, -0.8],
+    [2, -0.2, 0.06, -0.55, 1.4],
+    [3, 0.6, 0.03, 0.2, -1.6],
+    [3, -0.7, 0.05, -0.15, 0.2],
   ];
   const byAsset = new Map<number, { matrix: number[]; extras: { animTime: number; param1: number; param2: number; flags: number } }[]>();
   const push = (asset: number, matrix: number[], animTime: number) => {
@@ -103,14 +109,6 @@ function pinKoiContents(lane: MeshPinLane): void {
     list.push({ matrix, extras: { animTime, param1: 0, param2: 0, flags: 0 } });
     byAsset.set(asset, list);
   };
-  push(4, hostMeshMatrixYawPos(0, 0, 0, 0.3, KOI_ROCK_SCALE), 0);
-  const pads: [number, number, number][] = [
-    [0.15, 0.35, 0.2],
-    [-0.45, -0.2, 1.1],
-    [0.5, -0.45, -0.4],
-    [-0.15, 0.6, 2.2],
-  ];
-  for (const [x, z, yaw] of pads) push(3, hostMeshMatrixYawPos(x, 0.01, z, yaw, KOI_LILY_SCALE), 0);
   fish.forEach(([asset, x, y, z, yaw], i) => {
     push(asset, hostMeshMatrixYawPos(x, y, z, yaw, KOI_FISH_SCALE), i * 0.37);
   });
@@ -124,6 +122,7 @@ export function pinPackContents(lane: MeshPinLane, packId: string, set: HostMesh
   if (packId === "aquarium") {
     pinAquariumContents(lane);
   } else if (packId === "koi-pond") {
+    lane.setScenery(buildKoiPondScenery().root);
     pinKoiContents(lane);
   } else if (packId === "marble-run") {
     // the Blender track sits at the origin in metres; marbles are instanced scenery fed from slots

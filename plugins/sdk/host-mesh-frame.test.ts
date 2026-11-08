@@ -5,8 +5,58 @@ import path from "node:path";
 import {
   decodeHostMeshSlotPacket,
   encodeHostMeshSlotPacket,
+  encodeHostMeshSlotPacketV3Mixed,
+  HOST_MESH_FRAME_V3,
+  HOST_MESH_V3_MAX_INSTANCES,
   hostMeshMatrixYawPos,
 } from "./host-mesh-frame";
+
+describe("host-mesh-frame v3 mixed", () => {
+  it("round-trips up to four mixed-asset fish and marks flush on last packet", () => {
+    const raw = encodeHostMeshSlotPacketV3Mixed(
+      [
+        { assetIndex: 1, x: 0.1, y: 0.2, z: 0.3, yaw: 0.5, scale: 0.48, animTime: 1.1 },
+        { assetIndex: 3, x: -0.2, y: 0.04, z: 0.8, yaw: -0.3, animTime: 0.5 },
+      ],
+      { flush: true },
+    );
+    const pkt = decodeHostMeshSlotPacket(raw);
+    expect(pkt?.version).toBe(HOST_MESH_FRAME_V3);
+    expect(pkt?.instances.length).toBe(2);
+    expect(pkt?.v3Flush).toBe(true);
+    expect(pkt?.instances[0]?.meshAssetIndex).toBe(1);
+    expect(pkt?.instances[1]?.meshAssetIndex).toBe(3);
+    expect(pkt?.instances[0]?.matrix[12]).toBeCloseTo(0.1);
+  });
+
+  it("fits sixteen fish in two packets at max instance stride", () => {
+    const chunkA = Array.from({ length: HOST_MESH_V3_MAX_INSTANCES }, (_, i) => ({
+      assetIndex: (i % 3) + 1,
+      x: i * 0.01,
+      y: 0.04,
+      z: i * 0.02,
+      yaw: i * 0.1,
+    }));
+    const chunkB = Array.from({ length: 16 - HOST_MESH_V3_MAX_INSTANCES }, (_, i) => ({
+      assetIndex: ((i + HOST_MESH_V3_MAX_INSTANCES) % 3) + 1,
+      x: i,
+      y: 0.04,
+      z: i,
+      yaw: 0,
+    }));
+    expect(HOST_MESH_V3_MAX_INSTANCES).toBeGreaterThanOrEqual(8);
+    const packs = [
+      encodeHostMeshSlotPacketV3Mixed(chunkA),
+      encodeHostMeshSlotPacketV3Mixed(chunkB, { flush: true }),
+    ];
+    let n = 0;
+    for (const raw of packs) {
+      const pkt = decodeHostMeshSlotPacket(raw);
+      n += pkt?.instances.length ?? 0;
+    }
+    expect(n).toBe(16);
+  });
+});
 
 describe("host-mesh-frame v2", () => {
   it("round-trips slot packets", () => {

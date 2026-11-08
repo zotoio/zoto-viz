@@ -26,6 +26,7 @@ sim.mountTile();
 const buf0 = new Float32Array(64);
 const buf1 = new Float32Array(64);
 const buf2 = new Float32Array(64);
+const buf3 = new Float32Array(64);
 
 const actionLatch = { reset: false, randomise: false, undo: false };
 
@@ -56,9 +57,12 @@ host.onFrame = (frame: VizDataFrame) => {
   buf0.set(packed.slot0);
   buf1.set(packed.slot1);
   buf2.set(packed.slot2);
+  buf3.set(packed.slot3);
   host.writeBuffer(0, buf0);
   host.writeBuffer(1, buf1);
   host.writeBuffer(2, buf2);
+  // slot 3: occasional follow camera (host mesh packets start at slot 4)
+  host.writeBuffer(3, buf3);
   if (shouldWriteHostMeshMatrix(modelSlot.snapshot())) {
     writeKoiHostMeshSlots(host.writeBuffer, buf0, buf1, frame.t);
   }

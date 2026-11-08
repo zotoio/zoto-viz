@@ -1,0 +1,57 @@
+{
+  "koi-pond-scape.glb": {
+    "sha256": "237cfce9185aabbff43ea0db361de834fb33dd7a287db368b3e74cfe6b6758db",
+    "bytes": 282176,
+    "triangles": 9160
+  },
+  "koi-kohaku.glb": {
+    "sha256": "d9fc3a5cca789f3c6e1ad5ee0e694a5f1dfcfa9f5044960a923f2383f9b9d021",
+    "bytes": 246748,
+    "triangles": 5876
+  },
+  "koi-showa.glb": {
+    "sha256": "d50dec18997c534bd3f07d12be335461f4d70200413403604942563986b7956b",
+    "bytes": 263372,
+    "triangles": 5876
+  },
+  "koi-ogon.glb": {
+    "sha256": "f894847f8af82893c7a11eb3548796fd322ca151d808b86799b8baabb274a282",
+    "bytes": 305100,
+    "triangles": 5876
+  },
+  "lily-pads.glb": {
+    "sha256": "4b225d4e982cc2df2b64bc9fafbfbb5384c2961847b8401f3a0e2b02ba87927b",
+    "bytes": 165936,
+    "triangles": 12744
+  },
+  "pond-rocks.glb": {
+    "sha256": "3b910d506fab10a46e434350afcafb1659de53e517dbb4a150c9b01ce0ace5a2",
+    "bytes": 604576,
+    "triangles": 9216
+  },
+  "koi-kohaku-hd.glb": {
+    "sha256": "a51ffa3f461d18508ede8e7ff7f3fbc26d7c7c6fc9b49385f0b6ba597ee27be2",
+    "bytes": 80628,
+    "triangles": 1808
+  },
+  "koi-showa-hd.glb": {
+    "sha256": "418048762eccd65977fa474bbbb8af9712eb82f9abed6abb4d0fb8b7dee3f454",
+    "bytes": 80620,
+    "triangles": 1808
+  },
+  "koi-ogon-hd.glb": {
+    "sha256": "aaab253f98807dcb17513051bd197380e35f3d3890940eccfda9df68a73a9b2a",
+    "bytes": 80616,
+    "triangles": 1808
+  },
+  "lily-pads-hd.glb": {
+    "sha256": "f98945f89c73dac2e612b960ed5d217432c5e44960ce0cc5fc80042a68825547",
+    "bytes": 93264,
+    "triangles": 3120
+  },
+  "pond-rocks-hd.glb": {
+    "sha256": "91aca3b75d316e324a9a2923c9cfa4767b29300d6d628ca089d71ef1fb5366c9",
+    "bytes": 32196,
+    "triangles": 1280
+  }
+}

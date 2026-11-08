@@ -74,11 +74,11 @@ config:
   - key: swimSpeed
     label: swim speed
     type: number
-    default: 0.55
+    default: 0.38
     min: 0
     max: 1
     step: 0.05
-    hint: Global swim speed multiplier.
+    hint: Global swim speed multiplier (low default keeps path + body motion calm).
   - key: schooling
     label: schooling vs wandering
     type: number
@@ -192,6 +192,11 @@ config:
     type: boolean
     default: true
     hint: Slow camera drift (disabled with reduced motion).
+  - key: followCam
+    label: follow a koi
+    type: boolean
+    default: true
+    hint: Occasionally drift the stage camera alongside one koi, then ease back to the pond view.
   - key: label
     label: HUD label
     type: boolean
