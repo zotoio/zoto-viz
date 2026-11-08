@@ -198,9 +198,13 @@ vec4 aqPattern(float pat, float u, float v, float fin) {
 }
 `;
 
-/** Swim bend: tail-weighted travelling wave + a turn bend toward the yaw rate. Local nose is +Z. */
-function patchSwim(mat: THREE.MeshStandardMaterial, nose: number, len: number, halfW: number, fin: boolean, pat = 0, sheen = 0.3, halfH = 0.05): void {
+/**
+ * Swim bend: tail-weighted travelling wave + a turn bend toward the yaw rate. Local nose is +Z.
+ * Fins move as membranes in the water around them (see the fin block below); `time` is the tank clock.
+ */
+function patchSwim(mat: THREE.MeshStandardMaterial, time: { value: number }, nose: number, len: number, halfW: number, fin: boolean, pat = 0, sheen = 0.3, halfH = 0.05): void {
   mat.onBeforeCompile = (shader) => {
+    shader.uniforms.uAqTime = time;
     shader.uniforms.uPat = { value: pat };
     shader.uniforms.uSheen = { value: sheen };
     shader.uniforms.uHalfH = { value: halfH };
@@ -216,6 +220,7 @@ function patchSwim(mat: THREE.MeshStandardMaterial, nose: number, len: number, h
         uniform float uLen;
         uniform float uHalfW;
         uniform float uFin;
+        uniform float uAqTime;
         attribute vec3 aSwim;
         ${SKIN_GLSL}`,
       )
@@ -229,12 +234,30 @@ function patchSwim(mat: THREE.MeshStandardMaterial, nose: number, len: number, h
           float w = 0.06 + 0.94 * t * t;
           float wave = sin(aSwim.x - t * 6.2832) * aSwim.y * uLen * w;
           float bend = aSwim.z * uLen * t * t;
-          // pectoral fins (the only fin verts off the midline) flap, out of phase left / right
           float side = position.x;
-          if (uFin > 0.5 && abs(side) > uHalfW * 0.5) {
-            float outw = abs(side) - uHalfW * 0.5;
-            transformed.y += sin(aSwim.x * 0.8 + sign(side) * 1.2) * outw * 0.9;
-            transformed.x += sign(side) * cos(aSwim.x * 0.8) * outw * 0.25;
+          if (uFin > 0.5) {
+            // Fins are membranes in moving water. thrust: 0 hovering / gliding .. 1 a burst (aSwim.y).
+            float thrust = clamp((aSwim.y - 0.015) / 0.095, 0.0, 1.0);
+            if (abs(side) > uHalfW * 0.5) {
+              // pectorals: scull hard to hold station, fold back along the body and quieten at speed
+              float outw = abs(side) - uHalfW * 0.5;
+              float scull = mix(1.0, 0.3, thrust);
+              float ph = uAqTime * mix(7.0, 4.0, thrust) + aSwim.x * 0.15;
+              transformed.y += sin(ph + sign(side) * 1.2) * outw * 0.9 * scull;
+              transformed.x += sign(side) * (cos(ph) * outw * 0.25 * scull - outw * 0.35 * thrust);
+              transformed.z -= outw * 0.3 * thrust;
+            } else {
+              // dorsal / anal reach past the body's height, the caudal past ~80% of its length; only
+              // that reach moves on its own, so the body skin never slides
+              float offV = max(0.0, abs(position.y) - uHalfH) / max(uHalfH, 1e-4);
+              float edge = clamp(max(offV * 0.8, smoothstep(0.8, 1.0, t)), 0.0, 1.0);
+              // the edge trails the body wave (phase lag), flutters in the flow, and is swept outward of a turn
+              float trail = sin(aSwim.x - t * 6.2832 - (0.7 + 0.9 * edge)) * aSwim.y * uLen * (0.25 + 0.75 * w) * edge * 0.6;
+              float flutter = sin(uAqTime * (5.0 + 6.0 * thrust) + t * 14.0 + position.y * 40.0 / max(uLen, 1e-3))
+                * edge * edge * uLen * (0.004 + 0.012 * thrust);
+              float sweep = -aSwim.z * uLen * edge * 0.35;
+              transformed.x += trail + flutter + sweep;
+            }
           }
           transformed.x += wave + bend;
         }`,
@@ -263,9 +286,21 @@ function patchSwim(mat: THREE.MeshStandardMaterial, nose: number, len: number, h
         "#include <normal_fragment_maps>",
         `#include <normal_fragment_maps>
         if (uPat > 0.5) {
-          float aqH = uFin < 0.5
-            ? length(fract(vec2(aqU * 70.0, aqV * 9.0 + floor(aqU * 70.0) * 0.5)) - vec2(0.2, 0.5)) * (1.0 - smoothstep(0.85, 1.0, aqU))
-            : abs(fract(aqV * 7.0) - 0.5) * 0.6;
+          // Smooth periodic relief (no fract() seams, whose derivatives sparkle), faded out once a
+          // scale or fin ray is under a couple of pixels so small and distant fish do not shimmer.
+          float aqH;
+          if (uFin < 0.5) {
+            // overlapping scales: a diamond lattice along the flank, none on the tail stalk's end
+            vec2 sc = vec2(aqU * 70.0, aqV * 9.0);
+            float aa = 1.0 - smoothstep(0.15, 0.4, max(fwidth(sc.x), fwidth(sc.y)));
+            aqH = (0.5 + 0.25 * (cos(6.2832 * (sc.x + sc.y)) + cos(6.2832 * (sc.x - sc.y)))) * aa * (1.0 - smoothstep(0.85, 1.0, aqU));
+          } else {
+            // fin rays run from base to edge: lengthwise on the tail, outward on the dorsal and anal fins
+            float cau = smoothstep(0.75, 0.9, aqU);
+            float ray = mix(aqU * 45.0, aqV * 7.0, cau);
+            float aa = 1.0 - smoothstep(0.15, 0.4, fwidth(ray));
+            aqH = (0.5 + 0.5 * cos(6.2832 * ray)) * 0.6 * aa;
+          }
           vec3 aqDx = dFdx(vViewPosition), aqDy = dFdy(vViewPosition);
           float aqHx = dFdx(aqH), aqHy = dFdy(aqH);
           vec3 aqR1 = cross(aqDy, normal), aqR2 = cross(normal, aqDx);
@@ -514,7 +549,7 @@ export function buildAquariumScenery(): AquariumScenery {
           const ph = p.mat as THREE.MeshPhysicalMaterial;
           if (ph.isMeshPhysicalMaterial) { ph.clearcoat = 1; ph.clearcoatRoughness = 0.02; }
         }
-        patchSwim(p.mat, nose, len, Math.max(1e-4, halfW), p.fin, eye ? 0 : FISH_PATTERN[name] ?? 0, eye ? 0 : FISH_SHEEN[name] ?? 0.3, halfH);
+        patchSwim(p.mat, shared.uTime, nose, len, Math.max(1e-4, halfW), p.fin, eye ? 0 : FISH_PATTERN[name] ?? 0, eye ? 0 : FISH_SHEEN[name] ?? 0.3, halfH);
         const attr = new THREE.InstancedBufferAttribute(new Float32Array(AQUARIUM_MAX_FISH * 3), 3);
         attr.setUsage(THREE.DynamicDrawUsage);
         p.geo.setAttribute("aSwim", attr);
