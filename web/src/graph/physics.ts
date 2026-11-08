@@ -205,6 +205,71 @@ export function edgeBend(aId: string, bId: string): number {
   return ((h >>> 0) / 4294967295) * 2 - 1;
 }
 
+/** Slow travelling-wave rate of the idle undulation (Hz): calm, well under a breath. */
+export const EDGE_UNDULATE_HZ = 0.18;
+
+/**
+ * Idle undulation of a live cable: a slow wave that travels along the edge plus a weaker ripple,
+ * across the chord in a plane unique to the edge. Zero at both ends (the nodes stay put), at most
+ * `amt` × 4.5% of the edge length (capped at 9 units), and smooth in time. `seed` is the stable
+ * −1…1 per-edge value from {@link edgeBend}, so neighbours sway out of step.
+ */
+export function edgeUndulate(
+  ax: number, ay: number, az: number,
+  bx: number, by: number, bz: number,
+  t: number,
+  timeSec: number,
+  seed: number,
+  amt: number,
+): [number, number, number] {
+  const a = Math.max(0, Math.min(1, amt));
+  if (a < 1e-3) return [0, 0, 0];
+  const u = Math.max(0, Math.min(1, t));
+  const env = Math.sin(u * Math.PI);
+  if (env < 1e-4) return [0, 0, 0];
+  const dx = bx - ax, dy = by - ay, dz = bz - az;
+  const len = Math.hypot(dx, dy, dz);
+  if (len < 1e-3) return [0, 0, 0];
+  const ex = dx / len, ey = dy / len, ez = dz / len;
+  // Basis across the chord: n1 ⟂ chord (from world up, or world x when the chord is vertical), n2 = chord × n1.
+  let n1x = -ez, n1y = 0, n1z = ex;
+  let n1l = Math.hypot(n1x, n1y, n1z);
+  if (n1l < 1e-3) {
+    n1x = 0; n1y = ez; n1z = -ey;
+    n1l = Math.hypot(n1x, n1y, n1z) || 1;
+  }
+  n1x /= n1l; n1y /= n1l; n1z /= n1l;
+  const n2x = ey * n1z - ez * n1y, n2y = ez * n1x - ex * n1z, n2z = ex * n1y - ey * n1x;
+  const phase = seed * Math.PI * 4;
+  const w = 2 * Math.PI * EDGE_UNDULATE_HZ * (0.8 + 0.4 * Math.abs(seed));
+  const theta = seed * Math.PI + 0.35 * Math.sin(timeSec * w * 0.37 + phase);
+  const wave = 0.75 * Math.sin(2 * Math.PI * u - timeSec * w + phase)
+    + 0.25 * Math.sin(2 * Math.PI * 1.7 * u + timeSec * w * 0.61 + 2 * phase);
+  const amp = a * Math.min(len * 0.045, 9) * env * wave;
+  const c = Math.cos(theta), s = Math.sin(theta);
+  return [amp * (c * n1x + s * n2x), amp * (c * n1y + s * n2y), amp * (c * n1z + s * n2z)];
+}
+
+/**
+ * {@link edgeUndulate} with the ends in the edge's own fixed order. `aFirst` says whether A is the
+ * end that sorts first by node id; callers that draw an edge in either direction (arrows follow the
+ * traffic) then get one cable. The order comes from the ids, never from positions, so the wave does
+ * not flip when two nodes cross during layout motion or a drag.
+ */
+export function edgeUndulateOrdered(
+  ax: number, ay: number, az: number,
+  bx: number, by: number, bz: number,
+  t: number,
+  timeSec: number,
+  seed: number,
+  amt: number,
+  aFirst: boolean,
+): [number, number, number] {
+  return aFirst
+    ? edgeUndulate(ax, ay, az, bx, by, bz, t, timeSec, seed, amt)
+    : edgeUndulate(bx, by, bz, ax, ay, az, 1 - t, timeSec, seed, amt);
+}
+
 /**
  * Point along a catenary-ish quadratic from A to B.
  * `sag` 0–1 droops the middle; `wave` 0–1 adds a sideways ripple.

@@ -176,6 +176,7 @@ ANIM_NUM: dict[str, dict[str, float]] = {
     "drag": {"min": 0.12, "max": 0.7, "step": 0.01},
     "centerPull": {"min": 0, "max": 2, "step": 0.05},
     "stringAmt": {"min": 0, "max": 1, "step": 0.05},
+    "edgeUndulate": {"min": 0, "max": 1, "step": 0.05},
 }
 ANIM_ENUM = {
     "backdrop": BACKDROPS,

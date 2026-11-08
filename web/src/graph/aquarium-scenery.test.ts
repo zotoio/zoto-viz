@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { AQUARIUM_MAX_FISH, buildAquariumScenery, fishTemplateName } from "./aquarium-scenery";
 import { aquariumStagePose } from "./stage-mesh-camera";
 import { pinPackContents } from "../app/host-mesh-bridge";
+import { mockPartial } from "../../test-support/mock-partial";
 
 /** A stand-in for the pinned scape GLB: substrate, a fresh and a reef part, two fish templates. */
 function fakeLane(): THREE.Group {
@@ -118,5 +119,60 @@ describe("aquarium follow camera pose", () => {
     expect(pose.target).toEqual([s3[4], s3[5], s3[6]]);
     expect(pose.fov).toBeCloseTo(46);
     expect(aquariumStagePose(read, 0.5).fov!).toBeGreaterThan(46);
+  });
+});
+
+describe("fish skin and fins", () => {
+  const one = (m: THREE.InstancedMesh): THREE.Material => (Array.isArray(m.material) ? m.material[0]! : m.material);
+
+  /** Run a material's onBeforeCompile on three's own standard shader source and return the result. */
+  function compiled(mat: THREE.Material): { vertex: string; fragment: string; uniforms: Record<string, THREE.IUniform> } {
+    const lib = THREE.ShaderLib.physical;
+    const shader = mockPartial<THREE.WebGLProgramParametersWithUniforms>({
+      vertexShader: lib.vertexShader,
+      fragmentShader: lib.fragmentShader,
+      uniforms: THREE.UniformsUtils.clone(lib.uniforms),
+    });
+    mat.onBeforeCompile(shader, mockPartial<THREE.WebGLRenderer>({}));
+    return { vertex: shader.vertexShader, fragment: shader.fragmentShader, uniforms: shader.uniforms };
+  }
+
+  function fishParts(): { body: THREE.InstancedMesh; fins: THREE.InstancedMesh; tick: () => void } {
+    const lane = fakeLane();
+    const sc = buildAquariumScenery();
+    lane.add(sc.root);
+    sc.update(slots([{ species: 0, x: 0, y: 0, z: 0, yaw: 0 }]), 1 / 60);
+    const parts: THREE.InstancedMesh[] = [];
+    sc.root.traverse((o) => { if (o instanceof THREE.InstancedMesh && o.name === "aq-fish-neon") parts.push(o); });
+    return {
+      body: parts.find((m) => m.renderOrder === 2)!,
+      fins: parts.find((m) => m.renderOrder === 3)!,
+      tick: () => sc.update(slots([{ species: 0, x: 0, y: 0, z: 0, yaw: 0 }]), 0.5),
+    };
+  }
+
+  it("draws scales and fin rays as seamless relief that fades out when it gets too small to resolve", () => {
+    const { body, fins } = fishParts();
+    for (const m of [body, fins]) {
+      const { fragment } = compiled(one(m));
+      // the old seam pattern (fract of the scale grid) sparkled and shimmered on small fish
+      expect(fragment).not.toContain("fract(vec2(aqU * 70.0");
+      expect(fragment).toContain("fwidth(");
+    }
+  });
+
+  it("moves fin edges with the water: thrust, a trailing lag, a turn sweep, on the tank clock", () => {
+    const { body, fins, tick } = fishParts();
+    const f = compiled(one(fins));
+    expect(f.vertex).toContain("float thrust =");
+    expect(f.vertex).toContain("float trail =");
+    expect(f.vertex).toContain("float sweep = -aSwim.z");
+    const clock = f.uniforms.uAqTime!;
+    const before = Number(clock.value);
+    tick();
+    expect(Number(clock.value)).toBeGreaterThan(before);
+    // the body shares the program text but its uFin is 0, so the fin block never moves body skin
+    expect(compiled(one(body)).uniforms.uFin!.value).toBe(0);
+    expect(f.uniforms.uFin!.value).toBe(1);
   });
 });

@@ -15,6 +15,8 @@ import {
   nodeLagReach,
   nodeTravelScale,
   pickDragCore,
+  easeDragCore,
+  slackStep,
   angularAccelAt,
   edgeAngularPull,
   edgeBowPull,
@@ -260,6 +262,55 @@ describe("applyDriftPoint", () => {
     expect(viaQuat.x).toBeCloseTo(viaPose.x, 4);
     expect(viaQuat.y).toBeCloseTo(viaPose.y, 4);
     expect(viaQuat.z).toBeCloseTo(viaPose.z, 4);
+  });
+});
+
+describe("calm edges: no whole-fan snaps", () => {
+  it("steps the edge springs about every other frame at 120 fps and loses no time", () => {
+    let pending = 0;
+    let steps = 0;
+    let total = 0;
+    let longest = 0;
+    for (let f = 0; f < 120; f++) {
+      const tick = slackStep(pending, 1 / 120);
+      pending = tick.pending;
+      if (tick.stepDt > 0) {
+        steps++;
+        total += tick.stepDt;
+        longest = Math.max(longest, tick.stepDt);
+      }
+    }
+    // A per-frame `dt < 1/90` skip never stepped at 120 fps; the next slow frame then jolted.
+    expect(steps).toBeGreaterThanOrEqual(55);
+    expect(total + pending).toBeCloseTo(1, 9);
+    expect(longest).toBeLessThanOrEqual(2 / 120 + 1e-9);
+  });
+
+  it("moves the drag core smoothly as one node outgrows the rest (no flip at a threshold)", () => {
+    const leader = { x: 60, y: 0, z: 0 };
+    let prev = pickDragCore([{ ...leader, scale: 4.4 }, { x: 0, y: 0, z: 0, scale: 4 }, { x: 0, y: 0, z: 60, scale: 4 }]);
+    let biggest = 0;
+    for (let s = 4.45; s <= 8; s += 0.05) {
+      const core = pickDragCore([{ ...leader, scale: s }, { x: 0, y: 0, z: 0, scale: 4 }, { x: 0, y: 0, z: 60, scale: 4 }]);
+      biggest = Math.max(biggest, Math.hypot(core.x - prev.x, core.z - prev.z));
+      prev = core;
+    }
+    // From the origin (20, 0, 20) to the leader is ~45 units; no 0.05 size step may move it > 3.
+    expect(biggest).toBeLessThan(3);
+    expect(prev).toEqual(leader);
+  });
+
+  it("eases the drag core the same at any frame rate", () => {
+    const from = { x: 0, y: 0, z: 0 };
+    const to = { x: 10, y: -4, z: 2 };
+    const once = easeDragCore(from, to, 0.2);
+    let many = from;
+    for (let i = 0; i < 10; i++) many = easeDragCore(many, to, 0.02);
+    expect(many.x).toBeCloseTo(once.x, 9);
+    expect(many.y).toBeCloseTo(once.y, 9);
+    let settle = from;
+    for (let i = 0; i < 150; i++) settle = easeDragCore(settle, to, 1 / 60);
+    expect(Math.hypot(settle.x - to.x, settle.y - to.y, settle.z - to.z)).toBeLessThan(0.2);
   });
 });
 

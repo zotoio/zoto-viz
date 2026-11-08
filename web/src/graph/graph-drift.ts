@@ -276,9 +276,16 @@ export function graphOrigin(nodes: { x: number; y: number; z: number }[]): Drift
   return { x: x * k, y: y * k, z: z * k };
 }
 
+function smooth01(x: number): number {
+  const t = Math.max(0, Math.min(1, x));
+  return t * t * (3 - 2 * t);
+}
+
 /**
  * Where a moving cloud is pulled from. A node that is clearly the largest
- * is the drag core. Otherwise the pull is the graph origin.
+ * is the drag core; with no clear leader the pull is the graph origin. In
+ * between it blends, so node sizes that follow live load (CPU cores, talkers)
+ * cannot flip every edge's pull point between frames.
  */
 export function pickDragCore(nodes: DragNode[]): DriftCenter {
   const origin = graphOrigin(nodes);
@@ -292,10 +299,36 @@ export function pickDragCore(nodes: DragNode[]): DriftCenter {
       second = n.scale;
     }
   }
-  if (best && best.scale >= 0.8 && (second <= 0.05 || best.scale >= second * 1.25)) {
-    return { x: best.x, y: best.y, z: best.z };
-  }
-  return origin;
+  if (!best) return origin;
+  const lead = second <= 0.05 ? 1 : smooth01((best.scale / second - 1.15) / 0.3);
+  const w = lead * smooth01((best.scale - 0.7) / 0.2);
+  if (w <= 0) return origin;
+  if (w >= 1) return { x: best.x, y: best.y, z: best.z };
+  return {
+    x: origin.x + (best.x - origin.x) * w,
+    y: origin.y + (best.y - origin.y) * w,
+    z: origin.z + (best.z - origin.z) * w,
+  };
+}
+
+/**
+ * Edge springs step at most at 90 Hz, on the time elapsed since their last step. `stepDt` is 0
+ * while time is still pending. No frame time is dropped, so a 120 fps display steps them every
+ * other frame instead of leaving them frozen until a slow frame.
+ */
+export function slackStep(pending: number, dt: number): { stepDt: number; pending: number } {
+  const t = pending + Math.max(0, dt);
+  return t < 1 / 90 ? { stepDt: 0, pending: t } : { stepDt: t, pending: 0 };
+}
+
+/** Ease a pull point toward its target with time constant `tauS`, frame-rate independent. */
+export function easeDragCore(prev: DriftCenter, next: DriftCenter, dt: number, tauS = 0.5): DriftCenter {
+  const k = 1 - Math.exp(-Math.max(0, dt) / Math.max(1e-3, tauS));
+  return {
+    x: prev.x + (next.x - prev.x) * k,
+    y: prev.y + (next.y - prev.y) * k,
+    z: prev.z + (next.z - prev.z) * k,
+  };
 }
 
 /** 0 on the drag point, 1 once an edge middle sits well away from it. */

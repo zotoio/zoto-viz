@@ -127,7 +127,12 @@ export function mosaicAnimForTile(
   tileSky?: BackdropKind,
   pinLook = true,
 ): DreamAnim {
-  const look = pinLook ? lookForTile(id) : undefined;
+  // `pinLook` answers for the wall's main view (header AI cycling may own the look). A pane whose pack
+  // owns its stage (plugin sky / stage-only scene) keeps its own pins regardless, or Backrooms, Koi
+  // and Aquarium panes pick up the wall's floor grid and sky.
+  const tileLook = lookForTile(id);
+  const ownsStage = tileLook?.backdrop === "plugin" || tileLook?.stageOnly === true;
+  const look = pinLook || ownsStage ? tileLook : undefined;
   const authored = authoredTileSky(id);
   const viewId = sharedViewId(id);
   const ctx: ScopeCtx = {

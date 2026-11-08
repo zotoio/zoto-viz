@@ -5,9 +5,10 @@ import type { SimNode, SimLink } from "d3-force-3d";
 import { LabelItem, LabelLayer, labelActivity } from "./labels";
 import {
   applyPhys, clampParticleCap, easePhysToward, hashAngle,
-  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, edgeDrawSegs, organicEdgePoint,
+  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, edgeBend, edgeDrawSegs, edgeUndulateOrdered, organicEdgePoint,
   type PhysEase,
 } from "./physics";
+import { labelVisible, roleLabelIds, type LabelCandidate } from "./label-pick";
 import { LayoutClient } from "./layout";
 import { layoutBodyBudget, selectLayoutBodyIds, usesFullDeviceTable } from "./layout-budget";
 import type { HostedView, HostGpu, RenderHost, Viewport } from "./render-host";
@@ -47,7 +48,7 @@ import { cameraConsumers } from "../camera/want";
 import { Gaze } from "../camera/gaze";
 import { FloorGrid, easeFloorPose, floorPose, type FloorPose, type FloorShape } from "./floor";
 import {
-  applyDriftPoint, driftInView, driftOmegas, driftRig, edgeAngularPull, edgeBowPull, edgeDragAccel, edgeDragWeight, edgeFlex, edgeGravityPerLength, edgeInertiaTarget, edgeSpinAlpha, edgeYieldOmega, graphDriftPose, lagIntoLayout, pickDragCore, rigOmega, stepAngles, stepSpring, unapplyDriftPoint,
+  applyDriftPoint, driftInView, driftOmegas, driftRig, easeDragCore, edgeAngularPull, edgeBowPull, edgeDragAccel, edgeDragWeight, edgeFlex, edgeGravityPerLength, edgeInertiaTarget, edgeSpinAlpha, edgeYieldOmega, graphDriftPose, lagIntoLayout, pickDragCore, rigOmega, slackStep, stepAngles, stepSpring, unapplyDriftPoint,
   type SpringBody,
   type DriftCenter,
   type GraphDriftPose,
@@ -854,6 +855,8 @@ export interface DreamAnim {
   centerPull: number;
   /** 0–1 sag of edges into strings (0 = straight) */
   stringAmt: number;
+  /** 0–1 idle undulation of every edge: a slow wave along the cable (0 = still) */
+  edgeUndulate: number;
   /** pulse magnets, gravity, swirl, and string sag */
   audioPhysics: boolean;
 }
@@ -1002,6 +1005,7 @@ export const DEFAULT_DREAM: DreamAnim = {
   drag: 0.35,
   centerPull: 1,
   stringAmt: 0,
+  edgeUndulate: 0.35,
   audioPhysics: false,
 };
 
@@ -1048,6 +1052,7 @@ export const DREAM_BOUNDS = {
   drag: { min: 0.12, max: 0.7, step: 0.01 },
   centerPull: { min: 0, max: 2, step: 0.05 },
   stringAmt: { min: 0, max: 1, step: 0.05 },
+  edgeUndulate: { min: 0, max: 1, step: 0.05 },
 };
 
 /**
@@ -1178,6 +1183,12 @@ export class NetScene implements HostedView, RenderScalePane {
   private coreBody: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
   /** String slack while the cloud is dragged. Zero when the motion is steady. */
   private edgeSlack: SpringBody = { x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 };
+  /** Frame time not yet given to the edge springs (they step at most at 90 Hz). */
+  private slackDt = 0;
+  /** Bass the string wave follows: fast attack, slow release (see applyLook). */
+  private edgeWaveBass = 0;
+  /** Seconds of edge undulation (advanced per frame in applyLook, so it pauses with the scene). */
+  private undulateClock = 0;
   private edgeTarget: DriftCenter = { x: 0, y: 0, z: 0 };
   /** Last camera-frame slide, so acceleration ignores the view orbit. */
   private dragSample: DriftCenter = { x: 0, y: 0, z: 0 };
@@ -2180,7 +2191,7 @@ export class NetScene implements HostedView, RenderScalePane {
   private linkDraw(
     a: GNode, b: GNode,
     byId: Map<string, FabricNodePose>,
-  ): { ax: number; ay: number; az: number; bx: number; by: number; bz: number; px: number; py: number; pz: number; bend: number } {
+  ): { ax: number; ay: number; az: number; bx: number; by: number; bz: number; px: number; py: number; pz: number; bend: number; aFirst: boolean } {
     const end = (n: GNode) => {
       const p = byId.get(n.id);
       if (p) return { x: p.x + (p.lx ?? 0), y: p.y + (p.ly ?? 0), z: p.z + (p.lz ?? 0), lx: p.lx ?? 0, ly: p.ly ?? 0, lz: p.lz ?? 0 };
@@ -2205,7 +2216,9 @@ export class NetScene implements HostedView, RenderScalePane {
       px: (B.lx - A.lx) + pull.x,
       py: (B.ly - A.ly) + pull.y,
       pz: (B.lz - A.lz) + pull.z,
-      bend: 0,
+      // The edge's own −1…1 value and fixed end order: its undulation phase, plane and direction (edgePoint).
+      bend: edgeBend(a.id, b.id),
+      aFirst: a.id < b.id,
     };
   }
 
@@ -2231,7 +2244,7 @@ export class NetScene implements HostedView, RenderScalePane {
       const b = fwd ? l.target : l.source;
       const d = this.linkDraw(a, b, byId);
       const ax = d.ax, ay = d.ay, az = d.az, bx = d.bx, by = d.by, bz = d.bz;
-      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend };
+      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend, aFirst: d.aFirst };
       const dist = Math.hypot(bx - ax, by - ay, bz - az);
       if (dist < 12) continue;
       const t = 0.72;
@@ -2563,7 +2576,7 @@ export class NetScene implements HostedView, RenderScalePane {
     return {
       segs: edgeDrawSegs(a.stringAmt, bundle),
       sag: 0,
-      wave: a.audioPhysics ? this.pulseBass * a.audioSens * a.stringAmt : 0,
+      wave: a.audioPhysics ? this.edgeWaveBass * a.audioSens * a.stringAmt : 0,
       hx: hub[0], hy: hub[1], hz: hub[2], bundle,
     };
   }
@@ -2573,14 +2586,19 @@ export class NetScene implements HostedView, RenderScalePane {
     bx: number, by: number, bz: number,
     t: number,
     str: { sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number },
-    pull: { x: number; y: number; z: number; bend: number },
+    pull: { x: number; y: number; z: number; bend: number; aFirst?: boolean },
   ): [number, number, number] {
-    return organicEdgePoint(
+    const p = organicEdgePoint(
       ax, ay, az, bx, by, bz, t,
       pull.x, pull.y, pull.z,
       str.sag, str.wave, str.hx, str.hy, str.hz, str.bundle, pull.bend,
       this.dragCore.x, this.dragCore.y, this.dragCore.z,
     );
+    const d = edgeUndulateOrdered(ax, ay, az, bx, by, bz, t, this.undulateClock, pull.bend, this.anim.edgeUndulate, pull.aFirst ?? true);
+    p[0] += d[0];
+    p[1] += d[1];
+    p[2] += d[2];
+    return p;
   }
 
   private gazeWanted(): boolean {
@@ -2663,6 +2681,10 @@ export class NetScene implements HostedView, RenderScalePane {
     const sens = Math.max(0, a.audioSens);
     this.pulseLevel = Math.min(1, p.level * sens);
     this.pulseBass = Math.min(1, p.bass * sens);
+    // Strings ride a bass that rises fast and falls slowly: a beat swells the cables, not snaps them.
+    this.undulateClock += Math.min(0.1, Math.max(0, dt));
+    const waveTau = this.pulseBass > this.edgeWaveBass ? 0.12 : 0.7;
+    this.edgeWaveBass += (this.pulseBass - this.edgeWaveBass) * (1 - Math.exp(-Math.max(0, dt) / waveTau));
     const onset = Math.min(1, Math.abs(this.pulseLevel - this.prevPulseLevel) / Math.max(dt, 1 / 90) * 0.28);
     this.prevPulseLevel = this.pulseLevel;
     this.changeVel += (Math.min(1, 0.55 * this.layoutVel + 0.85 * onset) - this.changeVel) * Math.min(1, dt * 5);
@@ -4102,27 +4124,26 @@ export class NetScene implements HostedView, RenderScalePane {
     const ctx = this.ctx;
     const cap = paneLabelCap(ctx);
     // one visibility pass; the label ranking below reads the flag instead of re-running the filter
-    const lan: GNode[] = [], net: GNode[] = [];
+    const shown: LabelCandidate[] = [];
     for (const n of this.nodes.values()) {
       n.visible = this.nodeVisible(n);
       if (!n.visible) continue;
-      const r = n.device.role;
-      if (r === "lan" || r === "local") lan.push(n);
-      else if (r === "internet") net.push(n);
+      shown.push({ id: n.id, role: n.device.role, bytes: n.device.bytes_in + n.device.bytes_out, rate: n.rate });
     }
-    const byBytes = (a: GNode, b: GNode) => (b.device.bytes_in + b.device.bytes_out) - (a.device.bytes_in + a.device.bytes_out) || b.rate - a.rate;
-    const topLan = new Set(lan.sort(byBytes).slice(0, cap).map((n) => n.id));
-    const topNet = new Set(net.sort(byBytes).slice(0, cap).map((n) => n.id));
+    const keep = roleLabelIds(shown, cap);
     for (const n of this.nodes.values()) {
       const r = n.device.role;
       const live = (n.labelUntil ?? 0) > this.now;
       const focused = n === this.selected || n === this.hovered;
-      const lanKeep = (r === "lan" || r === "local") && topLan.has(n.id);
-      const netKeep = r === "internet" && topNet.has(n.id);
-      const byRole = r === "self" || r === "gateway" || lanKeep || netKeep;
-      const showLabel = n.visible && this.filters.labels && (
-        focused || live || this.mode.forceLabel?.(n, ctx) || (byRole && !this.mode.suppressLabel?.(n, ctx))
-      );
+      const showLabel = labelVisible({
+        visible: n.visible,
+        focused,
+        labelsOn: this.filters.labels,
+        live,
+        forced: !!this.mode.forceLabel?.(n, ctx),
+        byRole: keep.has(n.id),
+        suppressed: !!this.mode.suppressLabel?.(n, ctx),
+      });
       n.label.visible = !this.stageOnly && !!showLabel;
       n.labelEl.classList.toggle("off", this.stageOnly || !showLabel);
       n.label.pinned = focused;
@@ -4471,7 +4492,7 @@ export class NetScene implements HostedView, RenderScalePane {
       const a = l.source, b = l.target;
       const d = this.linkDraw(a, b, fabricById);
       const ax = d.ax, ay = d.ay, az = d.az, bx = d.bx, by = d.by, bz = d.bz;
-      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend };
+      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend, aFirst: d.aFirst };
       const tether = l.id.startsWith("~");
       let bright: number;
       if (tether) bright = this.additiveMarks() ? 0.08 : 0.22;
@@ -4603,7 +4624,7 @@ export class NetScene implements HostedView, RenderScalePane {
       const a = p.link.source, b = p.link.target;
       const t = p.t;
       const d = this.linkDraw(a, b, fabricById);
-      const pt = this.edgePoint(d.ax, d.ay, d.az, d.bx, d.by, d.bz, t, str, { x: d.px, y: d.py, z: d.pz, bend: d.bend });
+      const pt = this.edgePoint(d.ax, d.ay, d.az, d.bx, d.by, d.bz, t, str, { x: d.px, y: d.py, z: d.pz, bend: d.bend, aFirst: d.aFirst });
       this.partPos[k * 3] = pt[0];
       this.partPos[k * 3 + 1] = pt[1];
       this.partPos[k * 3 + 2] = pt[2];
@@ -4838,6 +4859,7 @@ export class NetScene implements HostedView, RenderScalePane {
       this.rigOmegaNow = { x: 0, y: 0, z: 0 };
       this.rigAlpha = { x: 0, y: 0, z: 0 };
       this.edgeFlexNow = 0;
+      this.slackDt = 0;
       this.cloudSlideVel = { x: 0, y: 0, z: 0 };
       this.driftPitch = 0;
       this.driftPitchV = 0;
@@ -4882,7 +4904,9 @@ export class NetScene implements HostedView, RenderScalePane {
         this.driftYaw = ang.yaw;
         this.driftYawV = ang.yawV;
       }
-      this.dragCore = this.liveDragCore();
+      // Eased, so a change of pull point (node sizes follow live load) bends the edges over half a second.
+      const core = this.liveDragCore();
+      this.dragCore = waking ? core : easeDragCore(this.dragCore, core, dt);
       this.stepEdgeSlack(dt, waking, local, beat, cam, sphere);
       const slide = this.coreBody;
       this.driftPose = driftInView({
@@ -4940,7 +4964,11 @@ export class NetScene implements HostedView, RenderScalePane {
     this.gravDown = lagIntoLayout({ x: 0, y: -1, z: 0 }, poseAxes);
     const omegaHz = edgeYieldOmega(flex, beat);
     const slide = { x: this.coreBody.x, y: this.coreBody.y, z: this.coreBody.z };
-    if (waking || dt < 1 / 90) {
+    // At 120 fps a per-frame `dt < 1/90` skip left the springs frozen until a slow frame, which
+    // then turned many frames of motion into one jolt that whipped every edge at once.
+    const tick = slackStep(waking ? 0 : this.slackDt, waking ? 0 : dt);
+    this.slackDt = tick.pending;
+    if (waking || tick.stepDt <= 0) {
       if (waking) {
         const seedDt = Math.max(dt, 1 / 60);
         const prev = graphDriftPose(this.driftTime - seedDt, cam, this.driftPhase, sphere);
@@ -4960,13 +4988,14 @@ export class NetScene implements HostedView, RenderScalePane {
       }
       return;
     }
-    const step = edgeDragAccel(this.dragSample, this.cloudSlideVel, slide, dt);
+    const sdt = tick.stepDt;
+    const step = edgeDragAccel(this.dragSample, this.cloudSlideVel, slide, sdt);
     this.dragSample = slide;
     this.cloudSlideVel = step.vel;
-    const pitchRate = (local.pitch - this.spinPitch) / dt;
-    const yawRate = (local.yaw - this.spinYaw) / dt;
+    const pitchRate = (local.pitch - this.spinPitch) / sdt;
+    const yawRate = (local.yaw - this.spinYaw) / sdt;
     const spin = rigOmega(local.pitch, pitchRate, yawRate);
-    this.rigAlpha = edgeSpinAlpha(this.rigOmegaNow, spin, dt);
+    this.rigAlpha = edgeSpinAlpha(this.rigOmegaNow, spin, sdt);
     this.rigOmegaNow = spin;
     this.spinPitch = local.pitch;
     this.spinYaw = local.yaw;
@@ -4978,9 +5007,9 @@ export class NetScene implements HostedView, RenderScalePane {
     const cap = Math.min(110, Math.max(16, this.dragReach * 0.2)) * flex;
     const inertial = edgeInertiaTarget(layout, cap > 1 ? cap / 6 : 0, cap);
     this.edgeTarget = inertial;
-    this.edgeSlack = stepSpring(this.edgeSlack, this.edgeTarget, dt, omegaHz);
+    this.edgeSlack = stepSpring(this.edgeSlack, this.edgeTarget, sdt, omegaHz);
     const hang = edgeGravityPerLength(this.gravDown, flex, this.anim.gravity);
-    this.gravSlack = stepSpring(this.gravSlack, hang, dt, omegaHz);
+    this.gravSlack = stepSpring(this.gravSlack, hang, sdt, omegaHz);
   }
 
   /** A bass transient shoves the cloud along its travel. Only while Audio → nodes is on. */

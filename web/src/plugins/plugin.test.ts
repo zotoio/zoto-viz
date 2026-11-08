@@ -6,7 +6,7 @@ import { applyInstance } from "./instances";
 import { HEADLINES_PACK } from "./test/load-settings-fixture";
 import {
   applyPluginConfigs, replacePluginConfigs, applyPluginCatalog, attachPluginFrontend, collectPluginConfigs, compilePlugin, fetchPlugins, fieldDefault, grantPluginConsent, installPlugins,
-  loadPluginConfig, lookForMode, mergeLook, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
+  loadPluginConfig, lookForMode, mergeLook, viewLookWithStageFloor, parsePluginId, pickPluginSkySpec, pluginHasFrontend, pluginHasSky, pluginModulePath, pluginNeedsReview, pluginSkyPath, pluginStageOnly, pluginViewId, pluginWall, pluginWallOwns, shippedModeIds, specCaption,
   viewSelectOptions, fillViewSelect, writePluginConfig, type PluginView,
 } from "./plugin";
 import { pluginViewKnobs, toPluginView, VIEW_PROMPT_KEY } from "./plugin-visualisation";
@@ -494,5 +494,22 @@ describe("visualisation.yml", () => {
     expect(pickPluginSkySpec(wall, hero)?.id).toBe("cypher-cic");
     expect(pickPluginSkySpec(hero, wall)?.id).toBe("cypher-cic");
     expect(pickPluginSkySpec(hero, hero)?.id).toBe("topology");
+  });
+});
+
+describe("stage-only scenes keep the host floor grid out by default", () => {
+  it("pins gridOpacity 0 for a stage-only view that does not set it, and leaves any explicit value", () => {
+    const stage: PluginView = { id: "host-mesh-demo", name: "Host mesh demo", version: 1, engine: "graph", look: { backdrop: "plugin", stageOnly: true } };
+    expect(viewLookWithStageFloor(stage)?.gridOpacity).toBe(0);
+    const reef: PluginView = { id: "blob-mesh", name: "Blob", version: 1, engine: "graph", look: { backdrop: "plugin", stageOnly: true, gridOpacity: 0.07 } };
+    expect(viewLookWithStageFloor(reef)?.gridOpacity).toBe(0.07);
+    const graph: PluginView = { id: "talkers", name: "Talkers", version: 1, engine: "graph", look: { stageOnly: false } };
+    expect(viewLookWithStageFloor(graph)?.gridOpacity).toBeUndefined();
+  });
+
+  it("the catalog applies it: the stage-only view's look carries gridOpacity 0", () => {
+    applyPluginCatalog([{ id: "host-mesh-demo", name: "Host mesh demo", version: 1, engine: "graph", look: { backdrop: "plugin", stageOnly: true } }]);
+    expect(lookForMode("plugin:host-mesh-demo")?.gridOpacity).toBe(0);
+    applyPluginCatalog([]);
   });
 });
