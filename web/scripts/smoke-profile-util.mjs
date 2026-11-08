@@ -49,9 +49,39 @@ export async function seedSmokeProfile(base, settings) {
  * animation frames, and a software-GL headless run can go longer than the timeout between frames;
  * a page screenshot clipped to the box does not wait for that.
  */
-export async function screenshotBox(page, locator, timeout = 120_000) {
+/**
+ * @param {import('playwright').Page} page
+ * @param {import('playwright').Locator} locator visibility gate
+ * @param {number} [timeout]
+ * @param {string[] | null} [domSelectors] when set, read clip via page.evaluate (animated stages)
+ */
+export async function screenshotBox(page, locator, timeout = 120_000, domSelectors = null) {
   await locator.waitFor({ state: "visible", timeout });
-  const box = await locator.boundingBox({ timeout });
+  const box = domSelectors
+    ? await page.evaluate((sels) => {
+      for (const sel of sels) {
+        const el = document.querySelector(sel);
+        if (!el) continue;
+        const r = el.getBoundingClientRect();
+        if (r.width > 0 && r.height > 0) {
+          return { x: r.x, y: r.y, width: r.width, height: r.height };
+        }
+      }
+      return null;
+    }, domSelectors)
+    : await locator.boundingBox({ timeout: Math.min(timeout, 30_000) });
   assert.ok(box && box.width > 0 && box.height > 0, `no box to screenshot: ${JSON.stringify(box)}`);
-  return page.screenshot({ type: "png", clip: box, timeout });
+  if (domSelectors) {
+    const cdp = await page.context().newCDPSession(page);
+    const { data } = await cdp.send("Page.captureScreenshot", {
+      format: "png",
+      clip: { x: box.x, y: box.y, width: box.width, height: box.height, scale: 1 },
+      fromSurface: true,
+    });
+    return Buffer.from(data, "base64");
+  }
+  return page.screenshot({ type: "png", clip: box, timeout: Math.min(timeout, 60_000), animations: "disabled" });
 }
+
+/** Wall render-host or legacy #scene canvas — used by browser smokes on animated packs. */
+export const SMOKE_STAGE_CANVAS_SELECTORS = ["#wall canvas.render-host", "#scene canvas"];
