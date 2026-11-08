@@ -889,6 +889,16 @@ export async function grantPluginConsent(id: string, kind: "reviewed" | "authore
   if (!r.ok) throw new Error(`consent ${r.status}`);
 }
 
+/**
+ * A view's look pins, plus the floor default: stage-only scenes (Backrooms, Koi Pond, Aquarium, …)
+ * draw their own world, so the host floor grid stays out unless the pack sets `gridOpacity`.
+ */
+export function viewLookWithStageFloor(view: PluginView): PluginLook | undefined {
+  const look = view.look;
+  if (look?.gridOpacity !== undefined || !pluginStageOnly(view)) return look;
+  return { ...look, gridOpacity: 0 };
+}
+
 export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
   const { rows, overlays } = partitionCatalog(specs);
   const nextLooks = new Map<string, PluginLook>();
@@ -898,7 +908,8 @@ export function applyPluginCatalog(specs: PluginView[]): ViewMode[] {
     const extra = overlays.get(spec.id);
     const merged = extra ? mergeOverlayPins(spec, extra) : spec;
     for (const view of expandPluginInstances(merged)) {
-      if (view.look) nextLooks.set(pluginViewId(view.id, view.instanceId), view.look);
+      const look = viewLookWithStageFloor(view);
+      if (look) nextLooks.set(pluginViewId(view.id, view.instanceId), look);
       if (!view.engine) continue;
       try {
         const mode = compilePlugin(view);

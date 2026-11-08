@@ -234,3 +234,21 @@ describe("mosaicTileTheme", () => {
     expect(used.has("ocean")).toBe(true);
   });
 });
+
+describe("scene panes keep their floor out of the wall's look", () => {
+  afterEach(() => applyPluginCatalog([]));
+
+  it("a stage-owning pane keeps its pinned grid even when the wall's looks are unpinned (AI cycle)", () => {
+    applyPluginCatalog([
+      { id: "backrooms", name: "Backrooms", version: 1, engine: "graph", look: { backdrop: "plugin", stageOnly: true, gridOpacity: 0 } },
+      { id: "talkers", name: "Talkers", version: 1, engine: "graph", look: { gridOpacity: 0.3 } },
+    ]);
+    const wall = { ...DEFAULT_DREAM, gridOpacity: 0.7 };
+    // pinLook false is what applyViewLook passes while header AI cycling owns a graph main view.
+    expect(mosaicAnimForTile(wall, "plugin:backrooms", undefined, false).gridOpacity).toBe(0);
+    expect(mosaicAnimForTile(wall, "plugin:backrooms", undefined, true).gridOpacity).toBe(0);
+    // A graph pane still follows the wall when unpinned, and its own pin when pinned.
+    expect(mosaicAnimForTile(wall, "plugin:talkers", undefined, false).gridOpacity).toBe(0.7);
+    expect(mosaicAnimForTile(wall, "plugin:talkers", undefined, true).gridOpacity).toBe(0.3);
+  });
+});
