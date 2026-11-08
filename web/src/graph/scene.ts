@@ -5,7 +5,7 @@ import type { SimNode, SimLink } from "d3-force-3d";
 import { LabelItem, LabelLayer, labelActivity } from "./labels";
 import {
   applyPhys, clampParticleCap, easePhysToward, hashAngle,
-  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, edgeBend, edgeDrawSegs, edgeUndulate, organicEdgePoint,
+  MAX_PARTICLES as PARTICLE_CAP, particlesOnLink, pickPhys, edgeBend, edgeDrawSegs, edgeUndulateOrdered, organicEdgePoint,
   type PhysEase,
 } from "./physics";
 import { labelVisible, roleLabelIds, type LabelCandidate } from "./label-pick";
@@ -2191,7 +2191,7 @@ export class NetScene implements HostedView, RenderScalePane {
   private linkDraw(
     a: GNode, b: GNode,
     byId: Map<string, FabricNodePose>,
-  ): { ax: number; ay: number; az: number; bx: number; by: number; bz: number; px: number; py: number; pz: number; bend: number } {
+  ): { ax: number; ay: number; az: number; bx: number; by: number; bz: number; px: number; py: number; pz: number; bend: number; aFirst: boolean } {
     const end = (n: GNode) => {
       const p = byId.get(n.id);
       if (p) return { x: p.x + (p.lx ?? 0), y: p.y + (p.ly ?? 0), z: p.z + (p.lz ?? 0), lx: p.lx ?? 0, ly: p.ly ?? 0, lz: p.lz ?? 0 };
@@ -2216,8 +2216,9 @@ export class NetScene implements HostedView, RenderScalePane {
       px: (B.lx - A.lx) + pull.x,
       py: (B.ly - A.ly) + pull.y,
       pz: (B.lz - A.lz) + pull.z,
-      // The edge's own −1…1 value: its undulation phase and plane (edgePoint).
+      // The edge's own −1…1 value and fixed end order: its undulation phase, plane and direction (edgePoint).
       bend: edgeBend(a.id, b.id),
+      aFirst: a.id < b.id,
     };
   }
 
@@ -2243,7 +2244,7 @@ export class NetScene implements HostedView, RenderScalePane {
       const b = fwd ? l.target : l.source;
       const d = this.linkDraw(a, b, byId);
       const ax = d.ax, ay = d.ay, az = d.az, bx = d.bx, by = d.by, bz = d.bz;
-      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend };
+      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend, aFirst: d.aFirst };
       const dist = Math.hypot(bx - ax, by - ay, bz - az);
       if (dist < 12) continue;
       const t = 0.72;
@@ -2585,7 +2586,7 @@ export class NetScene implements HostedView, RenderScalePane {
     bx: number, by: number, bz: number,
     t: number,
     str: { sag: number; wave: number; hx: number; hy: number; hz: number; bundle: number },
-    pull: { x: number; y: number; z: number; bend: number },
+    pull: { x: number; y: number; z: number; bend: number; aFirst?: boolean },
   ): [number, number, number] {
     const p = organicEdgePoint(
       ax, ay, az, bx, by, bz, t,
@@ -2593,7 +2594,7 @@ export class NetScene implements HostedView, RenderScalePane {
       str.sag, str.wave, str.hx, str.hy, str.hz, str.bundle, pull.bend,
       this.dragCore.x, this.dragCore.y, this.dragCore.z,
     );
-    const d = edgeUndulate(ax, ay, az, bx, by, bz, t, this.undulateClock, pull.bend, this.anim.edgeUndulate);
+    const d = edgeUndulateOrdered(ax, ay, az, bx, by, bz, t, this.undulateClock, pull.bend, this.anim.edgeUndulate, pull.aFirst ?? true);
     p[0] += d[0];
     p[1] += d[1];
     p[2] += d[2];
@@ -4491,7 +4492,7 @@ export class NetScene implements HostedView, RenderScalePane {
       const a = l.source, b = l.target;
       const d = this.linkDraw(a, b, fabricById);
       const ax = d.ax, ay = d.ay, az = d.az, bx = d.bx, by = d.by, bz = d.bz;
-      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend };
+      const pull = { x: d.px, y: d.py, z: d.pz, bend: d.bend, aFirst: d.aFirst };
       const tether = l.id.startsWith("~");
       let bright: number;
       if (tether) bright = this.additiveMarks() ? 0.08 : 0.22;
@@ -4623,7 +4624,7 @@ export class NetScene implements HostedView, RenderScalePane {
       const a = p.link.source, b = p.link.target;
       const t = p.t;
       const d = this.linkDraw(a, b, fabricById);
-      const pt = this.edgePoint(d.ax, d.ay, d.az, d.bx, d.by, d.bz, t, str, { x: d.px, y: d.py, z: d.pz, bend: d.bend });
+      const pt = this.edgePoint(d.ax, d.ay, d.az, d.bx, d.by, d.bz, t, str, { x: d.px, y: d.py, z: d.pz, bend: d.bend, aFirst: d.aFirst });
       this.partPos[k * 3] = pt[0];
       this.partPos[k * 3 + 1] = pt[1];
       this.partPos[k * 3 + 2] = pt[2];

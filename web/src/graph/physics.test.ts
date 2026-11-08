@@ -5,6 +5,7 @@ import {
   clampParticleCap,
   edgeBend,
   edgeUndulate,
+  edgeUndulateOrdered,
   easePhysToward,
   hottestTrafficKeys,
   MAGNET_FIELDS,
@@ -205,14 +206,26 @@ describe("edge undulation: live cables, not rods", () => {
     expect(hi - lo).toBeGreaterThan(cap * 0.5);
   });
 
-  it("sways each edge out of step with its neighbours, and the same whichever end comes first", () => {
+  it("sways each edge out of step with its neighbours, and draws one cable in either direction", () => {
     const s1 = edgeBend("cpu1", "zoto");
     const s2 = edgeBend("cpu2", "zoto");
     const d1 = at(0.5, 3.2, s1);
     const d2 = at(0.5, 3.2, s2);
     expect(Math.hypot(d1[0] - d2[0], d1[1] - d2[1], d1[2] - d2[2])).toBeGreaterThan(cap * 0.05);
-    const fwd = edgeUndulate(...A, ...B, 0.3, 2.1, s1, 1);
-    const rev = edgeUndulate(...B, ...A, 0.7, 2.1, s1, 1);
+    // arrows draw in the traffic direction: same cable when the ends arrive swapped
+    const fwd = edgeUndulateOrdered(...A, ...B, 0.3, 2.1, s1, 1, true);
+    const rev = edgeUndulateOrdered(...B, ...A, 0.7, 2.1, s1, 1, false);
     for (let k = 0; k < 3; k++) expect(rev[k]).toBeCloseTo(fwd[k]!, 9);
+  });
+
+  it("stays continuous when one node crosses the other (no flip from a position-based end order)", () => {
+    let prev: [number, number, number] | null = null;
+    let biggest = 0;
+    for (let bx = 5; bx >= -5; bx -= 0.1) {
+      const d = edgeUndulateOrdered(0, 0, 0, bx, 0, 60, 0.3, 4.2, 0.61, 1, true);
+      if (prev) biggest = Math.max(biggest, Math.hypot(d[0] - prev[0], d[1] - prev[1], d[2] - prev[2]));
+      prev = d;
+    }
+    expect(biggest).toBeLessThan(0.05);
   });
 });

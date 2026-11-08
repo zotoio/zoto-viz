@@ -224,14 +224,7 @@ export function edgeUndulate(
 ): [number, number, number] {
   const a = Math.max(0, Math.min(1, amt));
   if (a < 1e-3) return [0, 0, 0];
-  let u = Math.max(0, Math.min(1, t));
-  // Same cable whichever end is passed first (arrows draw in the traffic direction).
-  if (ax > bx || (ax === bx && (ay > by || (ay === by && az > bz)))) {
-    [ax, bx] = [bx, ax];
-    [ay, by] = [by, ay];
-    [az, bz] = [bz, az];
-    u = 1 - u;
-  }
+  const u = Math.max(0, Math.min(1, t));
   const env = Math.sin(u * Math.PI);
   if (env < 1e-4) return [0, 0, 0];
   const dx = bx - ax, dy = by - ay, dz = bz - az;
@@ -255,6 +248,26 @@ export function edgeUndulate(
   const amp = a * Math.min(len * 0.045, 9) * env * wave;
   const c = Math.cos(theta), s = Math.sin(theta);
   return [amp * (c * n1x + s * n2x), amp * (c * n1y + s * n2y), amp * (c * n1z + s * n2z)];
+}
+
+/**
+ * {@link edgeUndulate} with the ends in the edge's own fixed order. `aFirst` says whether A is the
+ * end that sorts first by node id; callers that draw an edge in either direction (arrows follow the
+ * traffic) then get one cable. The order comes from the ids, never from positions, so the wave does
+ * not flip when two nodes cross during layout motion or a drag.
+ */
+export function edgeUndulateOrdered(
+  ax: number, ay: number, az: number,
+  bx: number, by: number, bz: number,
+  t: number,
+  timeSec: number,
+  seed: number,
+  amt: number,
+  aFirst: boolean,
+): [number, number, number] {
+  return aFirst
+    ? edgeUndulate(ax, ay, az, bx, by, bz, t, timeSec, seed, amt)
+    : edgeUndulate(bx, by, bz, ax, ay, az, 1 - t, timeSec, seed, amt);
 }
 
 /**
