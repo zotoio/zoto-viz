@@ -19,6 +19,13 @@ describe("koiStagePose follow", () => {
     expect(pose.fov).toBeGreaterThan(30);
   });
 
+  it("ignores host-mesh v2 packets on slot3 (version header 2)", () => {
+    const read = (slot: number, i: number) => (slot === 3 && i === 0 ? 2 : slot === 0 && i === 17 ? 1 : slot === 0 && i === 18 ? 0.5 : 0);
+    const pose = koiStagePose(read);
+    expect(pose.target).toEqual([0, 0, 0]);
+    expect(pose.position[1]).toBeGreaterThan(1);
+  });
+
   it("falls back to drift pose when follow is off", () => {
     const read = (slot: number, i: number) => (slot === 0 && i === 17 ? 1 : slot === 0 && i === 18 ? 0 : 0);
     const pose = koiStagePose(read);

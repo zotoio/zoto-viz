@@ -5,6 +5,7 @@ import { clone as cloneSkinnedRoot } from "three/addons/utils/SkeletonUtils.js";
 import {
   decodeHostMeshSlotPacket,
   HOST_MESH_FRAME_V1,
+  HOST_MESH_FRAME_V3,
   hostMeshMatrixYawPos,
   type HostMeshInstanceExtras,
 } from "../../../plugins/sdk/host-mesh-frame";
@@ -140,17 +141,16 @@ type LiveRigid = {
 type LiveSkinned = {
   root: THREE.Object3D;
   mixer: THREE.AnimationMixer;
-  /** Playing swim action — tick seeks {@link THREE.AnimationAction.time} so the clip advances. */
-  action: THREE.AnimationAction;
   animOffset: number;
   clipDuration: number;
-  /** Aquarium / koi HD: bones or nodes the procedural fin beat and turn bend drive. */
+  /** Aquarium HD only: bones the procedural fin beat and turn bend drive. */
   hd?: HdFishRig;
 };
 
 /**
  * How a lane animates fish beyond their baked swim clip. `aquarium-hd` (aquarium pack, HD model
  * set) adds a fin beat, a median-fin ripple, a spine bend into turns and a brighter tank lamp.
+ * `koi-hd` is the koi-pond HD model set (baked swim clip only; no aquarium fin/lamp overlays).
  * `standard` is the baked clip only, unchanged.
  */
 export type HostMeshMotionProfile = "standard" | "aquarium-hd" | "koi-hd";
@@ -201,73 +201,44 @@ function rotateBoneWorldAxis(bone: THREE.Object3D, worldAxis: THREE.Vector3, ang
  * the turn (tail lags toward the inside, head leads), the caudal end beats harder, and the
  * pectorals row. Exported for tests.
  */
-/** Swim-cycle rate scale: aquarium HD stays lively; koi HD is slow and smooth. */
-export type HdFishMotionPace = "aquarium" | "koi";
-
-const HD_PACE = {
-  aquarium: { beat: 9.5, flap: 6.2, bendLerp: 8, amp: 1 },
-  koi: { beat: 3.2, flap: 2.4, bendLerp: 3.2, amp: 0.72 },
-} as const;
-
-export function applyHdFishMotion(
-  root: THREE.Object3D,
-  rig: HdFishRig,
-  t: number,
-  dt: number,
-  pace: HdFishMotionPace = "aquarium",
-): void {
-  const p = HD_PACE[pace];
+export function applyHdFishMotion(root: THREE.Object3D, rig: HdFishRig, t: number, dt: number): void {
   const target = fishTurnBend(rig.turnRate);
-  rig.bend += (target - rig.bend) * Math.min(1, Math.max(0, dt) * p.bendLerp);
+  rig.bend += (target - rig.bend) * Math.min(1, Math.max(0, dt) * 8);
   root.updateMatrixWorld(true);
   root.getWorldQuaternion(_qp);
   _up.set(0, 1, 0).applyQuaternion(_qp);
   _fwd.set(0, 0, 1).applyQuaternion(_qp);
   const up = _up.clone();
   const fwd = _fwd.clone();
-  const beat = t * p.beat + rig.phase;
+  const beat = t * 9.5 + rig.phase;
   rig.chain.forEach((bone, i) => {
     if (!bone) return;
     // Tail-side bones turn the opposite way to the nose: with root mid-body that curls the
     // whole fish into a C toward the inside of the turn.
-    const raw = i >= 3 ? (i === 3 ? 0.16 : 0.26) : 0.04;
-    const tailBeat = Math.sin(beat - i * 1.1) * raw * p.amp;
+    const tailBeat = i >= 3 ? Math.sin(beat - i * 1.1) * (i === 3 ? 0.16 : 0.26) : Math.sin(beat - i * 1.1) * 0.04;
     rotateBoneWorldAxis(bone, up, -rig.bend * FISH_BEND_WEIGHTS[i]! + tailBeat);
   });
-  if (rig.head) rotateBoneWorldAxis(rig.head, up, rig.bend * 0.22 * p.amp);
-  const flap = Math.sin(t * p.flap + rig.phase * 1.3);
-  const row = Math.sin(t * p.flap + rig.phase * 1.3 + 1.2);
+  if (rig.head) rotateBoneWorldAxis(rig.head, up, rig.bend * 0.22);
+  const flap = Math.sin(t * 6.2 + rig.phase * 1.3);
+  const row = Math.sin(t * 6.2 + rig.phase * 1.3 + 1.2);
   if (rig.finL) {
-    rotateBoneWorldAxis(rig.finL, fwd, 0.42 * flap * p.amp);
-    rotateBoneWorldAxis(rig.finL, up, 0.3 * row * p.amp);
+    rotateBoneWorldAxis(rig.finL, fwd, 0.42 * flap);
+    rotateBoneWorldAxis(rig.finL, up, 0.3 * row);
   }
   if (rig.finR) {
-    rotateBoneWorldAxis(rig.finR, fwd, -0.42 * flap * p.amp);
-    rotateBoneWorldAxis(rig.finR, up, -0.3 * row * p.amp);
+    rotateBoneWorldAxis(rig.finR, fwd, -0.42 * flap);
+    rotateBoneWorldAxis(rig.finR, up, -0.3 * row);
   }
 }
 
 function findHdFishRig(root: THREE.Object3D, phase: number, turnRate: number): HdFishRig | undefined {
   const chain = FISH_BEND_CHAIN.map((n) => root.getObjectByName(n) ?? null);
-  if (chain.some(Boolean)) {
-    return {
-      chain,
-      head: root.getObjectByName("head") ?? null,
-      finL: root.getObjectByName("fin_pectoral_L") ?? null,
-      finR: root.getObjectByName("fin_pectoral_R") ?? null,
-      phase,
-      turnRate,
-      bend: fishTurnBend(turnRate),
-    };
-  }
-  // Blenderwright HD koi: separate mesh parts (no skin), wagged by node rotations.
-  const koiChain = ["KoiRear", "KoiTail"].map((n) => root.getObjectByName(n) ?? null);
-  if (!koiChain.some(Boolean)) return undefined;
+  if (!chain.some(Boolean)) return undefined;
   return {
-    chain: [null, null, null, koiChain[0], koiChain[1]],
-    head: root.getObjectByName("KoiHead") ?? null,
-    finL: root.getObjectByName("KoiFinL") ?? null,
-    finR: root.getObjectByName("KoiFinR") ?? null,
+    chain,
+    head: root.getObjectByName("head") ?? null,
+    finL: root.getObjectByName("fin_pectoral_L") ?? null,
+    finR: root.getObjectByName("fin_pectoral_R") ?? null,
     phase,
     turnRate,
     bend: fishTurnBend(turnRate),
@@ -567,29 +538,21 @@ export class HostMeshLane {
     this.assetOrder = [];
   }
 
-  /** Advance skinned / node-swim clips so {@link THREE.AnimationAction.time} moves (not only mixer.time). */
+  /** Advance skinned swim clips. */
   tick(dtSec: number): void {
     if (dtSec <= 0 || !Number.isFinite(dtSec)) return;
     this.clockSec += dtSec;
     this.finUniforms.uFinTime.value = this.clockSec;
     for (const list of this.skinnedLive.values()) {
       for (const row of list) {
-        const dur = row.clipDuration > 0 ? row.clipDuration : 1;
-        // Seek the playing action. Setting mixer.time alone left action.time at 0 forever.
-        // Koi HD plays the baked swim slowly so fins/body never look snappy.
-        const clipRate = this.motion === "koi-hd" ? 0.45 : 1;
-        row.action.time = ((row.animOffset + this.clockSec * clipRate) % dur + dur) % dur;
-        row.mixer.update(0);
+        // Absolute clip phase: assignment + update(0) does not sample tracks; setTime() does.
+        row.mixer.setTime(
+          row.animOffset + this.clockSec * (row.clipDuration > 0 ? 1 : 0),
+        );
         const turn = this.driftDecor(row.root, dtSec);
         if (row.hd) {
           if (turn !== undefined) row.hd.turnRate = turn;
-          applyHdFishMotion(
-            row.root,
-            row.hd,
-            this.clockSec,
-            dtSec,
-            this.motion === "koi-hd" ? "koi" : "aquarium",
-          );
+          applyHdFishMotion(row.root, row.hd, this.clockSec, dtSec);
         }
       }
     }
@@ -614,9 +577,33 @@ export class HostMeshLane {
   /**
    * Apply one sandbox host-mesh buffer slot (v2 packet or legacy 16-float matrix).
    */
+  private v3MixedByAsset = new Map<number, { matrix: Float32Array; extras: HostMeshInstanceExtras }[]>();
+
+  private flushV3MixedBatch(): void {
+    for (const [assetIndex, instances] of this.v3MixedByAsset) {
+      const assetId = this.assetOrder[assetIndex];
+      if (!assetId) continue;
+      const tpl = this.templates.get(assetId);
+      if (!tpl?.loadOk) continue;
+      if (tpl.kind === "skinned") this.applySkinnedInstances(tpl, assetId, instances);
+      else this.applyRigidInstances(tpl, assetId, instances);
+    }
+    this.v3MixedByAsset.clear();
+  }
+
   applySlotBuffer(data: ArrayLike<number>, slotAssetIndexOffset = 0): void {
     const pkt = decodeHostMeshSlotPacket(data);
     if (!pkt || pkt.instances.length === 0) return;
+    if (pkt.version === HOST_MESH_FRAME_V3 && pkt.assetIndex === 0) {
+      for (const inst of pkt.instances) {
+        const ai = inst.meshAssetIndex ?? 0;
+        const list = this.v3MixedByAsset.get(ai) ?? [];
+        list.push({ matrix: inst.matrix, extras: inst.extras });
+        this.v3MixedByAsset.set(ai, list);
+      }
+      if (pkt.v3Flush) this.flushV3MixedBatch();
+      return;
+    }
     const assetIndex =
       pkt.version === HOST_MESH_FRAME_V1 ? slotAssetIndexOffset : pkt.assetIndex;
     const assetId = this.assetOrder[assetIndex];
@@ -697,17 +684,15 @@ export class HostMeshLane {
       root.updateMatrixWorld(true);
       const mixer = new THREE.AnimationMixer(root);
       const action = mixer.clipAction(tpl.swimClip);
-      action.setLoop(THREE.LoopRepeat, Infinity);
       action.play();
       const clipDuration = tpl.swimClip.duration > 0 ? tpl.swimClip.duration : 1;
-      const animOffset = ((inst.extras.animTime % clipDuration) + clipDuration) % clipDuration;
-      action.time = animOffset;
+      const animOffset = inst.extras.animTime % clipDuration;
       this.group.add(root);
       // Sandbox fish carry their yaw rate in param1; pinned decor (flags 1) uses param1 as a phase.
-      const hd = this.motion === "aquarium-hd" || this.motion === "koi-hd"
+      const hd = this.motion === "aquarium-hd"
         ? findHdFishRig(root, inst.extras.animTime * 3.1 + i, (inst.extras.flags & 1) === 0 ? inst.extras.param1 : 0)
         : undefined;
-      list.push({ root, mixer, action, animOffset, clipDuration, hd });
+      list.push({ root, mixer, animOffset, clipDuration, hd });
     }
     this.skinnedLive.set(assetId, list);
   }
