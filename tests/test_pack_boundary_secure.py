@@ -149,7 +149,7 @@ def test_secure_ci_check_mocked_api_uses_pr_head_tree(tmp_path: Path) -> None:
     changed = ["plugins/src/demo-pack/plugin.yml"]
     with patch(
         "scripts.check_pack_pr_boundary.load_pr_review_context",
-        return_value=(set(), [], None),
+        return_value=(set(), [], None, None),
     ), patch(
         "scripts.check_pack_pr_boundary.fetch_pull_changed_files",
         return_value=changed,

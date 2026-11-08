@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -20,11 +21,15 @@ from scripts.check_pack_pr_boundary import (
     pack_py_test_path,
     paths_from_name_status,
     paths_from_pull_files_pages,
+    any_head_ref_force_push_after,
+    head_ref_agreement_error,
+    validate_pr_head_for_ci,
     run_check,
     run_host_change_gate,
     validate_catalog_py_change,
     validate_schema_py_change,
     fetch_pull_changed_files,
+    load_pr_review_context,
     validate_pull_changed_files_complete,
     validate_tsconfig_change,
 )
@@ -232,6 +237,134 @@ def test_host_change_reviewed_after_push_passes_dry_run() -> None:
     assert any("check passed" in line for line in lines)
 
 
+def test_validate_pr_head_fail_closed_on_missing() -> None:
+    head = "a" * 40
+    assert validate_pr_head_for_ci(None, head)[1] == "missing pull_request webhook head SHA"
+    assert validate_pr_head_for_ci(head, None)[1] == "missing pulls API head SHA"
+
+
+def test_head_ref_agreement_mismatch_detected() -> None:
+    a, b = "e" * 40, "f" * 40
+    assert validate_pr_head_for_ci(a, b)[1] is not None
+
+
+def test_lifecycle_push_then_label_uses_persisted_delivery() -> None:
+    """push (synchronize) stamps check; labeled-only run reads it — not wall clock."""
+    head = "c" * 40
+    delivery = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    review = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+    ]
+    code, lines = run_host_change_gate(
+        {"host-change", "host-reviewed"}, timeline, delivery_at=delivery
+    )
+    assert code == 0
+    assert any("check passed" in line for line in lines)
+
+
+def test_labeled_only_without_delivery_check_fails() -> None:
+    review = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+    ]
+    code, lines = run_host_change_gate({"host-change", "host-reviewed"}, timeline)
+    assert code == 1
+    assert any("no durable head delivery check" in line for line in lines)
+
+
+def test_delivery_after_review_fails_on_labeled_rerun() -> None:
+    review = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    delivery = datetime(2026, 9, 26, 14, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+    ]
+    code, _ = run_host_change_gate(
+        {"host-change", "host-reviewed"}, timeline, delivery_at=delivery
+    )
+    assert code == 1
+
+
+def test_any_force_push_after_review_blocks_replay_to_older_sha() -> None:
+    head_a = "d" * 40
+    ancestor_b = "e" * 40
+    review = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    t1 = datetime(2026, 9, 26, 10, 0, tzinfo=timezone.utc)
+    t3 = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "head_ref_force_pushed",
+            "commit_id": head_a,
+            "created_at": _iso(t1),
+        },
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+        {
+            "event": "head_ref_force_pushed",
+            "commit_id": ancestor_b,
+            "created_at": _iso(t3),
+        },
+    ]
+    assert any_head_ref_force_push_after(timeline, review)
+    delivery = t1
+    code, _ = run_host_change_gate(
+        {"host-change", "host-reviewed"}, timeline, delivery_at=delivery
+    )
+    assert code == 1
+
+
+def test_load_context_with_check_delivery(monkeypatch) -> None:
+    head = "f" * 40
+    delivery = datetime(2026, 11, 7, 6, 51, tzinfo=timezone.utc)
+    review = datetime(2026, 11, 7, 6, 52, tzinfo=timezone.utc)
+
+    def fake_labels(_r: str, _p: int, _t: str) -> set[str]:
+        return {"host-change", "host-reviewed"}
+
+    def fake_timeline(_r: str, _p: int, _t: str) -> list[dict]:
+        return [
+            {
+                "event": "labeled",
+                "label": {"name": "host-reviewed"},
+                "created_at": _iso(review),
+            },
+        ]
+
+    def fake_head(_r: str, _p: int, _t: str) -> str:
+        return head
+
+    monkeypatch.setenv("PACK_BOUNDARY_HEAD_SHA", head)
+    with patch("scripts.check_pack_pr_boundary.fetch_pull_labels", fake_labels):
+        with patch("scripts.check_pack_pr_boundary.fetch_issue_timeline", fake_timeline):
+            with patch("scripts.check_pack_pr_boundary.fetch_pull_head_sha", fake_head):
+                with patch(
+                    "scripts.check_pack_pr_boundary.fetch_head_delivery_at",
+                    lambda *_a, **_k: delivery,
+                ):
+                    labels, timeline, resolved, err = load_pr_review_context(
+                        "zotoio/zoto-viz", 337, "token"
+                    )
+    assert err is None
+    assert resolved == head
+    code, _ = run_host_change_gate(labels, timeline, delivery_at=delivery)
+    assert code == 0
+
+
 def test_host_change_push_after_review_fails_dry_run() -> None:
     review = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
     push = datetime(2026, 9, 26, 13, 0, tzinfo=timezone.utc)
@@ -357,9 +490,11 @@ def test_legacy_cli_looks_up_labels_when_pr_from_github_event(tmp_path, monkeypa
 
     calls: list[tuple[str, int, str]] = []
 
-    def fake_load(repo: str, pr: int, token: str) -> tuple[set[str], list, datetime | None]:
+    def fake_load(
+        repo: str, pr: int, token: str
+    ) -> tuple[set[str], list, str | None, str | None]:
         calls.append((repo, pr, token))
-        return (set(), [], None)
+        return (set(), [], None, None)
 
     with patch("scripts.check_pack_pr_boundary.load_pr_review_context", fake_load):
         with patch("scripts.check_pack_pr_boundary.git_diff_changed_paths", return_value=[]):
@@ -461,20 +596,19 @@ def test_pack_pr_editing_workflow_yaml_is_host_infra() -> None:
     assert any(PACK_PR_HOST_INFRA_FAIL in line or "host infra" in line for line in lines)
 
 
-def test_merge_workflow_label_event_appends_host_reviewed() -> None:
+def test_merge_workflow_label_event_does_not_synthesize_from_env() -> None:
     import os
 
     os.environ["PACK_BOUNDARY_EVENT_ACTION"] = "labeled"
     os.environ["PACK_BOUNDARY_EVENT_LABEL_NAME"] = "host-reviewed"
     os.environ["PACK_BOUNDARY_EVENT_LABEL_CREATED_AT"] = "2026-09-26T14:00:00Z"
     try:
-        merged = merge_workflow_label_event([])
+        merged = merge_workflow_label_event([{"event": "committed", "sha": "a" * 40}])
     finally:
         os.environ.pop("PACK_BOUNDARY_EVENT_ACTION", None)
         os.environ.pop("PACK_BOUNDARY_EVENT_LABEL_NAME", None)
         os.environ.pop("PACK_BOUNDARY_EVENT_LABEL_CREATED_AT", None)
-    assert len(merged) == 1
-    assert merged[0]["event"] == "labeled"
+    assert merged == [{"event": "committed", "sha": "a" * 40}]
 
 
 def test_fetch_pull_changed_files_rejects_non_array_page() -> None:
@@ -511,13 +645,28 @@ def test_validate_pull_changed_files_rejects_at_api_limit() -> None:
     assert f">={limit}" in err
 
 
-def test_committed_event_timestamp_ignores_committer_date() -> None:
-    from scripts.check_pack_pr_boundary import _committed_event_timestamp
-
-    assert _committed_event_timestamp({"committer": {"date": "2026-09-26T15:00:00Z"}}) is None
-    ts = _committed_event_timestamp({"created_at": "2026-09-26T14:00:00Z"})
-    assert ts is not None
-    assert ts.year == 2026
+def test_force_push_after_review_fails_gate() -> None:
+    head = "9" * 40
+    review = datetime(2026, 9, 26, 12, 0, tzinfo=timezone.utc)
+    replay = datetime(2026, 9, 26, 14, 0, tzinfo=timezone.utc)
+    delivery = datetime(2026, 9, 26, 10, 0, tzinfo=timezone.utc)
+    timeline = [
+        {
+            "event": "labeled",
+            "label": {"name": "host-reviewed"},
+            "created_at": _iso(review),
+        },
+        {
+            "event": "head_ref_force_pushed",
+            "commit_id": head,
+            "created_at": _iso(replay),
+        },
+    ]
+    code, lines = run_host_change_gate(
+        {"host-change", "host-reviewed"}, timeline, delivery_at=delivery
+    )
+    assert code == 1
+    assert any("head_ref_force_pushed after host-reviewed" in line for line in lines)
 
 
 def test_rename_lists_predecessor_for_boundary_scan() -> None:
