@@ -32,6 +32,8 @@ from typing import Callable
 from urllib.parse import urljoin, urlparse
 import ipaddress
 
+from . import http_headers
+
 Progress = Callable[[str, dict], None]
 
 def location_allowed(loc: str, device_ip: str) -> bool:
@@ -241,7 +243,10 @@ def step_upnp(ip: str) -> dict:
             devices.append({"location": loc, "error": "LOCATION rejected (not this host / not http(s))"})
             continue
         try:
-            with urllib.request.urlopen(urllib.request.Request(loc, headers={"User-Agent": "zoto-viz/1.0"}), timeout=5) as resp:
+            with urllib.request.urlopen(
+                urllib.request.Request(loc, headers=http_headers.outbound_headers(loc)),
+                timeout=5,
+            ) as resp:
                 body = resp.read(262144)
         except Exception as e:  # noqa: BLE001
             devices.append({"location": loc, "error": str(e)})
