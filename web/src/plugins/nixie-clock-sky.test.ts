@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import FRAG from "../../../plugins/src/nixie-clock/sky/fragment.glsl?raw";
 import {
+  NIXIE_GLYPH_FONT_ASPECT,
+  nixieGlyphAspectCorrection,
+  nixieGlyphBoxPixelAspect,
+  nixieGlyphCorrectedPixelAspect,
+} from "../../../plugins/src/nixie-clock/frontend/tubes";
+import {
   pluginSkyVertGlsl,
   probePluginSkyCompile,
   probePluginSkyVertCompile,
@@ -93,5 +99,18 @@ describe("nixie-clock sky GLSL", () => {
     expect("error" in wrapped).toBe(false);
     if ("error" in wrapped) return;
     expect(pluginSkyCompileErrorCount(wrapped.frag, pluginSkyVertGlsl)).toBe(0);
+  });
+
+  it("glyph aspect: shader corrects 5×7 font for ultrawide and square buffers", () => {
+    expect(FRAG).toMatch(/\bnixieGlyphUv\b/);
+    expect(FRAG).toMatch(/uResolution\.x > 8\.0/);
+    const ultrawide = { w: 5120, h: 1440 };
+    const square = { w: 1440, h: 1440 };
+    expect(nixieGlyphBoxPixelAspect(ultrawide)).toBeGreaterThan(NIXIE_GLYPH_FONT_ASPECT * 1.2);
+    expect(nixieGlyphBoxPixelAspect(square)).toBeLessThan(NIXIE_GLYPH_FONT_ASPECT * 0.85);
+    expect(nixieGlyphAspectCorrection(ultrawide)).toBeGreaterThan(1);
+    expect(nixieGlyphAspectCorrection(square)).toBeLessThan(1);
+    expect(nixieGlyphCorrectedPixelAspect(ultrawide)).toBeCloseTo(NIXIE_GLYPH_FONT_ASPECT, 5);
+    expect(nixieGlyphCorrectedPixelAspect(square)).toBeCloseTo(NIXIE_GLYPH_FONT_ASPECT, 5);
   });
 });

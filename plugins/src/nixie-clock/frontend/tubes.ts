@@ -153,6 +153,28 @@ export function formatNixieFallbackLine(
   return cache.text;
 }
 
+/** Shader tube layout — keep in sync with `sky/fragment.glsl`. */
+export const NIXIE_SHADER_TUBE = { w: 0.11, h: 0.34 } as const;
+export const NIXIE_SHADER_GLYPH_INSET = { x0: 0.18, y0: 0.16, w: 0.64, h: 0.70 } as const;
+export const NIXIE_GLYPH_FONT_ASPECT = 5 / 7;
+
+/** Pixel width:height of the glyph box inside one tube (uncorrected). */
+export function nixieGlyphBoxPixelAspect(canvas: { w: number; h: number }): number {
+  const boxW = NIXIE_SHADER_GLYPH_INSET.w * NIXIE_SHADER_TUBE.w * canvas.w;
+  const boxH = NIXIE_SHADER_GLYPH_INSET.h * NIXIE_SHADER_TUBE.h * canvas.h;
+  return boxW / boxH;
+}
+
+/** Horizontal UV scale applied in the sky shader so the 5×7 font stays square. */
+export function nixieGlyphAspectCorrection(canvas: { w: number; h: number }): number {
+  return nixieGlyphBoxPixelAspect(canvas) / NIXIE_GLYPH_FONT_ASPECT;
+}
+
+/** On-screen glyph aspect after `nixieGlyphAspectCorrection` (expect ~5/7). */
+export function nixieGlyphCorrectedPixelAspect(canvas: { w: number; h: number }): number {
+  return nixieGlyphBoxPixelAspect(canvas) / nixieGlyphAspectCorrection(canvas);
+}
+
 export function packNixieBuffer(
   date: Date,
   look: NixieLook,
