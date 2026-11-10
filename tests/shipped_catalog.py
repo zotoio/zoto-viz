@@ -87,7 +87,7 @@ PINNED_EXAMPLE_PACK_IDS: tuple[str, ...] = ("sample",)
 # Packs whose host support merged ahead of their pack-only PR (pack-boundary keeps a pack PR out of
 # these host pins). Each one counts as shipped once plugins/src/<id>/plugin.yml is on disk; move it
 # into PINNED_SHIPPED_PLUGIN_IDS in a later host change. web/test-support/staged-packs.ts reads it.
-STAGED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = ("orrery",)
+STAGED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = ("bonsai", "orrery")
 
 
 def staged_shipped_plugin_ids() -> tuple[str, ...]:

@@ -3,6 +3,7 @@ import type { VizPluginContract } from "../plugins/viz-host";
 import { HostMeshLane, type HostMeshAssetDecl, type HostMeshMotionProfile } from "../graph/host-mesh-lane";
 import { HOST_MESH_ENV_ROLE } from "../graph/host-mesh-env";
 import { buildAquariumScenery } from "../graph/aquarium-scenery";
+import { buildBonsaiScenery } from "../graph/bonsai-scenery";
 import { buildKoiPondScenery } from "../graph/koi-pond-scenery";
 import { buildMarbleRunScenery } from "../graph/marble-run-scenery";
 import { buildOrreryScenery } from "../graph/orrery-scenery";
@@ -167,6 +168,13 @@ export function pinPackContents(
     // the Blender track sits at the origin in metres; marbles are instanced scenery fed from slots
     lane.setScenery(buildMarbleRunScenery().root);
     lane.applySlotBuffer(encodeHostMeshSlotPacket(0, [{ matrix: IDENTITY_MATRIX }]));
+  } else if (packId === "bonsai") {
+    // bench/board/slab and the tree sit at the origin in metres; the scenery turns the board,
+    // thins and colours the leaves and instances blossoms and falling leaves from the pack's slots
+    lane.setScenery(buildBonsaiScenery().root);
+    for (let asset = 0; asset < 2; asset++) {
+      lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, [{ matrix: IDENTITY_MATRIX }]));
+    }
   } else if (packId === "orrery") {
     // desk, machine and planet templates all sit at the origin in metres; the scenery turns the
     // gears and instances arms, planets and sparks from the pack's slots
