@@ -3,6 +3,7 @@ import type { VizPluginContract } from "../plugins/viz-host";
 import { HostMeshLane, type HostMeshAssetDecl, type HostMeshMotionProfile } from "../graph/host-mesh-lane";
 import { HOST_MESH_ENV_ROLE } from "../graph/host-mesh-env";
 import { buildAquariumScenery } from "../graph/aquarium-scenery";
+import { buildAuroraFjordScenery } from "../graph/aurora-fjord-scenery";
 import { buildBonsaiScenery } from "../graph/bonsai-scenery";
 import { buildKoiPondScenery } from "../graph/koi-pond-scenery";
 import { buildMarbleRunScenery } from "../graph/marble-run-scenery";
@@ -172,6 +173,13 @@ export function pinPackContents(
     // bench/board/slab and the tree sit at the origin in metres; the scenery turns the board,
     // thins and colours the leaves and instances blossoms and falling leaves from the pack's slots
     lane.setScenery(buildBonsaiScenery().root);
+    for (let asset = 0; asset < 2; asset++) {
+      lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, [{ matrix: IDENTITY_MATRIX }]));
+    }
+  } else if (packId === "aurora-fjord") {
+    // terrain and shore sit at the origin in metres (water y = 0); the scenery mirrors them under
+    // the water, lights the cabin windows and lays ripples and streaks on the water from the slots
+    lane.setScenery(buildAuroraFjordScenery().root);
     for (let asset = 0; asset < 2; asset++) {
       lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, [{ matrix: IDENTITY_MATRIX }]));
     }

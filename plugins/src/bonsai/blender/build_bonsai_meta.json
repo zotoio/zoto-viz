@@ -1,0 +1,97 @@
+{
+  "blender": "5.2.1 LTS",
+  "env": {
+    "bytes": 44744,
+    "gpu": 699050,
+    "id": "env-hd",
+    "image": "512x256",
+    "path": "assets/env-hd.jpg",
+    "role": "environment",
+    "sha256": "c046325c7cee885f9a5bd923f7dac66ba9c28e158e2f72199dd274db0d71f2c7"
+  },
+  "gltfpack": "gltfpack 0.24",
+  "sets": {
+    "hd": [
+      {
+        "bytes": 492724,
+        "gpuBytes": 3069266,
+        "id": "bonsai-base-hd",
+        "images": [
+          "320x160",
+          "256x256",
+          "128x128",
+          "128x128",
+          "256x256",
+          "256x128",
+          "256x256",
+          "512x512"
+        ],
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/bonsai-base-hd.glb",
+        "rawBytes": 1512764,
+        "sha256": "fb56893cc716d19828395c96452d4430fe1c4e11a33745fe21950ebc3dba34f1",
+        "triangles": 34631
+      },
+      {
+        "bytes": 617364,
+        "gpuBytes": 4543828,
+        "id": "bonsai-tree-hd",
+        "images": [
+          "1024x512",
+          "256x256",
+          "512x512"
+        ],
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/bonsai-tree-hd.glb",
+        "rawBytes": 1764604,
+        "sha256": "504e1123ca5df700de0b75cde310ad4e1f0a197bfb525ab9851be1c92449d9eb",
+        "triangles": 36906
+      }
+    ],
+    "standard": [
+      {
+        "bytes": 98072,
+        "gpuBytes": 1310718,
+        "id": "bonsai-base",
+        "images": [
+          "256x128",
+          "256x256",
+          "128x128",
+          "256x256",
+          "256x256"
+        ],
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/bonsai-base.glb",
+        "rawBytes": 186120,
+        "sha256": "a73b579b1c7493c3998251758f66bc72f50ff10a342f465481f9cceeba98cd8b",
+        "triangles": 3202
+      },
+      {
+        "bytes": 295384,
+        "gpuBytes": 1048575,
+        "id": "bonsai-tree",
+        "images": [
+          "512x256",
+          "256x256"
+        ],
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/bonsai-tree.glb",
+        "rawBytes": 821704,
+        "sha256": "f4157b8fcd7140a7b79cc398f2fad5f860ccda4fbefea72ebd85a855b63855a2",
+        "triangles": 10748
+      }
+    ]
+  }
+}
