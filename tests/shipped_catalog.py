@@ -42,6 +42,7 @@ PINNED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = (
     "netpong",
     "nixie-clock",
     "orbits",
+    "orrery",
     "packet-tunnel",
     "pacman",
     "portal",

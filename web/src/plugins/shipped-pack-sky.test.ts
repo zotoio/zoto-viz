@@ -22,6 +22,7 @@ const PINNED_SHIPPED_PACK_SKY_IDS = [
   "marble-run",
   "metro-lines",
   "nixie-clock",
+  "orrery",
   "packet-tunnel",
   "rf-constellation",
   "rocket-car-soccer",

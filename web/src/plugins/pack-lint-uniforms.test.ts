@@ -330,7 +330,7 @@ describe("uniform declaration lint (#171 b): assumptions pinned", () => {
       const listed = listPackIds(tmp);
       expect(listed.filter((p) => p.startsWith("."))).toEqual([]);
       expect(listed).toEqual(pinnedShippedPackIds());
-      expect(listed).toHaveLength(73);
+      expect(listed).toHaveLength(74);
       expect(listed.every((p) => existsSync(path.join(tmp, p, "plugin.yml")))).toBe(true);
     } finally {
       rmSync(tmp, { recursive: true, force: true });

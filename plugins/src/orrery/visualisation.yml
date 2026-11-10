@@ -1,0 +1,155 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: ember
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1
+  skySpeed: 0.1
+  skyAudio: false
+  gridOpacity: 0
+dataMapping:
+  - field: talkers[].id
+    effect: stable planet slot per talker (rate-ranked, 2 s hold, 1.2x challenger)
+    default: —
+    clamp: planetCap arms
+  - field: talkers[].rate
+    effect: orbit speed of that talker's planet
+    default: 0
+    clamp: log1p(rate)/log1p(400)
+  - field: talkers[].rate x packets[].size
+    effect: planet size from estimated byte volume (20 s average)
+    default: 0
+    clamp: 12-24 mm, log10 bytes/s
+  - field: talkers[].role
+    effect: planet surface (gateway ringed, self banded, others by id hash)
+    default: lan
+    clamp: 7 planet maps
+  - field: packets[].proto
+    effect: spark colour along the gear train
+    default: tcp
+    clamp: hash01 into amber-gold
+  - field: packets[]
+    effect: one spark per packet from the escape wheel to a planet
+    default: 0
+    clamp: maxPacketsPerFrame, sparkCap pool
+  - field: sys.failed
+    effect: escapement slows to an uneven tick and a steady fail plaque lights
+    default: 0
+    clamp: 0..1 above failThreshold
+  - field: audio
+    effect: sun glow and lamp warmth breathe
+    default: 0
+    clamp: 0..1
+workBudget:
+  maxDrawCalls: 64
+  maxTriangles: 120000
+  maxInstances: 48
+  maxGpuBytes: 8388608
+  maxSimStepsPerFrame: 4
+  maxPacketsPerFrame: 8
+config:
+  - key: modelSet
+    label: model set
+    type: select
+    values:
+      - [standard, Standard]
+      - [hd, HD]
+    default: standard
+    hint: Standard meshes and 128-256 px colour maps, or the HD Blender set (assets ending -hd) with normal and roughness maps, perlage brass, clear-coated stones and study reflections.
+  - key: preset
+    label: preset
+    type: select
+    default: study
+    values:
+      - [study, Study]
+      - [night-watch, Night Watch]
+      - [clockmaker, Clockmaker]
+      - [grand, Grand Orrery]
+    hint: Presets set lamp, camera, tick and planet count. Change any knob after picking a preset.
+  - key: planetCap
+    label: planets
+    type: number
+    default: 7
+    min: 1
+    max: 8
+    step: 1
+    hint: Geared arms that carry talkers; the busiest talkers hold them with a 2 s hold.
+  - key: orbitSpeed
+    label: orbit speed
+    type: number
+    default: 1
+    min: 0.25
+    max: 2
+    step: 0.05
+    hint: Scales every planet's rate-driven orbit.
+  - key: planetScale
+    label: planet size
+    type: number
+    default: 1
+    min: 0.6
+    max: 1.4
+    step: 0.05
+    hint: Scales the byte-volume planet size.
+  - key: tickRate
+    label: tick rate
+    type: number
+    default: 1
+    min: 0.5
+    max: 2
+    step: 0.05
+    hint: Escapement beats per half second when healthy.
+  - key: sparks
+    label: sparks
+    type: select
+    default: "true"
+    values:
+      - ["true", On]
+      - ["false", Off]
+    hint: Packets as sparks running from the escape wheel through the gears to a planet.
+  - key: sparkCap
+    label: max sparks
+    type: number
+    default: 24
+    min: 0
+    max: 32
+    step: 1
+    hint: Pooled sparks; never exceeded (and never past the instance budget).
+  - key: failThreshold
+    label: fail threshold
+    type: number
+    default: 0.2
+    min: 0.05
+    max: 0.95
+    step: 0.05
+    hint: sys.failed above this slows the escapement to an uneven tick and lights the steady fail plaque.
+  - key: cameraMode
+    label: camera
+    type: select
+    default: drift
+    values:
+      - [drift, Slow drift]
+      - [fixed, Fixed]
+      - [low, Low (desk level)]
+      - [top, Clockmaker (from above)]
+    hint: Drift sways a few degrees over two minutes. Reduced motion holds the camera still.
+  - key: lampWarmth
+    label: lamp
+    type: number
+    default: 0.7
+    min: 0
+    max: 1
+    step: 0.05
+    hint: Banker's lamp brightness on the desk and the wall.
+  - key: reducedMotion
+    label: reduced motion
+    type: select
+    default: auto
+    values:
+      - [auto, "Auto (follow the system)"]
+      - [on, On]
+      - [off, Off]
+    hint: Holds the camera, halves sparks and slows the fades.
