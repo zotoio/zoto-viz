@@ -1,0 +1,226 @@
+{
+  "koi-kohaku-hd.glb": {
+    "actions": [
+      "swim"
+    ],
+    "before": {
+      "axis": "y",
+      "bare_head_weights": 0,
+      "body_band_boundary": 174,
+      "faces": 5876,
+      "has_head_bone_group": true,
+      "head_boundary": 24,
+      "head_verts": 57,
+      "ok_head": true,
+      "verts": 3196
+    },
+    "bytes": 339800,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform",
+      "KHR_materials_clearcoat"
+    ],
+    "images": 4,
+    "integrity": {
+      "axis": "y",
+      "bare_head_weights": 0,
+      "body_band_boundary": 174,
+      "faces": 5876,
+      "has_head_bone_group": true,
+      "head_boundary": 24,
+      "head_verts": 57,
+      "ok_head": true,
+      "verts": 3196
+    },
+    "nodes": [
+      "fin_pectoral_L",
+      "fin_pectoral_R",
+      "head",
+      "koi_kohaku",
+      "koi_kohaku_rig",
+      "root",
+      "spine_01",
+      "spine_02",
+      "spine_03",
+      "tail_01",
+      "tail_02"
+    ],
+    "problems": [],
+    "reimported_meshes": 1,
+    "sha256": "83c6870b1319f1b50c9f52f0c9b06a9e2a457e93a960f1f18af4b27a412fd022",
+    "triangles": 5876
+  },
+  "koi-ogon-hd.glb": {
+    "actions": [
+      "swim"
+    ],
+    "before": {
+      "axis": "y",
+      "bare_head_weights": 0,
+      "body_band_boundary": 174,
+      "faces": 5876,
+      "has_head_bone_group": true,
+      "head_boundary": 24,
+      "head_verts": 57,
+      "ok_head": true,
+      "verts": 3196
+    },
+    "bytes": 375780,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform",
+      "KHR_materials_clearcoat"
+    ],
+    "images": 4,
+    "integrity": {
+      "axis": "y",
+      "bare_head_weights": 0,
+      "body_band_boundary": 174,
+      "faces": 5876,
+      "has_head_bone_group": true,
+      "head_boundary": 24,
+      "head_verts": 57,
+      "ok_head": true,
+      "verts": 3196
+    },
+    "nodes": [
+      "fin_pectoral_L",
+      "fin_pectoral_R",
+      "head",
+      "koi_ogon",
+      "koi_ogon_rig",
+      "root",
+      "spine_01",
+      "spine_02",
+      "spine_03",
+      "tail_01",
+      "tail_02"
+    ],
+    "problems": [],
+    "reimported_meshes": 1,
+    "sha256": "62487df292f032a058d9c2f406571f122095232bf398be4e6951dde4aa19a1d2",
+    "triangles": 5876
+  },
+  "koi-pond-scape-hd.glb": {
+    "bytes": 315164,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform"
+    ],
+    "images": 3,
+    "nodes": [
+      "koi-pond-scape",
+      "substrate"
+    ],
+    "parts": {
+      "substrate": 3384
+    },
+    "problems": [],
+    "reimported_meshes": 1,
+    "sha256": "8e6e92e7e624fa42bc99bd1c6eb6dd04459719c51f9a3feb930a8dccb67ed807",
+    "triangles": 3384
+  },
+  "koi-showa-hd.glb": {
+    "actions": [
+      "swim"
+    ],
+    "before": {
+      "axis": "y",
+      "bare_head_weights": 0,
+      "body_band_boundary": 174,
+      "faces": 5876,
+      "has_head_bone_group": true,
+      "head_boundary": 24,
+      "head_verts": 57,
+      "ok_head": true,
+      "verts": 3196
+    },
+    "bytes": 335608,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform",
+      "KHR_materials_clearcoat"
+    ],
+    "images": 4,
+    "integrity": {
+      "axis": "y",
+      "bare_head_weights": 0,
+      "body_band_boundary": 174,
+      "faces": 5876,
+      "has_head_bone_group": true,
+      "head_boundary": 24,
+      "head_verts": 57,
+      "ok_head": true,
+      "verts": 3196
+    },
+    "nodes": [
+      "fin_pectoral_L",
+      "fin_pectoral_R",
+      "head",
+      "koi_showa",
+      "koi_showa_rig",
+      "root",
+      "spine_01",
+      "spine_02",
+      "spine_03",
+      "tail_01",
+      "tail_02"
+    ],
+    "problems": [],
+    "reimported_meshes": 1,
+    "sha256": "e6f16dba36293cf3a05d62c1dd40585c2db37b84d5a0534d7d2bf978cf1a277f",
+    "triangles": 5876
+  },
+  "lily-pads-hd.glb": {
+    "bytes": 357436,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform",
+      "KHR_materials_clearcoat",
+      "KHR_materials_sheen"
+    ],
+    "images": 5,
+    "nodes": [
+      "lily-pads",
+      "lily-pads-root",
+      "lotus-blooms"
+    ],
+    "parts": {
+      "lily-pads": 8976,
+      "lotus-blooms": 8820
+    },
+    "problems": [],
+    "reimported_meshes": 2,
+    "sha256": "6ae3bb6c7e179a831963b9715ff48cb48f87c1fd94ef21330122863a0593aebf",
+    "triangles": 17796
+  },
+  "pond-rocks-hd.glb": {
+    "bytes": 636800,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform"
+    ],
+    "images": 3,
+    "nodes": [
+      "bank-stones",
+      "fountain",
+      "pond-rocks",
+      "pond-rocks-root"
+    ],
+    "parts": {
+      "bank-stones": 9387,
+      "fountain": 1259,
+      "pond-rocks": 5747
+    },
+    "problems": [],
+    "reimported_meshes": 3,
+    "sha256": "c95dcd264c000a6bfb8b81b85f4b0b9377f581d25ce26d7fce4980a80c873614",
+    "triangles": 16393
+  }
+}

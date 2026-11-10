@@ -4,10 +4,14 @@ import {
   hostMeshDeclsForSet,
   hostMeshEnvironmentDecl,
   hostMeshModelSet,
+  KOI_HD_SCAPE_ID,
+  KOI_HD_SCENERY_ASSETS,
   mountPaneHostMeshes,
+  pinPackContents,
   type HostMeshModelSet,
 } from "./host-mesh-bridge";
 import { HostMeshLane, type HostMeshAssetDecl } from "../graph/host-mesh-lane";
+import { decodeHostMeshSlotPacket } from "../../../plugins/sdk/host-mesh-frame";
 
 type Decl = { id: string; path: string };
 
@@ -99,5 +103,53 @@ describe("host mesh environment (HD image-based lighting)", () => {
     await mountPaneHostMeshes(lane, { id: "koi-pond", assets: decls }, () => false, "hd");
     // once at mount start, once when the pane turned out to be rebound
     expect(clear).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("koi-pond scenery pins per model set", () => {
+  const KOI_BASE: HostMeshAssetDecl[] = [
+    "koi-pond-scape",
+    "koi-kohaku",
+    "koi-showa",
+    "koi-ogon",
+    "lily-pads",
+    "pond-rocks",
+  ].map((id) => ({ id, path: `assets/${id}.glb` }));
+  const hd = (ids: string[]): HostMeshAssetDecl[] => ids.map((id) => ({ id: `${id}-hd`, path: `assets/${id}-hd.glb` }));
+  /** The koi HD scan set: a bed-only scape plus scanned pads and rocks. */
+  const KOI_HD_SET = [...KOI_BASE, ...hd(["koi-pond-scape", "koi-kohaku", "koi-showa", "koi-ogon", "lily-pads", "pond-rocks"])];
+  /** An HD set without its own scape: HD keeps the Standard scape, which embeds pads and rocks. */
+  const KOI_HD_NO_SCAPE = [...KOI_BASE, ...hd(["koi-kohaku", "koi-showa", "koi-ogon", "lily-pads", "pond-rocks"])];
+
+  function pinnedAssets(set: HostMeshModelSet, decls: HostMeshAssetDecl[]): number[] {
+    const assets: number[] = [];
+    pinPackContents(
+      {
+        applySlotBuffer: (d) => {
+          const pkt = decodeHostMeshSlotPacket(Array.from(d));
+          if (!pkt) return;
+          for (const inst of pkt.instances) assets.push(inst.meshAssetIndex ?? pkt.assetIndex);
+        },
+        setScenery: () => {},
+      },
+      "koi-pond",
+      set,
+      decls,
+    );
+    return [...new Set(assets)].sort((a, b) => a - b);
+  }
+
+  it("Standard draws the scape and fish only; its scape already carries pads and rocks", () => {
+    expect(pinnedAssets("standard", KOI_HD_SET)).toEqual([0, 1, 2, 3]);
+  });
+
+  it("HD with koi-pond-scape-hd also pins lily-pads and pond-rocks, since that scape is just the pond bed", () => {
+    expect(KOI_HD_SCENERY_ASSETS).toEqual([4, 5]);
+    expect(KOI_HD_SET.some((d) => d.id === KOI_HD_SCAPE_ID)).toBe(true);
+    expect(pinnedAssets("hd", KOI_HD_SET)).toEqual([0, 1, 2, 3, 4, 5]);
+  });
+
+  it("HD without koi-pond-scape-hd keeps the Standard pins so pads and rocks are not drawn twice", () => {
+    expect(pinnedAssets("hd", KOI_HD_NO_SCAPE)).toEqual([0, 1, 2, 3]);
   });
 });

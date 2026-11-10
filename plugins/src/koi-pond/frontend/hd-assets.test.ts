@@ -16,6 +16,13 @@ function glbJson(bytes: Buffer): {
   skins?: unknown[];
   images?: unknown[];
   extensionsUsed?: string[];
+  meshes?: { primitives: { indices?: number; attributes: Record<string, number> }[] }[];
+  accessors?: { count: number }[];
+  materials?: {
+    name?: string;
+    pbrMetallicRoughness?: { baseColorTexture?: unknown };
+    normalTexture?: unknown;
+  }[];
 } {
   const chunkLen = bytes.readUInt32LE(12);
   return JSON.parse(bytes.subarray(20, 20 + chunkLen).toString("utf8"));
@@ -33,7 +40,14 @@ describe("koi-pond HD model set", () => {
   });
 
   it("lists every HD asset after the standard ones, each the sibling of a standard asset", () => {
-    expect(hd.map((d) => d.id)).toEqual(["koi-kohaku-hd", "koi-showa-hd", "koi-ogon-hd", "lily-pads-hd", "pond-rocks-hd"]);
+    expect(hd.map((d) => d.id)).toEqual([
+      "koi-pond-scape-hd",
+      "koi-kohaku-hd",
+      "koi-showa-hd",
+      "koi-ogon-hd",
+      "lily-pads-hd",
+      "pond-rocks-hd",
+    ]);
     const firstHd = decls.findIndex((d) => d.id.endsWith("-hd"));
     expect(decls.slice(firstHd).every((d) => d.id.endsWith("-hd"))).toBe(true);
     for (const d of hd) expect(std.some((s) => `${s.id}-hd` === d.id)).toBe(true);
@@ -58,10 +72,67 @@ describe("koi-pond HD model set", () => {
     for (const d of hd) {
       const bytes = readFileSync(join(PACK, d.path));
       expect(bytes.length).toBe(d.bytes);
-      expect(bytes.length).toBeLessThan(900_000); // textured PBR HD
+      expect(bytes.length).toBeLessThanOrEqual(800_000); // textured PBR HD
       expect(createHash("sha256").update(bytes).digest("hex")).toBe(d.sha256);
       expect(bytes.toString("latin1")).toContain("EXT_meshopt_compression");
     }
+  });
+
+  it("declares triangle counts that match each GLB's index buffers", () => {
+    const tris = new Map(
+      [...PLUGIN.matchAll(/- id: (\S+)\n\s+path: \S+\.glb\n\s+sha256: \w+\n\s+bytes: \d+\n\s+triangles: (\d+)/g)].map(
+        (m) => [m[1]!, Number(m[2])],
+      ),
+    );
+    for (const d of hd) {
+      const json = glbJson(readFileSync(join(PACK, d.path)));
+      const counted = json.meshes!.reduce(
+        (n, m) => n + m.primitives.reduce((k, p) => k + Math.floor(json.accessors![p.indices!]!.count / 3), 0),
+        0,
+      );
+      expect(tris.get(d.id), d.id).toBe(counted);
+    }
+  });
+
+  it("keeps lily-pads and pond-rocks at standard asset indices 4 and 5 (the HD bridge pins them there)", () => {
+    expect(std.map((d) => d.id).slice(0, 6)).toEqual([
+      "koi-pond-scape",
+      "koi-kohaku",
+      "koi-showa",
+      "koi-ogon",
+      "lily-pads",
+      "pond-rocks",
+    ]);
+  });
+
+  it("HD scenery splits the scape into a pebble bed, scanned stones and pads + lotus, under names the host scenery finds", () => {
+    const nodeNames = (id: string) =>
+      glbJson(readFileSync(join(PACK, `assets/${id}.glb`))).nodes.map((n) => n.name || "");
+    const scape = nodeNames("koi-pond-scape-hd");
+    expect(scape).toContain("substrate");
+    expect(scape).toContain("koi-pond-scape");
+    expect(scape.some((n) => /lily|lotus|rock|stone|fountain/.test(n))).toBe(false);
+    const rocks = nodeNames("pond-rocks-hd");
+    for (const n of ["pond-rocks", "bank-stones", "fountain"]) expect(rocks).toContain(n);
+    const lilies = nodeNames("lily-pads-hd");
+    expect(lilies).toContain("lily-pads");
+    expect(lilies).toContain("lotus-blooms");
+    for (const names of [scape, rocks, lilies]) expect(names.some((n) => /kerb/i.test(n))).toBe(false);
+  });
+
+  it("HD scenery is photo-textured PBR (albedo + normal + roughness), lotus with sheen, rocks with wet vertex tint", () => {
+    for (const id of ["koi-pond-scape-hd", "pond-rocks-hd", "lily-pads-hd"]) {
+      const json = glbJson(readFileSync(join(PACK, `assets/${id}.glb`)));
+      expect((json.images ?? []).length, id).toBeGreaterThanOrEqual(3);
+      for (const mat of json.materials ?? []) {
+        expect(mat.pbrMetallicRoughness?.baseColorTexture, `${id} ${mat.name}`).toBeDefined();
+        expect(mat.normalTexture, `${id} ${mat.name}`).toBeDefined();
+      }
+    }
+    const lilies = glbJson(readFileSync(join(PACK, "assets/lily-pads-hd.glb")));
+    expect(lilies.extensionsUsed).toContain("KHR_materials_sheen");
+    const rocks = glbJson(readFileSync(join(PACK, "assets/pond-rocks-hd.glb")));
+    expect(rocks.meshes!.every((m) => m.primitives.every((p) => "COLOR_0" in p.attributes))).toBe(true);
   });
 
   it("HD koi are textured, skinned, headed, with a swim clip on spine/tail/fins", () => {
@@ -82,5 +153,21 @@ describe("koi-pond HD model set", () => {
       const swim = json.animations.find((a) => a.name === "swim")!;
       expect(swim.channels.length).toBeGreaterThanOrEqual(7);
     }
+  });
+
+  it("ships one HD environment image (2:1 JPEG, ≤ 400 KB) whose bytes and hash match the manifest", () => {
+    const envs = [...PLUGIN.matchAll(/- id: (\S+)\n\s+path: (\S+)\n\s+role: environment\n\s+sha256: (\w+)\n\s+bytes: (\d+)/g)];
+    expect(envs.map((m) => m[1])).toEqual(["env-hd"]);
+    const [, , path, sha, size] = envs[0]!;
+    const bytes = readFileSync(join(PACK, path!));
+    expect(bytes.length).toBe(Number(size));
+    expect(bytes.length).toBeLessThanOrEqual(400_000);
+    expect(createHash("sha256").update(bytes).digest("hex")).toBe(sha);
+    expect(bytes.subarray(0, 3).toString("hex")).toBe("ffd8ff");
+    const sof = bytes.indexOf(Buffer.from([0xff, 0xc0]));
+    expect(sof).toBeGreaterThan(0);
+    const h = bytes.readUInt16BE(sof + 5);
+    const w = bytes.readUInt16BE(sof + 7);
+    expect(w).toBe(h * 2);
   });
 });
