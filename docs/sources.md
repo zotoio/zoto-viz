@@ -55,6 +55,8 @@ Views do not fork a plugin per feed. **Carousel**, **HN Rain**, and **HN Term** 
 
 `set_settings` `{ feed: { includeSources } }` shows or hides headlines on the ticker. Source rows themselves are not a live UI patch — they persist on the server.
 
+**NOAA planetary K-index** (`noaa-kp`) is the geomagnetic Kp from [NOAA SWPC](https://www.swpc.noaa.gov/products/planetary-k-index) (public JSON, no key, US Government work). Add it with `set_source {library: "noaa-kp"}` or Settings → Sources. The row's items are the last eight 3-hour readings, newest first, titled `Kp 3.00 · unsettled` (quiet / unsettled / active / G1–G5 storm); `json` carries `{kp, time, level, max24h, trend, history}`. It polls every 15 minutes and never faster than 10 (lower intervals are raised), sends a descriptive `User-Agent`, revalidates with `If-None-Match` / `If-Modified-Since`, and waits 5 minutes after a failure. The last good reading is kept in `~/.zoto-viz/cache/noaa-kp.json`. When SWPC is unreachable the row keeps serving it with `stale: true` and `liveError`. A restart within 10 minutes of the last fetch reads the cache and does not fetch again. Views that bind it (`source: noaa-kp`) fall back to their idle demo while the row is missing or has never fetched.
+
 [JSONLint datasets](https://jsonlint.com/datasets) are in that library as `jl-<slug>` (for example `jl-countries`, `jl-planets`). Settings → Sources lists the useful reference sets first and the rest of the catalog in a selector. They stay off the ticker until headlines are enabled. Static files are polled once a day.
 
 ## Graph (`base: sources`)
