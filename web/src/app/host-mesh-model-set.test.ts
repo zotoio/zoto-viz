@@ -4,10 +4,13 @@ import {
   hostMeshDeclsForSet,
   hostMeshEnvironmentDecl,
   hostMeshModelSet,
+  KOI_HD_SCENERY_ASSETS,
   mountPaneHostMeshes,
+  pinPackContents,
   type HostMeshModelSet,
 } from "./host-mesh-bridge";
 import { HostMeshLane, type HostMeshAssetDecl } from "../graph/host-mesh-lane";
+import { decodeHostMeshSlotPacket } from "../../../plugins/sdk/host-mesh-frame";
 
 type Decl = { id: string; path: string };
 
@@ -99,5 +102,32 @@ describe("host mesh environment (HD image-based lighting)", () => {
     await mountPaneHostMeshes(lane, { id: "koi-pond", assets: decls }, () => false, "hd");
     // once at mount start, once when the pane turned out to be rebound
     expect(clear).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe("koi-pond scenery pins per model set", () => {
+  function pinnedAssets(set: HostMeshModelSet): number[] {
+    const assets: number[] = [];
+    pinPackContents(
+      {
+        applySlotBuffer: (d) => {
+          const pkt = decodeHostMeshSlotPacket(Array.from(d));
+          for (const inst of pkt?.instances ?? []) assets.push(inst.meshAssetIndex ?? pkt!.assetIndex);
+        },
+        setScenery: () => {},
+      },
+      "koi-pond",
+      set,
+    );
+    return [...new Set(assets)].sort((a, b) => a - b);
+  }
+
+  it("Standard draws the scape and fish only; its scape already carries pads and rocks", () => {
+    expect(pinnedAssets("standard")).toEqual([0, 1, 2, 3]);
+  });
+
+  it("HD also pins lily-pads and pond-rocks, since its scape is just the pond bed", () => {
+    expect(KOI_HD_SCENERY_ASSETS).toEqual([4, 5]);
+    expect(pinnedAssets("hd")).toEqual([0, 1, 2, 3, 4, 5]);
   });
 });
