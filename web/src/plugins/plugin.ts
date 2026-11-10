@@ -272,7 +272,15 @@ export interface PluginView {
   /** Host drawer: presets, HUD label fields, section order (from plugin.yml / visualisation.yml). */
   settings?: import("./plugin-visualisation").PluginSettingsDecl;
   /** Declared binary assets (meshes/textures) hashed into consent (`assets_sha256`). */
-  assets?: { id: string; path: string; sha256?: string; bytes?: number; triangles?: number }[];
+  assets?: {
+    id: string;
+    path: string;
+    sha256?: string;
+    bytes?: number;
+    triangles?: number;
+    /** `environment`: equirect image for HD image-based lighting (default `mesh`). */
+    role?: "mesh" | "environment";
+  }[];
   assets_sha256?: string;
   /** Catalog manifest kind; data-source trees are remix feeds, not view menu rows. */
   pluginKind?: "data-source";

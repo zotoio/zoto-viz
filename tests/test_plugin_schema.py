@@ -491,3 +491,35 @@ def test_viz_graph_walk_true_fails_schema() -> None:
             "capabilities": ["viz.write"],
             "viz": {"graphWalk": True},
         })
+
+
+def _with_assets(*assets: dict) -> dict:
+    return {**MINIMAL, "assets": list(assets)}
+
+
+_MESH = {"id": "koi", "path": "assets/koi.glb", "triangles": 120}
+_ENV = {"id": "env-hd", "path": "assets/env-hd.jpg", "role": "environment"}
+
+
+def test_environment_asset_role_validates() -> None:
+    _validator().validate(_with_assets(_MESH, _ENV))
+    _validator().validate(_with_assets({**_MESH, "role": "mesh"}, {**_ENV, "path": "assets/sky.webp"}))
+    plugins.validate_doc(_with_assets(_MESH, _ENV))
+
+
+@pytest.mark.parametrize("bad", [
+    {**_ENV, "path": "assets/env-hd.hdr"},
+    {**_ENV, "path": "assets/env-hd.glb"},
+    {**_ENV, "triangles": 0},
+    {**_ENV, "role": "skybox"},
+])
+def test_environment_asset_must_be_an_image(bad: dict) -> None:
+    with pytest.raises(ValidationError):
+        _validator().validate(_with_assets(_MESH, bad))
+
+
+def test_at_most_one_environment_asset() -> None:
+    doc = _with_assets(_MESH, _ENV, {**_ENV, "id": "env-b", "path": "assets/env-b.png"})
+    _validator().validate(doc)
+    with pytest.raises(ValueError, match="at most one role: environment"):
+        plugins.validate_doc(doc)

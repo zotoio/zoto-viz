@@ -5095,6 +5095,7 @@ export class NetScene implements HostedView, RenderScalePane {
     window.removeEventListener("pointercancel", this.onCamPtrLost);
     this.listenerAbort.abort();
     this.pulse.disable();
+    this.hostMeshLane.clear();
     this.layout?.dispose();
     this.fabric.dispose();
     this.arrows.geometry.dispose();
