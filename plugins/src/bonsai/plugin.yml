@@ -1,0 +1,65 @@
+id: bonsai
+name: Bonsai Seasons
+version: 1
+hint: A slowly turning bonsai on a scanned stone slab — leaf density follows active talkers, packet bursts open blossoms, failed units turn the pads to autumn with leaves gently falling, and the time of day sets the light.
+description: >-
+  Bench, board, slab, moss and tree are Blender-built GLBs (blender/build_bonsai.py: geometry-node
+  trunk, roots and branches swept with a Poly Haven bark scan, CC0 leaf alpha cards instanced over
+  the pads, the Poly Haven boulder scan as the slab with an ambientCG moss carpet, ray-cast AO baked
+  into vertex colour, then gltfpack -cc -kn -km) drawn by the host mesh lane; the host scenery turns
+  the board on a slow turntable, thins and colours the leaves per pad from viz slot 1 and instances
+  blossoms and falling leaves from slots 2..5. The sandbox (frontend/bonsai.ts) runs the seasons,
+  burst detection, the blossom and falling-leaf pools, time-of-day light and the camera. Standard
+  and HD model sets via modelSet. Data mapping is declared in visualisation.yml dataMapping (and
+  data-mapping.yml); per-frame caps in workBudget. Idle host fixture keeps demo talkers and packets
+  moving the tree.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+assets:
+  - id: bonsai-base
+    path: assets/bonsai-base.glb
+    sha256: a73b579b1c7493c3998251758f66bc72f50ff10a342f465481f9cceeba98cd8b
+    bytes: 98072
+    triangles: 3202
+  - id: bonsai-tree
+    path: assets/bonsai-tree.glb
+    sha256: f4157b8fcd7140a7b79cc398f2fad5f860ccda4fbefea72ebd85a855b63855a2
+    bytes: 295384
+    triangles: 10748
+  - id: bonsai-base-hd
+    path: assets/bonsai-base-hd.glb
+    sha256: e2891caa65582da2176dba0e748054dd0a7d64afdf610eb7974e006ec08d3d86
+    bytes: 366632
+    triangles: 22423
+  - id: bonsai-tree-hd
+    path: assets/bonsai-tree-hd.glb
+    sha256: dba5b6c41a324980961999af1b4b9aeeb04ed7afac2c938cc6d3a3084350fbe7
+    bytes: 774444
+    triangles: 27816
+  - id: env-hd
+    path: assets/env-hd.jpg
+    role: environment
+    sha256: c046325c7cee885f9a5bd923f7dac66ba9c28e158e2f72199dd274db0d71f2c7
+    bytes: 44744
+viz:
+  graphWalk: false
+  contract: 2
+  maxBuffers: 6
+  maxBufferFloats: 64
+  maxParticles: 0
+  # pad, blossom and falling-leaf slots are 1..5; the host mesh lane only pins the two GLBs, never reads a slot
+  hostMeshSlot: 7
+  hostMeshSlotCount: 1
+  uniforms:
+    - uTime
+    - uOpacity
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts
