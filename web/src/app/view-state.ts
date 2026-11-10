@@ -11,6 +11,7 @@ import { skyStartingText } from "../graph/sky-starting-card";
 import { GFX_INTERRUPTED_NOTICE, GFX_NO_RESTORE_NOTICE } from "../graph/shader-fallback-copy";
 import { paintPackAssetPaneNotice } from "../plugins/pack-asset-pane-notice";
 import { packSkyTimedOut } from "../plugins/plugin-copy";
+import { AutoRetries, autoRetryable } from "./auto-retry";
 import type { ConsentState } from "./consent-store";
 
 /**
@@ -209,6 +210,34 @@ const heldUnderContextLost = new Map<string, { viewId: string; state: ViewState 
  */
 const loadRetry = new Map<string, () => void>();
 
+/**
+ * A tile that couldn't start (with Retry) runs that Retry again on its own, on backoff. Under a lost
+ * context the step is held (the #216 rerun owns the tile until the context is back).
+ */
+const autoRetries = new AutoRetries({
+  check: (tileId) => {
+    const state = tiles.get(tileId)?.state;
+    if (state && holdsContextLost(state)) return "hold";
+    return autoRetryable(state) ? "run" : "drop";
+  },
+  snapshot: (tileId) => tiles.get(tileId)?.state,
+});
+
+/** The tile's automatic retry stops (its pane went away). */
+export function cancelAutoRetry(tileId: string): void {
+  autoRetries.forget(tileId);
+}
+
+/** An automatic retry is waiting for this tile. */
+export function autoRetryPending(tileId: string): boolean {
+  return autoRetries.pending(tileId);
+}
+
+/** Every state but a retryable Couldn't start, or Starting on its way there, ends the tile's retries. */
+function settleAutoRetry(tileId: string, state: ViewState, viewChanged: boolean): void {
+  if (viewChanged || !(autoRetryable(state) || state.kind === "starting")) autoRetries.forget(tileId);
+}
+
 function isLoadFailed(state: ViewState | null | undefined): boolean {
   return state?.kind === "couldnt-start" && state.reason === "load-failed";
 }
@@ -291,6 +320,7 @@ export function setViewState(tileId: string, viewId: string, state: ViewState, e
     return;
   }
   tiles.set(tileId, { viewId, state, el: el ?? prev?.el ?? null });
+  settleAutoRetry(tileId, state, !!prev && prev.viewId !== viewId);
   if ((state.kind === "starting" || state.kind === "ready")
     && (prev?.state.kind === "needs-you" || prev?.state.kind === "couldnt-start")) {
     removeStateNotice(viewStateTileEl(tileId));
@@ -310,6 +340,7 @@ export function viewStateViewId(tileId: string): string | null {
 /** Forget a tile (view torn down): attributes come off its element. */
 export function clearViewState(tileId: string): void {
   if (!tiles.has(tileId)) return;
+  autoRetries.forget(tileId);
   if (holdsContextLost(tiles.get(tileId)!.state)) {
     heldUnderContextLost.set(tileId, { viewId: tiles.get(tileId)!.viewId, state: null, cleared: true });
     return;
@@ -366,8 +397,11 @@ export function leaveContextLost(tileId: string): void {
   }
   const back = under?.state && under.state.kind !== "ready" ? under.state : { kind: "ready" as const };
   tiles.set(tileId, { viewId: under?.viewId ?? cur.viewId, state: back, el: cur.el });
+  settleAutoRetry(tileId, back, (under?.viewId ?? cur.viewId) !== cur.viewId);
   const rerun = isLoadFailed(back) ? loadRetry.get(tileId) : undefined;
   loadRetry.delete(tileId);
+  // The rerun is this tile's one try in flight; a failure there arms the next automatic retry.
+  if (rerun) autoRetries.forget(tileId);
   // A notice asked for while the context was lost shows now (a failed load reruns instead).
   if (!rerun) under?.paint?.();
   stampViewState(tileId);
@@ -403,7 +437,10 @@ export function onViewStateChange(fn: (tileId: string) => void): () => void {
 
 export type ViewStateActions = {
   onReview?: () => void;
-  onRetry?: () => void;
+  /** Couldn't start's Retry. It also runs on its own, on backoff, until the tile starts (auto-retry.ts). */
+  onRetry?: () => unknown;
+  /** The automatic retry runs only while this holds (the tile still shows this view). */
+  autoRetryWhile?: () => boolean;
   /** After the button's click moved focus to the tile (e.g. to focus the review panel). */
   onActionFocused?: () => void;
 };
@@ -411,6 +448,7 @@ export type ViewStateActions = {
 /**
  * Record a state and paint its notice on the tile: Needs you gets Review, Couldn't start gets
  * Retry. Starting and ready paint nothing here (the starting card belongs to the sky wait).
+ * A Couldn't start with Retry also retries on its own; pressing Retry starts its backoff over.
  */
 export function showViewState(
   tileId: string,
@@ -421,9 +459,12 @@ export function showViewState(
   hostEl?: HTMLElement | null,
 ): void {
   const el = tileEl(tileId) ?? hostEl ?? null;
+  const retry = actions.onRetry;
+  const auto = !!retry && autoRetryable(state);
+  const onRetry = retry && auto ? () => { autoRetries.forget(tileId); void retry(); } : retry;
   const paint = el && (state.kind === "needs-you" || state.kind === "couldnt-start") ? () => {
     const copy = viewStateCopy(state, viewName, viewStateTile(tileId, el));
-    const onAction = copy.action === "review" ? actions.onReview : copy.action === "retry" ? actions.onRetry : undefined;
+    const onAction = copy.action === "review" ? actions.onReview : copy.action === "retry" ? onRetry : undefined;
     paintPackAssetPaneNotice(el, copy.text, "fail", onAction
       ? { showRetry: true, onRetry: onAction, retryLabel: copy.button ?? undefined, retryAction: copy.action ?? undefined, onRetryFocused: actions.onActionFocused }
       : undefined);
@@ -438,7 +479,11 @@ export function showViewState(
     paint?.();
     setViewState(tileId, viewId, state, el);
   }
-  if (isLoadFailed(state) && actions.onRetry) loadRetry.set(tileId, actions.onRetry);
+  if (isLoadFailed(state) && retry) loadRetry.set(tileId, () => { void retry(); });
+  if (retry && auto) {
+    const still = actions.autoRetryWhile;
+    autoRetries.schedule(tileId, retry, () => viewStateViewId(tileId) === viewId && (still?.() ?? true));
+  }
 }
 
 /** Tiles only: host listeners registered at module load stay. */
@@ -446,5 +491,6 @@ export function resetViewStatesForTests(): void {
   tiles.clear();
   heldUnderContextLost.clear();
   loadRetry.clear();
+  autoRetries.dispose();
   tileEl = defaultTileEl;
 }

@@ -201,7 +201,11 @@ export function showPickCouldntStart(
     m.id,
     spec?.name || host.modeLabel(m),
     { kind: "couldnt-start", reason, packId, ...(log ? { log } : {}) },
-    { onRetry: () => host.retryDeclinedMode?.(m.id) },
+    {
+      onRetry: () => host.retryDeclinedMode?.(m.id),
+      // The pick is still this tile's view: a solo wall still on it, or its pane still on the wall.
+      autoRetryWhile: () => (tile === SOLO_TILE ? host.modeSel.value === m.id : host.mosaicHasTile(m.id)),
+    },
   );
 }
 

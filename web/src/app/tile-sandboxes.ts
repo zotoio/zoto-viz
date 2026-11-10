@@ -14,7 +14,7 @@ import {
   unregisterPackAssetRetry,
 } from "../plugins/pack-asset-frame";
 import { mosaicTileViewId } from "../graph/mosaic-tile-id";
-import { setViewState, showViewState, viewStateOf } from "./view-state";
+import { cancelAutoRetry, setViewState, showViewState, viewStateOf } from "./view-state";
 import {
   bindVizWriterCore,
   defaultVizContract,
@@ -225,7 +225,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
       mosaicTileViewId(tileId),
       e.spec.name ?? e.spec.id,
       { kind: "couldnt-start", reason: "load-failed", packId: e.spec.id, ...(log ? { log } : {}) },
-      { onRetry: () => { void this.restart(tileId); } },
+      { onRetry: () => this.restart(tileId), autoRetryWhile: () => this.byTile.get(tileId)?.spec.id === e.spec.id },
     );
     return true;
   }
@@ -280,6 +280,7 @@ export class TileSandboxes<S extends TileSandboxLike> {
     // An attach still in flight (the pre-attach import, or the asset rebuild's retry wait) must not
     // boot this sandbox after it is gone.
     e.abort.abort();
+    cancelAutoRetry(tileId);
     unregisterPackAssetRetry(tileId, e.retry);
     e.sandbox.unload();
     markSandboxUnloaded(tileId);
