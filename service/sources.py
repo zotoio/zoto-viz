@@ -26,6 +26,7 @@ from yarl import URL
 
 from . import agent_assets
 from . import nasa_api
+from . import noaa_kp
 from . import paths
 from . import source_fields
 
@@ -309,6 +310,8 @@ def normalize(raw: Any, *, taken: set[str] | None = None) -> dict[str, Any]:
     else:
         url = agent_assets.check_url(str(raw.get("url") or ""))
         row["url"] = nasa_api.public_url(url)
+        if noaa_kp.matches(row["url"]):
+            row["interval"] = max(noaa_kp.MIN_INTERVAL, interval)
     fields = source_fields.normalize_fields(raw.get("fields"))
     if fields:
         expand = str(fields.get("expand") or "")
@@ -1173,6 +1176,8 @@ async def _fetch_live(row: dict[str, Any]) -> dict[str, Any]:
             parsed = parse_rss(body)
             _record(row, ok=True, payload=parsed)
             _schedule_prefetch(parsed.get("items") or [])
+        elif noaa_kp.matches(str(row.get("url") or "")):
+            _record(row, ok=True, payload=await noaa_kp.fetch(await session()))
         elif DATE_TOKEN in str(row.get("url") or ""):
             await _fetch_dated(row)
         else:
@@ -1249,7 +1254,7 @@ async def poll(now: float | None = None) -> dict[str, dict[str, Any]]:
             wait = int(row.get("interval") or DEFAULT_INTERVAL)
             live = _live.get(row["id"]) or {}
             if not live.get("ok"):
-                wait = min(wait, 30)
+                wait = min(wait, noaa_kp.RETRY_S if noaa_kp.matches(str(row.get("url") or "")) else 30)
             _due[row["id"]] = t + wait
     return snapshot()
 
