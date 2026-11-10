@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { probePluginSkyCompile, wrapPluginSky } from "./plugin-sky-probe";
 import { mockPartial } from "../../test-support/mock-partial";
+import { stagedShippedPackIds } from "../../test-support/staged-packs";
 
 /** Shipped packs that ship `sky/fragment.glsl` (via `plugin.yml` home). Update when adding a sky pack. */
 const PINNED_SHIPPED_PACK_SKY_IDS = [
@@ -94,6 +95,12 @@ function scanShippedPackSkyFragments(repoRoot: string): ShippedPackSkyFragment[]
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 
+/** The pinned sky packs plus the staged packs (tests/shipped_catalog.py) on disk that ship a sky. */
+const PINNED_AND_STAGED_SKY_IDS: string[] = [
+  ...PINNED_SHIPPED_PACK_SKY_IDS,
+  ...stagedShippedPackIds(repoRoot).filter((id) => packHomeDeclaresSkyShader(path.join(repoRoot, "plugins/src", id))),
+];
+
 describe("shipped pack sky fragments (host)", () => {
   const fragments = scanShippedPackSkyFragments(repoRoot);
   const scannedIds = fragments.map((f) => f.packId);
@@ -101,14 +108,14 @@ describe("shipped pack sky fragments (host)", () => {
   it("checks every shipped pack that declares a sky shader (count matches catalog inspect)", () => {
     const declared = countShippedPacksDeclaringSkyShader(repoRoot);
     expect(fragments.length).toBe(declared);
-    expect(fragments.length).toBe(PINNED_SHIPPED_PACK_SKY_IDS.length);
+    expect(fragments.length).toBe(PINNED_AND_STAGED_SKY_IDS.length);
   });
 
   it("matches pinned shipped pack sky ids (both directions)", () => {
-    const pinned = [...PINNED_SHIPPED_PACK_SKY_IDS].sort();
+    const pinned = [...PINNED_AND_STAGED_SKY_IDS].sort();
     const scanned = [...scannedIds].sort();
     const missing = pinned.filter((id) => !scanned.includes(id));
-    const extra = scanned.filter((id) => !(PINNED_SHIPPED_PACK_SKY_IDS as readonly string[]).includes(id));
+    const extra = scanned.filter((id) => !PINNED_AND_STAGED_SKY_IDS.includes(id));
     expect(missing, `missing sky packs from scan: ${missing.join(", ") || "(none)"}`).toEqual([]);
     expect(extra, `unexpected sky packs in scan: ${extra.join(", ") || "(none)"}`).toEqual([]);
     expect(scanned).toEqual(pinned);

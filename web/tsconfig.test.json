@@ -49,6 +49,7 @@
     "src/ui/drawer-context.nest-devices-required.typecheck.ts",
     "test-support/mock-partial.ts",
     "test-support/pack-mirror-rect.boundary.ts",
+    "test-support/staged-packs.ts",
     "test-support/test-cast-scan.ts",
     "test/node/pack-mirror-readback-chrome.ts",
     "test/node/pack-mirror-readback-vite.ts"
