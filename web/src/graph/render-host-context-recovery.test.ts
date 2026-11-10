@@ -357,6 +357,17 @@ describe("#179 render host context recovery (Backrooms boot)", () => {
     expect(h.wall.querySelectorAll(".gfx-wall-reload").length).toBe(0);
   });
 
+  it("a restore invalidates the scene's HD environment PMREM so it is rebuilt on the new context", () => {
+    h = bootBackrooms();
+    const restored = vi.spyOn(h.scene.hostMeshLane.env, "contextRestored");
+    h.gl.browserLoss({ autoRestoreMs: 1_500 });
+    vi.advanceTimersByTime(0);
+    expect(restored).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(1_500);
+    expect(h.host.glContextLost).toBe(false);
+    expect(restored).toHaveBeenCalledTimes(1);
+  });
+
   it("dispose while lost: the host's notice and timer go with it; a new host shows exactly one notice", () => {
     h = bootBackrooms();
     h.gl.browserLoss({ restorable: false });

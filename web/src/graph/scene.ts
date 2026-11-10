@@ -1781,6 +1781,7 @@ export class NetScene implements HostedView, RenderScalePane {
   }
   hostContextRestored(): void {
     this._gpuContextLost = false;
+    this.hostMeshLane.contextRestored();
     this.syncRenderScaleGpuProbe();
     this.relayout();
   }

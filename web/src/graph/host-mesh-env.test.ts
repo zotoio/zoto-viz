@@ -148,6 +148,37 @@ describe("HostMeshEnv", () => {
     expect(env.envTarget()).not.toBe(target);
   });
 
+  it("a context restore on the same renderer frees the old PMREM and rebuilds it from the kept image", async () => {
+    const { scene, tex, target, targetDispose, build, env } = rig();
+    await env.load("env.jpg");
+    const renderer = fakeRenderer();
+    draw(scene, renderer);
+    expect(build).toHaveBeenCalledTimes(1);
+    env.contextRestored();
+    expect(targetDispose).toHaveBeenCalledTimes(1);
+    expect(env.envTarget()).toBeNull();
+    expect(env.active()).toBe(true);
+    const rebuilt = new THREE.WebGLRenderTarget(4, 4);
+    build.mockReturnValue(rebuilt);
+    let during: THREE.Texture | null = null;
+    draw(scene, renderer, () => { during = scene.environment; });
+    expect(build).toHaveBeenCalledTimes(2);
+    expect(build).toHaveBeenLastCalledWith(tex);
+    expect(env.envTarget()).toBe(rebuilt);
+    expect(during).toBe(rebuilt.texture);
+    expect(during).not.toBe(target.texture);
+    draw(scene, renderer);
+    expect(build).toHaveBeenCalledTimes(2);
+  });
+
+  it("a context restore with no environment loaded is a no-op", () => {
+    const { build, targetDispose, env } = rig();
+    env.contextRestored();
+    expect(env.envTarget()).toBeNull();
+    expect(build).not.toHaveBeenCalled();
+    expect(targetDispose).not.toHaveBeenCalled();
+  });
+
   it("drops a load that a clear overtook, and leaves no hooks", async () => {
     const { scene, tex, texDispose, env } = rig();
     let resolve!: (t: THREE.Texture) => void;
@@ -191,5 +222,12 @@ describe("HostMeshLane environment", () => {
     const clear = vi.spyOn(lane.env, "clear");
     lane.clear();
     expect(clear).toHaveBeenCalledTimes(1);
+  });
+
+  it("lane.contextRestored() invalidates the environment PMREM", () => {
+    const lane = new HostMeshLane();
+    const restored = vi.spyOn(lane.env, "contextRestored");
+    lane.contextRestored();
+    expect(restored).toHaveBeenCalledTimes(1);
   });
 });

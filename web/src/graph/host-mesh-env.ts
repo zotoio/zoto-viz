@@ -53,7 +53,7 @@ function sceneOf(o: THREE.Object3D): THREE.Scene | null {
  * that lights the lane's scene, with tone mapping and sRGB output, only while that scene renders:
  * mosaic panes share one WebGLRenderer, so renderer state and the scene's lights are set in
  * `scene.onBeforeRender` and put back in `onAfterRender`. The PMREM is built on first render
- * (that is where the renderer is) and freed by {@link clear}.
+ * (that is where the renderer is), rebuilt after {@link contextRestored}, and freed by {@link clear}.
  */
 export class HostMeshEnv {
   private source: THREE.Texture | null = null;
@@ -121,6 +121,16 @@ export class HostMeshEnv {
       src.dispose();
       if (image && typeof image.close === "function") image.close();
     }
+  }
+
+  /**
+   * The WebGL context was restored on the same renderer: the PMREM was rendered on the GPU, so its
+   * contents are gone. Free it; the next draw rebuilds it from the retained source image.
+   */
+  contextRestored(): void {
+    this.pmrem?.dispose();
+    this.pmrem = null;
+    this.builtFor = null;
   }
 
   private attach(scene: THREE.Scene): void {
