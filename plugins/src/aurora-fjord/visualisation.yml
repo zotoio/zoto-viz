@@ -1,0 +1,183 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+datasource:
+  library:
+    - noaa-kp
+look:
+  theme: midnight
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1
+  skySpeed: 0.1
+  skyAudio: false
+  gridOpacity: 0
+dataMapping:
+  - field: headlines[noaa-kp].text
+    effect: aurora strength, curtain speed and latitude from the planetary K-index
+    default: demo Kp curve
+    clamp: Kp 0..9, 8 s ease
+  - field: headlines[noaa-kp].summary
+    effect: Kp gauge history and 24 h peak
+    default: demo history
+    clamp: 8 three-hour slots
+  - field: talkers[].id
+    effect: stable cabin per talker (rate-ranked, 2 s hold, 1.2x challenger)
+    default: —
+    clamp: cabinCap cabins
+  - field: talkers[].rate
+    effect: cabin window brightness
+    default: 0
+    clamp: log1p(rate)/log1p(400)
+  - field: talkers[].role
+    effect: window warmth (self amber, gateway pale, others by id hash)
+    default: lan
+    clamp: 0..1
+  - field: packets[]
+    effect: one light ripple on the water off a lit cabin per packet
+    default: 0
+    clamp: maxPacketsPerFrame, rippleCap pool
+  - field: packets[].proto
+    effect: ripple tint between window amber and aurora green
+    default: tcp
+    clamp: hash01
+  - field: sys.failed
+    effect: a fog bank rolls in from the fjord head and a steady fail chip lights
+    default: 0
+    clamp: 0..1 above failThreshold
+  - field: audio
+    effect: faint shimmer on the curtains' lower edge
+    default: 0
+    clamp: 0..1
+workBudget:
+  maxDrawCalls: 64
+  maxTriangles: 120000
+  maxInstances: 48
+  maxGpuBytes: 8388608
+  maxSimStepsPerFrame: 4
+  maxPacketsPerFrame: 8
+config:
+  - key: modelSet
+    label: model set
+    type: select
+    values:
+      - [standard, Standard]
+      - [hd, HD]
+    default: standard
+    hint: Standard meshes with 128-256 px maps and cone pines, or the HD Blender set (assets ending -hd) with rock and boulder normal maps, rendered fir cards, denser forest and the lakeside-night environment light.
+  - key: preset
+    label: preset
+    type: select
+    default: winter-night
+    values:
+      - [winter-night, Winter Night]
+      - [still-water, Still Water]
+      - [substorm, Substorm]
+      - [sea-fog, Sea Fog]
+    hint: Presets set the moon, camera, aurora gain and fog. Change any knob after picking a preset.
+  - key: source
+    label: Kp source
+    type: text
+    default: noaa-kp
+    hint: Host source id carrying NOAA planetary Kp (Settings → Sources → library → NOAA planetary K-index). Without it the demo Kp curve runs.
+  - key: kpMode
+    label: Kp
+    type: select
+    default: live
+    values:
+      - [live, "Live (source, demo when absent)"]
+      - [demo, Demo curve]
+    hint: Live follows the bound source; the demo curve walks Kp from quiet to a substorm and back.
+  - key: auroraGain
+    label: aurora gain
+    type: number
+    default: 1
+    min: 0.4
+    max: 2
+    step: 0.05
+    hint: Scales how bright a given Kp draws the curtains.
+  - key: auroraSpeed
+    label: aurora speed
+    type: number
+    default: 1
+    min: 0.25
+    max: 2
+    step: 0.05
+    hint: Scales the Kp-driven drift of the curtains.
+  - key: cabinCap
+    label: cabins
+    type: number
+    default: 8
+    min: 1
+    max: 8
+    step: 1
+    hint: Shore cabins that carry talkers; the busiest talkers hold them with a 2 s hold.
+  - key: ripples
+    label: ripples
+    type: select
+    default: "true"
+    values:
+      - ["true", On]
+      - ["false", Off]
+    hint: Packets as light ripples on the water off the lit cabins.
+  - key: rippleCap
+    label: max ripples
+    type: number
+    default: 12
+    min: 0
+    max: 16
+    step: 1
+    hint: Pooled ripples; never exceeded.
+  - key: failThreshold
+    label: fail threshold
+    type: number
+    default: 0.2
+    min: 0.05
+    max: 0.95
+    step: 0.05
+    hint: sys.failed above this rolls the fog bank in and lights the steady fail chip.
+  - key: fogDensity
+    label: fog bank
+    type: number
+    default: 0.8
+    min: 0.2
+    max: 1
+    step: 0.05
+    hint: How thick the fog bank gets while units are failed.
+  - key: moon
+    label: moon
+    type: number
+    default: 0.55
+    min: 0
+    max: 1
+    step: 0.05
+    hint: Moonlight on the snow and the water.
+  - key: gauge
+    label: Kp gauge
+    type: select
+    default: "true"
+    values:
+      - ["true", Show]
+      - ["false", Hide]
+    hint: A small Kp gauge with the last 24 h in the corner of the sky.
+  - key: cameraMode
+    label: camera
+    type: select
+    default: drift
+    values:
+      - [drift, Slow drift]
+      - [fixed, Fixed]
+      - [low, Low (on the water)]
+      - [high, High (over the fjord)]
+    hint: Drift sways a few degrees over two and a half minutes. Reduced motion holds the camera still.
+  - key: reducedMotion
+    label: reduced motion
+    type: select
+    default: auto
+    values:
+      - [auto, "Auto (follow the system)"]
+      - [on, On]
+      - [off, Off]
+    hint: Holds the camera, slows the curtains and halves the ripples.

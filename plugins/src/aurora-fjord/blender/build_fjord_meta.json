@@ -1,0 +1,88 @@
+{
+  "blender": "5.2.1 LTS",
+  "firCard": {
+    "aspect": 0.5,
+    "cells": [
+      {
+        "baseFrac": 0.0064,
+        "cell": 0,
+        "heightFrac": 0.8304,
+        "trunkU": 0.5141
+      },
+      {
+        "baseFrac": 0.0061,
+        "cell": 1,
+        "heightFrac": 0.7963,
+        "trunkU": 0.4772
+      }
+    ],
+    "mean": [
+      0.3096,
+      0.3518,
+      0.1982
+    ]
+  },
+  "gltfpack": "gltfpack 0.24",
+  "pines": {
+    "hd": 700,
+    "standard": 380
+  },
+  "sets": {
+    "hd": [
+      {
+        "bytes": 466192,
+        "id": "fjord-terrain-hd",
+        "integrity": {
+          "degenerate": 0,
+          "loose": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/fjord-terrain-hd.glb",
+        "rawBytes": 1400532,
+        "sha256": "8f99b29012bab222f433374b358fdcdd70af34c302f3641c80acbcdba6e0aa72",
+        "triangles": 31999
+      },
+      {
+        "bytes": 371456,
+        "id": "fjord-shore-hd",
+        "integrity": {
+          "degenerate": 0,
+          "loose": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/fjord-shore-hd.glb",
+        "rawBytes": 1111524,
+        "sha256": "a6d25763502b54760f6e7e1718a2294f7956d6605cfb290f58b8e216d5ca7011",
+        "triangles": 18777
+      }
+    ],
+    "standard": [
+      {
+        "bytes": 126700,
+        "id": "fjord-terrain",
+        "integrity": {
+          "degenerate": 0,
+          "loose": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/fjord-terrain.glb",
+        "rawBytes": 399540,
+        "sha256": "ed9415083d5adb069108872493c90cdbbd6ec722054f9bec3d28b095cae15175",
+        "triangles": 11000
+      },
+      {
+        "bytes": 130220,
+        "id": "fjord-shore",
+        "integrity": {
+          "degenerate": 0,
+          "loose": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/fjord-shore.glb",
+        "rawBytes": 580760,
+        "sha256": "c6b37b85833022a779118f8d3ed5e815cf92d793986980720e8925677fae70c8",
+        "triangles": 12301
+      }
+    ]
+  }
+}

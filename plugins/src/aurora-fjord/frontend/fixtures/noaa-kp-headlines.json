@@ -1,0 +1,53 @@
+{
+ "_note": "Host projection (service/noaa_kp.items) of tests/fixtures/noaa-kp/noaa-planetary-k-index.json, recorded from SWPC; no network in tests.",
+ "headlines": [
+  {
+   "id": "noaa-kp:0",
+   "label": "NOAA planetary K-index",
+   "text": "Kp 3.00 \u00b7 unsettled",
+   "summary": "3 h slot from 2026-11-10T15:00:00Z \u00b7 24 h max 3.00 \u00b7 a 15 \u00b7 8 stations"
+  },
+  {
+   "id": "noaa-kp:1",
+   "label": "NOAA planetary K-index",
+   "text": "Kp 1.33 \u00b7 quiet",
+   "summary": "3 h slot from 2026-11-10T12:00:00Z \u00b7 a 5 \u00b7 8 stations"
+  },
+  {
+   "id": "noaa-kp:2",
+   "label": "NOAA planetary K-index",
+   "text": "Kp 2.67 \u00b7 unsettled",
+   "summary": "3 h slot from 2026-11-10T09:00:00Z \u00b7 a 12 \u00b7 8 stations"
+  },
+  {
+   "id": "noaa-kp:3",
+   "label": "NOAA planetary K-index",
+   "text": "Kp 2.33 \u00b7 unsettled",
+   "summary": "3 h slot from 2026-11-10T06:00:00Z \u00b7 a 9 \u00b7 8 stations"
+  },
+  {
+   "id": "noaa-kp:4",
+   "label": "NOAA planetary K-index",
+   "text": "Kp 3.00 \u00b7 unsettled",
+   "summary": "3 h slot from 2026-11-10T03:00:00Z \u00b7 a 15 \u00b7 8 stations"
+  },
+  {
+   "id": "noaa-kp:5",
+   "label": "NOAA planetary K-index",
+   "text": "Kp 3.00 \u00b7 unsettled",
+   "summary": "3 h slot from 2026-11-10T00:00:00Z \u00b7 a 15 \u00b7 8 stations"
+  },
+  {
+   "id": "noaa-kp:6",
+   "label": "NOAA planetary K-index",
+   "text": "Kp 2.00 \u00b7 unsettled",
+   "summary": "3 h slot from 2026-11-09T21:00:00Z \u00b7 a 7 \u00b7 8 stations"
+  },
+  {
+   "id": "noaa-kp:7",
+   "label": "NOAA planetary K-index",
+   "text": "Kp 2.67 \u00b7 unsettled",
+   "summary": "3 h slot from 2026-11-09T18:00:00Z \u00b7 a 12 \u00b7 8 stations"
+  }
+ ]
+}
