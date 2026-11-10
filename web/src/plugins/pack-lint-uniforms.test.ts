@@ -37,7 +37,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const FIXTURES = "plugins/sdk/uniform-lint-fixtures";
 const packsRoot = path.join(repoRoot, "plugins/src");
 
-/** The shipped pack ids, as pinned for the service catalog (tests/shipped_catalog.py, 73 today). */
+/** The shipped pack ids, as pinned for the service catalog (tests/shipped_catalog.py, 74 today). */
 function pinnedShippedPackIds(): string[] {
   const py = readFileSync(path.join(repoRoot, "tests/shipped_catalog.py"), "utf8");
   const body = py.match(/PINNED_SHIPPED_PLUGIN_IDS[^=]*=\s*\(([\s\S]*?)\)/)?.[1] ?? "";
@@ -330,7 +330,7 @@ describe("uniform declaration lint (#171 b): assumptions pinned", () => {
       const listed = listPackIds(tmp);
       expect(listed.filter((p) => p.startsWith("."))).toEqual([]);
       expect(listed).toEqual(pinnedShippedPackIds());
-      expect(listed).toHaveLength(73);
+      expect(listed).toHaveLength(74);
       expect(listed.every((p) => existsSync(path.join(tmp, p, "plugin.yml")))).toBe(true);
     } finally {
       rmSync(tmp, { recursive: true, force: true });

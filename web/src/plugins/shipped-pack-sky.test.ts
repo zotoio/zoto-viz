@@ -11,6 +11,7 @@ const PINNED_SHIPPED_PACK_SKY_IDS = [
   "aquarium",
   "backrooms",
   "blob-mesh",
+  "bonsai",
   "cypher-cic",
   "fluid-dyn",
   "fractal-zoom",

@@ -9,6 +9,7 @@ PINNED_SHIPPED_PLUGIN_IDS: tuple[str, ...] = (
     "aquarium",
     "backrooms",
     "blob-mesh",
+    "bonsai",
     "carousel",
     "cgroups",
     "command",

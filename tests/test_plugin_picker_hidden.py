@@ -29,10 +29,10 @@ def test_the_seven_are_hidden(rows: list[dict]) -> None:
     assert {r["id"] for r in rows if r.get("picker") == "hidden"} == HIDDEN
 
 
-def test_pick_every_view_goes_from_70_to_63(rows: list[dict]) -> None:
+def test_pick_every_view_goes_from_71_to_64(rows: list[dict]) -> None:
     views = [r for r in rows if r.get("pluginKind") != "data-source"]
-    assert len(views) == 70
-    assert len([r for r in views if r.get("picker") != "hidden"]) == 63
+    assert len(views) == 71
+    assert len([r for r in views if r.get("picker") != "hidden"]) == 64
 
 
 def test_schema_accepts_hidden_and_rejects_other_values() -> None:
