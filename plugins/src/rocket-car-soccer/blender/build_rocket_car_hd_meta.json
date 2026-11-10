@@ -1,0 +1,368 @@
+{
+  "_totals": {
+    "bytes_hd": 618812,
+    "gpu_bytes_hd": 8388608,
+    "gpu_bytes_standard": 16951978
+  },
+  "rocket-car-blue-hd.glb": {
+    "atlas_coverage": 0.625,
+    "bytes": 259568,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform",
+      "KHR_materials_clearcoat",
+      "KHR_materials_emissive_strength"
+    ],
+    "gpu_bytes_est": 3407872,
+    "images": [
+      [
+        "booster_flame_rgba",
+        "image/png",
+        64,
+        256,
+        773
+      ],
+      [
+        "rocket-car-blue_body_normal",
+        "image/jpeg",
+        512,
+        512,
+        25464
+      ],
+      [
+        "rocket-car-blue_body_orm",
+        "image/jpeg",
+        256,
+        256,
+        8843
+      ],
+      [
+        "rocket-car-blue_carbon_normal",
+        "image/jpeg",
+        256,
+        256,
+        20291
+      ],
+      [
+        "rocket-car-blue_carbon_orm",
+        "image/jpeg",
+        256,
+        256,
+        6815
+      ],
+      [
+        "rocket-car-blue_carbon_basecolor",
+        "image/jpeg",
+        256,
+        256,
+        8746
+      ],
+      [
+        "rocket-car-blue_tyre_normal",
+        "image/jpeg",
+        512,
+        128,
+        17609
+      ],
+      [
+        "rocket-car-blue_tyre_orm",
+        "image/jpeg",
+        256,
+        64,
+        4179
+      ],
+      [
+        "rocket-car-blue_tyre_basecolor",
+        "image/jpeg",
+        256,
+        64,
+        2727
+      ]
+    ],
+    "integrity": {
+      "loose_verts": 0,
+      "nan_verts": 0,
+      "non_manifold_edges_welded": 48,
+      "zero_area_faces": 72
+    },
+    "nodes": [
+      "Mesh_1",
+      "Mesh_10",
+      "Mesh_4",
+      "Mesh_5",
+      "Mesh_5.001",
+      "Mesh_7",
+      "Mesh_8",
+      "Mesh_8.001",
+      "Mesh_9",
+      "booster_flame",
+      "booster_nozzle",
+      "chassis",
+      "rocket_car",
+      "wheel_front_left",
+      "wheel_front_right",
+      "wheel_rear_left",
+      "wheel_rear_right"
+    ],
+    "problems": [],
+    "sha256": "c285a1d0f00e0b2380279b8d060d1f4e212b14930c22b0d6cc17b94a3532052d",
+    "standard_triangles": 28284,
+    "team": "blue",
+    "triangles": 28276
+  },
+  "rocket-car-blue.glb": {
+    "bytes": 282868,
+    "gpu_bytes_est": 4281685,
+    "images": [
+      [
+        "booster_flame_rgba",
+        "image/png",
+        64,
+        256,
+        773
+      ],
+      [
+        "tyre_normal",
+        "image/jpeg",
+        1024,
+        256,
+        44631
+      ],
+      [
+        "tyre_basecolor",
+        "image/jpeg",
+        1024,
+        256,
+        11165
+      ],
+      [
+        "tyre_mr",
+        "image/jpeg",
+        1024,
+        256,
+        19542
+      ]
+    ],
+    "sha256": "0f8e5a464ff52efc070b96d8d7b42ae0631a5bfa54deac95af4278c86d5baf55",
+    "triangles": 28284
+  },
+  "rocket-car-hd.glb": {
+    "atlas_coverage": 0.625,
+    "bytes": 259584,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform",
+      "KHR_materials_clearcoat",
+      "KHR_materials_emissive_strength"
+    ],
+    "gpu_bytes_est": 3407872,
+    "images": [
+      [
+        "booster_flame_rgba",
+        "image/png",
+        64,
+        256,
+        773
+      ],
+      [
+        "rocket-car_body_normal",
+        "image/jpeg",
+        512,
+        512,
+        25464
+      ],
+      [
+        "rocket-car_body_orm",
+        "image/jpeg",
+        256,
+        256,
+        8843
+      ],
+      [
+        "rocket-car_carbon_normal",
+        "image/jpeg",
+        256,
+        256,
+        20291
+      ],
+      [
+        "rocket-car_carbon_orm",
+        "image/jpeg",
+        256,
+        256,
+        6815
+      ],
+      [
+        "rocket-car_carbon_basecolor",
+        "image/jpeg",
+        256,
+        256,
+        8746
+      ],
+      [
+        "rocket-car_tyre_normal",
+        "image/jpeg",
+        512,
+        128,
+        17609
+      ],
+      [
+        "rocket-car_tyre_orm",
+        "image/jpeg",
+        256,
+        64,
+        4179
+      ],
+      [
+        "rocket-car_tyre_basecolor",
+        "image/jpeg",
+        256,
+        64,
+        2767
+      ]
+    ],
+    "integrity": {
+      "loose_verts": 0,
+      "nan_verts": 0,
+      "non_manifold_edges_welded": 48,
+      "zero_area_faces": 72
+    },
+    "nodes": [
+      "Mesh_1",
+      "Mesh_10",
+      "Mesh_4",
+      "Mesh_5",
+      "Mesh_5.001",
+      "Mesh_7",
+      "Mesh_8",
+      "Mesh_8.001",
+      "Mesh_9",
+      "booster_flame",
+      "booster_nozzle",
+      "chassis",
+      "rocket_car",
+      "wheel_front_left",
+      "wheel_front_right",
+      "wheel_rear_left",
+      "wheel_rear_right"
+    ],
+    "problems": [],
+    "sha256": "c5599ef866835bd1003d47371e3ac59cdfe82df013d0e0462c95a06c33735e1e",
+    "standard_triangles": 28284,
+    "team": "orange",
+    "triangles": 28276
+  },
+  "rocket-car.glb": {
+    "bytes": 288556,
+    "gpu_bytes_est": 4281685,
+    "images": [
+      [
+        "booster_flame_rgba",
+        "image/png",
+        64,
+        256,
+        773
+      ],
+      [
+        "tyre_normal",
+        "image/jpeg",
+        1024,
+        256,
+        44631
+      ],
+      [
+        "tyre_basecolor",
+        "image/jpeg",
+        1024,
+        256,
+        11165
+      ],
+      [
+        "tyre_mr",
+        "image/jpeg",
+        1024,
+        256,
+        19542
+      ]
+    ],
+    "sha256": "0b9565a8e3c7f9ba633599c0a8255fb5dabacae0cd4e953994015ffc81fff424",
+    "triangles": 28284
+  },
+  "soccer-ball-hd.glb": {
+    "bytes": 99660,
+    "extensions": [
+      "KHR_mesh_quantization",
+      "EXT_meshopt_compression",
+      "KHR_texture_transform",
+      "KHR_materials_clearcoat"
+    ],
+    "gpu_bytes_est": 1572864,
+    "images": [
+      [
+        "soccer-ball_normal",
+        "image/jpeg",
+        512,
+        256,
+        11363
+      ],
+      [
+        "soccer-ball_orm",
+        "image/jpeg",
+        256,
+        128,
+        3728
+      ],
+      [
+        "soccer-ball_basecolor",
+        "image/jpeg",
+        512,
+        256,
+        26316
+      ]
+    ],
+    "integrity": {
+      "loose_verts": 0,
+      "nan_verts": 0,
+      "non_manifold_edges_welded": 0,
+      "zero_area_faces": 0
+    },
+    "nodes": [
+      "soccer_ball"
+    ],
+    "panels": 32,
+    "problems": [],
+    "sha256": "102be6b4da1b83974738a48eee039b4fc9f62ee1210b1a64522fb52dbeb56306",
+    "triangles": 7920
+  },
+  "soccer-ball.glb": {
+    "bytes": 161676,
+    "gpu_bytes_est": 8388608,
+    "images": [
+      [
+        "soccer_ball_normal",
+        "image/jpeg",
+        1024,
+        512,
+        49162
+      ],
+      [
+        "soccer_ball_basecolor",
+        "image/jpeg",
+        1024,
+        512,
+        42213
+      ],
+      [
+        "soccer_ball_mr",
+        "image/jpeg",
+        1024,
+        512,
+        43592
+      ]
+    ],
+    "sha256": "5f3ce4b8616e3540f6ec7095166a1220a92bdb4f4761755371a8f3f94678e815",
+    "triangles": 3968
+  }
+}
