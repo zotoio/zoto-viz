@@ -109,6 +109,35 @@ Pack media files live under `assets/` and are served by the **host only** at
 `GET /api/plugins/<id>/asset/<path>` (reviewed / src). The sandbox CSP blocks
 `connect-src`, so the iframe cannot fetch these URLs.
 
+### HD image-based lighting (`role: environment`)
+
+A host-mesh pack can ship one equirect environment image that lights its meshes when the
+pack's `modelSet` config is `hd`. Declare it as an asset with `role: environment`:
+
+```yaml
+assets:
+  - id: env-hd
+    path: assets/env-hd.jpg   # .jpg / .png / .webp only (zip-allowed suffixes)
+    role: environment
+    sha256: <sha256>
+    bytes: <bytes>
+```
+
+- The entry never takes a mesh slot: the lane's asset order (and so the mesh index packs
+  address) is the same with or without it. At most one per pack; no `triangles`.
+- With `hd` the web host loads it, builds a PMREM env map and sets `scene.environment` on that
+  pane's scene only while the scene draws. The pack's sky stays the background. ACES filmic tone
+  mapping and sRGB output are applied for that draw, and the scene's own lights drop to 80% so the
+  meshes are not lit twice. Everything is put back after the draw, so other mosaic panes on the
+  shared renderer are unchanged. Plugin skies are `toneMapped: false` and are not affected.
+- `standard` never loads the image and leaves the renderer exactly as before.
+- The PMREM and image are freed when the lane clears (view switch, model-set change, mosaic
+  pane rebind or pane dispose).
+- Make the image from a Poly Haven (CC0) `.hdr` with
+  `python3 scripts/hdri_to_env.py <in>.hdr plugins/src/<id>/assets/env-hd.jpg --width 1024`
+  (LDR, exposure-normalised with a soft highlight shoulder; keep it ≤ ~400 KB) and credit the
+  source in the pack's `ASSETS.md`.
+
 ## Writes (plugin → host)
 
 Sandbox SDK (`getVizZoto()` from `plugins/sdk/viz-zoto`; runtime object is `globalThis.zoto`):

@@ -153,10 +153,24 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 5000000
+          },
+          "role": {
+            "enum": ["mesh", "environment"],
+            "description": "mesh (default) is a host-mesh model. environment is an equirect .jpg/.png/.webp the web host turns into a PMREM env map for image-based lighting when the HD model set is on; it never takes a mesh slot. At most one per pack."
+          }
+        },
+        "if": {
+          "properties": { "role": { "const": "environment" } },
+          "required": ["role"]
+        },
+        "then": {
+          "properties": {
+            "path": { "pattern": "\\.(jpe?g|png|webp)$" },
+            "triangles": false
           }
         }
       },
-      "description": "Host-loaded mesh/texture assets (GLB/glTF/etc.). Digested into consent as assets_sha256."
+      "description": "Host-loaded mesh/texture assets (GLB/glTF/etc.). Digested into consent as assets_sha256. An entry with role: environment is the pack's HD image-based-lighting image."
     },
     "render": {
       "type": "object",

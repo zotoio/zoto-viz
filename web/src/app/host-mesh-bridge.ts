@@ -1,6 +1,7 @@
 import type { PluginView } from "../plugins/plugin";
 import type { VizPluginContract } from "../plugins/viz-host";
 import { HostMeshLane, type HostMeshAssetDecl, type HostMeshMotionProfile } from "../graph/host-mesh-lane";
+import { HOST_MESH_ENV_ROLE } from "../graph/host-mesh-env";
 import { buildAquariumScenery } from "../graph/aquarium-scenery";
 import { buildKoiPondScenery } from "../graph/koi-pond-scenery";
 import { buildMarbleRunScenery } from "../graph/marble-run-scenery";
@@ -49,13 +50,29 @@ export function hostMeshModelSet(config: Record<string, string | undefined> | un
  * entry that has an `<id>-hd` sibling loads the sibling's file under the standard id.
  */
 export function hostMeshDeclsForSet(decls: HostMeshAssetDecl[], set: HostMeshModelSet): HostMeshAssetDecl[] {
-  const hd = new Map(decls.filter((d) => d.id.endsWith(HD_ASSET_SUFFIX)).map((d) => [d.id, d]));
-  return decls
+  const meshes = decls.filter((d) => d.role !== HOST_MESH_ENV_ROLE);
+  const hd = new Map(meshes.filter((d) => d.id.endsWith(HD_ASSET_SUFFIX)).map((d) => [d.id, d]));
+  return meshes
     .filter((d) => !d.id.endsWith(HD_ASSET_SUFFIX))
     .map((d) => {
       const alt = set === "hd" ? hd.get(d.id + HD_ASSET_SUFFIX) : undefined;
       return alt ? { ...alt, id: d.id } : d;
     });
+}
+
+/** The pack's environment image for image-based lighting; HD only, so Standard renders as before. */
+export function hostMeshEnvironmentDecl(
+  decls: HostMeshAssetDecl[] | undefined,
+  set: HostMeshModelSet,
+): HostMeshAssetDecl | null {
+  if (set !== "hd") return null;
+  return decls?.find((d) => d.role === HOST_MESH_ENV_ROLE) ?? null;
+}
+
+type EnvLane = Partial<Pick<HostMeshLane, "setEnvironment">>;
+
+function startEnvironment(lane: EnvLane, packId: string, decl: HostMeshAssetDecl | null): void {
+  if (decl) void lane.setEnvironment?.(packId, decl).catch(() => {});
 }
 
 /** Fin beat, turn bend and the brighter lamp are the aquarium HD set's; every other mount is the baked clip. */
@@ -140,6 +157,7 @@ export function pinPackContents(lane: MeshPinLane, packId: string, set: HostMesh
 export async function mountPaneHostMeshes(
   lane: Pick<HostMeshLane, "clear" | "setAssetOrder" | "ensureAssets"> &
     Partial<Pick<HostMeshLane, "setMotionProfile">> &
+    EnvLane &
     MeshPinLane,
   spec: { id: string; assets?: HostMeshAssetDecl[] },
   stillShown: () => boolean,
@@ -149,6 +167,7 @@ export async function mountPaneHostMeshes(
   lane.setMotionProfile?.(hostMeshMotionProfile(spec.id, modelSet));
   const decls = spec.assets ? hostMeshDeclsForSet(spec.assets, modelSet) : undefined;
   if (!decls?.length) return;
+  startEnvironment(lane, spec.id, hostMeshEnvironmentDecl(spec.assets, modelSet));
   lane.setAssetOrder(decls.map((d) => d.id));
   await lane.ensureAssets(spec.id, decls);
   if (!stillShown()) {
@@ -195,6 +214,7 @@ export function createHostMeshBridge(
       if (!canPlace(spec.id)) return false;
       const decls = hostMeshDeclsForSet(spec.assets as HostMeshAssetDecl[], set);
       const into = lane;
+      startEnvironment(into, spec.id, hostMeshEnvironmentDecl(spec.assets as HostMeshAssetDecl[], set));
       into.setAssetOrder(decls.map((d) => d.id));
       await into.ensureAssets(spec.id, decls);
       if (mine !== gen || into !== current) return false;
