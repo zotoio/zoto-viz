@@ -9,11 +9,14 @@ import {
   hostMeshMatrixYawPos,
   type HostMeshInstanceExtras,
 } from "../../../plugins/sdk/host-mesh-frame";
+import { HostMeshEnv } from "./host-mesh-env";
 
 export type HostMeshAssetDecl = {
   id: string;
   path: string;
   sha256?: string;
+  /** `environment`: an equirect image for HD image-based lighting, never loaded as a mesh. */
+  role?: string;
 };
 
 export type HostMeshInstanceFrame = {
@@ -473,6 +476,7 @@ export class HostMeshLane {
   private motion: HostMeshMotionProfile = "standard";
   private hdLights: THREE.Group | null = null;
   private readonly finUniforms: FinRippleUniforms = { uFinTime: { value: 0 }, uFinAmp: { value: 0 } };
+  readonly env = new HostMeshEnv(this.group);
 
   constructor() {
     this.group.name = "HostMeshLane";
@@ -524,9 +528,19 @@ export class HostMeshLane {
     return true;
   }
 
+  /** Light the lane's scene from the pack's environment image (HD), or turn that lighting off. */
+  setEnvironment(packId: string, decl: HostMeshAssetDecl | null): Promise<boolean> {
+    if (!decl) {
+      this.env.clear();
+      return Promise.resolve(false);
+    }
+    return this.env.load(this.assetUrl(packId, decl.path, decl.sha256));
+  }
+
   clear(): void {
     this.loadEpoch += 1;
     this.pendingByAsset.clear();
+    this.env.clear();
     this.disposeScenery();
     this.clearLive();
     for (const t of this.templates.values()) {

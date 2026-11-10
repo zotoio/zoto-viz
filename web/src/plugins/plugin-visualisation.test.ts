@@ -31,4 +31,16 @@ describe("catalog assets", () => {
     });
     expect(view.assets?.map((a) => a.id)).toEqual(["fish-betta"]);
   });
+
+  it("keeps a known asset role and drops an unknown one", () => {
+    expect(parseCatalogAssets([
+      { id: "env-hd", path: "assets/env-hd.jpg", role: "environment" },
+      { id: "koi", path: "assets/koi.glb", role: "mesh" },
+      { id: "odd", path: "assets/odd.glb", role: "skybox" },
+    ])).toEqual([
+      { id: "env-hd", path: "assets/env-hd.jpg", role: "environment" },
+      { id: "koi", path: "assets/koi.glb", role: "mesh" },
+      { id: "odd", path: "assets/odd.glb" },
+    ]);
+  });
 });

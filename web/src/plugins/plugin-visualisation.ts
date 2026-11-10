@@ -452,6 +452,8 @@ export function parseCatalogAssets(raw: unknown): NonNullable<PluginView["assets
     if (sha) asset.sha256 = sha;
     if (typeof rec?.bytes === "number") asset.bytes = rec.bytes;
     if (typeof rec?.triangles === "number") asset.triangles = rec.triangles;
+    const role = asString(rec?.role);
+    if (role === "mesh" || role === "environment") asset.role = role;
     out.push(asset);
   }
   return out;

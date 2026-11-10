@@ -1382,6 +1382,17 @@ def _check_semantics(doc: dict[str, Any], *, include_settings: bool = False) -> 
             "totalBytes": 2048,
         }:
             raise ValueError("viz.ubo must match the fixed ZotoVizData std140 layout")
+    _check_asset_roles(doc)
+
+
+def _check_asset_roles(doc: dict[str, Any]) -> None:
+    """One ``role: environment`` image per pack: the web host lights an HD lane from a single env map."""
+    assets = doc.get("assets")
+    if not isinstance(assets, list):
+        return
+    env = [str(a.get("id") or "?") for a in assets if isinstance(a, dict) and a.get("role") == "environment"]
+    if len(env) > 1:
+        raise ValueError(f"assets: at most one role: environment entry, got {', '.join(env)}")
 
 
 def _schema_error_line(err: Any, prefix: str = "") -> str:
