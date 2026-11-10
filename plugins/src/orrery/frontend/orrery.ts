@@ -20,6 +20,7 @@ import {
 } from "../../../sdk/talker-slots";
 import { ORRERY_DATA_MAPPING, ZOTO_FAIL_RGB, hash01, parseOrreryOptions, type OrreryOptions } from "./config";
 import { ORRERY } from "./orrery-data";
+import { resolveReducedMotion, unwatchSystemReducedMotion, watchSystemReducedMotion } from "./reduced-motion";
 import { applyPackWorkBudget, orreryWorkBudget, parseOrreryWorkBudgetYaml, resetPackWorkBudget } from "./work-budget";
 
 export type { VizDataFrame, VizPacketSample };
@@ -194,9 +195,12 @@ export function orreryEscapement(): Readonly<typeof esc> { return esc; }
 export function setOrreryOptions(next: OrreryOptions): void {
   opts = next;
   if (slotPair[0].length !== opts.planetCap) slotPair = resizeTalkerSlotArrays(slotPair, opts.planetCap);
+  if (opts.reducedMotion === "auto") watchSystemReducedMotion();
+  else unwatchSystemReducedMotion();
 }
 
 export function disposeOrreryPack(): void {
+  unwatchSystemReducedMotion();
   opts = parseOrreryOptions();
   slotPair = createTalkerSlotArrays(opts.planetCap);
   for (let k = 0; k < OR_MAX_ARMS; k++) arms[k] = newArm(k);
@@ -210,7 +214,7 @@ export function disposeOrreryPack(): void {
 }
 
 function reducedOn(): boolean {
-  return opts.reducedMotion === "on";
+  return resolveReducedMotion(opts.reducedMotion);
 }
 
 /** Failed state: slow EMA plus hysteresis, so a flapping unit never makes the plaque blink. */

@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import VIS from "../visualisation.yml?raw";
 import PLUGIN from "../plugin.yml?raw";
 import MAPPING from "../data-mapping.yml?raw";
 import FRAG from "../sky/fragment.glsl?raw";
 import { EMPTY_SYS_TELEMETRY, type VizDataFrame, type VizTalkerSample } from "../../../sdk/viz-contract";
-import { ORRERY_DATA_MAPPING, parseOrreryOptions } from "./config";
+import { ORRERY_DATA_MAPPING, ORRERY_DEFAULTS, parseOrreryOptions } from "./config";
 import { ORRERY } from "./orrery-data";
 import {
   OR_ARM,
@@ -60,6 +60,42 @@ function run(frames: number, over: Partial<VizDataFrame> | ((f: number) => Parti
   return slots;
 }
 
+/** What the host's loadPluginConfig sends: every visualisation.yml knob, untouched ones at their default. */
+function hostFilledConfig(): Record<string, string> {
+  const out: Record<string, string> = {};
+  let key: string | null = null;
+  for (const line of VIS.split("\n")) {
+    const k = /^\s+- key: (\S+)/.exec(line);
+    if (k) { key = k[1]!; continue; }
+    const d = /^\s+default: "?([^"]*?)"?\s*$/.exec(line);
+    if (key && d) { out[key] = d[1]!; key = null; }
+  }
+  return out;
+}
+
+type MotionListener = (e: { matches: boolean }) => void;
+
+/** A prefers-reduced-motion MediaQueryList the test can flip; resets the pack so it re-reads it. */
+function stubReducedMotionQuery(matches: boolean) {
+  const listeners = new Set<MotionListener>();
+  const mql = {
+    matches,
+    listeners,
+    addEventListener: (_type: "change", fn: MotionListener) => { listeners.add(fn); },
+    removeEventListener: (_type: "change", fn: MotionListener) => { listeners.delete(fn); },
+    flip(next: boolean) {
+      mql.matches = next;
+      for (const fn of listeners) fn({ matches: next });
+    },
+  };
+  vi.stubGlobal("matchMedia", function (this: unknown, q: string) {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    return q === "(prefers-reduced-motion: reduce)" ? mql : { matches: false };
+  });
+  disposeOrreryPack();
+  return mql;
+}
+
 beforeEach(() => {
   disposeOrreryPack();
   setOrreryOptions(parseOrreryOptions({}));
@@ -111,6 +147,21 @@ describe("orrery pack", () => {
     // arms + planets + sparks never exceed the instance cap
     const tight = parseOrreryOptions({ planetCap: "8" }, 30);
     expect(2 * tight.planetCap + tight.sparkCap).toBeLessThanOrEqual(30);
+  });
+
+  it("lets the preset win over knobs the host fills with their defaults", () => {
+    const sent = hostFilledConfig();
+    expect(Object.keys(sent)).toEqual(expect.arrayContaining(Object.keys(ORRERY_DEFAULTS)));
+    const night = parseOrreryOptions({ ...sent, preset: "night-watch" });
+    expect([night.lampWarmth, night.cameraMode, night.orbitSpeed, night.tickRate]).toEqual([0.35, "low", 0.75, 0.8]);
+    const clock = parseOrreryOptions({ ...sent, preset: "clockmaker" });
+    expect([clock.cameraMode, clock.tickRate, clock.sparkCap, clock.lampWarmth]).toEqual(["top", 1.25, 32, 0.85]);
+    const grand = parseOrreryOptions({ ...sent, preset: "grand" });
+    expect([grand.planetCap, grand.planetScale, grand.orbitSpeed]).toEqual([8, 1.15, 1.2]);
+    expect(parseOrreryOptions({ ...sent, preset: "study" })).toEqual(parseOrreryOptions({}));
+    // a knob moved off its default still beats the preset
+    const mine = parseOrreryOptions({ ...sent, preset: "night-watch", lampWarmth: "0.9", cameraMode: "top" });
+    expect([mine.lampWarmth, mine.cameraMode, mine.orbitSpeed]).toEqual([0.9, "top", 0.75]);
   });
 
   it("maps rate to orbit speed and byte volume to planet size, monotonic and clamped", () => {
@@ -252,5 +303,52 @@ describe("orrery pack", () => {
     const c = Array.from(run(60)[0]!.subarray(1, 4));
     const d = Array.from(run(1800)[0]!.subarray(1, 4));
     expect(Math.abs(d[0]! - c[0]!)).toBeGreaterThan(0.01);
+  });
+});
+
+describe("orrery reduced motion auto", () => {
+  afterEach(() => {
+    disposeOrreryPack();
+    vi.unstubAllGlobals();
+  });
+
+  const reducedSlot = (): number => run(2)[0]![OR_SLOT.reduced]!;
+
+  it("follows the system setting and its live changes", () => {
+    const mql = stubReducedMotionQuery(true);
+    setOrreryOptions(parseOrreryOptions({ reducedMotion: "auto" }));
+    expect(reducedSlot()).toBe(1);
+    mql.flip(false);
+    expect(reducedSlot()).toBe(0);
+    mql.flip(true);
+    expect(reducedSlot()).toBe(1);
+  });
+
+  it("lets explicit on and off beat the system setting", () => {
+    stubReducedMotionQuery(true);
+    setOrreryOptions(parseOrreryOptions({ reducedMotion: "off" }));
+    expect(reducedSlot()).toBe(0);
+    stubReducedMotionQuery(false);
+    setOrreryOptions(parseOrreryOptions({ reducedMotion: "on" }));
+    expect(reducedSlot()).toBe(1);
+  });
+
+  it("reads a sandbox without matchMedia as no preference", () => {
+    vi.stubGlobal("matchMedia", undefined);
+    disposeOrreryPack();
+    setOrreryOptions(parseOrreryOptions({ reducedMotion: "auto" }));
+    expect(reducedSlot()).toBe(0);
+  });
+
+  it("stops listening when the pack is disposed or leaves auto", () => {
+    const mql = stubReducedMotionQuery(false);
+    setOrreryOptions(parseOrreryOptions({ reducedMotion: "auto" }));
+    expect(mql.listeners.size).toBe(1);
+    setOrreryOptions(parseOrreryOptions({ reducedMotion: "off" }));
+    expect(mql.listeners.size).toBe(0);
+    setOrreryOptions(parseOrreryOptions({ reducedMotion: "auto" }));
+    expect(mql.listeners.size).toBe(1);
+    disposeOrreryPack();
+    expect(mql.listeners.size).toBe(0);
   });
 });
