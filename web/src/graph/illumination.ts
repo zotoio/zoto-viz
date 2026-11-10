@@ -81,6 +81,11 @@ export class GraphIllumination {
     this.cool.color.setHex(hex);
   }
 
+  /** Hide the whole rig (a stage scenery that lights itself). */
+  setEnabled(on: boolean): void {
+    for (const l of [this.hemi, this.key, this.fill, this.bounce, this.warm, this.cool]) l.visible = on;
+  }
+
   step(timeSec: number): void {
     const p = illuminationPose(timeSec);
     this.key.position.set(p.key.x, p.key.y, p.key.z);

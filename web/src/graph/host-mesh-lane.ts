@@ -823,6 +823,11 @@ export class HostMeshLane {
     this.group.add(root);
   }
 
+  /** Scenery with its own light rig (a night scene) sets `userData.ownLights`; the graph's lights step aside. */
+  sceneryOwnsLights(): boolean {
+    return this.scenery?.userData.ownLights === true;
+  }
+
   /**
    * Hand the scenery the pack's slot reader once a frame. Scenery that reacts to the pack
    * (the aquarium's eat puff) sets `userData.onSlots(read, dt)`.

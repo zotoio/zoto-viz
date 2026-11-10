@@ -81,6 +81,25 @@ uniform float uAfSide;
 varying vec3 vAfWorld;
 `;
 
+/**
+ * Detail maps tile every few tens of metres; across the fjord that repeat reads as a grid. Fade
+ * the sample toward the map's own mean (its smallest mip) with distance.
+ */
+const FRAGMENT_MAP = /* glsl */ `
+#ifdef USE_MAP
+  vec4 sampledDiffuseColor = texture2D( map, vMapUv );
+  float afDetail = smoothstep( 120.0, 900.0, length( vAfWorld - cameraPosition ) );
+  sampledDiffuseColor.rgb = mix( sampledDiffuseColor.rgb, textureLod( map, vMapUv, 12.0 ).rgb, 0.8 * afDetail );
+  diffuseColor *= sampledDiffuseColor;
+#endif
+`;
+
+/** Night vision has little colour: halve the albedo's saturation (emissive windows keep theirs). */
+const FRAGMENT_ALBEDO = /* glsl */ `
+#include <alphamap_fragment>
+diffuseColor.rgb = mix( vec3( dot( diffuseColor.rgb, vec3( 0.2126, 0.7152, 0.0722 ) ) ), diffuseColor.rgb, 0.5 );
+`;
+
 /** Originals keep what is above the water, reflections what is below it. */
 const FRAGMENT_CLIP = /* glsl */ `
 #include <clipping_planes_fragment>
@@ -121,9 +140,11 @@ export function patchFjordMaterial(mat: THREE.Material, shared: FjordUniforms, s
     shader.fragmentShader = shader.fragmentShader
       .replace("#include <common>", `#include <common>\n${FRAGMENT_PARS}`)
       .replace("#include <clipping_planes_fragment>", FRAGMENT_CLIP)
+      .replace("#include <map_fragment>", FRAGMENT_MAP)
+      .replace("#include <alphamap_fragment>", FRAGMENT_ALBEDO)
       .replace("#include <fog_fragment>", FRAGMENT_FOG);
   };
-  mat.customProgramCacheKey = () => "aurora-fjord-v1";
+  mat.customProgramCacheKey = () => "aurora-fjord-v3";
   mat.needsUpdate = true;
 }
 
@@ -192,6 +213,7 @@ function glowMesh(kind: "ring" | "streak", cap: number, name: string): THREE.Ins
 export function buildAuroraFjordScenery(): AuroraFjordScenery {
   const root = new THREE.Group();
   root.name = "aurora-fjord-scenery";
+  root.userData.ownLights = true;
 
   // night light: the moon behind the camera's left shoulder, a navy sky fill, and a green
   // (purple-fringed in a storm) wash from the aurora down the fjord
@@ -343,10 +365,10 @@ export function buildAuroraFjordScenery(): AuroraFjordScenery {
       shared.uAfTime.value = time;
     }
     shared.uAfFog.value = fog;
-    moon.intensity = 0.25 + 0.6 * moonLevel;
-    hemi.intensity = 0.35 + 0.25 * moonLevel + 0.2 * strength;
+    moon.intensity = 0.2 + 0.55 * moonLevel;
+    hemi.intensity = 0.16 + 0.14 * moonLevel + 0.1 * strength;
     aurora.color.copy(auroraCol);
-    aurora.intensity = (0.15 + 1.1 * strength) * (1 - 0.6 * fog);
+    aurora.intensity = (0.04 + 0.42 * strength) * (1 - 0.6 * fog);
     aurora.position.set(-80 + 200 * storm, 420 + 300 * storm, -1600 + 900 * storm);
 
     const ok = bind();
@@ -358,8 +380,8 @@ export function buildAuroraFjordScenery(): AuroraFjordScenery {
     }
 
     // reflections: dim, cool, tinted by the sky over them; calm water reflects more
-    tint.setRGB(0.1, 0.13, 0.19).multiplyScalar(0.6 + 0.5 * moonLevel)
-      .add(col.copy(auroraCol).multiplyScalar(0.22 * strength));
+    tint.setRGB(0.024, 0.03, 0.046).multiplyScalar(0.6 + 0.5 * moonLevel)
+      .add(col.copy(auroraCol).multiplyScalar(0.045 * strength));
     tint.multiplyScalar(0.55 + 0.45 * calm);
     for (const m of mirrorMats) if (!isWindowMirror.has(m)) m.color.copy(tint);
 
