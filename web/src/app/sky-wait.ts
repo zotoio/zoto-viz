@@ -230,7 +230,7 @@ export class SkyWaits {
       this.viewId(key),
       this.host.name(key),
       { kind: "couldnt-start", reason: "timeout", packId: this.host.packId?.(key) ?? key },
-      { onRetry: () => this.host.retry(key) },
+      { onRetry: () => this.host.retry(key), autoRetryWhile: () => this.waits.get(key)?.state === "failed:timeout" },
       el,
     );
   }

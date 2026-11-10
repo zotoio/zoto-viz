@@ -5,7 +5,8 @@
  * notice painted underneath it. When the context is back and drew, the failed load runs again once,
  * through the notice's own Retry (host.retryDeclinedMode): it lands ready with no notice, or, if it
  * fails again, the one "couldn't start." notice with its Retry shows (no couldn't-draw line).
- * Exactly one rerun per restore, counted on a spy of the pack load; never a loop. Counts only: the
+ * Exactly one rerun per restore, counted on a spy of the pack load; never a loop. A rerun that fails
+ * is then retried on the automatic backoff (auto-retry.ts), never sooner. Counts only: the
  * notice under the line is counted, not judged by its opacity.
  *
  * Same harness as context-lost-pack-216.test.ts: a real RenderHost over a fake GL context, the
@@ -307,12 +308,18 @@ describe("#216: a pack whose load fails under a lost context says one thing, and
 
     expect(w.load).toHaveBeenCalledTimes(1);
     expectCouldntStart(w);
-    // No loop: that Couldn't start is the answer until the user presses its Retry.
+    // No loop: the next try is the automatic retry's first step (3 s ±20 %), never another rerun.
     w.frame();
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(2_000);
     w.frame();
     expect(w.load).toHaveBeenCalledTimes(1);
     expectCouldntStart(w);
+    vi.advanceTimersByTime(2_000);
+    expect(w.load).toHaveBeenCalledTimes(2);
+    expectCouldntStart(w);
+    // That try failed too: the next one is the 10 s step, not sooner.
+    vi.advanceTimersByTime(5_000);
+    expect(w.load).toHaveBeenCalledTimes(2);
   });
 
   it("the rerun fails, then a second loss and restore: exactly one more load, one message at a time, no loop", () => {
@@ -330,7 +337,7 @@ describe("#216: a pack whose load fails under a lost context says one thing, and
     expect(w.load).toHaveBeenCalledTimes(2);
     expectCouldntStart(w);
     w.frame();
-    vi.advanceTimersByTime(5_000);
+    vi.advanceTimersByTime(2_000);
     w.frame();
     expect(w.load).toHaveBeenCalledTimes(2);
 
@@ -344,5 +351,8 @@ describe("#216: a pack whose load fails under a lost context says one thing, and
     expect(stateNotices(w)).toHaveLength(0);
     expect(notices(w)).toHaveLength(0);
     expect(drawLines(w)).toHaveLength(0);
+    // Ready: no automatic retry is left behind.
+    vi.advanceTimersByTime(120_000);
+    expect(w.load).toHaveBeenCalledTimes(3);
   });
 });
