@@ -195,6 +195,33 @@ export function bonsaiStagePose(read: StageSlotReader, viewAspect?: number): Sta
   return { ...pose, fov: Math.min(100, (2 * Math.atan(need) * 180) / Math.PI) };
 }
 
+/** Aurora Fjord fallback pose (down the fjord from the water, ~14 m up) before the pack's first frame. */
+const AURORA_FJORD_REST: StageMeshPose = { position: [8, 14, 40], target: [0, 92, -800], near: 0.5, fov: 34 };
+/** Narrowest horizontal half-angle (deg) that still shows both shores and a cabin. */
+const AURORA_FJORD_HALF_H = 28;
+
+/**
+ * Aurora Fjord camera from the pack (slot0: 1..3 position, 4..6 target, 7 fov). The fjord is a
+ * landscape: on a narrow pane the vertical fov widens until ~56 deg across still fits.
+ */
+export function auroraFjordStagePose(read: StageSlotReader, viewAspect?: number): StageMeshPose {
+  let pose = AURORA_FJORD_REST;
+  if (read(0, 0) >= 0.5) {
+    const fov = read(0, 7);
+    pose = {
+      position: [read(0, 1), read(0, 2), read(0, 3)],
+      target: [read(0, 4), read(0, 5), read(0, 6)],
+      near: 0.5,
+      fov: fov > 10 && fov < 100 ? fov : 34,
+    };
+  }
+  const aspect = viewAspect !== undefined && Number.isFinite(viewAspect) && viewAspect > 0.1 ? viewAspect : 16 / 9;
+  const need = Math.tan((AURORA_FJORD_HALF_H * Math.PI) / 180) / aspect;
+  const have = Math.tan(((pose.fov ?? 34) * Math.PI) / 360);
+  if (need <= have) return pose;
+  return { ...pose, fov: Math.min(75, (2 * Math.atan(need) * 180) / Math.PI) };
+}
+
 /** Orrery fallback pose (desk-level three-quarter view) before the pack's first frame. */
 const ORRERY_REST: StageMeshPose = { position: [0, 0.749, 1.233], target: [0, 0.2, 0], near: 0.02, fov: 30 };
 /** Half-width (m) of the orrery plus its outer planet that must stay in frame. */
@@ -228,6 +255,7 @@ export function orreryStagePose(read: StageSlotReader, viewAspect?: number): Sta
 export function stageMeshPose(packId: string, read: StageSlotReader, viewAspect?: number): StageMeshPose | null {
   if (packId === "marble-run") return marbleRunStagePose(read, viewAspect);
   if (packId === "bonsai") return bonsaiStagePose(read, viewAspect);
+  if (packId === "aurora-fjord") return auroraFjordStagePose(read, viewAspect);
   if (packId === "orrery") return orreryStagePose(read, viewAspect);
   if (packId === "aquarium") return aquariumStagePose(read, viewAspect);
   if (packId === "koi-pond") return koiStagePose(read, viewAspect);
