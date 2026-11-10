@@ -107,11 +107,24 @@ const IDENTITY_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const KOI_FISH_SCALE = 0.48;
 
 /**
- * Asset 0 = Blender scape (identity). Assets 1..3 = kohaku/showa/ogon fish seeds until
- * the pack starts writing live host-mesh packets. Pads/rocks/basin come from the scape.
+ * koi-pond plugin.yml order: 4 = lily-pads, 5 = pond-rocks. The Standard scape embeds its own pads
+ * and rocks, so these are drawn only when HD swaps in `koi-pond-scape-hd`, which is just the pond
+ * bed; lily-pads-hd / pond-rocks-hd then carry the scanned stone, leaf-textured pads and lotus.
  */
-function pinKoiContents(lane: MeshPinLane): void {
+export const KOI_HD_SCENERY_ASSETS = [4, 5] as const;
+export const KOI_HD_SCAPE_ID = "koi-pond-scape-hd";
+
+/**
+ * Asset 0 = Blender scape (identity). Assets 1..3 = kohaku/showa/ogon fish seeds until
+ * the pack starts writing live host-mesh packets. Standard: pads/rocks/basin come from the scape.
+ */
+function pinKoiContents(lane: MeshPinLane, bedOnlyScape: boolean): void {
   lane.applySlotBuffer(encodeHostMeshSlotPacket(0, [{ matrix: IDENTITY_MATRIX }]));
+  if (bedOnlyScape) {
+    for (const asset of KOI_HD_SCENERY_ASSETS) {
+      lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, [{ matrix: IDENTITY_MATRIX }]));
+    }
+  }
   const fish: [number, number, number, number, number][] = [
     [1, -0.55, 0.04, 0.15, 0.4],
     [1, 0.35, 0.05, -0.4, 2.1],
@@ -134,13 +147,21 @@ function pinKoiContents(lane: MeshPinLane): void {
   }
 }
 
-/** A pack's shipped scenery and fixed contents, pinned into a lane with no sandbox packets. */
-export function pinPackContents(lane: MeshPinLane, packId: string, set: HostMeshModelSet = "standard"): void {
+/**
+ * A pack's shipped scenery and fixed contents, pinned into a lane with no sandbox packets.
+ * `assets` is the pack's raw declaration list (before {@link hostMeshDeclsForSet}).
+ */
+export function pinPackContents(
+  lane: MeshPinLane,
+  packId: string,
+  set: HostMeshModelSet = "standard",
+  assets: readonly HostMeshAssetDecl[] = [],
+): void {
   if (packId === "aquarium") {
     pinAquariumContents(lane);
   } else if (packId === "koi-pond") {
     lane.setScenery(buildKoiPondScenery().root);
-    pinKoiContents(lane);
+    pinKoiContents(lane, set === "hd" && assets.some((d) => d.id === KOI_HD_SCAPE_ID));
   } else if (packId === "marble-run") {
     // the Blender track sits at the origin in metres; marbles are instanced scenery fed from slots
     lane.setScenery(buildMarbleRunScenery().root);
@@ -174,7 +195,7 @@ export async function mountPaneHostMeshes(
     lane.clear();
     return;
   }
-  pinPackContents(lane, spec.id, modelSet);
+  pinPackContents(lane, spec.id, modelSet, spec.assets);
 }
 
 /**
@@ -222,7 +243,7 @@ export function createHostMeshBridge(
         into.clear();
         return false;
       }
-      pinPackContents(into, spec.id, set);
+      pinPackContents(into, spec.id, set, spec.assets as HostMeshAssetDecl[]);
       return !into.allAssetsFailed();
     },
     applySlotBuffer(data) {
