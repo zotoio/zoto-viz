@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aquariumStagePose, koiStagePose, rocketCarStagePose, stageMeshPackId, stageMeshPose } from "./stage-mesh-camera";
+import { aquariumStagePose, koiStagePose, orreryStagePose, rocketCarStagePose, stageMeshPackId, stageMeshPose } from "./stage-mesh-camera";
 
 function slots(values: Record<string, number>) {
   return (slot: number, index: number) => values[`${slot}:${index}`] ?? 0;
@@ -69,5 +69,22 @@ describe("stage mesh camera", () => {
     const pose = stageMeshPose("rocket-car-soccer", slots({}));
     expect(pose?.position).toEqual([0, 11, 26]);
     expect(pose?.target[2]).toBeLessThan(26);
+  });
+
+  it("orrery: follows the pack camera (slot0 1..7) and keeps the machine in narrow panes", () => {
+    const cam = slots({ "0:0": 1, "0:1": 0, "0:2": 0.75, "0:3": 1.23, "0:4": 0, "0:5": 0.2, "0:6": 0, "0:7": 30 });
+    const pose = stageMeshPose("orrery", cam, 32 / 9);
+    expect(pose?.position).toEqual([0, 0.75, 1.23]);
+    expect(pose?.fov).toBeCloseTo(30, 3);
+    const tall = orreryStagePose(cam, 0.6);
+    const t = Math.tan(((tall.fov ?? 0) * Math.PI) / 360);
+    expect(tall.fov!).toBeGreaterThan(30);
+    expect(0.56).toBeLessThanOrEqual(Math.hypot(0.55, 1.23) * t * 0.6 + 1e-9);
+  });
+
+  it("orrery: desk-level rest pose before the pack's first frame", () => {
+    const rest = orreryStagePose(slots({}), 2);
+    expect(rest.target).toEqual([0, 0.2, 0]);
+    expect(rest.fov).toBe(30);
   });
 });
