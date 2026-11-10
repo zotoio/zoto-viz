@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as THREE from "three";
+import { mockPartial } from "../../test-support/mock-partial";
 import { HOST_MESH_ENV_LOOK, HostMeshEnv } from "./host-mesh-env";
 import { HostMeshLane } from "./host-mesh-lane";
 
@@ -17,15 +18,16 @@ function fakeRenderer(): FakeRenderer {
 }
 
 const camera = new THREE.PerspectiveCamera();
-
-type SceneHook = (renderer: THREE.WebGLRenderer, scene: THREE.Scene, camera: THREE.Camera, target?: unknown) => void;
+const geometry = new THREE.BufferGeometry();
+const material = new THREE.MeshBasicMaterial();
+const group = new THREE.Group();
 
 /** What WebGLRenderer.render does around a scene: onBeforeRender, draw, onAfterRender. */
 function draw(scene: THREE.Scene, renderer: FakeRenderer, inner?: () => void): void {
-  const r = renderer as unknown as THREE.WebGLRenderer;
-  (scene.onBeforeRender as unknown as SceneHook)(r, scene, camera, null);
+  const r = mockPartial<THREE.WebGLRenderer>(renderer);
+  scene.onBeforeRender(r, scene, camera, geometry, material, group);
   inner?.();
-  (scene.onAfterRender as unknown as SceneHook)(r, scene, camera);
+  scene.onAfterRender(r, scene, camera, geometry, material, group);
 }
 
 function rig() {

@@ -6,7 +6,7 @@ image only has to carry lighting, not a perfect background. Exposure is normalis
 luminance lands on ``--median`` (linear), and highlights roll off with a soft shoulder above
 ``--knee`` instead of clipping. Deterministic: same input and flags give the same bytes.
 
-    python3 scripts/hdri_to_env.py in.hdr plugins/src/<id>/assets/env-hd.jpg --width 1024
+    python3 plugins/src/koi-pond/blender/hdri_to_env.py in.hdr plugins/src/<id>/assets/env-hd.jpg --width 1024
 """
 from __future__ import annotations
 

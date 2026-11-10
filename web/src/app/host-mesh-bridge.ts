@@ -107,23 +107,11 @@ const IDENTITY_MATRIX = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
 const KOI_FISH_SCALE = 0.48;
 
 /**
- * koi-pond plugin.yml order: 4 = lily-pads, 5 = pond-rocks. The Standard scape embeds its own pads
- * and rocks, so these are drawn with the HD set only, where the scape is just the pond bed and
- * lily-pads-hd / pond-rocks-hd carry the scanned stone, leaf-textured pads and lotus.
- */
-export const KOI_HD_SCENERY_ASSETS = [4, 5] as const;
-
-/**
  * Asset 0 = Blender scape (identity). Assets 1..3 = kohaku/showa/ogon fish seeds until
- * the pack starts writing live host-mesh packets. Standard: pads/rocks/basin come from the scape.
+ * the pack starts writing live host-mesh packets. Pads/rocks/basin come from the scape.
  */
-function pinKoiContents(lane: MeshPinLane, set: HostMeshModelSet): void {
+function pinKoiContents(lane: MeshPinLane): void {
   lane.applySlotBuffer(encodeHostMeshSlotPacket(0, [{ matrix: IDENTITY_MATRIX }]));
-  if (set === "hd") {
-    for (const asset of KOI_HD_SCENERY_ASSETS) {
-      lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, [{ matrix: IDENTITY_MATRIX }]));
-    }
-  }
   const fish: [number, number, number, number, number][] = [
     [1, -0.55, 0.04, 0.15, 0.4],
     [1, 0.35, 0.05, -0.4, 2.1],
@@ -152,7 +140,7 @@ export function pinPackContents(lane: MeshPinLane, packId: string, set: HostMesh
     pinAquariumContents(lane);
   } else if (packId === "koi-pond") {
     lane.setScenery(buildKoiPondScenery().root);
-    pinKoiContents(lane, set);
+    pinKoiContents(lane);
   } else if (packId === "marble-run") {
     // the Blender track sits at the origin in metres; marbles are instanced scenery fed from slots
     lane.setScenery(buildMarbleRunScenery().root);
