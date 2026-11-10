@@ -17,14 +17,28 @@ BODY = FIXTURE.read_bytes()
 
 
 class FakeResponse:
-    def __init__(self, status: int, body: bytes = b"", headers: dict[str, str] | None = None) -> None:
+    """``content.read(n)`` behaves like aiohttp's StreamReader: at most one network ``chunk`` per
+    call (never more than ``n``), then ``b""`` at EOF."""
+
+    def __init__(self, status: int, body: bytes = b"", headers: dict[str, str] | None = None,
+                 *, chunk: int | None = None) -> None:
         self.status = status
         self.headers = headers or {}
         self._body = body
+        self._pos = 0
+        self._chunk = chunk
+        self.reads = 0
         self.content = self
 
     async def read(self, n: int = -1) -> bytes:
-        return self._body if n < 0 else self._body[:n]
+        self.reads += 1
+        left = len(self._body) - self._pos
+        take = left if n < 0 else min(n, left)
+        if self._chunk is not None:
+            take = min(take, self._chunk)
+        out = self._body[self._pos:self._pos + take]
+        self._pos += take
+        return out
 
     async def __aenter__(self) -> FakeResponse:
         return self
@@ -146,6 +160,29 @@ def test_fetch_sends_a_descriptive_user_agent_and_caches() -> None:
     assert cached["etag"] == '"12c5-65ff"' and cached["fetchedAt"] == 1000.0
 
 
+def test_a_body_split_across_network_chunks_is_read_to_the_end() -> None:
+    reply = FakeResponse(200, BODY, chunk=500)
+    payload = asyncio.run(noaa_kp.fetch(FakeSession(reply), now=1000.0))  # type: ignore[arg-type]
+    assert reply.reads > len(BODY) // 500
+    assert payload["json"]["kp"] == 3.0 and "stale" not in payload
+    assert len(payload["items"]) == noaa_kp.HISTORY
+
+
+def test_a_body_of_exactly_the_cap_is_accepted() -> None:
+    padded = BODY + b" " * (noaa_kp.MAX_BODY - len(BODY))
+    payload = asyncio.run(noaa_kp.fetch(FakeSession(FakeResponse(200, padded, chunk=4096)), now=1000.0))  # type: ignore[arg-type]
+    assert payload["json"]["kp"] == 3.0
+
+
+def test_a_chunked_body_over_the_cap_is_refused_without_reading_it_all() -> None:
+    huge = b"[" + b" " * (noaa_kp.MAX_BODY * 4) + b"]"
+    reply = FakeResponse(200, huge, chunk=4096)
+    with pytest.raises(ValueError, match="too large"):
+        asyncio.run(noaa_kp.fetch(FakeSession(reply), now=1000.0))  # type: ignore[arg-type]
+    assert reply._pos == noaa_kp.MAX_BODY + 1
+    assert not noaa_kp.cache_file().exists()
+
+
 def test_fresh_cache_skips_the_network_after_a_restart() -> None:
     asyncio.run(noaa_kp.fetch(FakeSession(ok_reply()), now=1000.0))  # type: ignore[arg-type]
     noaa_kp.reset_for_tests()
@@ -203,6 +240,30 @@ def test_first_fetch_offline_backs_off_and_stays_empty(monkeypatch: pytest.Monke
     assert live["ok"] is False and "offline" in live["error"]
     assert not live.get("items")
     assert sources._due["noaa-kp"] == 1000.0 + noaa_kp.RETRY_S
+
+
+def test_a_failure_served_from_cache_stays_ok_but_backs_off(monkeypatch: pytest.MonkeyPatch) -> None:
+    asyncio.run(noaa_kp.fetch(FakeSession(ok_reply()), now=1000.0))  # type: ignore[arg-type]
+    sess = FakeSession(OSError("network unreachable"), ok_reply())
+
+    async def fake_session() -> FakeSession:
+        return sess
+
+    monkeypatch.setattr(sources, "session", fake_session)
+    sources.save([_row()])
+    asyncio.run(sources.poll(now=5000.0))
+    live = sources.snapshot()["noaa-kp"]
+    assert live["ok"] is True and live["stale"] is True
+    assert "network unreachable" in live["liveError"]
+    assert live["items"][0]["title"] == "Kp 3.00 · unsettled"
+    assert sources._due["noaa-kp"] == 5000.0 + noaa_kp.RETRY_S
+
+    retry = 5000.0 + noaa_kp.RETRY_S
+    asyncio.run(sources.poll(now=retry))
+    assert len(sess.calls) == 2
+    live = sources.snapshot()["noaa-kp"]
+    assert live["ok"] is True and "stale" not in live and "liveError" not in live
+    assert sources._due["noaa-kp"] == retry + 900
 
 
 def test_consent_gate_still_applies(monkeypatch: pytest.MonkeyPatch) -> None:
