@@ -4,7 +4,7 @@
 
 | File | Source | Author | Licence | Notes |
 | --- | --- | --- | --- | --- |
-| `assets/env-hd.jpg` | [Ninomaru Teien](https://polyhaven.com/a/ninomaru_teien) (Poly Haven HDRI, 1k `.hdr`) | Greg Zaal | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | HD image-based lighting only (`role: environment`). Converted with `scripts/hdri_to_env.py <in>.hdr assets/env-hd.jpg --width 1024` (median 0.18, knee 0.7, JPEG q86): 1024×512 sRGB equirect, 269 194 bytes. |
+| `assets/env-hd.jpg` | [Ninomaru Teien](https://polyhaven.com/a/ninomaru_teien) (Poly Haven HDRI, 1k `.hdr`) | Greg Zaal | [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/) | HD image-based lighting only (`role: environment`). Converted with `blender/hdri_to_env.py <in>.hdr assets/env-hd.jpg --width 1024` (median 0.18, knee 0.7, JPEG q86): 1024×512 sRGB equirect, 269 194 bytes. |
 
 ## Built in this repo
 

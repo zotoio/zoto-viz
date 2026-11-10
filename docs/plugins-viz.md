@@ -135,7 +135,7 @@ assets:
 - The PMREM and image are freed when the lane clears (view switch, model-set change, mosaic
   pane rebind or pane dispose).
 - Make the image from a Poly Haven (CC0) `.hdr` with
-  `python3 scripts/hdri_to_env.py <in>.hdr plugins/src/<id>/assets/env-hd.jpg --width 1024`
+  `python3 plugins/src/koi-pond/blender/hdri_to_env.py <in>.hdr plugins/src/<id>/assets/env-hd.jpg --width 1024`
   (LDR, exposure-normalised with a soft highlight shoulder; keep it ≤ ~400 KB) and credit the
   source in the pack's `ASSETS.md`.
 
