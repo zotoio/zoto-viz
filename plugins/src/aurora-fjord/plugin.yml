@@ -1,0 +1,65 @@
+id: aurora-fjord
+name: Aurora Fjord
+version: 1
+hint: A night fjord under the aurora — the curtains' strength, speed and latitude follow the live NOAA planetary K-index, top talkers are cabin lights along the shore, packets ripple the still water, and failed units roll a fog bank in from the fjord head.
+description: >-
+  Terrain and shore are Blender-built GLBs (blender/build_fjord.py: a sculpted fjord heightmap
+  painted with CC0 Poly Haven rock, snow, forest-floor and shingle scans, fir impostor cards
+  rendered from the Poly Haven fir scan, scanned boulders and plank-and-slate cabins with
+  emissive windows, then gltfpack -cc -kn -km) drawn by the host mesh lane. The host scenery
+  mirrors them in the water, lights the cabin windows from viz slot 1 and lays packet ripples
+  from slot 2. The sky shader raymarches the aurora, the stars, the open water's reflection and
+  the haze / fog bank; the sandbox (frontend/fjord.ts) reads Kp from the bound noaa-kp source
+  (a demo Kp curve when the source is absent or offline), runs rate-ranked cabin slots with
+  hysteresis, the ripple pool, the fog and the camera. Standard and HD model sets via modelSet;
+  per-frame caps in workBudget. Idle host fixture keeps demo talkers and packets on the water.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+assets:
+  - id: fjord-terrain
+    path: assets/fjord-terrain.glb
+    sha256: ed9415083d5adb069108872493c90cdbbd6ec722054f9bec3d28b095cae15175
+    bytes: 126700
+    triangles: 11000
+  - id: fjord-shore
+    path: assets/fjord-shore.glb
+    sha256: c6b37b85833022a779118f8d3ed5e815cf92d793986980720e8925677fae70c8
+    bytes: 130220
+    triangles: 12301
+  - id: fjord-terrain-hd
+    path: assets/fjord-terrain-hd.glb
+    sha256: 8f99b29012bab222f433374b358fdcdd70af34c302f3641c80acbcdba6e0aa72
+    bytes: 466192
+    triangles: 31999
+  - id: fjord-shore-hd
+    path: assets/fjord-shore-hd.glb
+    sha256: a6d25763502b54760f6e7e1718a2294f7956d6605cfb290f58b8e216d5ca7011
+    bytes: 371456
+    triangles: 18777
+  - id: env-hd
+    path: assets/env-hd.jpg
+    role: environment
+    sha256: 41fbbdc3284efeda50a7cfd097795fcf55840bb83866ca952217740141f606f0
+    bytes: 6125
+viz:
+  graphWalk: false
+  contract: 2
+  maxBuffers: 4
+  maxBufferFloats: 64
+  maxParticles: 0
+  # cabin and ripple slots are 1..2; the host mesh lane only pins the two GLBs, never reads a slot
+  hostMeshSlot: 7
+  hostMeshSlotCount: 1
+  uniforms:
+    - uTime
+    - uOpacity
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts

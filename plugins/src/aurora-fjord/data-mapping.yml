@@ -1,0 +1,43 @@
+# Host VizDataFrame → aurora-fjord effects (declared mapping; read in pack only).
+
+mappings:
+  - field: headlines[noaa-kp].text
+    effect: aurora strength, curtain speed and latitude from the planetary K-index
+    default: demo Kp curve
+    clamp: Kp 0..9 parsed from "Kp <value>", 8 s ease; strength (Kp-0.3)/6, latitude Kp/8, storm fringe from Kp 5
+  - field: headlines[noaa-kp].summary
+    effect: Kp gauge history and 24 h peak
+    default: demo history
+    clamp: 8 three-hour slots, newest last
+  - field: talkers[].id
+    effect: stable cabin per talker (rate-ranked, 2 s hold, 1.2x challenger)
+    default: —
+    clamp: cabinCap cabins (1..8), nearest cabin for the busiest; plugins/sdk/talker-slots.ts rules
+  - field: talkers[].rate
+    effect: cabin window brightness
+    default: 0
+    clamp: log1p(rate)/log1p(400), 1.5 s average
+  - field: talkers[].role
+    effect: window warmth (self amber, gateway pale, others by id hash)
+    default: lan
+    clamp: 0..1
+  - field: packets[]
+    effect: one light ripple on the water off a lit cabin per packet
+    default: 0
+    clamp: maxPacketsPerFrame, rippleCap pool, ~5 ripples/s
+  - field: packets[].proto
+    effect: ripple tint between window amber and aurora green
+    default: tcp
+    clamp: hash01
+  - field: sys.failed
+    effect: a fog bank rolls in from the fjord head and a steady fail chip lights
+    default: 0
+    clamp: 0..1 above failThreshold, 1.5 s average, off below 0.7 × threshold; fog eases over ~6 s
+  - field: audio
+    effect: faint shimmer on the curtains' lower edge
+    default: 0
+    clamp: 0..1
+  - field: demo
+    effect: built-in demo talkers when the frame has none; idle flag in slot 0
+    default: false
+    clamp: boolean
