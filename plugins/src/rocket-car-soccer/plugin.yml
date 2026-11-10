@@ -28,6 +28,26 @@ assets:
     sha256: 5f3ce4b8616e3540f6ec7095166a1220a92bdb4f4761755371a8f3f94678e815
     bytes: 161676
     triangles: 3968
+  - id: rocket-car-hd
+    path: assets/rocket-car-hd.glb
+    sha256: cedc396d417936600442698e24e6623170c3bdc821961168aa7aeba98df341b1
+    bytes: 285804
+    triangles: 28484
+  - id: rocket-car-blue-hd
+    path: assets/rocket-car-blue-hd.glb
+    sha256: 4b4863c52d44deb48a6e590d932c78bfe6b29e24b56dcaa0d6c5fed667bf9d53
+    bytes: 280192
+    triangles: 28484
+  - id: soccer-ball-hd
+    path: assets/soccer-ball-hd.glb
+    sha256: ea48c597851c4d8efd1c029ad9e1697365b019fcb8636ca629c3e6ba03e9cc9f
+    bytes: 76124
+    triangles: 7920
+  - id: env-hd
+    path: assets/env-hd.jpg
+    role: environment
+    sha256: c786107c62bb9397db73569d0ab7d7c084fb96ccb410e6b9cb8c1c1fd1bbb516
+    bytes: 26120
 viz:
   graphWalk: false
   presentTick: true

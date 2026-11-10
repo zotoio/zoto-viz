@@ -187,6 +187,7 @@ describe("rocket-car-soccer pack", () => {
     const base = JSON.stringify(parseRcsOptions({ preset: "neon_night" }));
     for (const key of keys) {
       if (key === "preset" || key === "teamOrange" || key === "teamBlue") continue;
+      if (key === "modelSet") continue; // host-mesh bridge reads it to pick the -hd assets
       const chunk = VIS.split(`key: ${key}`)[1]!.split("- key:")[0]!;
       const def = chunk.match(/default: (\S+)/)?.[1] ?? "";
       const min = Number(chunk.match(/min: (\S+)/)?.[1]);

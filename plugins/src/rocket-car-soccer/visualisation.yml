@@ -151,3 +151,11 @@ config:
     type: text
     default: "host"
     hint: host = ZotoDesigner GLB lane on the host; procedural = shader-only; or assets/foo.glb path.
+  - key: modelSet
+    label: model set
+    type: select
+    values:
+      - [standard, Standard]
+      - [hd, HD]
+    default: standard
+    hint: Standard designer meshes, or the HD Blender set (assets ending -hd) with a two-tone clearcoat livery, light strips, carbon, tread and a stitched leather ball lit by a stadium env. Assets with no HD version stay standard.

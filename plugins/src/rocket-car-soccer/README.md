@@ -1,6 +1,6 @@
 # Rocket Car Soccer
 
-Self-playing boost-car arena visual for zoto-viz. Original procedural stadium, teams, and physics — no third-party assets or trademarks.
+Self-playing boost-car arena visual for zoto-viz. Original procedural stadium, teams, cars, and physics — no real car brands, logos, or trademarks. The optional HD model set uses CC0 textures only (see `ASSETS.md`).
 
 ## Layout
 
@@ -12,6 +12,7 @@ Self-playing boost-car arena visual for zoto-viz. Original procedural stadium, t
 - `frontend/pack.ts` — options, presets, caps
 - `frontend/index.ts` — sandbox driver (`config.read`, `viz.write`, `writeBuffer`, `writeParticles`)
 - `sky/fragment.glsl` — raymarched arena + tile-legible scoreboard / fail strip / demo label
+- `assets/` — Standard designer GLBs, the `-hd` set and `env-hd.jpg`; `blender/` builds the HD set (`ASSETS.md`)
 
 ## Live mapping
 
@@ -38,6 +39,23 @@ Failures are **stadium-wide** from `sys.failed` only (scoreboard / HUD strip), n
 | `chill_orbit` | 2v2, slow orbit, softer particles |
 
 Use the **preset** select in This view, then tune individual sliders. Randomise, Undo, and Reset live in the host settings panel (not in this pack’s config).
+
+## Model set (Standard / HD)
+
+**model set** in This view picks the host-mesh assets. **Standard** (the default) draws the original designer GLBs.
+**HD** swaps in `rocket-car-hd`, `rocket-car-blue-hd` and `soccer-ball-hd`, and lights them with the `env-hd`
+stadium environment (Poly Haven Orlando Stadium, CC0). Node names, wheel spin and booster flame are the same in
+both sets.
+
+- Cars: a two-tone clearcoat livery (team colour over graphite, twin white stripes, a race-number door panel)
+  over a baked panel-line normal, team-colour light strips on the skirts and tail, glowing hubs and calipers,
+  photographed carbon-fibre trim, tread and sidewall tyres, and polished metal rims.
+- Ball: a 32-panel stitched leather ball, white hexagons and black pentagons (Poly Haven Leather White grain,
+  deep recessed seams, stitch rows).
+- Budget: about 285 KB per car and 76 KB for the ball. Textures plus the environment PMREM fit the 8 MiB
+  `maxGpuBytes` ceiling, versus about 17 MB of textures for Standard.
+
+Rebuild with `blender --python blender/build_rocket_car_hd.py -- --out plugins/src/rocket-car-soccer` in a visible Blender (steps in `ASSETS.md`).
 
 ## Tests
 
