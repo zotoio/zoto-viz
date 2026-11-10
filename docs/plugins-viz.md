@@ -126,8 +126,9 @@ assets:
 - The entry never takes a mesh slot: the lane's asset order (and so the mesh index packs
   address) is the same with or without it. At most one per pack; no `triangles`.
 - With `hd` the web host loads it, builds a PMREM env map and sets `scene.environment` on that
-  pane's scene only while the scene draws. The pack's sky stays the background. ACES filmic tone
-  mapping and sRGB output are applied for that draw, and the scene's own lights drop to 80% so the
+  pane's scene only while the scene draws. The pack's sky stays the background. Neutral tone
+  mapping (Khronos PBR Neutral, which keeps hue and saturation) and sRGB output are applied for
+  that draw, and the scene's own lights drop to 80% so the
   meshes are not lit twice. Everything is put back after the draw, so other mosaic panes on the
   shared renderer are unchanged. Plugin skies are `toneMapped: false` and are not affected.
 - `standard` never loads the image and leaves the renderer exactly as before.

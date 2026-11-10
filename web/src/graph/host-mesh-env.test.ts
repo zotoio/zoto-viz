@@ -65,6 +65,10 @@ describe("HostMeshEnv", () => {
     expect(build).toHaveBeenCalledWith(tex);
   });
 
+  it("tone maps with Neutral (hue-preserving), not ACES", () => {
+    expect(HOST_MESH_ENV_LOOK.toneMapping).toBe(THREE.NeutralToneMapping);
+  });
+
   it("lights the scene only while it draws, then puts the shared renderer and lights back", async () => {
     const { scene, hemi, sun, target, env } = rig();
     await env.load("env.jpg");

@@ -14,8 +14,9 @@ export type HostMeshEnvLook = {
   lightScale: number;
 };
 
+/** Neutral, not ACES: ACES shifts saturated hues toward white (it paled the koi-pond lotus). */
 export const HOST_MESH_ENV_LOOK: Readonly<HostMeshEnvLook> = {
-  toneMapping: THREE.ACESFilmicToneMapping,
+  toneMapping: THREE.NeutralToneMapping,
   exposure: 1.0,
   envIntensity: 0.6,
   lightScale: 0.8,
