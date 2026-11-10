@@ -15,6 +15,7 @@ import { pickPaneDiceView } from "../graph/pane-dice";
 import { applyPluginCatalog, dreamCycleModes, fillViewSelect, isPickerHidden, viewSelectOptions, type PluginView } from "./plugin";
 import { toPluginView } from "./plugin-visualisation";
 import type { ProfileSettings } from "../core/profiles";
+import { stagedShippedPackIds } from "../../test-support/staged-packs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../..");
 const HIDDEN = [
@@ -75,14 +76,18 @@ describe("picker: hidden — the 7 fixture packs", () => {
     expect(inPane, "mosaic pane pickers list none either").toEqual([]);
   });
 
-  it("(b) pick-every-view: 71 view packs before, 64 after (picker rows drop by the 7 as well)", () => {
+  it("(b) pick-every-view: 70 view packs before, 63 after (picker rows drop by the 7 as well)", () => {
     applyPluginCatalog(shippedCatalog(true));
     const beforeRows = viewSelectOptions().length;
     const beforePacks = new Set(viewSelectOptions().map((o) => packOf(o.value))).size;
     applyPluginCatalog(shippedCatalog());
     const afterRows = viewSelectOptions().length;
     const afterPacks = new Set(viewSelectOptions().map((o) => packOf(o.value))).size;
-    expect({ beforePacks, afterPacks, dropped: beforeRows - afterRows }).toEqual({ beforePacks: 71, afterPacks: 64, dropped: 7 });
+    // staged packs (tests/shipped_catalog.py) on disk add to both counts; none is hidden
+    const staged = new Set(stagedShippedPackIds(repoRoot));
+    const stagedViews = shippedCatalog().filter((p) => staged.has(p.id) && p.picker !== "hidden").length;
+    expect({ beforePacks, afterPacks, dropped: beforeRows - afterRows })
+      .toEqual({ beforePacks: 70 + stagedViews, afterPacks: 63 + stagedViews, dropped: 7 });
     expect(allModes().filter((m) => HIDDEN.includes(m.pluginId ?? "")).length, "still in the catalog").toBe(7);
   });
 

@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import * as THREE from "three";
 import { beforeAll, describe, expect, it } from "vitest";
 import yaml from "yaml";
+import { stagedShippedPackIds } from "../../test-support/staged-packs";
 import { formatViolationMessage, listPackIds, type PackLintViolation } from "../../../plugins/sdk/pack-lint";
 import {
   CUSTOM_UNIFORM_RE,
@@ -37,11 +38,11 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../
 const FIXTURES = "plugins/sdk/uniform-lint-fixtures";
 const packsRoot = path.join(repoRoot, "plugins/src");
 
-/** The shipped pack ids, as pinned for the service catalog (tests/shipped_catalog.py, 74 today). */
+/** The shipped pack ids, as pinned for the service catalog (tests/shipped_catalog.py, 73 today, plus staged packs on disk). */
 function pinnedShippedPackIds(): string[] {
   const py = readFileSync(path.join(repoRoot, "tests/shipped_catalog.py"), "utf8");
   const body = py.match(/PINNED_SHIPPED_PLUGIN_IDS[^=]*=\s*\(([\s\S]*?)\)/)?.[1] ?? "";
-  return [...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]!).sort();
+  return [...[...body.matchAll(/"([^"]+)"/g)].map((m) => m[1]!), ...stagedShippedPackIds(repoRoot)].sort();
 }
 
 /**
@@ -330,7 +331,7 @@ describe("uniform declaration lint (#171 b): assumptions pinned", () => {
       const listed = listPackIds(tmp);
       expect(listed.filter((p) => p.startsWith("."))).toEqual([]);
       expect(listed).toEqual(pinnedShippedPackIds());
-      expect(listed).toHaveLength(74);
+      expect(listed).toHaveLength(73 + stagedShippedPackIds(repoRoot).length);
       expect(listed.every((p) => existsSync(path.join(tmp, p, "plugin.yml")))).toBe(true);
     } finally {
       rmSync(tmp, { recursive: true, force: true });

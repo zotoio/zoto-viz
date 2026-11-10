@@ -6,7 +6,12 @@ from pathlib import Path
 import pytest
 
 from service import plugins
-from tests.shipped_catalog import PINNED_EXAMPLE_PACK_IDS, PINNED_SHIPPED_PLUGIN_IDS
+from tests.shipped_catalog import (
+    PINNED_EXAMPLE_PACK_IDS,
+    PINNED_SHIPPED_PLUGIN_IDS,
+    STAGED_SHIPPED_PLUGIN_IDS,
+    shipped_plugin_ids,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "plugins" / "src"
@@ -22,11 +27,15 @@ def _disk_src_ids() -> list[str]:
 
 def test_shipped_src_ids_match_pinned_list() -> None:
     disk = _disk_src_ids()
-    assert disk == list(PINNED_SHIPPED_PLUGIN_IDS)
+    assert disk == list(shipped_plugin_ids())
     assert "marble-run" in disk
 
 
-@pytest.mark.parametrize("pid", PINNED_SHIPPED_PLUGIN_IDS)
+def test_staged_packs_are_not_also_pinned() -> None:
+    assert not set(STAGED_SHIPPED_PLUGIN_IDS) & set(PINNED_SHIPPED_PLUGIN_IDS)
+
+
+@pytest.mark.parametrize("pid", shipped_plugin_ids())
 def test_each_shipped_pack_validates_manifest(pid: str) -> None:
     home = SRC / pid
     assert (home / "plugin.yml").is_file(), f"{pid}: missing plugin.yml"

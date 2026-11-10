@@ -195,9 +195,40 @@ export function bonsaiStagePose(read: StageSlotReader, viewAspect?: number): Sta
   return { ...pose, fov: Math.min(100, (2 * Math.atan(need) * 180) / Math.PI) };
 }
 
+/** Orrery fallback pose (desk-level three-quarter view) before the pack's first frame. */
+const ORRERY_REST: StageMeshPose = { position: [0, 0.749, 1.233], target: [0, 0.2, 0], near: 0.02, fov: 30 };
+/** Half-width (m) of the orrery plus its outer planet that must stay in frame. */
+const ORRERY_HALF_W = 0.56;
+
+/**
+ * Orrery camera from the pack (slot0: 1..3 position, 4..6 target, 7 fov). The machine is ~1 m
+ * across, so on a narrow pane the vertical fov widens until the outer arm still fits.
+ */
+export function orreryStagePose(read: StageSlotReader, viewAspect?: number): StageMeshPose {
+  let pose = ORRERY_REST;
+  if (read(0, 0) >= 0.5) {
+    const fov = read(0, 7);
+    pose = {
+      position: [read(0, 1), read(0, 2), read(0, 3)],
+      target: [read(0, 4), read(0, 5), read(0, 6)],
+      near: 0.02,
+      fov: fov > 10 && fov < 100 ? fov : 30,
+    };
+  }
+  const aspect = viewAspect !== undefined && Number.isFinite(viewAspect) && viewAspect > 0.1 ? viewAspect : 16 / 9;
+  const [px, py, pz] = pose.position;
+  const [tx, ty, tz] = pose.target;
+  const dist = Math.max(0.2, Math.hypot(px - tx, py - ty, pz - tz));
+  const need = ORRERY_HALF_W / dist / aspect;
+  const have = Math.tan(((pose.fov ?? 30) * Math.PI) / 360);
+  if (need <= have) return pose;
+  return { ...pose, fov: Math.min(100, (2 * Math.atan(need) * 180) / Math.PI) };
+}
+
 export function stageMeshPose(packId: string, read: StageSlotReader, viewAspect?: number): StageMeshPose | null {
   if (packId === "marble-run") return marbleRunStagePose(read, viewAspect);
   if (packId === "bonsai") return bonsaiStagePose(read, viewAspect);
+  if (packId === "orrery") return orreryStagePose(read, viewAspect);
   if (packId === "aquarium") return aquariumStagePose(read, viewAspect);
   if (packId === "koi-pond") return koiStagePose(read, viewAspect);
   if (packId === "rocket-car-soccer") return rocketCarStagePose(read);

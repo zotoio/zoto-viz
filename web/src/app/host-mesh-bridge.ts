@@ -6,6 +6,7 @@ import { buildAquariumScenery } from "../graph/aquarium-scenery";
 import { buildBonsaiScenery } from "../graph/bonsai-scenery";
 import { buildKoiPondScenery } from "../graph/koi-pond-scenery";
 import { buildMarbleRunScenery } from "../graph/marble-run-scenery";
+import { buildOrreryScenery } from "../graph/orrery-scenery";
 import {
   encodeHostMeshSlotPacket,
   hostMeshMatrixYawPos,
@@ -172,6 +173,13 @@ export function pinPackContents(
     // thins and colours the leaves and instances blossoms and falling leaves from the pack's slots
     lane.setScenery(buildBonsaiScenery().root);
     for (let asset = 0; asset < 2; asset++) {
+      lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, [{ matrix: IDENTITY_MATRIX }]));
+    }
+  } else if (packId === "orrery") {
+    // desk, machine and planet templates all sit at the origin in metres; the scenery turns the
+    // gears and instances arms, planets and sparks from the pack's slots
+    lane.setScenery(buildOrreryScenery().root);
+    for (let asset = 0; asset < 3; asset++) {
       lane.applySlotBuffer(encodeHostMeshSlotPacket(asset, [{ matrix: IDENTITY_MATRIX }]));
     }
   }

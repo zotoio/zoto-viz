@@ -17,6 +17,7 @@ import { resetModeSwitchStateForTests, setLastConsentedModeId } from "./mode-swi
 import { resetPackConsentForTests } from "./pack-consent";
 import { resetNeedsYouForTests } from "./needs-you";
 import { resetViewStatesForTests } from "./view-state";
+import { stagedShippedPackIds } from "../../test-support/staged-packs";
 
 const webRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
 const repoRoot = path.resolve(webRoot, "..");
@@ -308,7 +309,7 @@ describe("Needs you via the main host", { timeout: 60_000 }, () => {
   });
 });
 
-/** Shipped packs that ship pack code a picker pick could run: `sky/fragment.glsl` (31 today: #180 gave sandbox-fixture-multi a sky; it still needs consent though it is `picker: hidden`). */
+/** Shipped packs that ship pack code a picker pick could run: `sky/fragment.glsl` (30 today: #180 gave sandbox-fixture-multi a sky; it still needs consent though it is `picker: hidden`). */
 function shippedConsentPacks(): PluginView[] {
   const src = path.join(repoRoot, "plugins/src");
   const out: PluginView[] = [];
@@ -365,9 +366,10 @@ describe("Pedant: no pack code runs before the OK", { timeout: 120_000 }, () => 
     vi.unstubAllGlobals();
   });
 
-  it("each of the 31 consent packs, auto-consent off: Needs you on the tile, no modal, 0 network listeners per pick", async () => {
+  it("each of the 30 consent packs (plus staged packs on disk), auto-consent off: Needs you on the tile, no modal, 0 network listeners per pick", async () => {
     const packs = shippedConsentPacks();
-    expect(packs).toHaveLength(31);
+    const staged = new Set(stagedShippedPackIds(repoRoot));
+    expect(packs).toHaveLength(30 + packs.filter((p) => staged.has(p.id)).length);
     const h = await mainHost();
     h.configureApplyModeForTests({ liveMode: "topology", lastConsentedMode: "topology", pluginSpecs: packs });
     setLastConsentedModeId("topology");
