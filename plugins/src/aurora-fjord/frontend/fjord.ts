@@ -21,6 +21,7 @@ import {
 } from "../../../sdk/talker-slots";
 import { FJORD_DATA_MAPPING, ZOTO_FAIL_RGB, hash01, parseFjordOptions, type FjordOptions } from "./config";
 import { FJORD } from "./fjord-data";
+import { resolveReducedMotion, unwatchSystemReducedMotion, watchSystemReducedMotion } from "./reduced-motion";
 import { applyPackWorkBudget, fjordWorkBudget, parseFjordWorkBudgetYaml, resetPackWorkBudget } from "./work-budget";
 
 export type { VizDataFrame, VizPacketSample };
@@ -237,9 +238,12 @@ export function fjordFog(): Readonly<typeof fog> { return fog; }
 export function setFjordOptions(next: FjordOptions): void {
   opts = next;
   if (slotPair[0].length !== opts.cabinCap) slotPair = resizeTalkerSlotArrays(slotPair, opts.cabinCap);
+  if (opts.reducedMotion === "auto") watchSystemReducedMotion();
+  else unwatchSystemReducedMotion();
 }
 
 export function disposeFjordPack(): void {
+  unwatchSystemReducedMotion();
   opts = parseFjordOptions();
   slotPair = createTalkerSlotArrays(opts.cabinCap);
   for (let k = 0; k < AF_MAX_CABINS; k++) cabins[k] = newCabin();
@@ -256,7 +260,7 @@ export function disposeFjordPack(): void {
 }
 
 function reducedOn(): boolean {
-  return opts.reducedMotion === "on";
+  return resolveReducedMotion(opts.reducedMotion);
 }
 
 function stepKp(frame: VizDataFrame, dt: number): void {

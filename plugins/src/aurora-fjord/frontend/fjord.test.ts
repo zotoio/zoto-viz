@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import VIS from "../visualisation.yml?raw";
 import PLUGIN from "../plugin.yml?raw";
 import MAPPING from "../data-mapping.yml?raw";
@@ -66,6 +66,29 @@ function run(frames: number, over: Partial<VizDataFrame> | ((f: number) => Parti
 }
 
 const withKp = (kp: number): VizHeadline[] => [{ id: "noaa-kp:0", label: "NOAA planetary K-index", text: `Kp ${kp.toFixed(2)} · test` }];
+
+type MotionListener = (e: { matches: boolean }) => void;
+
+/** A prefers-reduced-motion MediaQueryList the test can flip; resets the pack so it re-reads it. */
+function stubReducedMotionQuery(matches: boolean) {
+  const listeners = new Set<MotionListener>();
+  const mql = {
+    matches,
+    listeners,
+    addEventListener: (_type: "change", fn: MotionListener) => { listeners.add(fn); },
+    removeEventListener: (_type: "change", fn: MotionListener) => { listeners.delete(fn); },
+    flip(next: boolean) {
+      mql.matches = next;
+      for (const fn of listeners) fn({ matches: next });
+    },
+  };
+  vi.stubGlobal("matchMedia", function (this: unknown, q: string) {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    return q === "(prefers-reduced-motion: reduce)" ? mql : { matches: false };
+  });
+  disposeFjordPack();
+  return mql;
+}
 
 beforeEach(() => {
   disposeFjordPack();
@@ -348,5 +371,52 @@ describe("aurora fjord pack", () => {
     const d = Array.from(run(1800, { headlines: KP_HEADLINES })[0]!.subarray(1, 7));
     expect(Math.abs(d[3]! - c[3]!) + Math.abs(d[1]! - c[1]!)).toBeGreaterThan(0.1);
     expect(slowSpeed).toBeCloseTo(fullSpeed * 0.5, 5);
+  });
+});
+
+describe("aurora fjord reduced motion auto", () => {
+  afterEach(() => {
+    disposeFjordPack();
+    vi.unstubAllGlobals();
+  });
+
+  const reducedSlot = (): number => run(2)[0]![AF_SLOT.reduced]!;
+
+  it("follows the system setting and its live changes", () => {
+    const mql = stubReducedMotionQuery(true);
+    setFjordOptions(parseFjordOptions({ reducedMotion: "auto" }));
+    expect(reducedSlot()).toBe(1);
+    mql.flip(false);
+    expect(reducedSlot()).toBe(0);
+    mql.flip(true);
+    expect(reducedSlot()).toBe(1);
+  });
+
+  it("lets explicit on and off beat the system setting", () => {
+    stubReducedMotionQuery(true);
+    setFjordOptions(parseFjordOptions({ reducedMotion: "off" }));
+    expect(reducedSlot()).toBe(0);
+    stubReducedMotionQuery(false);
+    setFjordOptions(parseFjordOptions({ reducedMotion: "on" }));
+    expect(reducedSlot()).toBe(1);
+  });
+
+  it("reads a sandbox without matchMedia as no preference", () => {
+    vi.stubGlobal("matchMedia", undefined);
+    disposeFjordPack();
+    setFjordOptions(parseFjordOptions({ reducedMotion: "auto" }));
+    expect(reducedSlot()).toBe(0);
+  });
+
+  it("stops listening when the pack is disposed or leaves auto", () => {
+    const mql = stubReducedMotionQuery(false);
+    setFjordOptions(parseFjordOptions({ reducedMotion: "auto" }));
+    expect(mql.listeners.size).toBe(1);
+    setFjordOptions(parseFjordOptions({ reducedMotion: "off" }));
+    expect(mql.listeners.size).toBe(0);
+    setFjordOptions(parseFjordOptions({ reducedMotion: "auto" }));
+    expect(mql.listeners.size).toBe(1);
+    disposeFjordPack();
+    expect(mql.listeners.size).toBe(0);
   });
 });
