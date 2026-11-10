@@ -1,10 +1,13 @@
 id: marble-run
 name: Marble Run
-version: 2
+version: 3
 hint: A wood-and-brass marble run modelled in Blender — every packet rides a glass marble down the spiral, switchbacks, xylophone, loop and funnel, then back up the screw lift. Colour is protocol, size is bytes, lift speed is packet rate.
 description: >-
   The track is a Blender-built GLB (blender/build_track.py, then gltfpack -cc -kn -km -ke for meshopt compression → assets/marble-track.glb) drawn
   by the host mesh lane; glass marbles are one host instanced mesh fed from viz slots 1..3.
+  The HD model set (blender/build_track_hd.py → assets/marble-track-hd.glb) is the same track
+  and path with UVs, rounded edges and photo-sourced PBR (walnut planks, oak, brushed steel and
+  brass), lit by a carpentry-workshop environment image that the glass marbles reflect.
   The sandbox sim (frontend/sim.ts) rolls marbles along the exported centre path
   (frontend/track-data.ts) under gravity with rail friction, drag and 1-D contacts; the
   screw lift admits one marble per thread pitch. Packets queue colours for marbles leaving
@@ -21,6 +24,17 @@ assets:
     sha256: 85f9d13b53b630fade697ccfc1c7ac65d457e20d35b847bd9797aba4f83b70bf
     bytes: 158680
     triangles: 38592
+  - id: marble-track-hd
+    path: assets/marble-track-hd.glb
+    sha256: 1a85c8fad1d2a5dcfb1be2a7b800243cd4968869cd61f23353d709d2a64f310d
+    bytes: 566700
+    triangles: 41040
+  # HD image-based lighting (Poly Haven "Carpentry Shop 02", CC0); see ASSETS.md
+  - id: env-hd
+    path: assets/env-hd.jpg
+    role: environment
+    sha256: f3004c592351648271b6f8a34a72aac6938c9d1aa4d9d5efa21b61f88565b3d8
+    bytes: 50352
 viz:
   graphWalk: false
   contract: 2

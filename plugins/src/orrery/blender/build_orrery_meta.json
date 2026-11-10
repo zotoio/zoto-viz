@@ -1,0 +1,82 @@
+{
+  "blender": "5.2.1 LTS",
+  "gltfpack": "gltfpack 0.24",
+  "sets": {
+    "hd": [
+      {
+        "bytes": 221496,
+        "id": "orrery-study-hd",
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/orrery-study-hd.glb",
+        "rawBytes": 280360,
+        "sha256": "a63fe4043bc80e7ddd504b95e00c59c845bf8aa9fa4c38f6e864ac19d7e40799",
+        "triangles": 2586
+      },
+      {
+        "bytes": 228696,
+        "id": "orrery-machine-hd",
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/orrery-machine-hd.glb",
+        "rawBytes": 1114340,
+        "sha256": "1e6e90dc57232bad67576158d8c46e09626bc90ce06c488b48a0f6648e1db7e9",
+        "triangles": 29328
+      },
+      {
+        "bytes": 184632,
+        "id": "orrery-planets-hd",
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/orrery-planets-hd.glb",
+        "rawBytes": 512944,
+        "sha256": "db53fe6183f06e07c74bf2031d2586cbca12f9d129a728332a2c4e912987ed9a",
+        "triangles": 16992
+      }
+    ],
+    "standard": [
+      {
+        "bytes": 65708,
+        "id": "orrery-study",
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/orrery-study.glb",
+        "rawBytes": 100260,
+        "sha256": "933decbaedf946d31aaee8cdfc1f8721a53a800631a8203d0b8bf364b00d29da",
+        "triangles": 1162
+      },
+      {
+        "bytes": 76700,
+        "id": "orrery-machine",
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/orrery-machine.glb",
+        "rawBytes": 310076,
+        "sha256": "c80778ba82c5f2b9a3095757094fd6d11627bb6c608981282b279b7395a81cfb",
+        "triangles": 6940
+      },
+      {
+        "bytes": 56316,
+        "id": "orrery-planets",
+        "integrity": {
+          "degenerate": 0,
+          "nonmanifold": 0
+        },
+        "path": "assets/orrery-planets.glb",
+        "rawBytes": 172456,
+        "sha256": "3295567a9836ebf42a39f452f1862a9d3914b4d33e259bb29235c2dbf6e52791",
+        "triangles": 4464
+      }
+    ]
+  }
+}

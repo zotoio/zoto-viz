@@ -7,7 +7,9 @@ description: >-
   meshopt-compressed): sand, seiryu stone, driftwood with java fern, vallisneria, rotala and moss
   for fresh water; live rock, staghorn, brain coral, sea fans and an anemone for reef. The host
   instances the fish (a travelling-wave swim bend, no bones), rising air-stone bubbles and
-  caustics on the sand; the sky is the room behind the tank. Data mapping is declared in
+  caustics on the sand; the sky is the room behind the tank. The HD model set (view setting
+  `modelSet`) swaps in a second GLB (blender/build_scape_hd.py) built from Poly Haven scans and
+  ambientCG photo textures with baked AO, plus a room HDRI for image-based lighting. Data mapping is declared in
   data-mapping.yml (talkers→fish by id, packets→bubbles and plankton, sys.failed→tank murk).
   Per-frame work budget (counts): fish instances ≤16, particles ≤24, sim catch-up steps ≤6.
   Camera follow drifts alongside one fish and eases over to another that swims close by.
@@ -22,6 +24,18 @@ assets:
     sha256: 3d9c5480db075b0a4ddeecaa41b553917a3317e5aa53354c82200f37ccaaf32b
     bytes: 609528
     triangles: 46662
+  # HD scape (blender/build_scape_hd.py): Poly Haven / ambientCG scans and photo textures; see ASSETS.md
+  - id: aquarium-scape-hd
+    path: assets/aquarium-scape-hd.glb
+    sha256: e1ddacf9a4cf3c70a7069c50f883e2caa5e8ceab05abde8a7948f88b3da1433a
+    bytes: 761600
+    triangles: 39406
+  # HD image-based lighting (Poly Haven "Lebombo", a sunlit living room, CC0); see ASSETS.md
+  - id: env-hd
+    path: assets/env-hd.jpg
+    role: environment
+    sha256: a6cbeca4b70ef9d6b2ff272ea841c348ac24b1ecb37679c75b90d0c91758946e
+    bytes: 41597
 viz:
   graphWalk: false
   # present ticks carry the pane aspect and pixel area: the tank is sized to its pane

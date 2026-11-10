@@ -100,7 +100,7 @@ export const CONFIG_KEYS = [
   "reducedMotion", "eatTestSec",
   "sp_neon", "sp_angel", "sp_guppy", "sp_cory", "sp_discus", "sp_cichlid", "sp_betta",
   "sp_clown", "sp_tang", "sp_damsel", "sp_goby", "sp_yellowtang", "sp_gramma",
-  "modelGlb",
+  "modelGlb", "modelSet",
 ] as const;
 
 export const TRADEMARK_DENY = [

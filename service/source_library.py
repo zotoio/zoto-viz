@@ -44,6 +44,16 @@ LIBRARY: list[dict[str, Any]] = [
         },
     },
     {
+        "id": "noaa-kp",
+        "type": "http",
+        "label": "NOAA planetary K-index",
+        "vendor": "NOAA SWPC",
+        "hint": "Geomagnetic Kp (0-9, 3-hourly) newest first, e.g. 'Kp 3.00 · unsettled'. No key. Polled at most every 10 min; keeps the last reading offline.",
+        "url": "https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json",
+        "interval": 900,
+        "feed": False,
+    },
+    {
         "id": "frankfurter",
         "type": "http",
         "label": "ECB exchange rates",

@@ -11,7 +11,7 @@ export type TankType = "freshwater" | "reef";
 export const FRESHWATER_SPECIES = ["neon", "angel", "guppy", "cory", "discus", "cichlid", "betta"] as const;
 export const SALTWATER_SPECIES = ["clown", "tang", "damsel", "goby", "yellowtang", "gramma"] as const;
 export const FRESHWATER_DECOR = ["substrate", "fresh-rocks", "fresh-driftwood", "fresh-plant-fern", "fresh-plant-vallisneria", "fresh-plant-rotala", "fresh-plant-moss"] as const;
-export const SALTWATER_DECOR = ["substrate", "reef-rocks", "reef-coral-staghorn", "reef-coral-brain", "reef-coral-fan", "reef-anemone"] as const;
+export const SALTWATER_DECOR = ["substrate", "reef-sand", "reef-rocks", "reef-coral-staghorn", "reef-coral-brain", "reef-coral-fan", "reef-anemone"] as const;
 
 export interface TankSpec {
   type: TankType;

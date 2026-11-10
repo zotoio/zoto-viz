@@ -26,8 +26,10 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from service import access, live, plugins
 from tests.pack_asset_test_util import HOST, NULL, SESSION, make_test_app, pack_url
+from tests.shipped_catalog import staged_shipped_plugin_ids
 
-ASSET_PACKS = ("aquarium", "host-mesh-demo", "koi-pond", "marble-run", "rocket-car-soccer")
+# The staged packs (bonsai, orrery) ship GLBs too; they join once their folder is on disk.
+ASSET_PACKS = ("aquarium", "host-mesh-demo", "koi-pond", "marble-run", "rocket-car-soccer") + staged_shipped_plugin_ids()
 ZOTO_PRE_KEY = ("rocket-car-soccer", "host-mesh-demo")
 MUTATE = {**HOST, access.HEADER: SESSION}
 
