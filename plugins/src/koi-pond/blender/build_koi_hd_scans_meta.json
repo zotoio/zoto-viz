@@ -110,6 +110,9 @@
       "EXT_meshopt_compression",
       "KHR_texture_transform"
     ],
+    "facing_up": {
+      "substrate": 0.997
+    },
     "images": 3,
     "nodes": [
       "koi-pond-scape",
@@ -176,7 +179,7 @@
     "triangles": 5876
   },
   "lily-pads-hd.glb": {
-    "bytes": 357436,
+    "bytes": 347760,
     "extensions": [
       "KHR_mesh_quantization",
       "EXT_meshopt_compression",
@@ -184,6 +187,9 @@
       "KHR_materials_clearcoat",
       "KHR_materials_sheen"
     ],
+    "facing_up": {
+      "lily-pads": 0.929
+    },
     "images": 5,
     "nodes": [
       "lily-pads",
@@ -196,7 +202,7 @@
     },
     "problems": [],
     "reimported_meshes": 2,
-    "sha256": "6ae3bb6c7e179a831963b9715ff48cb48f87c1fd94ef21330122863a0593aebf",
+    "sha256": "5d4bb319f41dc489ebcce6a4be6ba0871ee1ce92134925f2bdc8ebe7293364e0",
     "triangles": 17796
   },
   "pond-rocks-hd.glb": {
