@@ -68,10 +68,25 @@ function bool(raw: string | undefined, def: boolean): boolean {
   return def;
 }
 
-/** Preset first, then any knob the user set explicitly (all config.read values are strings). */
-export function parseOrreryOptions(raw: Record<string, string | undefined> = {}, maxInstances = 48): OrreryOptions {
-  const preset = sel(raw.preset, PRESETS, ORRERY_DEFAULTS.preset);
-  const p = { ...ORRERY_DEFAULTS, ...PRESET_PATCH[preset] };
+function atDefault(raw: string, def: unknown): boolean {
+  if (typeof def === "number") return Number(raw) === def;
+  if (typeof def === "boolean") return bool(raw, !def) === def;
+  return raw === def;
+}
+
+/**
+ * Preset first, then any knob the user set explicitly (all config.read values are strings). The
+ * host sends every knob, defaults included, so a knob still at its default yields to the preset.
+ */
+export function parseOrreryOptions(input: Record<string, string | undefined> = {}, maxInstances = 48): OrreryOptions {
+  const preset = sel(input.preset, PRESETS, ORRERY_DEFAULTS.preset);
+  const patch: Partial<OrreryOptions> = PRESET_PATCH[preset];
+  const raw = { ...input };
+  for (const key of Object.keys(patch) as (keyof OrreryOptions)[]) {
+    const v = raw[key];
+    if (v !== undefined && atDefault(v, ORRERY_DEFAULTS[key])) delete raw[key];
+  }
+  const p = { ...ORRERY_DEFAULTS, ...patch };
   const planetCap = Math.round(num(raw.planetCap, p.planetCap, 1, 8));
   // arms and planets take 2 instances each; whatever is left of the cap is the spark pool
   const sparkRoom = Math.max(0, Math.min(32, maxInstances - 2 * planetCap));
