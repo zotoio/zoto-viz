@@ -14,6 +14,7 @@
 import type { VizDataFrame, VizPacketSample } from "../../../sdk/viz-contract";
 import { BONSAI_DATA_MAPPING, ZOTO_FAIL_RGB, hash01, parseBonsaiOptions, type BonsaiOptions } from "./config";
 import { BONSAI } from "./bonsai-data";
+import { resolveReducedMotion, unwatchSystemReducedMotion, watchSystemReducedMotion } from "./reduced-motion";
 import { applyPackWorkBudget, bonsaiWorkBudget, parseBonsaiWorkBudgetYaml, resetPackWorkBudget } from "./work-budget";
 
 export type { VizDataFrame, VizPacketSample };
@@ -222,9 +223,12 @@ export function setBonsaiClock(fn: () => Date): void { clock = fn; }
 
 export function setBonsaiOptions(next: BonsaiOptions): void {
   opts = next;
+  if (opts.reducedMotion === "auto") watchSystemReducedMotion();
+  else unwatchSystemReducedMotion();
 }
 
 export function disposeBonsaiPack(): void {
+  unwatchSystemReducedMotion();
   opts = parseBonsaiOptions();
   clock = () => new Date();
   simTime = 0; dtEma = 1 / 60; idleFlag = 0; hudSkipCount = 0; audioEma = 0; spawnSeq = 0; activeTalkers = 0;
@@ -241,7 +245,7 @@ export function disposeBonsaiPack(): void {
 let seasonInit = false;
 
 function reducedOn(): boolean {
-  return opts.reducedMotion === "on";
+  return resolveReducedMotion(opts.reducedMotion);
 }
 
 /** Failed state: slow EMA plus hysteresis, so a flapping unit never flickers the season. */

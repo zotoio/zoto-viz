@@ -1,10 +1,10 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import VIS from "../visualisation.yml?raw";
 import PLUGIN from "../plugin.yml?raw";
 import MAPPING from "../data-mapping.yml?raw";
 import FRAG from "../sky/fragment.glsl?raw";
 import { EMPTY_SYS_TELEMETRY, type VizDataFrame, type VizTalkerSample } from "../../../sdk/viz-contract";
-import { BONSAI_DATA_MAPPING, parseBonsaiOptions } from "./config";
+import { BONSAI_DATA_MAPPING, BONSAI_DEFAULTS, parseBonsaiOptions } from "./config";
 import { BONSAI } from "./bonsai-data";
 import {
   BS_BLOSSOM_SLOT0,
@@ -75,6 +75,42 @@ function bursty(every: number, proto = "TCP"): (f: number) => Partial<VizDataFra
   };
 }
 
+/** What the host's loadPluginConfig sends: every visualisation.yml knob, untouched ones at their default. */
+function hostFilledConfig(): Record<string, string> {
+  const out: Record<string, string> = {};
+  let key: string | null = null;
+  for (const line of VIS.split("\n")) {
+    const k = /^\s+- key: (\S+)/.exec(line);
+    if (k) { key = k[1]!; continue; }
+    const d = /^\s+default: "?([^"]*?)"?\s*$/.exec(line);
+    if (key && d) { out[key] = d[1]!; key = null; }
+  }
+  return out;
+}
+
+type MotionListener = (e: { matches: boolean }) => void;
+
+/** A prefers-reduced-motion MediaQueryList the test can flip; resets the pack so it re-reads it. */
+function stubReducedMotionQuery(matches: boolean) {
+  const listeners = new Set<MotionListener>();
+  const mql = {
+    matches,
+    listeners,
+    addEventListener: (_type: "change", fn: MotionListener) => { listeners.add(fn); },
+    removeEventListener: (_type: "change", fn: MotionListener) => { listeners.delete(fn); },
+    flip(next: boolean) {
+      mql.matches = next;
+      for (const fn of listeners) fn({ matches: next });
+    },
+  };
+  vi.stubGlobal("matchMedia", function (this: unknown, q: string) {
+    if (this !== globalThis) throw new TypeError("Illegal invocation");
+    return q === "(prefers-reduced-motion: reduce)" ? mql : { matches: false };
+  });
+  disposeBonsaiPack();
+  return mql;
+}
+
 beforeEach(() => {
   disposeBonsaiPack();
   setBonsaiOptions(parseBonsaiOptions({}));
@@ -131,6 +167,21 @@ describe("bonsai pack", () => {
     expect(parseBonsaiOptions({ preset: "gallery" }).cameraMode).toBe("gallery");
     const tight = parseBonsaiOptions({ blossomCap: "32", fallCap: "16" }, 30);
     expect(tight.blossomCap + tight.fallCap).toBeLessThanOrEqual(30);
+  });
+
+  it("lets the preset win over knobs the host fills with their defaults", () => {
+    const sent = hostFilledConfig();
+    expect(Object.keys(sent)).toEqual(expect.arrayContaining(Object.keys(BONSAI_DEFAULTS)));
+    const zen = parseBonsaiOptions({ ...sent, preset: "zen" });
+    expect([zen.turnMinutes, zen.blossomCap, zen.breeze, zen.cameraMode]).toEqual([8, 12, 0.25, "low"]);
+    const spring = parseBonsaiOptions({ ...sent, preset: "spring" });
+    expect([spring.blossomCap, spring.leafDensity, spring.breeze, spring.timeOfDay]).toEqual([32, 1.15, 0.7, "day"]);
+    const gallery = parseBonsaiOptions({ ...sent, preset: "gallery" });
+    expect([gallery.cameraMode, gallery.timeOfDay, gallery.turnMinutes]).toEqual(["gallery", "day", 3]);
+    expect(parseBonsaiOptions({ ...sent, preset: "garden" })).toEqual(parseBonsaiOptions({}));
+    // a knob moved off its default still beats the preset
+    const mine = parseBonsaiOptions({ ...sent, preset: "zen", turnMinutes: "2", cameraMode: "close" });
+    expect([mine.turnMinutes, mine.cameraMode, mine.breeze]).toEqual([2, "close", 0.25]);
   });
 
   it("leaf density follows active talkers on a log scale, slowly", () => {
@@ -346,5 +397,52 @@ describe("bonsai pack", () => {
     const d = run(1800)[0]!;
     expect(Math.abs(d[BS_SLOT.yaw]! - yaw0)).toBeGreaterThan(0.1);
     expect(Math.abs(d[BS_SLOT.eyeX]! - x0)).toBeGreaterThan(0.01);
+  });
+});
+
+describe("bonsai reduced motion auto", () => {
+  afterEach(() => {
+    disposeBonsaiPack();
+    vi.unstubAllGlobals();
+  });
+
+  const reducedSlot = (): number => run(2)[0]![BS_SLOT.reduced]!;
+
+  it("follows the system setting and its live changes", () => {
+    const mql = stubReducedMotionQuery(true);
+    setBonsaiOptions(parseBonsaiOptions({ reducedMotion: "auto" }));
+    expect(reducedSlot()).toBe(1);
+    mql.flip(false);
+    expect(reducedSlot()).toBe(0);
+    mql.flip(true);
+    expect(reducedSlot()).toBe(1);
+  });
+
+  it("lets explicit on and off beat the system setting", () => {
+    stubReducedMotionQuery(true);
+    setBonsaiOptions(parseBonsaiOptions({ reducedMotion: "off" }));
+    expect(reducedSlot()).toBe(0);
+    stubReducedMotionQuery(false);
+    setBonsaiOptions(parseBonsaiOptions({ reducedMotion: "on" }));
+    expect(reducedSlot()).toBe(1);
+  });
+
+  it("reads a sandbox without matchMedia as no preference", () => {
+    vi.stubGlobal("matchMedia", undefined);
+    disposeBonsaiPack();
+    setBonsaiOptions(parseBonsaiOptions({ reducedMotion: "auto" }));
+    expect(reducedSlot()).toBe(0);
+  });
+
+  it("stops listening when the pack is disposed or leaves auto", () => {
+    const mql = stubReducedMotionQuery(false);
+    setBonsaiOptions(parseBonsaiOptions({ reducedMotion: "auto" }));
+    expect(mql.listeners.size).toBe(1);
+    setBonsaiOptions(parseBonsaiOptions({ reducedMotion: "off" }));
+    expect(mql.listeners.size).toBe(0);
+    setBonsaiOptions(parseBonsaiOptions({ reducedMotion: "auto" }));
+    expect(mql.listeners.size).toBe(1);
+    disposeBonsaiPack();
+    expect(mql.listeners.size).toBe(0);
   });
 });
