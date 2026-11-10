@@ -13,6 +13,14 @@ look:
   gridOpacity: 0
   mosaic: "off"
 config:
+  - key: modelSet
+    label: model set
+    type: select
+    values:
+      - [standard, Standard]
+      - [hd, HD]
+    default: standard
+    hint: Standard Blender scape, or the HD set (photo-scanned stone and driftwood, textured sand, plants, corals and fish; room-lit). Assets with no HD version stay standard.
   - key: preset
     label: preset
     type: select
