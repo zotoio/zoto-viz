@@ -1,0 +1,73 @@
+id: orrery
+name: Orrery
+version: 1
+hint: A brass clockwork orrery on a walnut study desk — top talkers are planets on geared arms (size is bytes, orbit speed is rate), packets run as sparks through the gear train, and failed units slow the escapement to an uneven tick.
+description: >-
+  Desk, machine and planet templates are Blender-built GLBs (blender/build_orrery.py: geometry-node
+  gears, rings, hairspring and arms over CC0 Poly Haven and ambientCG photo textures, then
+  gltfpack -cc -kn -km) drawn by the host mesh lane; the host scenery instances the arms,
+  planets and sparks from viz slots 1..3 and turns the named gear nodes from slot 0. The sandbox
+  (frontend/orrery.ts) runs the escapement, rate-ranked planet slots with hysteresis, the spark
+  pool and the camera. Standard and HD model sets via modelSet. Data mapping is declared in
+  visualisation.yml dataMapping (and data-mapping.yml); per-frame caps in workBudget. Idle host
+  fixture keeps demo talkers and packets turning the machine.
+capabilities:
+  - viz.read
+  - viz.write
+  - config.read
+assets:
+  - id: orrery-study
+    path: assets/orrery-study.glb
+    sha256: 933decbaedf946d31aaee8cdfc1f8721a53a800631a8203d0b8bf364b00d29da
+    bytes: 65708
+    triangles: 1162
+  - id: orrery-machine
+    path: assets/orrery-machine.glb
+    sha256: c80778ba82c5f2b9a3095757094fd6d11627bb6c608981282b279b7395a81cfb
+    bytes: 76700
+    triangles: 6940
+  - id: orrery-planets
+    path: assets/orrery-planets.glb
+    sha256: 3295567a9836ebf42a39f452f1862a9d3914b4d33e259bb29235c2dbf6e52791
+    bytes: 56316
+    triangles: 4464
+  - id: orrery-study-hd
+    path: assets/orrery-study-hd.glb
+    sha256: a63fe4043bc80e7ddd504b95e00c59c845bf8aa9fa4c38f6e864ac19d7e40799
+    bytes: 221496
+    triangles: 2586
+  - id: orrery-machine-hd
+    path: assets/orrery-machine-hd.glb
+    sha256: 1e6e90dc57232bad67576158d8c46e09626bc90ce06c488b48a0f6648e1db7e9
+    bytes: 228696
+    triangles: 29328
+  - id: orrery-planets-hd
+    path: assets/orrery-planets-hd.glb
+    sha256: db53fe6183f06e07c74bf2031d2586cbca12f9d129a728332a2c4e912987ed9a
+    bytes: 184632
+    triangles: 16992
+  - id: env-hd
+    path: assets/env-hd.jpg
+    role: environment
+    sha256: 0aa81dd011872b69a8fd1048eb2ada4f6a515b10eb0bc5fc1b6915f2e05284b5
+    bytes: 31546
+viz:
+  graphWalk: false
+  contract: 2
+  maxBuffers: 4
+  maxBufferFloats: 64
+  maxParticles: 0
+  # arm and spark slots are 1..3; the host mesh lane only pins the three GLBs, never reads a slot
+  hostMeshSlot: 7
+  hostMeshSlotCount: 1
+  uniforms:
+    - uTime
+    - uOpacity
+    - uBright
+    - uAudio
+    - uAccent
+    - uBg
+  idle:
+    fixture: host
+frontend:
+  entry: frontend/index.ts

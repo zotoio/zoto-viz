@@ -321,6 +321,7 @@ def test_viz_plugin_yml_validates() -> None:
         "rocket-car-soccer",
         "metro-lines",
         "fractal-zoom",
+        "orrery",
     ):
         doc = plugins.load_file(ROOT / "plugins" / "src" / pid / "plugin.yml")
         assert doc["viz"]["graphWalk"] is False

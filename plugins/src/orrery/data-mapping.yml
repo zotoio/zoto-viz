@@ -1,0 +1,39 @@
+# Host VizDataFrame → orrery effects (declared mapping; read in pack only).
+
+mappings:
+  - field: talkers[].id
+    effect: stable planet slot per talker (rate-ranked, 2 s hold, 1.2x challenger)
+    default: —
+    clamp: planetCap arms (1..8); plugins/sdk/talker-slots.ts rules
+  - field: talkers[].rate
+    effect: orbit speed of that talker's planet
+    default: 0
+    clamp: log1p(rate)/log1p(400), 3 s average, slower on outer arms
+  - field: talkers[].rate x packets[].size
+    effect: planet size from estimated byte volume (20 s average)
+    default: 0
+    clamp: 12-24 mm × planetScale, log10 bytes/s over 6 decades
+  - field: talkers[].role
+    effect: planet surface (gateway ringed, self banded, others by id hash)
+    default: lan
+    clamp: 7 planet maps
+  - field: packets[].proto
+    effect: spark colour along the gear train
+    default: tcp
+    clamp: hash01 into amber-gold
+  - field: packets[]
+    effect: one spark per packet from the escape wheel to a planet
+    default: 0
+    clamp: maxPacketsPerFrame, sparkCap pool, ~15 sparks/s
+  - field: sys.failed
+    effect: escapement slows to an uneven tick and a steady fail plaque lights
+    default: 0
+    clamp: 0..1 above failThreshold, 1.5 s average, off below 0.7 × threshold
+  - field: audio
+    effect: sun glow and lamp warmth breathe
+    default: 0
+    clamp: 0..1
+  - field: demo
+    effect: built-in demo talkers when the frame has none; idle flag in slot 0
+    default: false
+    clamp: boolean
