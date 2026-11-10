@@ -15,6 +15,7 @@ import pytest
 import yaml
 
 from service import hooks, mcp, plugin_catalog, plugins
+from tests.shipped_catalog import staged_shipped_plugin_ids
 
 REPO = plugins.REPO
 SRC = REPO / "plugins" / "src"
@@ -102,12 +103,12 @@ def test_hidden_esbuild_leaves_python_and_glsl_packs_loaded(no_esbuild: Path) ->
 
 
 def test_esbuild_present_catalog_is_every_shipped_pack() -> None:
-    """Count unchanged vs main (d276d5df also loads all 73 shipped packs): nothing unavailable."""
+    """Count unchanged vs main (d276d5df also loads all 73 shipped packs, plus the staged packs on disk): nothing unavailable."""
     plugins.reset_bundles()
     result = plugins.scan()
     assert result["unavailable"] == []
     assert {str(p.get("id")) for p in result["plugins"]} == _shipped_ids()
-    assert len(result["plugins"]) == len(_shipped_ids()) == 73
+    assert len(result["plugins"]) == len(_shipped_ids()) == 73 + len(staged_shipped_plugin_ids())
 
 
 def _two_pack_root(tmp: Path) -> Path:

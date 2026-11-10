@@ -9,6 +9,7 @@ from __future__ import annotations
 import pytest
 
 from service import plugins
+from tests.shipped_catalog import staged_shipped_plugin_ids
 
 HIDDEN = {
     "host-mesh-demo", "sandbox-fixture-multi", "tile-health-black", "tile-health-detail",
@@ -30,9 +31,11 @@ def test_the_seven_are_hidden(rows: list[dict]) -> None:
 
 
 def test_pick_every_view_goes_from_70_to_63(rows: list[dict]) -> None:
-    views = [r for r in rows if r.get("pluginKind") != "data-source"]
+    staged = set(staged_shipped_plugin_ids())
+    views = [r for r in rows if r.get("pluginKind") != "data-source" and r["id"] not in staged]
     assert len(views) == 70
     assert len([r for r in views if r.get("picker") != "hidden"]) == 63
+    assert {r["id"] for r in rows if r["id"] in staged and r.get("picker") != "hidden"} == staged
 
 
 def test_schema_accepts_hidden_and_rejects_other_values() -> None:
