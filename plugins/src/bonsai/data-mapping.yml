@@ -1,0 +1,31 @@
+# Host VizDataFrame → bonsai effects (declared mapping; read in pack only).
+
+mappings:
+  - field: talkers[].rate
+    effect: leaf density across the pads follows the number of active talkers
+    default: 0
+    clamp: active above 0.05/s, 30 % bare to full at densityTalkers (log scale), 6 s average
+  - field: packets[]
+    effect: a packet burst opens a cluster of blossoms on one pad
+    default: 0
+    clamp: 3-6 blossoms; 0.6 s rate over 2x the 30 s baseline (min 4/s), 3 s cooldown, blossomCap pool, maxPacketsPerFrame
+  - field: packets[].proto
+    effect: blossom tint (pink, blush, white, plum)
+    default: tcp
+    clamp: hash01 into 4 tints
+  - field: sys.failed
+    effect: pads turn autumn colour one by one and leaves fall gently to the slab (no flashing)
+    default: 0
+    clamp: 0..1 above failThreshold, 1.5 s average, off below 0.7 × threshold; 24 s to full autumn, 40 s back
+  - field: clock
+    effect: time of day sets the light warmth and the sun height
+    default: local time
+    clamp: timeOfDay knob overrides (dawn, day, golden, night)
+  - field: audio
+    effect: a breeze stirs the pads
+    default: 0
+    clamp: 0..1
+  - field: demo
+    effect: built-in demo talkers and blossom bursts when the frame has none; idle flag in slot 0
+    default: false
+    clamp: boolean

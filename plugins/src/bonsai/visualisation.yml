@@ -1,0 +1,158 @@
+engine: graph
+base: talkers
+idle:
+  fixture: host
+look:
+  theme: zen
+  backdrop: plugin
+  stageOnly: true
+  skyOpacity: 1
+  skyBright: 1
+  skySpeed: 0.1
+  skyAudio: false
+  gridOpacity: 0
+dataMapping:
+  - field: talkers[].rate
+    effect: leaf density across the pads follows the number of active talkers
+    default: 0
+    clamp: active above 0.05/s, log scale to densityTalkers
+  - field: packets[]
+    effect: a packet burst opens a cluster of blossoms on one pad
+    default: 0
+    clamp: 0.6 s rate over 30 s baseline, cooldown, blossomCap pool
+  - field: packets[].proto
+    effect: blossom tint (pink, blush, white, plum)
+    default: tcp
+    clamp: hash01 into 4 tints
+  - field: sys.failed
+    effect: pads turn autumn colour one by one and leaves fall gently to the slab (no flashing)
+    default: 0
+    clamp: 0..1 above failThreshold
+  - field: clock
+    effect: time of day sets the light warmth and the sun height
+    default: local time
+    clamp: timeOfDay knob overrides
+  - field: audio
+    effect: a breeze stirs the pads
+    default: 0
+    clamp: 0..1
+workBudget:
+  maxDrawCalls: 64
+  maxTriangles: 120000
+  maxInstances: 48
+  maxGpuBytes: 8388608
+  maxSimStepsPerFrame: 4
+  maxPacketsPerFrame: 8
+config:
+  - key: modelSet
+    label: model set
+    type: select
+    values:
+      - [standard, Standard]
+      - [hd, HD]
+    default: standard
+    hint: Standard meshes and 256 px maps, or the HD Blender set (assets ending -hd) with a flared, bark-relief trunk and roots, scanned leaf sprays and petals, a mossy slab with moss cushions and fronds, and a garden reflection probe.
+  - key: preset
+    label: preset
+    type: select
+    default: garden
+    values:
+      - [garden, Garden]
+      - [zen, Zen]
+      - [spring, Spring]
+      - [gallery, Gallery]
+    hint: Presets set camera, turntable speed, blossom count, breeze and light. Change any knob after picking a preset.
+  - key: timeOfDay
+    label: time of day
+    type: select
+    default: auto
+    values:
+      - [auto, "Auto (local clock)"]
+      - [dawn, Dawn]
+      - [day, Day]
+      - [golden, Golden hour]
+      - [night, Night]
+    hint: Sets the sun height and the warmth of the light on the tree and the garden.
+  - key: turnMinutes
+    label: turntable minutes
+    type: number
+    default: 4
+    min: 0
+    max: 20
+    step: 0.5
+    hint: Minutes per full turn of the board; 0 holds it still.
+  - key: densityTalkers
+    label: talkers for full leaf
+    type: number
+    default: 12
+    min: 2
+    max: 64
+    step: 1
+    hint: Active talkers (above 0.05 packets/s) that fill every pad; fewer talkers thin the leaves.
+  - key: leafDensity
+    label: leaf density
+    type: number
+    default: 1
+    min: 0.5
+    max: 1.3
+    step: 0.05
+    hint: Scales the talker-driven leaf density.
+  - key: blossoms
+    label: blossoms
+    type: select
+    default: "true"
+    values:
+      - ["true", On]
+      - ["false", Off]
+    hint: Packet bursts open a cluster of blossoms on one pad.
+  - key: blossomCap
+    label: max blossoms
+    type: number
+    default: 24
+    min: 0
+    max: 32
+    step: 1
+    hint: Pooled blossoms; never exceeded (and never past the instance budget).
+  - key: fallCap
+    label: max falling leaves
+    type: number
+    default: 16
+    min: 0
+    max: 16
+    step: 1
+    hint: Leaves falling or resting on the slab at once.
+  - key: failThreshold
+    label: fail threshold
+    type: number
+    default: 0.2
+    min: 0.05
+    max: 0.95
+    step: 0.05
+    hint: sys.failed above this turns the pads to autumn one by one and lets leaves fall; a steady fail chip shows in the sky.
+  - key: cameraMode
+    label: camera
+    type: select
+    default: garden
+    values:
+      - [garden, Garden]
+      - [close, Close]
+      - [low, Low (bench level)]
+      - [gallery, Gallery (from above)]
+    hint: The camera sways a few degrees over two minutes. Reduced motion holds it still.
+  - key: breeze
+    label: breeze
+    type: number
+    default: 0.5
+    min: 0
+    max: 1
+    step: 0.05
+    hint: How much the pads sway; audio adds a little.
+  - key: reducedMotion
+    label: reduced motion
+    type: select
+    default: auto
+    values:
+      - [auto, "Auto (follow the system)"]
+      - [on, On]
+      - [off, Off]
+    hint: Holds the turntable and camera, quiets the breeze and slows blossoms and falling leaves.
