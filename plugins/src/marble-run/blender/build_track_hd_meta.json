@@ -1,0 +1,126 @@
+{
+ "asset": "assets/marble-track-hd.glb",
+ "bytes": 566700,
+ "sha256": "1a85c8fad1d2a5dcfb1be2a7b800243cd4968869cd61f23353d709d2a64f310d",
+ "triangles": 41040,
+ "importedTriangles": 41028,
+ "trianglesByPart": {
+  "base": 108,
+  "bell": 240,
+  "funnel": 960,
+  "funnel-rim": 80,
+  "lift-rod": 60,
+  "lift-thread": 3008,
+  "lift-tube": 56,
+  "pegboard": 108,
+  "posts": 1404,
+  "rails": 32208,
+  "stands": 216,
+  "ties": 1728,
+  "xylo-bar-0": 108,
+  "xylo-bar-1": 108,
+  "xylo-bar-2": 108,
+  "xylo-bar-3": 108,
+  "xylo-bar-4": 108,
+  "xylo-bar-5": 108,
+  "xylo-bar-6": 108,
+  "xylo-bar-7": 108
+ },
+ "nodes": [
+  "base",
+  "bell",
+  "funnel",
+  "funnel-rim",
+  "lift-rod",
+  "lift-thread",
+  "lift-tube",
+  "pegboard",
+  "posts",
+  "rails",
+  "stands",
+  "ties",
+  "xylo-bar-0",
+  "xylo-bar-1",
+  "xylo-bar-2",
+  "xylo-bar-3",
+  "xylo-bar-4",
+  "xylo-bar-5",
+  "xylo-bar-6",
+  "xylo-bar-7"
+ ],
+ "images": [
+  {
+   "name": "walnut_normal",
+   "mime": "image/jpeg",
+   "size": [
+    512,
+    512
+   ],
+   "bytes": 36521,
+   "gpuBytes": 1398101
+  },
+  {
+   "name": "walnut_albedo",
+   "mime": "image/jpeg",
+   "size": [
+    512,
+    512
+   ],
+   "bytes": 84904,
+   "gpuBytes": 1398101
+  },
+  {
+   "name": "walnut_mr",
+   "mime": "image/jpeg",
+   "size": [
+    256,
+    256
+   ],
+   "bytes": 16567,
+   "gpuBytes": 349525
+  },
+  {
+   "name": "metal_albedo",
+   "mime": "image/jpeg",
+   "size": [
+    256,
+    256
+   ],
+   "bytes": 10291,
+   "gpuBytes": 349525
+  },
+  {
+   "name": "metal_mr",
+   "mime": "image/jpeg",
+   "size": [
+    512,
+    512
+   ],
+   "bytes": 85139,
+   "gpuBytes": 1398101
+  },
+  {
+   "name": "oak_albedo",
+   "mime": "image/jpeg",
+   "size": [
+    512,
+    512
+   ],
+   "bytes": 58716,
+   "gpuBytes": 1398101
+  }
+ ],
+ "textureGpuBytes": 6291454,
+ "envPmremGpuBytes": 1572864,
+ "gpuBytesTotal": 7864318,
+ "maxGpuBytes": 8388608,
+ "gltfpack": [
+  "gltfpack",
+  "-cc",
+  "-kn",
+  "-km",
+  "-ke"
+ ],
+ "standardRebuildMatchesShippedJson": true,
+ "trackDataReproduced": true
+}

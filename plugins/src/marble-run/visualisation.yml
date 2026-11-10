@@ -36,6 +36,14 @@ workBudget:
   maxSimStepsPerFrame: 4
   maxPacketsPerFrame: 8
 config:
+  - key: modelSet
+    label: model set
+    type: select
+    default: standard
+    values:
+      - [standard, Standard]
+      - [hd, HD]
+    hint: Standard track, or the HD track (photo-textured walnut, oak, brushed steel and brass, workshop reflections in the glass). Same track and path.
   - key: preset
     label: preset
     type: select
