@@ -83,20 +83,4 @@ describe("koi-pond HD model set", () => {
       expect(swim.channels.length).toBeGreaterThanOrEqual(7);
     }
   });
-
-  it("ships one HD environment image (2:1 JPEG, ≤ 400 KB) whose bytes and hash match the manifest", () => {
-    const envs = [...PLUGIN.matchAll(/- id: (\S+)\n\s+path: (\S+)\n\s+role: environment\n\s+sha256: (\w+)\n\s+bytes: (\d+)/g)];
-    expect(envs.map((m) => m[1])).toEqual(["env-hd"]);
-    const [, , path, sha, size] = envs[0]!;
-    const bytes = readFileSync(join(PACK, path!));
-    expect(bytes.length).toBe(Number(size));
-    expect(bytes.length).toBeLessThanOrEqual(400_000);
-    expect(createHash("sha256").update(bytes).digest("hex")).toBe(sha);
-    expect(bytes.subarray(0, 3).toString("hex")).toBe("ffd8ff");
-    const sof = bytes.indexOf(Buffer.from([0xff, 0xc0]));
-    expect(sof).toBeGreaterThan(0);
-    const h = bytes.readUInt16BE(sof + 5);
-    const w = bytes.readUInt16BE(sof + 7);
-    expect(w).toBe(h * 2);
-  });
 });

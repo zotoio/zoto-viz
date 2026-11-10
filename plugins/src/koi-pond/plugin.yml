@@ -71,12 +71,6 @@ assets:
     sha256: 2222d173b8477a4a041e99f89cc5a81e45c80eb9544e87304f12a4ff2cca996e
     bytes: 18116
     triangles: 1280
-  # HD image-based lighting (Poly Haven "Ninomaru Teien", CC0); see ASSETS.md
-  - id: env-hd
-    path: assets/env-hd.jpg
-    role: environment
-    sha256: 74cc3a18b21c81676fa5dc6fc7843f6d7d7df20073d2ac4f1a546e43760d7334
-    bytes: 269194
 viz:
   graphWalk: false
   idle:
