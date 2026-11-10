@@ -11,7 +11,7 @@ import {
   patchFjordMaterial,
 } from "./aurora-fjord-scenery";
 import { pinPackContents } from "../app/host-mesh-bridge";
-import { disposeHostMeshObject3D } from "./host-mesh-lane";
+import { disposeHostMeshObject3D, HostMeshLane } from "./host-mesh-lane";
 import { mockPartial } from "../../test-support/mock-partial";
 
 const DT = 1 / 60;
@@ -75,6 +75,16 @@ describe("aurora fjord scenery", () => {
     expect(packets.map((p) => p.slice(0, 3))).toEqual([[2, 0, 1], [2, 1, 1]]);
     for (const p of packets) expect(p.slice(3, 19)).toEqual([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1]);
     expect((scenery as THREE.Object3D | null)?.name).toBe("aurora-fjord-scenery");
+  });
+
+  it("owns its night light, so the lane tells the graph rig to step aside", () => {
+    const lane = new HostMeshLane();
+    lane.setScenery(buildAuroraFjordScenery().root);
+    expect(lane.sceneryOwnsLights()).toBe(true);
+    lane.setScenery(new THREE.Group());
+    expect(lane.sceneryOwnsLights()).toBe(false);
+    lane.setScenery(null);
+    expect(lane.sceneryOwnsLights()).toBe(false);
   });
 
   it("stays unbound and draws nothing until the GLBs are on the lane", () => {
@@ -172,11 +182,14 @@ describe("aurora fjord scenery", () => {
     expect(shader.uniforms.uAfFront!.value).toBe(-900);
     expect(shader.uniforms.uAfSide!.value).toBe(1);
     expect(shader.fragmentShader).toContain("uAfSide * vAfWorld.y < -0.02");
+    expect(shader.fragmentShader).toContain("textureLod( map, vMapUv, 12.0 )");
+    expect(shader.fragmentShader).not.toContain("#include <map_fragment>");
+    expect(shader.fragmentShader).toContain("vec3( 0.2126, 0.7152, 0.0722 )");
     expect(shader.vertexShader).toContain("vAfWorld = ( modelMatrix");
     const lights = sc.root.children.filter((c) => (c as THREE.DirectionalLight).isDirectionalLight) as THREE.DirectionalLight[];
     expect(lights).toHaveLength(2);
     const aurora = lights.find((l) => l.color.g > l.color.b)!;
-    expect(aurora.intensity).toBeGreaterThan(0.6);
+    expect(aurora.intensity).toBeCloseTo((0.04 + 0.42 * 0.7) * (1 - 0.6 * 0.3), 5);
   });
 
   it("patches a material once", () => {

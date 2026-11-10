@@ -4331,6 +4331,7 @@ export class NetScene implements HostedView, RenderScalePane {
     const wall = wallMs / 1000;
     this.stepGraphDrift(wall, dt);
     this.illumination.step(wall);
+    this.illumination.setEnabled(!(this.stageOnly && this.hostMeshLane.sceneryOwnsLights()));
     this.backdrop.tick(wall);
     if (!this.satellite && this.anim.backdrop === "dynamic") ensureSkyRecipe(this.anim.skyAiMin * 60_000);
     this.applyLook(dt);

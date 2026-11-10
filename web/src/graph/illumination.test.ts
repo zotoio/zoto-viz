@@ -1,5 +1,6 @@
+import * as THREE from "three";
 import { describe, expect, it } from "vitest";
-import { illuminationPose } from "./illumination";
+import { GraphIllumination, illuminationPose } from "./illumination";
 
 function dist(a: { x: number; y: number; z: number }, b: { x: number; y: number; z: number }): number {
   return Math.hypot(a.x - b.x, a.y - b.y, a.z - b.z);
@@ -28,5 +29,18 @@ describe("illuminationPose", () => {
     }
     expect(apart).toBeGreaterThan(80);
     expect(dist(illuminationPose(0).key, illuminationPose(8).key)).toBeGreaterThan(40);
+  });
+});
+
+describe("GraphIllumination", () => {
+  it("hides and restores the whole rig", () => {
+    const scene = new THREE.Scene();
+    const rig = new GraphIllumination(scene, 0x7eb8ff);
+    const lights = scene.children.filter((c) => (c as THREE.Light).isLight);
+    expect(lights).toHaveLength(6);
+    rig.setEnabled(false);
+    expect(lights.every((l) => !l.visible)).toBe(true);
+    rig.setEnabled(true);
+    expect(lights.every((l) => l.visible)).toBe(true);
   });
 });
