@@ -5,11 +5,16 @@
 Downloads Poly Haven and ambientCG originals (2K JPG, 1K HDR) into <root>/raw/ (gitignored) and
 writes the maps the Blender build packs into the GLBs:
 
-  <root>/prep/standard/*.jpg   256 px base colour only (Standard model set)
-  <root>/prep/hd/*.jpg         512-1024 px base colour + glTF normal + packed ORM (HD model set)
+  <root>/prep/standard/*.jpg   128-256 px base colour only (Standard model set)
+  <root>/prep/hd/*.jpg         256-512 px base colour + glTF normal maps (HD model set)
+
+HD fits the pack's 8 MiB workBudget.maxGpuBytes (RGBA8 + mips, plus the env probe's PMREM): the
+scanned roughness / metal maps and the brass and walnut normals are near-constant, so the build
+uses their mean as a material factor instead; one neutral leather scan is tinted per material by
+baseColorFactor; the seven planets and the ring share one 512 px atlas.
 
 Brass has no CC0 photo source, so it is ambientCG Metal048B (gold, fingerprints) re-tinted to a
-brass colour; its normal and roughness stay the scanned ones. Deterministic: same inputs, same bytes.
+brass colour. Deterministic: same inputs, same bytes.
 """
 from __future__ import annotations
 
@@ -112,6 +117,44 @@ def save(img: Image.Image, path: Path, size: int, quality: int = 84) -> None:
     im.save(path, "JPEG", quality=quality, optimize=True, progressive=False, subsampling=0 if "nrm" in path.name else 2)
 
 
+def save_wh(img: Image.Image, path: Path, w: int, h: int, quality: int = 84) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    img.convert("RGB").resize((w, h), Image.LANCZOS).save(path, "JPEG", quality=quality, optimize=True,
+                                                          progressive=False, subsampling=2)
+
+
+def neutral(img: Image.Image, mean_to: int = 180) -> Image.Image:
+    """Grey luminance scan re-centred on `mean_to`, for tinting by material baseColorFactor."""
+    g = img.convert("L")
+    mean = max(1.0, sum(i * n for i, n in enumerate(g.histogram())) / (g.size[0] * g.size[1]))
+    g = Image.eval(g, lambda v: min(255, int(v * mean_to / mean)))
+    return Image.merge("RGB", (g, g, g))
+
+
+# HD planet atlas: 2 x 4 cells of 256 x 128 (equirect), planet-k at cell k, the ring band at cell 7.
+ATLAS_W, ATLAS_H, ATLAS_COLS, ATLAS_ROWS, ATLAS_PAD = 512, 512, 2, 4, 2
+
+
+def planet_atlas(cells: list[Image.Image]) -> Image.Image:
+    """Each cell holds its map shrunk by ATLAS_PAD px a side, padded by wrapping in u (the equirect
+    seam) and clamping in v, so mips never bleed a neighbour across a planet's edge."""
+    cw, ch = ATLAS_W // ATLAS_COLS, ATLAS_H // ATLAS_ROWS
+    p = ATLAS_PAD
+    atlas = Image.new("RGB", (ATLAS_W, ATLAS_H))
+    for k, src in enumerate(cells):
+        inner = src.convert("RGB").resize((cw - 2 * p, ch - 2 * p), Image.LANCZOS)
+        cell = Image.new("RGB", (cw, ch))
+        cell.paste(inner, (p, p))
+        cell.paste(inner.crop((inner.width - p, 0, inner.width, inner.height)), (0, p))
+        cell.paste(inner.crop((0, 0, p, inner.height)), (cw - p, p))
+        top, bottom = cell.crop((0, p, cw, p + 1)), cell.crop((0, ch - p - 1, cw, ch - p))
+        for y in range(p):
+            cell.paste(top, (0, y))
+            cell.paste(bottom, (0, ch - 1 - y))
+        atlas.paste(cell, ((k % ATLAS_COLS) * cw, (k // ATLAS_COLS) * ch))
+    return atlas
+
+
 def brass_tint(img: Image.Image) -> Image.Image:
     """Gold scan -> brass: keep the scan's luminance (fingerprints, scratches), swap the hue."""
     g = img.convert("L")
@@ -124,15 +167,6 @@ def recolor(img: Image.Image, rgb: tuple[int, int, int]) -> Image.Image:
     g = img.convert("L")
     mean = max(1.0, sum(i * n for i, n in enumerate(g.histogram())) / (g.size[0] * g.size[1]))
     return Image.merge("RGB", tuple(Image.eval(g, lambda v, k=k: min(255, int(v * k / mean))) for k in rgb))
-
-
-def orm(rough: Image.Image, metal: float, rough_lo: float = 0.0, rough_hi: float = 1.0) -> Image.Image:
-    """glTF metallicRoughness packing: R unused (255), G roughness, B metalness."""
-    g = rough.convert("L")
-    g = Image.eval(g, lambda v: int(255 * (rough_lo + (rough_hi - rough_lo) * v / 255)))
-    w = Image.new("L", g.size, 255)
-    m = Image.new("L", g.size, int(255 * metal))
-    return Image.merge("RGB", (w, g, m))
 
 
 def contact_shadow(size: int) -> Image.Image:
@@ -152,29 +186,23 @@ def prepare(raw: Path, prep: Path) -> None:
     std, hd = prep / "standard", prep / "hd"
     brass_d = brass_tint(acg(raw, "Metal048B", "Color"))
     save(brass_d, std / "brass_diff.jpg", 256)
-    save(brass_d, hd / "brass_diff.jpg", 512)
-    save(acg(raw, "Metal048B", "NormalGL"), hd / "brass_nrm.jpg", 512, 90)
-    save(orm(acg(raw, "Metal048B", "Roughness"), 1.0, 0.18, 0.62), hd / "brass_orm.jpg", 512)
-    save(acg(raw, "Metal051A", "NormalGL"), hd / "brushed_nrm.jpg", 512, 90)
-    save(orm(acg(raw, "Metal051A", "Roughness"), 1.0, 0.16, 0.5), hd / "brushed_orm.jpg", 512)
+    save(brass_d, hd / "brass_diff.jpg", 256)
+    save(acg(raw, "Metal051A", "NormalGL"), hd / "brushed_nrm.jpg", 256, 90)
 
     walnut = ph(raw, "black_walnut_veneer_02", "Diffuse")
     walnut = Image.merge("RGB", tuple(Image.eval(c, lambda v, k=k: int(v * k)) for c, k in zip(walnut.convert("RGB").split(), (0.62, 0.52, 0.47))))
     save(walnut, std / "walnut_diff.jpg", 256)
-    save(walnut, hd / "walnut_diff.jpg", 1024, 82)
+    save(walnut, hd / "walnut_diff.jpg", 512, 86)
     leather = ph(raw, "leather_red_02", "Diffuse")
     for name, rgb in (("book_green", (44, 78, 52)), ("book_navy", (36, 48, 86))):
         save(recolor(leather, rgb), std / f"{name}.jpg", 128)
-        save(recolor(leather, rgb), hd / f"{name}.jpg", 256)
+    save(neutral(leather), hd / "leather_lum.jpg", 512, 86)
     shade = recolor(acg(raw, "Marble012", "Color"), (22, 120, 70))
     save(shade, std / "lamp_shade.jpg", 128)
     save(shade, hd / "lamp_shade.jpg", 256)
-    save(ph(raw, "black_walnut_veneer_02", "nor_gl"), hd / "walnut_nrm.jpg", 512, 88)
-    save(orm(ph(raw, "black_walnut_veneer_02", "Rough"), 0.0, 0.22, 0.6), hd / "walnut_orm.jpg", 512)
     save(ph(raw, "leather_red_02", "Diffuse"), std / "leather_diff.jpg", 256)
-    save(ph(raw, "leather_red_02", "Diffuse"), hd / "leather_diff.jpg", 512)
-    save(ph(raw, "leather_red_02", "nor_gl"), hd / "leather_nrm.jpg", 512, 88)
-    save(orm(ph(raw, "leather_red_02", "Rough"), 0.0), hd / "leather_orm.jpg", 512)
+    save(ph(raw, "leather_red_02", "nor_gl"), hd / "leather_nrm.jpg", 256, 90)
+    save(acg(raw, "Travertine009", "Color"), hd / "pages.jpg", 256)
 
     planets = {
         "jove": acg(raw, "Onyx010", "Color"),
@@ -187,19 +215,21 @@ def prepare(raw: Path, prep: Path) -> None:
     }
     for name, img in planets.items():
         save(img, std / f"planet_{name}.jpg", 128)
-        save(img, hd / f"planet_{name}.jpg", 384, 82)
+    ring = acg(raw, "Travertine009", "Color")
+    planet_atlas([*planets.values(), ring]).save(hd / "planet_atlas.jpg", "JPEG", quality=88, optimize=True,
+                                                 progressive=False, subsampling=0)
     gold = acg(raw, "Metal048B", "Color")
     save(gold, std / "sun_diff.jpg", 256)
-    save(gold, hd / "sun_diff.jpg", 512)
-    sh = contact_shadow(256)
-    for d in (std, hd):
+    save(gold, hd / "sun_diff.jpg", 256)
+    for d, size in ((std, 256), (hd, 128)):
+        sh = contact_shadow(size)
         d.mkdir(parents=True, exist_ok=True)
         black = Image.new("L", sh.size, 0)
         Image.merge("RGBA", (black, black, black, Image.eval(sh, lambda v: 255 - v))).save(d / "contact_shadow.png", optimize=True)
-    # Study reflection probe: equirect LDR, flipped because glTF textures load with flipY=false.
+    # The pack's `role: environment` image (equirect LDR): the host keeps only its PMREM, and at
+    # 512 wide that is one 384x512 half-float target (1.5 MB), which fits the HD budget.
     env = Image.open(raw / "polyhaven" / POLYHAVEN_HDRI / f"{POLYHAVEN_HDRI}_tonemapped.jpg").convert("RGB")
-    env = env.resize((512, 256), Image.LANCZOS).transpose(Image.FLIP_TOP_BOTTOM)
-    env.save(hd / "env_study.jpg", "JPEG", quality=86, optimize=True)
+    env.resize((512, 256), Image.LANCZOS).save(hd / "env-hd.jpg", "JPEG", quality=88, optimize=True)
 
 
 def main() -> int:

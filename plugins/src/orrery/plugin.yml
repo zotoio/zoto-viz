@@ -33,19 +33,24 @@ assets:
     triangles: 4464
   - id: orrery-study-hd
     path: assets/orrery-study-hd.glb
-    sha256: 31a7d07702de649d47e5e686c674b54a3f5c240713e0272a80e18aa7be8f1866
-    bytes: 449924
-    triangles: 6926
+    sha256: a63fe4043bc80e7ddd504b95e00c59c845bf8aa9fa4c38f6e864ac19d7e40799
+    bytes: 221496
+    triangles: 2586
   - id: orrery-machine-hd
     path: assets/orrery-machine-hd.glb
-    sha256: 8af8ca2c32ab219c43314d9964c09316957433424355c4a679df2ba39403ebd3
-    bytes: 279684
-    triangles: 25000
+    sha256: 1e6e90dc57232bad67576158d8c46e09626bc90ce06c488b48a0f6648e1db7e9
+    bytes: 228696
+    triangles: 29328
   - id: orrery-planets-hd
     path: assets/orrery-planets-hd.glb
-    sha256: d363cca8f1a73346845b88b5aacec626fea679051e3294509e5bb551bc066b2c
-    bytes: 352416
+    sha256: db53fe6183f06e07c74bf2031d2586cbca12f9d129a728332a2c4e912987ed9a
+    bytes: 184632
     triangles: 16992
+  - id: env-hd
+    path: assets/env-hd.jpg
+    role: environment
+    sha256: 0aa81dd011872b69a8fd1048eb2ada4f6a515b10eb0bc5fc1b6915f2e05284b5
+    bytes: 31546
 viz:
   graphWalk: false
   contract: 2

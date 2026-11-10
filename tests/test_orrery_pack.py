@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import struct
 import subprocess
 from pathlib import Path
@@ -14,6 +15,7 @@ SRC = ROOT / "plugins" / "src" / "orrery"
 PACK_TEST = SRC / "frontend" / "orrery.test.ts"
 MAX_GLB_BYTES = 800 * 1024
 MAX_TOTAL_BYTES = 2 * 1024 * 1024
+MAX_ENV_BYTES = 400 * 1024
 GEAR_NODES = {"gear-crown", "gear-2", "gear-3", "escape-wheel", "anchor", "balance", "sun"}
 ARM_NODES = {"arm-hub", "arm-bar", "arm-post", "arm-cup"}
 PLANET_NODES = {f"planet-{k}" for k in range(7)} | {"planet-6-ring"}
@@ -36,9 +38,56 @@ def _glb_json(path: Path) -> dict:
     return json.loads(raw[20:20 + chunk_len])
 
 
+def _glb_bin(path: Path) -> bytes:
+    raw = path.read_bytes()
+    json_len = struct.unpack("<I", raw[12:16])[0]
+    off = 20 + json_len
+    bin_len, bin_type = struct.unpack("<II", raw[off:off + 8])
+    assert bin_type == 0x004E4942, path
+    return raw[off + 8:off + 8 + bin_len]
+
+
+def _image_size(data: bytes) -> tuple[int, int]:
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return struct.unpack(">II", data[16:24])
+    assert data[:2] == b"\xff\xd8", "not a JPEG or PNG"
+    i = 2
+    while i < len(data):
+        marker = data[i + 1]
+        seg = struct.unpack(">H", data[i + 2:i + 4])[0]
+        if marker in (0xC0, 0xC1, 0xC2):
+            h, w = struct.unpack(">HH", data[i + 5:i + 9])
+            return w, h
+        i += 2 + seg
+    raise AssertionError("JPEG without a frame header")
+
+
+def _gpu_bytes(row: dict) -> int:
+    """Decoded GPU memory of one asset row. GLB: RGBA8 with mips per image. Environment image: the
+    host keeps only three's PMREM (cube = 2^floor(log2(width / 4)), one 3*max(cube, 112) x 4*cube
+    half-float RGBA target) and frees the equirect once it is built."""
+    path = SRC / row["path"]
+    if row.get("role") == "environment":
+        width = _image_size(path.read_bytes())[0]
+        cube = 2 ** math.floor(math.log2(width / 4))
+        return 3 * max(cube, 112) * 4 * cube * 8
+    doc, blob = _glb_json(path), _glb_bin(path)
+    total = 0
+    for im in doc.get("images", []):
+        view = doc["bufferViews"][im["bufferView"]]
+        start = view.get("byteOffset", 0)
+        w, h = _image_size(blob[start:start + view["byteLength"]])
+        total += w * h * 4 * 4 // 3
+    return total
+
+
 def _assets() -> list[dict]:
     doc = yaml.safe_load((SRC / "plugin.yml").read_text(encoding="utf-8"))
     return doc["assets"]
+
+
+def _meshes() -> list[dict]:
+    return [r for r in _assets() if r.get("role", "mesh") == "mesh"]
 
 
 def test_orrery_pack_vitest() -> None:
@@ -59,7 +108,7 @@ def test_orrery_assets_match_manifest_and_budget() -> None:
     ids = [r["id"] for r in rows]
     assert ids == [
         "orrery-study", "orrery-machine", "orrery-planets",
-        "orrery-study-hd", "orrery-machine-hd", "orrery-planets-hd",
+        "orrery-study-hd", "orrery-machine-hd", "orrery-planets-hd", "env-hd",
     ]
     total = 0
     for row in rows:
@@ -67,16 +116,30 @@ def test_orrery_assets_match_manifest_and_budget() -> None:
         data = path.read_bytes()
         assert hashlib.sha256(data).hexdigest() == row["sha256"], row["id"]
         assert len(data) == row["bytes"], row["id"]
-        assert len(data) <= MAX_GLB_BYTES, row["id"]
-        assert 0 < row["triangles"] <= 120_000, row["id"]
+        if row.get("role") == "environment":
+            assert path.suffix == ".jpg" and "triangles" not in row
+            assert len(data) <= MAX_ENV_BYTES
+        else:
+            assert len(data) <= MAX_GLB_BYTES, row["id"]
+            assert 0 < row["triangles"] <= 120_000, row["id"]
         total += len(data)
     assert total <= MAX_TOTAL_BYTES
+
+
+def test_orrery_model_sets_fit_the_gpu_budget() -> None:
+    vis = yaml.safe_load((SRC / "visualisation.yml").read_text(encoding="utf-8"))
+    cap = vis["workBudget"]["maxGpuBytes"]
+    sets = {"standard": 0, "hd": 0}
+    for row in _assets():
+        sets["hd" if row["id"].endswith("-hd") else "standard"] += _gpu_bytes(row)
+    for name, total in sets.items():
+        assert 0 < total <= cap, (name, total, cap)
 
 
 def test_orrery_glbs_are_meshopt_with_named_nodes() -> None:
     want = {"orrery-study": {"desk-top", "blotter", "plinth", "contact-shadow", "lamp-shade"},
             "orrery-machine": GEAR_NODES | ARM_NODES, "orrery-planets": PLANET_NODES}
-    for row in _assets():
+    for row in _meshes():
         doc = _glb_json(SRC / row["path"])
         used = set(doc.get("extensionsUsed", []))
         assert "EXT_meshopt_compression" in used, row["id"]
@@ -87,10 +150,6 @@ def test_orrery_glbs_are_meshopt_with_named_nodes() -> None:
         assert doc.get("images"), row["id"]
         for im in doc["images"]:
             assert im.get("mimeType") in ("image/jpeg", "image/png"), row["id"]
-        if row["id"] == "orrery-machine-hd":
-            assert "env-probe" in names
-        if row["id"] == "orrery-machine":
-            assert "env-probe" not in names
 
 
 def test_orrery_hd_is_the_richer_set() -> None:

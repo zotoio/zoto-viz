@@ -14,8 +14,8 @@ import { EMPTY_SYS_TELEMETRY, type VizDataFrame } from "../../../plugins/sdk/viz
 import { probePluginSkyCompile, wrapPluginSky } from "../graph/backdrop";
 import { buildOrreryScenery } from "../graph/orrery-scenery";
 import { orreryStagePose, stageMeshPose } from "../graph/stage-mesh-camera";
-import { hostMeshDeclsForSet, pinPackContents } from "../app/host-mesh-bridge";
-import { disposeHostMeshObject3D } from "../graph/host-mesh-lane";
+import { hostMeshDeclsForSet, hostMeshEnvironmentDecl, pinPackContents } from "../app/host-mesh-bridge";
+import { disposeHostMeshObject3D, type HostMeshAssetDecl } from "../graph/host-mesh-lane";
 import { parseVizContract } from "./viz-host";
 
 const DT = 1 / 60;
@@ -44,7 +44,7 @@ function packSlots(frames: number): Float32Array[] {
 }
 
 /** A pinned-lane stand-in: the three GLB roots as the lane clones them (named node -> mesh child). */
-function fakeLane(hd: boolean) {
+function fakeLane() {
   const lane = new THREE.Group();
   const mat = new THREE.MeshStandardMaterial({ metalness: 1 });
   const geo = new THREE.BoxGeometry(1, 1, 1);
@@ -62,11 +62,6 @@ function fakeLane(hd: boolean) {
   for (const p of ["arm-hub", "arm-bar", "arm-post", "arm-cup"]) node(machine, p).position.set(0, -5, 0);
   const sunMat = new THREE.MeshStandardMaterial({ emissive: 0xffcc88, emissiveIntensity: 0.9 });
   node(machine, "sun", sunMat);
-  let envTex: THREE.Texture | null = null;
-  if (hd) {
-    envTex = new THREE.Texture();
-    node(machine, "env-probe", new THREE.MeshStandardMaterial({ emissiveMap: envTex }));
-  }
   const planets = new THREE.Group();
   for (let k = 0; k < 7; k++) {
     const p = node(planets, `planet-${k}`, new THREE.MeshStandardMaterial());
@@ -75,7 +70,7 @@ function fakeLane(hd: boolean) {
   const study = new THREE.Group();
   node(study, "desk-top", new THREE.MeshStandardMaterial({ metalness: 0 }));
   lane.add(study, machine, planets);
-  return { lane, mat, sunMat, envTex, geo };
+  return { lane, mat, sunMat, geo };
 }
 
 describe("orrery host", () => {
@@ -92,14 +87,17 @@ describe("orrery host", () => {
     if (!("error" in wrapped)) expect(probePluginSkyCompile(wrapped.frag)).toBeNull();
   });
 
-  it("swaps every asset to its -hd sibling for the HD model set, keeping the standard order", () => {
-    const decls = ["orrery-study", "orrery-machine", "orrery-planets", "orrery-study-hd", "orrery-machine-hd", "orrery-planets-hd"]
-      .map((id) => ({ id, path: `assets/${id}.glb` }));
+  it("swaps every mesh to its -hd sibling for HD and lights HD with the environment image", () => {
+    const decls: HostMeshAssetDecl[] = [...PLUGIN.matchAll(/- id: (\S+)\n\s+path: (\S+)\n(?:\s+role: (\S+)\n)?/g)]
+      .map(([, id, path, role]) => ({ id: id!, path: path!, ...(role ? { role } : {}) }));
+    expect(decls).toHaveLength(7);
     const std = hostMeshDeclsForSet(decls, "standard");
     const hd = hostMeshDeclsForSet(decls, "hd");
     expect(std.map((d) => d.path)).toEqual(["assets/orrery-study.glb", "assets/orrery-machine.glb", "assets/orrery-planets.glb"]);
     expect(hd.map((d) => d.id)).toEqual(["orrery-study", "orrery-machine", "orrery-planets"]);
     expect(hd.map((d) => d.path)).toEqual(["assets/orrery-study-hd.glb", "assets/orrery-machine-hd.glb", "assets/orrery-planets-hd.glb"]);
+    expect(hostMeshEnvironmentDecl(decls, "standard")).toBeNull();
+    expect(hostMeshEnvironmentDecl(decls, "hd")?.path).toBe("assets/env-hd.jpg");
   });
 
   it("pins all three GLBs at the origin and mounts the orrery scenery", () => {
@@ -114,12 +112,11 @@ describe("orrery host", () => {
   it("turns the gears, instances arms, planets and sparks from the slots without reallocating", () => {
     const slots = packSlots(400);
     const read = (slot: number, i: number) => slots[slot]?.[i] ?? 0;
-    const { lane, sunMat } = fakeLane(false);
+    const { lane, sunMat } = fakeLane();
     const sc = buildOrreryScenery();
     lane.add(sc.root);
     sc.update(read, DT);
     expect(sc.bound).toBe(true);
-    expect(sc.envMapped).toBe(false);
     expect(sc.planetCount).toBe(5);
     expect(sc.sparkCount).toBe(Math.round(slots[0]![OR_SLOT.sparks]!));
     const esc = lane.getObjectByName("escape-wheel")!;
@@ -148,7 +145,7 @@ describe("orrery host", () => {
   it("rebinds when a GLB lands after the first bind, keeping the gears' rest pose", () => {
     const slots = packSlots(400);
     const read = (slot: number, i: number) => slots[slot]?.[i] ?? 0;
-    const { lane } = fakeLane(false);
+    const { lane } = fakeLane();
     const planets = lane.children[2]!;
     lane.remove(planets);
     const sc = buildOrreryScenery();
@@ -165,22 +162,9 @@ describe("orrery host", () => {
     expect(esc.quaternion.angleTo(want)).toBeLessThan(1e-5);
   });
 
-  it("HD env probe becomes the study reflection on every lane material", () => {
-    const slots = packSlots(60);
-    const read = (slot: number, i: number) => slots[slot]?.[i] ?? 0;
-    const { lane, mat, envTex } = fakeLane(true);
-    const sc = buildOrreryScenery();
-    lane.add(sc.root);
-    sc.update(read, DT);
-    expect(sc.envMapped).toBe(true);
-    expect(mat.envMap).toBe(envTex);
-    expect(envTex!.mapping).toBe(THREE.EquirectangularReflectionMapping);
-    expect(lane.getObjectByName("env-probe")!.visible).toBe(false);
-  });
-
   it("scenery dispose leaves the lane's shared template geometry and materials to the lane", () => {
     const slots = packSlots(30);
-    const { lane, mat, geo } = fakeLane(false);
+    const { lane, mat, geo } = fakeLane();
     const sc = buildOrreryScenery();
     lane.add(sc.root);
     sc.update((s, i) => slots[s]?.[i] ?? 0, DT);

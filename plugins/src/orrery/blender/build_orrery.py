@@ -7,8 +7,9 @@
 Builds a brass clockwork orrery on a walnut study desk, per model set (Standard and HD):
   assets/orrery-study[-hd].glb    desk, leather blotter, books, banker's lamp, walnut plinth
   assets/orrery-machine[-hd].glb  base plate, zodiac ring, column, sun, gear train, escapement,
-                                  arm templates (hub, bar, post, cup) and the HD study env probe
+                                  arm templates (hub, bar, post, cup); HD also carries every brass part
   assets/orrery-planets[-hd].glb  planet-0..6 unit-sphere templates (planet-6 carries its ring)
+  assets/env-hd.jpg               HD only: the study HDRI as the pack's `role: environment` image
 Gears, rings, the hairspring and arm parts are geometry-node trees driven by real photo textures.
 Exports go through gltfpack (-cc -kn -km); writes blender/build_orrery_meta.json and
 frontend/orrery-data.ts (pivots, gear radii, arm layout in glTF Y-up metres). Deterministic.
@@ -82,7 +83,13 @@ def mat(name, set_name, diff, nrm=None, orm=None, metal=0.0, rough=0.5, coat=0.0
     b.inputs["Metallic"].default_value = metal
     b.inputs["Roughness"].default_value = rough
     t = nt.nodes.new("ShaderNodeTexImage"); t.image = img(set_name, diff)
-    nt.links.new(t.outputs["Color"], b.inputs["Base Color"])
+    if tint:  # exported as baseColorFactor (glTF: Mix RGBA Multiply by a constant, factor 1)
+        mx = nt.nodes.new("ShaderNodeMix"); mx.data_type = "RGBA"; mx.blend_type = "MULTIPLY"
+        mx.inputs["Factor"].default_value = 1.0
+        mx.inputs[7].default_value = (*tint, 1.0)
+        nt.links.new(t.outputs["Color"], mx.inputs[6]); nt.links.new(mx.outputs[2], b.inputs["Base Color"])
+    else:
+        nt.links.new(t.outputs["Color"], b.inputs["Base Color"])
     if blend:
         nt.links.new(t.outputs["Alpha"], b.inputs["Alpha"])
         try:
@@ -112,12 +119,14 @@ def materials(s):
     hd = s == "hd"
     M = {}
     if hd:
-        M["brass"] = mat("brass", s, "brass_diff.jpg", "brass_nrm.jpg", "brass_orm.jpg", 1.0, 0.35, nrm_strength=0.6)
-        M["brushed"] = mat("brass-brushed", s, "brass_diff.jpg", "brushed_nrm.jpg", "brushed_orm.jpg", 1.0, 0.3, nrm_strength=0.35)
-        M["walnut"] = mat("walnut", s, "walnut_diff.jpg", "walnut_nrm.jpg", "walnut_orm.jpg", 0.0, 0.4, coat=0.35, coat_rough=0.12)
-        M["leather"] = mat("leather", s, "leather_diff.jpg", "leather_nrm.jpg", "leather_orm.jpg", 0.0, 0.6)
-        M["book-green"] = mat("book-green", s, "book_green.jpg", "leather_nrm.jpg", "leather_orm.jpg", 0.0, 0.55)
-        M["book-navy"] = mat("book-navy", s, "book_navy.jpg", "leather_nrm.jpg", "leather_orm.jpg", 0.0, 0.55)
+        # roughness / metal are the scanned maps' means (those maps are near-constant); one neutral
+        # leather scan is tinted per material, so the blotter and both books share its two maps
+        M["brass"] = mat("brass", s, "brass_diff.jpg", metal=1.0, rough=0.24)
+        M["brushed"] = mat("brass-brushed", s, "brass_diff.jpg", "brushed_nrm.jpg", metal=1.0, rough=0.22, nrm_strength=0.35)
+        M["walnut"] = mat("walnut", s, "walnut_diff.jpg", metal=0.0, rough=0.43, coat=0.35, coat_rough=0.12)
+        M["leather"] = mat("leather", s, "leather_lum.jpg", "leather_nrm.jpg", rough=0.5, tint=(0.1758, 0.0552, 0.0226))
+        M["book-green"] = mat("book-green", s, "leather_lum.jpg", "leather_nrm.jpg", rough=0.5, tint=(0.0552, 0.1669, 0.0752))
+        M["book-navy"] = mat("book-navy", s, "leather_lum.jpg", "leather_nrm.jpg", rough=0.5, tint=(0.0387, 0.0648, 0.2039))
     else:
         M["brass"] = mat("brass", s, "brass_diff.jpg", metal=0.55, rough=0.45)
         M["brushed"] = M["brass"]
@@ -125,16 +134,16 @@ def materials(s):
         M["leather"] = mat("leather", s, "leather_diff.jpg", rough=0.7)
         M["book-green"] = mat("book-green", s, "book_green.jpg", rough=0.7)
         M["book-navy"] = mat("book-navy", s, "book_navy.jpg", rough=0.7)
-    M["pages"] = mat("pages", s, "planet_saturn.jpg", rough=0.8)
+    M["pages"] = mat("pages", s, "pages.jpg" if hd else "planet_saturn.jpg", rough=0.8)
     M["shade"] = mat("lamp-shade", s, "lamp_shade.jpg", rough=0.12 if hd else 0.3, coat=0.8 if hd else 0.0,
                      emit="lamp_shade.jpg", emit_strength=0.35)
     M["shadow"] = mat("contact-shadow", s, "contact_shadow.png", rough=1.0, blend=True)
     M["sun"] = mat("sun", s, "sun_diff.jpg", metal=0.0, rough=0.4, emit="sun_diff.jpg", emit_strength=0.9 if hd else 0.8)
     planets = ["jove", "terra", "ares", "luna", "nox", "glacier", "saturn"]
-    M["planets"] = [mat(f"planet-{p}", s, f"planet_{p}.jpg", rough=0.35 if hd else 0.6, coat=0.5 if hd else 0.0,
-                        coat_rough=0.1) for p in planets]
     if hd:
-        M["env"] = mat("env-probe", s, "env_study.jpg", rough=1.0, emit="env_study.jpg", emit_strength=1.0)
+        M["planets"] = [mat("planet-atlas", s, "planet_atlas.jpg", rough=0.35, coat=0.5, coat_rough=0.1)] * len(planets)
+    else:
+        M["planets"] = [mat(f"planet-{p}", s, f"planet_{p}.jpg", rough=0.6, coat=0.0, coat_rough=0.1) for p in planets]
     return M
 
 
@@ -363,7 +372,11 @@ def gn_gear(name, teeth, r, t, hd, style="spur", bore=0.0035, windows=0, boss=Tr
             cuts.append(g.radial(ring.outputs["Curve"], hole.outputs["Mesh"]))
     d = g.n("GeometryNodeMeshBoolean", {"Mesh 1": blank, "Mesh 2": cuts})
     d.operation = "DIFFERENCE"
-    return g.bmesh(d.outputs["Mesh"])
+    bm = g.bmesh(d.outputs["Mesh"])
+    if hd:  # the exporter fans the toothed n-gon faces into needles that the packed grid flattens
+        bmesh.ops.triangulate(bm, faces=bm.faces[:], quad_method="BEAUTY", ngon_method="BEAUTY")
+        bmesh.ops.dissolve_degenerate(bm, dist=3e-4, edges=bm.edges[:])
+    return bm
 
 
 def gn_ring(name, r, w, h, ticks=0, major=0, tick_len=0.008, hd=True):
@@ -418,6 +431,30 @@ def gn_torus(name, r, rr, hd=True):
     c = g.n("GeometryNodeCurvePrimitiveCircle", {"Resolution": 64 if hd else 32, "Radius": r})
     p = g.n("GeometryNodeCurvePrimitiveCircle", {"Resolution": 12 if hd else 8, "Radius": rr})
     return g.bmesh(g.n("GeometryNodeCurveToMesh", {"Curve": c.outputs["Curve"], "Profile Curve": p.outputs["Curve"]}).outputs["Mesh"])
+
+
+ATLAS_W, ATLAS_H, ATLAS_COLS, ATLAS_ROWS, ATLAS_PAD = 512, 512, 2, 4, 2  # fetch_sources.planet_atlas
+
+
+def atlas_uv(bm, cell):
+    """Squeeze a [0,1] UV layout into the HD planet atlas cell (inside its padding)."""
+    uv = bm.loops.layers.uv.verify()
+    cw, ch = ATLAS_W / ATLAS_COLS, ATLAS_H / ATLAS_ROWS
+    x0, y0 = (cell % ATLAS_COLS) * cw + ATLAS_PAD, (cell // ATLAS_COLS) * ch + ATLAS_PAD
+    w, h = cw - 2 * ATLAS_PAD, ch - 2 * ATLAS_PAD
+    for f in bm.faces:
+        for l in f.loops:
+            u, v = l[uv].uv
+            l[uv].uv = ((x0 + u * w) / ATLAS_W, 1.0 - (y0 + (1.0 - v) * h) / ATLAS_H)
+
+
+def ring_uv(bm, r_in, r_out):
+    """Ring bands run with the radius: v = radial fraction, u held at the cell's middle (no seam)."""
+    uv = bm.loops.layers.uv.verify()
+    for f in bm.faces:
+        for l in f.loops:
+            r = math.hypot(l.vert.co.x, l.vert.co.y)
+            l[uv].uv = (0.5, min(1.0, max(0.0, (r - r_in) / (r_out - r_in))))
 
 
 def merge_into(dst, src, mat=None):
@@ -505,6 +542,10 @@ def build(s):
     new_obj("lamp-shade", bm, M["shade"], cs, uv=0.1)
     # ---- machine ---------------------------------------------------------------
     cm = collection(f"orrery-machine-{s}")
+    if hd:  # every GLB decodes its own images: HD brass lives in the machine GLB only
+        for ob in [o for o in cs.objects if o.active_material is M["brass"]]:
+            cs.objects.unlink(ob)
+            cm.objects.link(ob)
     bm = bmesh.new(); bm_cyl(bm, (0, 0, PLINTH_Z1), PLATE_R, PLATE_T, 128 if hd else 64)
     if hd:
         bevel_edges(bm, 0.0015, 2, 50)
@@ -577,21 +618,21 @@ def build(s):
     new_obj("arm-post", bm, M["brass"], cm, loc=park, uv=0.03)
     cup = gn_torus("arm-cup", 0.0065, 0.0013, hd)
     new_obj("arm-cup", cup, M["brass"], cm, loc=park, uv=0.02, smooth=80)
-    if hd:
-        bm = bmesh.new(); r = bmesh.ops.create_grid(bm, x_segments=1, y_segments=1, size=0.05)
-        uv = bm.loops.layers.uv.verify()
-        for f in bm.faces:
-            for l in f.loops:
-                l[uv].uv = (l.vert.co.x / 0.1 + 0.5, l.vert.co.y / 0.1 + 0.5)
-        new_obj("env-probe", bm, M["env"], cm, loc=(0, 0, -5.2), keep_uv=True, smooth=None)
     # ---- planets ---------------------------------------------------------------
     cp_ = collection(f"orrery-planets-{s}")
     for k in range(7):
         bm = bmesh.new(); bm_sphere(bm, (0, 0, 0), 1.0, 48 if hd else 24, 24 if hd else 12)
+        if hd:
+            atlas_uv(bm, k)
         p = new_obj(f"planet-{k}", bm, M["planets"][k], cp_, loc=(3.0 * k, 0, -5.0), keep_uv=True, smooth=80)
         if k == 6:
             ring = gn_ring("planet-6-ring", 1.75, 0.8, 0.04, hd=hd)
-            ob = new_obj("planet-6-ring", ring, M["brushed"], cp_, uv=0.5)
+            if hd:  # the ring band is atlas cell 7, so the HD planets GLB carries one image
+                ring_uv(ring, 1.75 - 0.4, 1.75 + 0.4)
+                atlas_uv(ring, 7)
+                ob = new_obj("planet-6-ring", ring, M["planets"][k], cp_, keep_uv=True)
+            else:
+                ob = new_obj("planet-6-ring", ring, M["brushed"], cp_, uv=0.5)
             ob.parent = p
             ob.rotation_euler = (math.radians(22), 0, 0)
     return M, gears
@@ -644,7 +685,7 @@ def export(s):
             me.calc_loop_triangles()
             tris += len(me.loop_triangles)
             bm = bmesh.new(); bm.from_mesh(me)
-            if ob.name not in ("contact-shadow", "env-probe", "lamp-shade"):
+            if ob.name not in ("contact-shadow", "lamp-shade"):
                 bad["nonmanifold"] += sum(1 for e in bm.edges if not e.is_manifold)
             bad["degenerate"] += sum(1 for f in bm.faces if f.calc_area() < 1e-12)
             bm.free(); ob.evaluated_get(dg).to_mesh_clear()
@@ -684,7 +725,7 @@ def write_data(gears):
         "nodes": {"planets": [f"planet-{k}" for k in range(7)], "ring": "planet-6-ring",
                   "arm": ["arm-hub", "arm-bar", "arm-post", "arm-cup"],
                   "gears": ["gear-crown", "gear-2", "gear-3", "escape-wheel", "anchor", "balance"],
-                  "sun": "sun", "env": "env-probe"},
+                  "sun": "sun"},
     }
     ts = os.path.join(OUT, "frontend", "orrery-data.ts")
     os.makedirs(os.path.dirname(ts), exist_ok=True)
@@ -751,6 +792,13 @@ def sync_manifest(sets):
         for r in sets[s]:
             rows += [f"  - id: {r['id']}", f"    path: {r['path']}", f"    sha256: {r['sha256']}",
                      f"    bytes: {r['bytes']}", f"    triangles: {r['triangles']}"]
+    env = os.path.join(PREP, "hd", "env-hd.jpg")
+    if os.path.isfile(env):
+        data = open(env, "rb").read()
+        with open(os.path.join(OUT, "assets", "env-hd.jpg"), "wb") as f:
+            f.write(data)
+        rows += ["  - id: env-hd", "    path: assets/env-hd.jpg", "    role: environment",
+                 f"    sha256: {hashlib.sha256(data).hexdigest()}", f"    bytes: {len(data)}"]
     with open(path, "w") as f:
         f.write(text[:start] + "\n".join(rows) + "\n" + text[end:])
 
