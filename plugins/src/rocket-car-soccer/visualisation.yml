@@ -158,4 +158,4 @@ config:
       - [standard, Standard]
       - [hd, HD]
     default: standard
-    hint: Standard designer meshes, or the HD Blender set (assets ending -hd) with clearcoat paint, carbon, tread and a stitched leather ball lit by a stadium env. Assets with no HD version stay standard.
+    hint: Standard designer meshes, or the HD Blender set (assets ending -hd) with a two-tone clearcoat livery, light strips, carbon, tread and a stitched leather ball lit by a stadium env. Assets with no HD version stay standard.

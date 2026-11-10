@@ -8,20 +8,29 @@ Writes only the `-hd` assets (the Standard GLBs are read, never written):
 
   rocket-car-hd.glb, rocket-car-blue-hd.glb
       The Standard car (same geometry, node names and wheel / booster rig) with baked PBR:
-      - paint: a 512 px panel-line normal map (door, hood, deck and fuel-cap shut lines, hood
-        pins, honeycomb in the vents) under a clearcoat that follows the panel lines, and a
-        256 px occlusion / roughness / metal map. Paint colour stays the Standard team colour.
+      - livery: a 512 px albedo in object space, so it runs across UV seams: saturated team
+        colour over a graphite lower body split by a white pinline, twin white racing stripes
+        with dark pinlines over the nose, bonnet, deck, wing and tail, and a white number panel
+        with a dark race number straddling the split on each door. Shut lines are darkened in.
+      - paint: a 256 px panel-line normal (door, bonnet, deck and fuel-cap shut lines, bonnet
+        pins, honeycomb vents) under a clearcoat that follows it, and a 256 px occlusion /
+        roughness / metal map per livery region. All three are supersampled from 1024 px.
+      - light: emissive team-colour light ribbons laid on the side sills and the tail (raycast
+        onto the body), glowing brake calipers and hub caps, brighter head / tail lights and
+        polished rims, so the cars read at the broadcast camera.
       - trim: ambientCG Fabric004 carbon-fibre weave (box-projected, tiled) under a clearcoat.
       - tyres: Rubber004 grain with a block tread, sidewall ribs and a team-colour pinstripe,
         baked on the Standard tyre UVs (u around the wheel, v across the profile).
   soccer-ball-hd.glb
       A 32-panel truncated icosahedron (12 pentagons, 20 hexagons) with pillowed panels and
-      sunken seams, in Poly Haven "Leather White" grain with stitch rows. Every hexagon shares
-      one atlas cell and every pentagon the other (512 x 256 maps).
+      sunken seams, in Poly Haven "Leather White" grain with stitch rows. White hexagons and
+      black pentagons are separate materials, so panel edges are geometry-sharp; a vertex-colour
+      ramp darkens every seam. Hexagons share one atlas cell, pentagons the other (512 x 256).
 
 All maps are computed here with numpy (no render bake), so the build is deterministic. Every
 GLB is meshopt-packed with gltfpack (-cc -kn -km); `build_rocket_car_hd_meta.json` records
 bytes, sha256, triangles, node names, image sizes and the integrity check of the packed files.
+The decoded textures plus the env-hd.jpg PMREM must fit the 8 MiB maxGpuBytes ceiling.
 """
 from __future__ import annotations
 
@@ -36,6 +45,7 @@ import subprocess
 import sys
 
 import numpy as np
+from bpy_extras.bmesh_utils import bmesh_linked_uv_islands
 from mathutils import Vector
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -61,14 +71,26 @@ for d in (BAKED, RAW, DEC):
 TEAMS = {"rocket-car": "orange", "rocket-car-blue": "blue"}
 # sRGB pinstripe on the tyre sidewall (the Standard team colours in visualisation.yml)
 TEAM_RGB = {"orange": (1.0, 0.549, 0.196), "blue": (0.227, 0.655, 1.0)}
+# sRGB livery: body colour (more saturated than Standard), white, graphite
+LIVERY_BODY = {"orange": (1.0, 0.47, 0.05), "blue": (0.06, 0.40, 1.0)}
+LIVERY_WHITE = (0.95, 0.95, 0.93)
+LIVERY_DARK = (0.075, 0.08, 0.09)
+RACE_NUMBER = {"orange": "7", "blue": "4"}
+# linear emissive colour of light ribbons, calipers and hub caps
+TEAM_LIGHT = {"orange": (1.0, 0.36, 0.03), "blue": (0.1, 0.5, 1.0)}
 
-BODY_N = 512   # chassis panel-line normal map
+BODY_SS = 1024  # chassis raster (supersampled, then box-filtered)
+BODY_ALB = 512  # livery albedo
+BODY_N = 256    # chassis panel-line normal
 BODY_ORM = 256  # chassis occlusion / roughness / metal
-CARBON = 256
+CARBON = 128
+CARBON_TILE = 0.12  # mesh units per carbon tile
 TYRE = (512, 128)
 TYRE_SMALL = (256, 64)
 BALL = (512, 256)
+BALL_SS = 2
 BALL_ORM = (256, 128)
+GPU_CEILING = 8_388_608  # service/policy/work-budget-ceilings.json maxGpuBytes
 
 
 # ------------------------------------------------------------------ small helpers
@@ -149,6 +171,20 @@ def save_image(name: str, rgb: np.ndarray, *, non_color: bool, quality: int = 90
     return out
 
 
+def box_down(a: np.ndarray, f: int) -> np.ndarray:
+    """Average f x f blocks (H and W divisible by f)."""
+    if f == 1:
+        return a
+    h, w = a.shape[:2]
+    return a.reshape(h // f, f, w // f, f, *a.shape[2:]).mean((1, 3))
+
+
+def down_normal(n: np.ndarray, f: int) -> np.ndarray:
+    """Box-filter unit normals and renormalise (what a mip level of the map would hold)."""
+    n = box_down(n, f)
+    return n / np.maximum(np.linalg.norm(n, axis=-1, keepdims=True), 1e-9)
+
+
 def encode_normal(n: np.ndarray) -> np.ndarray:
     n = n / np.linalg.norm(n, axis=-1, keepdims=True)
     return n * 0.5 + 0.5
@@ -204,9 +240,10 @@ def export_glb(path: str) -> None:
         export_yup=True, export_normals=True, export_tangents=True, export_texcoords=True,
         export_materials="EXPORT", export_cameras=False, export_lights=False,
         export_animations=False, export_skins=False, export_morph=False,
-        export_image_format="AUTO",
+        export_image_format="AUTO", export_vertex_color="ACTIVE",
     )
-    bpy.ops.export_scene.gltf(**kw)
+    known = bpy.ops.export_scene.gltf.get_rna_type().properties.keys()
+    bpy.ops.export_scene.gltf(**{k: v for k, v in kw.items() if k in known})
     print("raw", path, os.path.getsize(path))
 
 
@@ -257,11 +294,18 @@ def tex_node(nt, img: bpy.types.Image):
 
 def wire_pbr(mat: bpy.types.Material, *, albedo=None, normal=None, orm=None, coat: float = 0.0,
              coat_rough: float = 0.05, coat_normal: bool = False, rough: float | None = None,
-             metal: float | None = None, normal_strength: float = 1.0) -> None:
-    """Replace a material's texture inputs; base colour factor stays as imported unless `albedo`."""
+             metal: float | None = None, normal_strength: float = 1.0, base=None, emission=None,
+             emission_strength: float = 1.0) -> None:
+    """Replace a material's texture inputs; base colour factor stays as imported unless `albedo`
+    or `base` (linear RGB) is given. `emission` is a linear RGB emissive colour."""
     nt, p = principled(mat)
     for n in [n for n in nt.nodes if n.type in ("TEX_IMAGE", "NORMAL_MAP", "SEPARATE_COLOR")]:
         nt.nodes.remove(n)
+    if base is not None:
+        p.inputs["Base Color"].default_value = (*base, 1.0)
+    if emission is not None:
+        p.inputs["Emission Color"].default_value = (*emission, 1.0)
+        p.inputs["Emission Strength"].default_value = emission_strength
     if albedo is not None:
         nt.links.new(tex_node(nt, albedo).outputs["Color"], p.inputs["Base Color"])
     if normal is not None:
@@ -435,9 +479,83 @@ def honeycomb(P, N) -> np.ndarray:
     return smoothstep(0.04, 0.12, edge)
 
 
-def chassis_maps(ob: bpy.types.Object, slots: dict[str, int], uv_name: str):
+def capsule(px, py, a, b):
+    """Distance from points (px, py) to the segment a-b."""
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    t = np.clip(((px - a[0]) * dx + (py - a[1]) * dy) / (dx * dx + dy * dy), 0.0, 1.0)
+    return np.hypot(px - a[0] - t * dx, py - a[1] - t * dy)
+
+
+# race numbers as stroke segments in a glyph box (x right, y up; height 2 = the number panel)
+GLYPHS = {
+    "7": [((-0.42, 0.66), (0.42, 0.66)), ((0.42, 0.66), (-0.1, -0.7))],
+    "4": [((0.24, 0.7), (0.24, -0.7)), ((0.24, 0.7), (-0.46, -0.18)), ((-0.46, -0.18), (0.5, -0.18))],
+}
+GLYPH_HW = 0.15
+
+
+def rrect(u, v, hx, hy, r):
+    """Signed distance to a rounded rectangle centred on 0 (negative inside)."""
+    qx = np.abs(u) - hx + r
+    qy = np.abs(v) - hy + r
+    return np.hypot(np.maximum(qx, 0), np.maximum(qy, 0)) + np.minimum(np.maximum(qx, qy), 0) - r
+
+
+# livery layout, glTF mesh units (the side tub between the wheel arches is x ~0.4, y -0.2..0)
+SPLIT_Y = -0.105  # two-tone line: graphite below on every surface that is not a top
+SKIRT_Y = -0.155  # side light ribbon, on the graphite
+STRIPE_C, STRIPE_HW, PINLINE = 0.05, 0.03, 0.006
+NUM_Z, NUM_Y, NUM_HX, NUM_HY, NUM_R = -0.03, -0.08, 0.1, 0.058, 0.028
+UNDERSIDE_UV = 0.3
+
+
+def livery(P, N, team: str):
+    """sRGB albedo, roughness and metal of the paint livery at object-space points P, normals N."""
+    x, y, z = gl(P)
+    nx, ny, _ = gl(N)
+    ax = np.abs(x)
+    aa = 0.0016
+
+    def inside(d):
+        return 1.0 - smoothstep(-aa, aa, d)
+
+    col = np.empty(x.shape + (3,))
+    col[:] = LIVERY_BODY[team]
+    rough = np.full(x.shape, 0.3)
+    metal = np.full(x.shape, 0.25)
+
+    def paint(mask, c, r, m):
+        col[:] = col * (1 - mask[..., None]) + np.asarray(c) * mask[..., None]
+        rough[:] = rough * (1 - mask) + r * mask
+        metal[:] = metal * (1 - mask) + m * mask
+
+    # two-tone: graphite lower body under a white pinline (tops stay team colour)
+    not_top = 1 - smoothstep(0.45, 0.6, ny)
+    lower = not_top * inside(y - SPLIT_Y)
+    paint(not_top * inside(np.abs(y - SPLIT_Y) - 0.0035), LIVERY_WHITE, 0.26, 0.0)
+    paint(lower, LIVERY_DARK, 0.42, 0.35)
+    # twin white stripes with dark pinlines over every surface that does not face sideways
+    along = (1 - smoothstep(0.5, 0.65, np.abs(nx))) * (1 - lower)
+    d = np.abs(ax - STRIPE_C) - STRIPE_HW
+    paint(along * inside(d - PINLINE), LIVERY_DARK, 0.35, 0.1)
+    paint(along * inside(d), LIVERY_WHITE, 0.26, 0.0)
+    # door number panel: white rounded rectangle, dark rim, dark number (u runs to the viewer's right)
+    side = smoothstep(0.5, 0.65, np.abs(nx)) * smoothstep(0.3, 0.34, ax)
+    u = -(z - NUM_Z) * np.sign(x)
+    v = y - NUM_Y
+    d = rrect(u, v, NUM_HX, NUM_HY, NUM_R)
+    paint(side * inside(d - PINLINE), LIVERY_DARK, 0.35, 0.1)
+    paint(side * inside(d), LIVERY_WHITE, 0.26, 0.0)
+    glyph = np.min([capsule(u / NUM_HY, v / NUM_HY, a, b) for a, b in GLYPHS[RACE_NUMBER[team]]], axis=0)
+    paint(side * inside((glyph - GLYPH_HW) * NUM_HY), LIVERY_DARK, 0.35, 0.0)
+    # undersides graphite too
+    paint(smoothstep(-0.4, -0.6, ny), LIVERY_DARK, 0.42, 0.35)
+    return col, rough, metal
+
+
+def chassis_maps(ob: bpy.types.Object, slots: dict[str, int], uv_name: str, team: str):
     paint, stripe, grille = slots["paint"], slots["stripe"], slots["grille"]
-    P, N, T, B, M, mask = rasterize(ob, uv_name, BODY_N, {paint, stripe, grille})
+    P, N, T, B, M, mask = rasterize(ob, uv_name, BODY_SS, {paint, stripe, grille})
     is_paint = (M == paint) | (M == stripe)
     is_grille = M == grille
 
@@ -447,14 +565,84 @@ def chassis_maps(ob: bpy.types.Object, slots: dict[str, int], uv_name: str):
     n = height_normal(h, P, N, T, B, mask, eps=0.0015)
     seam = shut_lines(P, N) * is_paint
     cell = honeycomb(P, N) * is_grille
+    col, rough, metal = livery(P, N, team)
+    col = np.where(is_grille[..., None], np.asarray(LIVERY_DARK) * (1 - 0.6 * cell)[..., None], col)
+    col = col * (1 - 0.55 * seam)[..., None]
+    rough = np.where(is_grille, 0.42 + 0.3 * cell, rough) + 0.3 * seam
+    metal = np.where(is_grille, 0.35, metal) * (1 - 0.6 * seam)
     ao = 1.0 - 0.7 * seam - 0.45 * cell
-    rough = np.where(is_grille, 0.42 + 0.3 * cell, np.where(M == stripe, 0.3, 0.34)) + 0.3 * seam
-    metal = np.where(is_grille, 0.35, np.where(M == stripe, 0.1, 0.6)) * (1 - 0.6 * seam)
-    nrm = dilate(encode_normal(n), mask, 6)
-    orm = dilate(np.stack([ao, rough, metal], -1), mask, 6)
-    orm = orm.reshape(BODY_ORM, BODY_N // BODY_ORM, BODY_ORM, BODY_N // BODY_ORM, 3).mean((1, 3))
+    # one dilation for all nine channels, 4 texels deep at the coarsest map
+    stack = np.concatenate([col, n, np.stack([ao, rough, metal], -1)], -1).astype(np.float32)
+    stack = dilate(stack, mask, 4 * (BODY_SS // BODY_N))
+    alb = box_down(stack[..., :3], BODY_SS // BODY_ALB)
+    nrm = encode_normal(down_normal(stack[..., 3:6], BODY_SS // BODY_N))
+    orm = box_down(stack[..., 6:], BODY_SS // BODY_ORM)
     cover = float(mask.mean())
-    return nrm, orm, cover
+    return alb, nrm, orm, cover
+
+
+STRIP_HW = 0.009     # half width of a light ribbon (mesh units; ~3.5 px at the broadcast camera)
+STRIP_LIFT = 0.0025  # off the paint
+STRIP_STRENGTH = 3.5
+TAIL_Y = -0.1
+
+
+def light_strips(chassis: bpy.types.Object, team: str, hit_slots: set[int]) -> dict:
+    """Emissive team-colour ribbons raycast onto the body: both side sills between the wheel
+    arches (on the skirt line) and two bars across the tail either side of the booster."""
+    me = chassis.data
+    up = Vector((0.0, 0.0, 1.0))
+
+    def cast(origin, direction, ok):
+        hit, loc, nrm, fi = chassis.ray_cast(origin, direction)
+        if not hit or me.polygons[fi].material_index not in hit_slots or not ok(loc):
+            return None
+        return loc.copy(), nrm.normalized()
+
+    runs = []
+    for side in (1.0, -1.0):
+        runs.append([cast(Vector((side, -z, SKIRT_Y)), Vector((-side, 0.0, 0.0)), lambda p: 0.37 < abs(p.x) < 0.45)
+                     for z in np.linspace(-0.3, 0.3, 41)])
+    for x0, x1 in ((-0.32, -0.13), (0.13, 0.32)):
+        runs.append([cast(Vector((x, 2.0, TAIL_Y)), Vector((0.0, -1.0, 0.0)), lambda p: p.y > 0.9)
+                     for x in np.linspace(x0, x1, 13)])
+    bm = bmesh.new()
+    quads = 0
+    for run in runs:
+        seg = []
+        for p in run + [None]:
+            if p is not None:
+                seg.append(p)
+                continue
+            if len(seg) >= 2:
+                rows = []
+                for loc, nrm in seg:
+                    t = (up - nrm * nrm.dot(up)).normalized()
+                    base = loc + nrm * STRIP_LIFT
+                    rows.append((bm.verts.new(base - t * STRIP_HW), bm.verts.new(base + t * STRIP_HW), nrm))
+                for (a0, b0, n0), (a1, b1, _) in zip(rows, rows[1:]):
+                    f = bm.faces.new((a0, a1, b1, b0))
+                    f.smooth = True
+                    f.normal_update()
+                    if f.normal.dot(n0) < 0:
+                        f.normal_flip()
+                    quads += 1
+            seg = []
+    me_s = bpy.data.meshes.new("light_strips")
+    bm.to_mesh(me_s)
+    bm.free()
+    me_s.uv_layers.new(name="UVMap")
+    mat = bpy.data.materials.new(f"car_light_strip_{team}")
+    mat.use_nodes = True
+    wire_pbr(mat, base=TEAM_LIGHT[team], emission=TEAM_LIGHT[team], emission_strength=STRIP_STRENGTH,
+             rough=0.3, metal=0.0)
+    me_s.materials.append(mat)
+    ob = bpy.data.objects.new("light_strips", me_s)
+    bpy.context.collection.objects.link(ob)
+    ob.parent = chassis
+    ob.matrix_parent_inverse.identity()
+    hits = [sum(p is not None for p in r) for r in runs]
+    return {"quads": quads, "hits_per_run": hits}
 
 
 def chassis_uvs(ob: bpy.types.Object, slots: dict[str, int]) -> str:
@@ -479,13 +667,27 @@ def chassis_uvs(ob: bpy.types.Object, slots: dict[str, int]) -> str:
     bpy.ops.uv.smart_project(angle_limit=math.radians(60), island_margin=0.004, area_weight=0.0,
                              correct_aspect=True, scale_to_bounds=False)
     bpy.ops.uv.average_islands_scale()
+    # the underside is never seen by the arena cameras: give its texels to the livery
+    ebm = bmesh.from_edit_mesh(me)
+    uvl = ebm.loops.layers.uv.active
+    for isl in bmesh_linked_uv_islands(ebm, uvl):
+        if isl[0].material_index not in atlas:
+            continue
+        area = sum(f.calc_area() for f in isl)
+        if sum(f.normal.z * f.calc_area() for f in isl) / max(area, 1e-12) > -0.5:
+            continue
+        loops = [lp for f in isl for lp in f.loops]
+        c = sum((lp[uvl].uv for lp in loops), Vector((0.0, 0.0))) / len(loops)
+        for lp in loops:
+            lp[uvl].uv = c + (lp[uvl].uv - c) * UNDERSIDE_UV
+    bmesh.update_edit_mesh(me)
     bpy.ops.uv.pack_islands(rotate=True, margin=0.006)
     bpy.ops.object.mode_set(mode="OBJECT")
-    # carbon: box projection, one Fabric004 tile per 0.24 mesh units (~0.45 m on the car)
+    # carbon: box projection, one Fabric004 tile per CARBON_TILE mesh units
     bm = bmesh.new()
     bm.from_mesh(me)
     uv = bm.loops.layers.uv["UVMap"]
-    tile = 0.24
+    tile = CARBON_TILE
     carbon = slots["carbon"]
     for f in bm.faces:
         if f.material_index in atlas:
@@ -631,9 +833,11 @@ def build_car(asset: str) -> dict:
         "carbon": names.index("car_trim_carbon"),
     }
     uv_name = chassis_uvs(chassis, slots)
-    nrm, orm, cover = chassis_maps(chassis, slots, uv_name)
+    alb, nrm, orm, cover = chassis_maps(chassis, slots, uv_name, team)
+    body_alb = save_image(f"{asset}_body_basecolor", alb, non_color=False, quality=92)
     body_n = save_image(f"{asset}_body_normal", nrm, non_color=True, quality=92)
     body_orm = save_image(f"{asset}_body_orm", orm, non_color=True, quality=90)
+    strips = light_strips(chassis, team, {slots["paint"], slots["carbon"]})
     c_alb, c_nrm, c_orm = carbon_maps()
     carbon_alb = save_image(f"{asset}_carbon_basecolor", c_alb, non_color=False)
     carbon_n = save_image(f"{asset}_carbon_normal", c_nrm, non_color=True)
@@ -645,23 +849,29 @@ def build_car(asset: str) -> dict:
     tyre_orm = save_image(f"{asset}_tyre_orm", t_orm, non_color=True)
 
     mats = {m.name: m for m in bpy.data.materials}
-    wire_pbr(mats[f"car_paint_{team}"], normal=body_n, orm=body_orm, coat=1.0, coat_rough=0.035, coat_normal=True)
-    wire_pbr(mats["car_stripe"], normal=body_n, orm=body_orm, coat=1.0, coat_rough=0.035, coat_normal=True)
-    wire_pbr(mats["car_grille"], normal=body_n, orm=body_orm, normal_strength=1.0)
+    for name in (f"car_paint_{team}", "car_stripe"):
+        wire_pbr(mats[name], albedo=body_alb, normal=body_n, orm=body_orm, coat=1.0, coat_rough=0.035,
+                 coat_normal=True)
+    wire_pbr(mats["car_grille"], albedo=body_alb, normal=body_n, orm=body_orm, normal_strength=1.0)
     wire_pbr(mats["car_trim_carbon"], albedo=carbon_alb, normal=carbon_n, orm=carbon_orm, coat=0.9,
              coat_rough=0.04)
     wire_pbr(mats["wheel_tyre"], albedo=tyre_alb, normal=tyre_n, orm=tyre_orm)
-    # machined rims and hubs read as metal once the HD environment lights them
-    wire_pbr(mats["wheel_rim"], rough=0.2, metal=1.0, coat=0.4, coat_rough=0.08)
-    wire_pbr(mats["wheel_hub"], rough=0.3, metal=1.0)
+    # polished rims; brake calipers and hub caps glow in the team colour through the spokes
+    wire_pbr(mats["wheel_rim"], base=(0.92, 0.92, 0.94), rough=0.14, metal=0.9, coat=0.6, coat_rough=0.05)
+    wire_pbr(mats["wheel_hub"], base=TEAM_LIGHT[team], emission=TEAM_LIGHT[team], emission_strength=1.6,
+             rough=0.3, metal=0.0)
+    wire_pbr(mats[f"car_accent_{team}"], base=TEAM_LIGHT[team], emission=TEAM_LIGHT[team],
+             emission_strength=3.0, rough=0.35, metal=0.0)
     wire_pbr(mats["car_canopy_glass"], rough=0.04, metal=0.6, coat=1.0, coat_rough=0.0)
+    principled(mats["car_headlight"])[1].inputs["Emission Strength"].default_value = 8.0
+    principled(mats["car_taillight"])[1].inputs["Emission Strength"].default_value = 6.0
     # HD renders with neutral tone mapping, which bleaches the Standard strength-6 flame to pink-white
     principled(mats["booster_flame_emissive"])[1].inputs["Emission Strength"].default_value = 2.2
 
     raw = os.path.join(RAW, f"{asset}-hd.glb")
     export_glb(raw)
     gltfpack(raw, os.path.join(ASSETS, f"{asset}-hd.glb"))
-    return {"team": team, "atlas_coverage": round(cover, 3)}
+    return {"team": team, "atlas_coverage": round(cover, 3), "light_strips": strips}
 
 
 # ------------------------------------------------------------------ ball
@@ -701,8 +911,13 @@ def truncated_icosahedron():
 
 
 BALL_RINGS = [0.0, 0.42, 0.7, 0.86, 0.94, 0.98, 1.0]
+# vertex-colour multiplier per ring: a dark seam line where the panels meet
+BALL_RING_SHADE = [1.0, 1.0, 1.0, 1.0, 0.93, 0.5, 0.3]
 BALL_PER_SIDE = 4
 SEAM_DEPTH = 0.02
+# linear base colours of the two panel materials (slightly cool: the stadium env is warm)
+BALL_WHITE = (0.86, 0.87, 0.89)
+BALL_BLACK = (0.006, 0.006, 0.007)
 # atlas: hexagon cell centred at u 0.25, pentagon at 0.75 (v 0.5); same texels per unit on both
 ATLAS_CENTRE = {6: (0.25, 0.5), 5: (0.75, 0.5)}
 
@@ -719,6 +934,7 @@ def build_ball_mesh() -> tuple[bpy.types.Object, float]:
     scale = ball_atlas_scale(a_plane)
     bm = bmesh.new()
     uvl = bm.loops.layers.uv.new("UVMap")
+    coll = bm.loops.layers.float_color.new("seam")
     for c, e1, e2, corners in panels:
         n = len(corners)
         d = float(np.dot(corners[0], c))
@@ -730,7 +946,7 @@ def build_ball_mesh() -> tuple[bpy.types.Object, float]:
                 perim.append(a0 + (a1 - a0) * (s / BALL_PER_SIDE))
         cu, cv = ATLAS_CENTRE[n]
         rows = []
-        for s in BALL_RINGS:
+        for s, shade in zip(BALL_RINGS, BALL_RING_SHADE):
             pts = [np.zeros(2)] if s == 0 else [p * s for p in perim]
             row = []
             for p2 in pts:
@@ -738,7 +954,7 @@ def build_ball_mesh() -> tuple[bpy.types.Object, float]:
                 p3 = p3 / np.linalg.norm(p3)
                 rad = 1.0 - SEAM_DEPTH * smoothstep(0.86, 1.0, s) ** 1.5
                 vert = bm.verts.new(Vector(p3 * rad))
-                row.append((vert, (cu + p2[0] * scale * 0.5, cv + p2[1] * scale)))
+                row.append((vert, (cu + p2[0] * scale * 0.5, cv + p2[1] * scale), shade))
             rows.append(row)
         faces = []
         centre = rows[0][0]
@@ -750,16 +966,21 @@ def build_ball_mesh() -> tuple[bpy.types.Object, float]:
             for j in range(len(r0)):
                 faces.append([r0[j], r1[j], r1[(j + 1) % len(r1)], r0[(j + 1) % len(r0)]])
         for f in faces:
-            face = bm.faces.new([v for v, _ in f])
+            face = bm.faces.new([v for v, _, _ in f])
             face.smooth = True
-            for loop, (_, uv) in zip(face.loops, f):
+            face.material_index = 0 if n == 6 else 1
+            for loop, (_, uv, shade) in zip(face.loops, f):
                 loop[uvl].uv = uv
+                loop[coll] = (shade, shade, shade, 1.0)
             face.normal_update()
             if face.normal.dot(face.calc_center_median()) < 0:
                 face.normal_flip()
     me = bpy.data.meshes.new("soccer_ball")
     bm.to_mesh(me)
     bm.free()
+    seam = me.color_attributes["seam"]
+    me.color_attributes.active_color = seam
+    me.color_attributes.render_color_index = me.color_attributes.find("seam")
     ob = bpy.data.objects.new("soccer_ball", me)
     bpy.context.collection.objects.link(ob)
     ob.scale = (1.05, 1.05, 1.05)
@@ -767,8 +988,9 @@ def build_ball_mesh() -> tuple[bpy.types.Object, float]:
 
 
 def ball_maps(a_plane: float):
-    """Atlas maps: leather grain, sunken seam crease and stitch rows on both panel shapes."""
-    W, H = BALL
+    """Atlas maps (normal + ORM): leather grain, sunken seam crease and stitch rows on both panel
+    shapes, computed at BALL_SS x and box-filtered. Panel colour comes from the two materials."""
+    W, H = BALL[0] * BALL_SS, BALL[1] * BALL_SS
     scale = ball_atlas_scale(a_plane)
     u = (np.arange(W) + 0.5) / W
     v = (np.arange(H) + 0.5) / H
@@ -790,12 +1012,12 @@ def ball_maps(a_plane: float):
     along_n = X * np.cos(mid) + Y * np.sin(mid)
     t = -X * np.sin(mid) + Y * np.cos(mid)
     dist = apothem - along_n
-    # seam crease, stitch dimples in a row just inside each edge
+    # seam crease, stitch dimples in a row just inside each edge (deeper than v1: crisper seams)
     crease = groove(dist, 0.006)
     stitch_pitch = 0.03
     st = np.mod(t / stitch_pitch, 1.0)
     stitch = groove(dist - 0.016, 0.0045) * groove(st - 0.5, 0.17) * smoothstep(0.0, 0.03, edge_len / 2 - np.abs(t))
-    h = -0.006 * crease - 0.0035 * stitch
+    h = -0.01 * crease - 0.0055 * stitch
     gu = 1.0 / (W * scale * 0.5)
     gv = 1.0 / (H * scale)
     hx = (np.roll(h, -1, 1) - np.roll(h, 1, 1)) / (2 * gu)
@@ -805,36 +1027,29 @@ def ball_maps(a_plane: float):
     lsrc = os.path.join(SRC, "leather_white", "leather_white_")
     tile = 2.7  # the scan is 300 mm square; one sphere unit is the 110 mm ball radius
     ln = sample(box_blur(load_px(lsrc + "nor_gl_1k.jpg"), 1), X / tile, Y / tile) * 2 - 1
-    ln[..., :2] *= 0.8
+    ln[..., :2] *= 0.55
     ln /= np.linalg.norm(ln, axis=-1, keepdims=True)
-    nrm = encode_normal(blend_normals(n, ln))
-    ld = sample(box_blur(load_px(lsrc + "diff_1k.jpg"), 1), X / tile, Y / tile).mean(-1)
-    grain = (ld - ld.mean()) / max(ld.std(), 1e-6)
-    white = np.clip(0.9 + 0.025 * grain, 0, 1)
-    black = np.clip(0.045 + 0.01 * grain, 0, 1)
-    lum = np.where(hexa, white, black)
-    lum = lum * (1 - 0.35 * crease - 0.25 * stitch)
-    alb = np.stack([lum, lum * 0.995, lum * 0.97], -1)
+    nrm = encode_normal(down_normal(blend_normals(n, ln), BALL_SS))
     lr = sample(load_px(lsrc + "rough_1k.jpg"), X / tile, Y / tile)[..., 1]
-    rough = 0.36 + 0.22 * (lr - lr.min()) / max(np.ptp(lr), 1e-6) + 0.25 * crease
-    ao = 1 - 0.45 * crease - 0.3 * stitch
+    rough = 0.34 + 0.2 * (lr - lr.min()) / max(np.ptp(lr), 1e-6) + 0.3 * crease
+    ao = 1 - 0.55 * crease - 0.35 * stitch
     orm = np.stack([ao, rough, np.zeros_like(rough)], -1)
-    w2, h2 = BALL_ORM
-    orm = orm.reshape(h2, H // h2, w2, W // w2, 3).mean((1, 3))
-    return nrm, alb, orm
+    orm = box_down(orm, W // BALL_ORM[0])
+    return nrm, orm
 
 
 def build_ball() -> dict:
     clear_all()
     ob, a_plane = build_ball_mesh()
-    nrm, alb, orm = ball_maps(a_plane)
-    mat = bpy.data.materials.new("soccer_ball_leather")
-    mat.use_nodes = True
-    mat.use_backface_culling = True
-    ob.data.materials.append(mat)
-    wire_pbr(mat, albedo=save_image("soccer-ball_basecolor", alb, non_color=False),
-             normal=save_image("soccer-ball_normal", nrm, non_color=True, quality=92),
-             orm=save_image("soccer-ball_orm", orm, non_color=True), coat=0.35, coat_rough=0.12)
+    nrm, orm = ball_maps(a_plane)
+    nrm_img = save_image("soccer-ball_normal", nrm, non_color=True, quality=92)
+    orm_img = save_image("soccer-ball_orm", orm, non_color=True)
+    for name, base in (("soccer_ball_leather_white", BALL_WHITE), ("soccer_ball_leather_black", BALL_BLACK)):
+        mat = bpy.data.materials.new(name)
+        mat.use_nodes = True
+        mat.use_backface_culling = True
+        ob.data.materials.append(mat)
+        wire_pbr(mat, base=base, normal=nrm_img, orm=orm_img, coat=0.35, coat_rough=0.12)
     raw = os.path.join(RAW, "soccer-ball-hd.glb")
     export_glb(raw)
     gltfpack(raw, os.path.join(ASSETS, "soccer-ball-hd.glb"))
@@ -842,6 +1057,26 @@ def build_ball() -> dict:
 
 
 # ------------------------------------------------------------------ verify packed GLBs
+def image_wh(data: bytes) -> tuple[int, int]:
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return struct.unpack(">II", data[16:24])
+    i = 2
+    while i < len(data):
+        if data[i] != 0xFF:
+            i += 1
+            continue
+        mk = data[i + 1]
+        if mk in (0xC0, 0xC1, 0xC2):
+            h, w = struct.unpack(">HH", data[i + 5:i + 9])
+            return w, h
+        i += 2 + struct.unpack(">H", data[i + 2:i + 4])[0]
+    return 0, 0
+
+
+def image_sizes_file(path: str) -> tuple[int, int]:
+    return image_wh(open(path, "rb").read())
+
+
 def image_sizes(path: str, j: dict) -> list[list]:
     b = open(path, "rb").read()
     n = struct.unpack_from("<I", b, 12)[0]
@@ -850,22 +1085,20 @@ def image_sizes(path: str, j: dict) -> list[list]:
     for im in j.get("images", []):
         bv = j["bufferViews"][im["bufferView"]]
         data = b[bin0 + bv.get("byteOffset", 0): bin0 + bv.get("byteOffset", 0) + bv["byteLength"]]
-        if data[:8] == b"\x89PNG\r\n\x1a\n":
-            w, h = struct.unpack(">II", data[16:24])
-        else:
-            i = 2
-            w = h = 0
-            while i < len(data):
-                if data[i] != 0xFF:
-                    i += 1
-                    continue
-                mk = data[i + 1]
-                if mk in (0xC0, 0xC1, 0xC2):
-                    h, w = struct.unpack(">HH", data[i + 5:i + 9])
-                    break
-                i += 2 + struct.unpack(">H", data[i + 2:i + 4])[0]
+        w, h = image_wh(data)
         out.append([im.get("name", ""), im.get("mimeType", ""), w, h, bv["byteLength"]])
     return out
+
+
+def gpu_bytes(imgs) -> int:
+    """three.js uploads every glTF image as RGBA8 with a full mip chain."""
+    return sum(w * h * 16 // 3 for _, _, w, h, _ in imgs)
+
+
+def env_pmrem_bytes(width: int) -> int:
+    """PMREMGenerator.fromEquirectangular: cube 2^floor(log2(w / 4)), RGBA16F 3*max(cube, 112) x 4*cube."""
+    cube = 2 ** int(math.floor(math.log2(width / 4)))
+    return 3 * max(cube, 112) * 4 * cube * 8
 
 
 def mesh_report(objs) -> dict:
@@ -895,9 +1128,11 @@ def verify(name: str, std: str | None) -> dict:
         "triangles": glb_tris(j),
         "nodes": sorted(n.get("name", "") for n in j["nodes"] if n.get("name")),
         "images": imgs,
-        "gpu_bytes_est": int(sum(w * h * 4 * 4 / 3 for _, _, w, h, _ in imgs)),
+        "gpu_bytes_est": gpu_bytes(imgs),
         "extensions": j.get("extensionsUsed", []),
         "integrity": mesh_report(meshes),
+        "materials": [m.get("name", "") for m in j.get("materials", [])],
+        "vertex_colors": sum(1 for m in j["meshes"] for p in m["primitives"] if "COLOR_0" in p["attributes"]),
     }
     problems = []
     for o in meshes:
@@ -919,6 +1154,10 @@ def verify(name: str, std: str | None) -> dict:
         # the welded ball must be closed (seams meet edge to edge)
         if info["integrity"]["non_manifold_edges_welded"]:
             problems.append({"ball": "open seams"})
+        if not info["vertex_colors"]:
+            problems.append({"ball": "seam vertex colours missing"})
+    elif "light_strips" not in info["nodes"] or not any("light_strip" in m for m in info["materials"]):
+        problems.append({"car": "light strips missing"})
     if info["bytes"] > 800_000:
         problems.append({"bytes": info["bytes"]})
     info["problems"] = problems
@@ -942,12 +1181,21 @@ def main() -> None:
         j = glb_json(p)
         imgs = image_sizes(p, j)
         meta[name] = {"bytes": os.path.getsize(p), "sha256": sha256(p), "triangles": glb_tris(j),
-                      "images": imgs, "gpu_bytes_est": int(sum(w * h * 4 * 4 / 3 for _, _, w, h, _ in imgs))}
+                      "images": imgs, "gpu_bytes_est": gpu_bytes(imgs)}
+    env = os.path.join(ASSETS, "env-hd.jpg")
+    env_w = image_sizes_file(env)[0]
+    pmrem = env_pmrem_bytes(env_w)
+    gpu_hd = sum(meta[n]["gpu_bytes_est"] for n in built)
     meta["_totals"] = {
         "gpu_bytes_standard": sum(meta[n]["gpu_bytes_est"] for n in ("rocket-car.glb", "rocket-car-blue.glb", "soccer-ball.glb")),
-        "gpu_bytes_hd": sum(meta[n]["gpu_bytes_est"] for n in built),
-        "bytes_hd": sum(meta[n]["bytes"] for n in built),
+        "gpu_bytes_hd": gpu_hd,
+        "env_hd": {"bytes": os.path.getsize(env), "sha256": sha256(env), "width": env_w, "pmrem_bytes": pmrem},
+        "gpu_bytes_hd_with_env": gpu_hd + pmrem,
+        "max_gpu_bytes": GPU_CEILING,
+        "bytes_hd": sum(meta[n]["bytes"] for n in built) + os.path.getsize(env),
     }
+    if gpu_hd + pmrem > GPU_CEILING:
+        meta["_totals"]["problems"] = [{"gpu_bytes_hd_with_env": gpu_hd + pmrem}]
     problems = {k: v["problems"] for k, v in meta.items() if v.get("problems")}
     meta_path = os.path.join(OUT, "blender", "build_rocket_car_hd_meta.json")
     with open(meta_path, "w") as f:

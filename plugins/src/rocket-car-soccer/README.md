@@ -47,10 +47,13 @@ Use the **preset** select in This view, then tune individual sliders. Randomise,
 stadium environment (Poly Haven Orlando Stadium, CC0). Node names, wheel spin and booster flame are the same in
 both sets.
 
-- Cars: clearcoat team paint over a baked panel-line normal (shut lines, fuel cap, hood pins, honeycomb vents),
-  photographed carbon-fibre trim, tread and sidewall tyres, and machined metal rims.
-- Ball: a 32-panel stitched leather ball (Poly Haven Leather White grain, recessed seams, stitch rows).
-- Budget: 260 KB per car and 100 KB for the ball. About 8 MiB of decoded textures, versus about 17 MB for Standard.
+- Cars: a two-tone clearcoat livery (team colour over graphite, twin white stripes, a race-number door panel)
+  over a baked panel-line normal, team-colour light strips on the skirts and tail, glowing hubs and calipers,
+  photographed carbon-fibre trim, tread and sidewall tyres, and polished metal rims.
+- Ball: a 32-panel stitched leather ball, white hexagons and black pentagons (Poly Haven Leather White grain,
+  deep recessed seams, stitch rows).
+- Budget: about 285 KB per car and 76 KB for the ball. Textures plus the environment PMREM fit the 8 MiB
+  `maxGpuBytes` ceiling, versus about 17 MB of textures for Standard.
 
 Rebuild with `blender --python blender/build_rocket_car_hd.py -- --out plugins/src/rocket-car-soccer` in a visible Blender (steps in `ASSETS.md`).
 

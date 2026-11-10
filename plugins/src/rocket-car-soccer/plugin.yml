@@ -30,24 +30,24 @@ assets:
     triangles: 3968
   - id: rocket-car-hd
     path: assets/rocket-car-hd.glb
-    sha256: c5599ef866835bd1003d47371e3ac59cdfe82df013d0e0462c95a06c33735e1e
-    bytes: 259584
-    triangles: 28276
+    sha256: cedc396d417936600442698e24e6623170c3bdc821961168aa7aeba98df341b1
+    bytes: 285804
+    triangles: 28484
   - id: rocket-car-blue-hd
     path: assets/rocket-car-blue-hd.glb
-    sha256: c285a1d0f00e0b2380279b8d060d1f4e212b14930c22b0d6cc17b94a3532052d
-    bytes: 259568
-    triangles: 28276
+    sha256: 4b4863c52d44deb48a6e590d932c78bfe6b29e24b56dcaa0d6c5fed667bf9d53
+    bytes: 280192
+    triangles: 28484
   - id: soccer-ball-hd
     path: assets/soccer-ball-hd.glb
-    sha256: 102be6b4da1b83974738a48eee039b4fc9f62ee1210b1a64522fb52dbeb56306
-    bytes: 99660
+    sha256: ea48c597851c4d8efd1c029ad9e1697365b019fcb8636ca629c3e6ba03e9cc9f
+    bytes: 76124
     triangles: 7920
   - id: env-hd
     path: assets/env-hd.jpg
     role: environment
-    sha256: 17611110424a681cf664e18a038dddd89f8aea8fa2b774f9392c5c5675cb61f4
-    bytes: 104105
+    sha256: c786107c62bb9397db73569d0ab7d7c084fb96ccb410e6b9cb8c1c1fd1bbb516
+    bytes: 26120
 viz:
   graphWalk: false
   presentTick: true
