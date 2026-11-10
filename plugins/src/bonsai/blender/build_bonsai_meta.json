@@ -13,15 +13,16 @@
   "sets": {
     "hd": [
       {
-        "bytes": 366632,
-        "gpuBytes": 3014654,
+        "bytes": 492724,
+        "gpuBytes": 3069266,
         "id": "bonsai-base-hd",
         "images": [
-          "384x192",
+          "320x160",
           "256x256",
           "128x128",
           "128x128",
           "256x256",
+          "256x128",
           "256x256",
           "512x512"
         ],
@@ -30,12 +31,12 @@
           "nonmanifold": 0
         },
         "path": "assets/bonsai-base-hd.glb",
-        "rawBytes": 939264,
-        "sha256": "e2891caa65582da2176dba0e748054dd0a7d64afdf610eb7974e006ec08d3d86",
-        "triangles": 22423
+        "rawBytes": 1512764,
+        "sha256": "fb56893cc716d19828395c96452d4430fe1c4e11a33745fe21950ebc3dba34f1",
+        "triangles": 34631
       },
       {
-        "bytes": 774444,
+        "bytes": 617364,
         "gpuBytes": 4543828,
         "id": "bonsai-tree-hd",
         "images": [
@@ -48,9 +49,9 @@
           "nonmanifold": 0
         },
         "path": "assets/bonsai-tree-hd.glb",
-        "rawBytes": 1908944,
-        "sha256": "dba5b6c41a324980961999af1b4b9aeeb04ed7afac2c938cc6d3a3084350fbe7",
-        "triangles": 27816
+        "rawBytes": 1764604,
+        "sha256": "504e1123ca5df700de0b75cde310ad4e1f0a197bfb525ab9851be1c92449d9eb",
+        "triangles": 36906
       }
     ],
     "standard": [

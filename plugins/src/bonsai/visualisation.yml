@@ -51,7 +51,7 @@ config:
       - [standard, Standard]
       - [hd, HD]
     default: standard
-    hint: Standard meshes and 256 px maps, or the HD Blender set (assets ending -hd) with fuller cupped leaf pads, normal-mapped bark, stone and moss, and a garden reflection probe.
+    hint: Standard meshes and 256 px maps, or the HD Blender set (assets ending -hd) with a flared, bark-relief trunk and roots, scanned leaf sprays and petals, a mossy slab with moss cushions and fronds, and a garden reflection probe.
   - key: preset
     label: preset
     type: select

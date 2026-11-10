@@ -17,7 +17,8 @@ decodes it. Exports go through gltfpack (-cc -kn -km); writes blender/build_bons
 frontend/bonsai-data.ts (pads, ground heights, camera in glTF Y-up metres). Deterministic.
 """
 import bpy, bmesh, math, json, os, sys, subprocess, hashlib, random, struct
-from mathutils import Vector, Matrix
+import numpy as np
+from mathutils import Vector, Matrix, noise
 from mathutils.bvhtree import BVHTree
 
 argv = sys.argv[sys.argv.index("--") + 1:] if "--" in sys.argv else []
@@ -29,7 +30,7 @@ ROOT = os.path.abspath(os.path.join(OUT, "..", "..", ".."))
 SRC = os.path.join(ROOT, "out", "sources", "bonsai")
 PREP = os.path.join(SRC, "prep")
 BUILD = os.path.join(SRC, "build")
-SHOTS = os.path.join(ROOT, "out", "shots", "bonsai")
+SHOTS = os.path.abspath(argv[argv.index("--shots") + 1]) if "--shots" in argv else os.path.join(ROOT, "out", "shots", "bonsai")
 GLTFPACK = os.environ.get("GLTFPACK") or os.path.join(ROOT, "out", "tools", "node_modules", ".bin", "gltfpack")
 TAU = math.tau
 MAX_PADS = 16
@@ -66,6 +67,18 @@ ROOTS = [(-150, 0.10), (-95, 0.085), (-30, 0.11), (40, 0.075), (120, 0.09), (190
 LEAF_TILES = [(0, 0), (1, 0), (0, 1)]
 BLOSSOM_TILE = (1, 1)
 FALL_TILE = (2, 0)                     # the scanned yellow leaf: the host tints it red / orange / gold
+
+# HD: willow bark at a coarser repeat, a deeper root flare (lobes run up the trunk from these roots),
+# and the HD atlas rects (fetch_sources.py hd_leaf_atlas, px in the shipped 1024 x 512 atlas)
+BARK_TILE_HD = 0.11
+ROOTS_HD = [(-158, 0.13, 1.0), (-120, 0.085, 0.7), (-84, 0.11, 0.9), (-38, 0.14, 1.0), (4, 0.075, 0.6),
+            (42, 0.10, 0.85), (88, 0.07, 0.55), (128, 0.115, 0.9), (172, 0.09, 0.75), (214, 0.08, 0.65)]
+TRUNK_TWIST = 2.4                      # radians per metre the flutes spiral up the trunk
+HD_SEED = 23
+
+
+def hd_atlas():
+    return json.load(open(os.path.join(PREP, "atlas.json")))["hd"]
 
 
 def gl(v):  # Blender Z-up -> glTF Y-up
@@ -131,6 +144,8 @@ def materials(s):
     M["blossom"] = mat("blossom", s, "leaf_atlas.png", rough=0.72, clip=True)
     M["fall"] = mat("falling-leaf", s, "leaf_atlas.png", rough=0.72, clip=True)
     M["shadow"] = mat("contact-shadow", s, "contact_shadow.png", rough=1.0, blend=True)
+    if hd:
+        M["fronds"] = mat("moss-fronds", s, "moss_fronds.png", rough=0.95, clip=True)
     return M
 
 
@@ -198,6 +213,22 @@ def quad(bm, size, tile=None, centre=(0.0, 0.0), stem=False):
     for l, (u, v) in zip(f.loops, ((u0, vt), (u1, vt), (u1, vb), (u0, vb))):
         l[uvl].uv = (u, v)
     return f
+
+
+
+def canonical(bm):
+    """Sort verts by position and faces by their verts. remove_doubles (also inside create_uvsphere)
+    keeps a run-dependent one of each duplicate, so element order, and everything that follows it
+    (point distribution, AO, export), would differ between builds."""
+    def by(seq, key):
+        seq.index_update()
+        rank = {e.index: r for r, e in enumerate(sorted(seq, key=key))}
+        seq.sort(key=lambda e: rank[e.index])
+        seq.index_update()
+
+    by(bm.verts, lambda v: (v.co.x, v.co.y, v.co.z))
+    by(bm.faces, lambda f: sorted(v.index for v in f.verts))
+    by(bm.edges, lambda e: sorted(v.index for v in e.verts))
 
 
 # ---------------------------------------------------------------- geometry nodes
@@ -441,8 +472,8 @@ def build_moss(slab_ob, hd, m, seed):
     dx = g.math("SUBTRACT", p[0], TRUNK_XY[0]); dy = g.math("SUBTRACT", p[1], TRUNK_XY[1])
     near = g.math("SQRT", g.math("ADD", g.math("MULTIPLY", dx, dx), g.math("MULTIPLY", dy, dy)))
     tex = g.n("ShaderNodeTexNoise", {"Vector": g.pos(), "Scale": 7.0, "Detail": 3.0, "Roughness": 0.6})
-    patch = g.math("GREATER_THAN", tex.outputs["Fac"], 0.55)
-    ring = g.math("LESS_THAN", g.math("ADD", near, g.math("MULTIPLY", tex.outputs["Fac"], 0.06)), 0.15)
+    patch = g.math("GREATER_THAN", tex.outputs["Fac"], 0.5 if hd else 0.55)
+    ring = g.math("LESS_THAN", g.math("ADD", near, g.math("MULTIPLY", tex.outputs["Fac"], 0.06)), 0.17 if hd else 0.15)
     up = g.math("GREATER_THAN", nz, 0.5)
     keep = g.math("MULTIPLY", up, g.math("MAXIMUM", ring, patch))
     geo = g.n("GeometryNodeDeleteGeometry", {"Geometry": g.inp, "Selection": g.math("LESS_THAN", keep, 0.5)},
@@ -453,11 +484,142 @@ def build_moss(slab_ob, hd, m, seed):
     on_edges = g.n("GeometryNodeFieldOnDomain", {"Value": rim}, domain="EDGE", data_type="FLOAT").outputs[0]
     inner = g.math("LESS_THAN", on_edges, 0.001)
     bump = g.n("ShaderNodeTexNoise", {"Vector": g.pos(), "Scale": 55.0, "Detail": 4.0, "Roughness": 0.65})
-    lift = g.mad(g.math("MULTIPLY", inner, g.mad(bump.outputs["Fac"], 0.009, -0.0015)), 1.0, 0.0007)
+    lift = g.mad(g.math("MULTIPLY", inner, g.mad(bump.outputs["Fac"], 0.013 if hd else 0.009, -0.0015)), 1.0, 0.0007)
     geo = g.n("GeometryNodeSetPosition", {"Geometry": geo, "Offset": g.vmath("SCALE", nrm, scale=lift)}).outputs["Geometry"]
     bm = g.bmesh(geo, ob=slab_ob)
+    if hd:
+        moss_cushions(bm, slab_ob, random.Random(seed))
+        canonical(bm)
     box_uv(bm, 0.035)
     return bm
+
+
+def moss_cushions(bm, slab_ob, rng):
+    """HD: lumpy moss cushions sat on the slab's upper faces, clear of the trunk foot."""
+    hit = bvh_of([slab_ob])
+    spots, tries = [], 0
+    while len(spots) < 12 and tries < 2000:
+        tries += 1
+        x, y = rng.uniform(-SLAB_W * 0.46, SLAB_W * 0.46), rng.uniform(-0.2, 0.2)
+        loc, nrm, _, _ = hit.ray_cast(Vector((x, y, 1.0)), Vector((0, 0, -1)), 3.0)
+        if loc is None or nrm.z < 0.75 or loc.z < 0.035:
+            continue
+        if math.hypot(x - TRUNK_XY[0], y - TRUNK_XY[1]) < 0.15:
+            continue
+        if any(math.hypot(x - sx, y - sy) < 0.045 for sx, sy, _ in spots):
+            continue
+        spots.append((x, y, loc.z))
+    for i, (x, y, z) in enumerate(spots):
+        r = rng.uniform(0.014, 0.03)
+        res = bmesh.ops.create_uvsphere(bm, u_segments=14, v_segments=8, radius=1.0)
+        off = Vector((x, y, 0.0)) * 37.0 + Vector((i * 3.1, 0.0, 0.0))
+        for v in res["verts"]:
+            c = v.co.copy()
+            if c.z < 0:
+                c.z *= 0.15
+            s = r * (1.0 + 0.38 * noise.noise(c * 1.8 + off) + 0.12 * noise.noise(c * 5.0 + off))
+            v.co = Vector((x + c.x * s * 1.3, y + c.y * s, z - 0.004 + c.z * s * 0.4))
+    return len(spots)
+
+
+def moss_fronds(moss_ob):
+    """HD: the scanned moss_01 frond cards stood up on the moss carpet and cushions (normal = the
+    carpet's, so they light as one soft surface)."""
+    g = GN("moss-fronds", with_input=True)
+    nrm = g.n("GeometryNodeInputNormal").outputs[0]
+    up = g.math("GREATER_THAN", g.sep(nrm)[2], 0.3)
+    d = 0.0056
+    dist = g.n("GeometryNodeDistributePointsOnFaces", {"Mesh": g.inp, "Selection": up, "Distance Min": d,
+                                                        "Density Max": 4.0 / (d * d), "Seed": 5},
+               distribute_method="POISSON")
+    cards = []
+    for i in range(4):
+        grid = g.n("GeometryNodeMeshGrid", {"Size X": 0.5, "Size Y": 1.0, "Vertices X": 2, "Vertices Y": 2})
+        uvf = g.sep(grid.outputs["UV Map"])
+        geo = g.store(grid.outputs["Mesh"], "uvw", g.xyz(g.mad(uvf[0], 0.25, i / 4), uvf[1], 0.0), "FLOAT_VECTOR", "CORNER")
+        # frond standing along +Z, its dark stalk sunk into the carpet
+        cards.append(g.xform(g.xform(geo, t=(0, 0.2, 0)), r=(math.pi / 2, 0, 0)))
+    inst = g.n("GeometryNodeGeometryToInstance", {"Geometry": cards}).outputs["Instances"]
+    r1 = g.n("FunctionNodeAlignRotationToVector", {"Vector": dist.outputs["Normal"]}, axis="Z").outputs[0]
+    tw = g.n("FunctionNodeAxisAngleToRotation", {"Axis": (0.0, 0.0, 1.0), "Angle": g.rand(0.0, TAU, 61)}).outputs[0]
+    tl = g.n("FunctionNodeAxisAngleToRotation", {"Axis": (1.0, 0.0, 0.0), "Angle": g.rand(-0.45, 0.45, 62)}).outputs[0]
+    rot = g.n("FunctionNodeRotateRotation", {"Rotation": r1, "Rotate By": tw}, rotation_space="LOCAL").outputs[0]
+    rot = g.n("FunctionNodeRotateRotation", {"Rotation": rot, "Rotate By": tl}, rotation_space="LOCAL").outputs[0]
+    iop = g.n("GeometryNodeInstanceOnPoints", {"Points": dist.outputs["Points"], "Instance": inst, "Pick Instance": True,
+                                              "Instance Index": g.rand(0, 3, 63, "INT"), "Rotation": rot,
+                                              "Scale": g.rand(0.006, 0.012, 64)}).outputs["Instances"]
+    iop = g.store(iop, "bent", dist.outputs["Normal"], "FLOAT_VECTOR", "INSTANCE")
+    real = g.n("GeometryNodeRealizeInstances", {"Geometry": iop}).outputs["Geometry"]
+    me = g.mesh(real, ob=moss_ob)
+    bent = me.attributes.get("bent")
+    nb = [0.0] * (len(me.vertices) * 3)
+    bent.data.foreach_get("vector", nb)
+    me.attributes.remove(bent)
+    return me, [Vector(nb[i:i + 3]).normalized() for i in range(0, len(nb), 3)]
+
+
+def bake_slab(slab_ob, M):
+    """HD: bake the boulder scan blended with the mossy_rock scan on its upper faces (noise-broken)
+    into one 512 px albedo on the scan's UVs, and use it as the slab's colour map."""
+    sc = bpy.context.scene
+    engine = sc.render.engine
+    sc.render.engine = "CYCLES"
+    sc.cycles.samples = 1
+    sc.cycles.device = "CPU"
+    target = bpy.data.images.new("rock_moss_diff", 512, 512, alpha=False)
+    bm_ = bpy.data.materials.new("rock-bake"); bm_.use_nodes = True
+    nt = bm_.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    out = nt.nodes.new("ShaderNodeOutputMaterial")
+    em = nt.nodes.new("ShaderNodeEmission")
+    rock = nt.nodes.new("ShaderNodeTexImage"); rock.image = img("hd", "rock_diff.jpg")
+    tc = nt.nodes.new("ShaderNodeTexCoord")
+    mp = nt.nodes.new("ShaderNodeMapping"); mp.inputs["Scale"].default_value = (4.0, 4.0, 4.0)
+    moss = nt.nodes.new("ShaderNodeTexImage"); moss.image = img("hd", "mossy_rock_diff.jpg")
+    moss.projection = "BOX"; moss.projection_blend = 0.3
+    nt.links.new(tc.outputs["Object"], mp.inputs["Vector"]); nt.links.new(mp.outputs["Vector"], moss.inputs["Vector"])
+    geo = nt.nodes.new("ShaderNodeNewGeometry")
+    sz = nt.nodes.new("ShaderNodeSeparateXYZ"); nt.links.new(geo.outputs["Normal"], sz.inputs["Vector"])
+    up = nt.nodes.new("ShaderNodeMapRange")
+    up.inputs["From Min"].default_value, up.inputs["From Max"].default_value = 0.35, 0.8
+    nt.links.new(sz.outputs["Z"], up.inputs["Value"])
+    nz = nt.nodes.new("ShaderNodeTexNoise"); nz.inputs["Scale"].default_value = 9.0; nz.inputs["Detail"].default_value = 4.0
+    nt.links.new(tc.outputs["Object"], nz.inputs["Vector"])
+    br = nt.nodes.new("ShaderNodeMapRange")
+    br.inputs["From Min"].default_value, br.inputs["From Max"].default_value = 0.38, 0.58
+    nt.links.new(nz.outputs["Fac"], br.inputs["Value"])
+    mul = nt.nodes.new("ShaderNodeMath"); mul.operation = "MULTIPLY"
+    nt.links.new(up.outputs["Result"], mul.inputs[0]); nt.links.new(br.outputs["Result"], mul.inputs[1])
+    mix = nt.nodes.new("ShaderNodeMix"); mix.data_type = "RGBA"
+    nt.links.new(mul.outputs[0], mix.inputs["Factor"])
+    nt.links.new(rock.outputs["Color"], mix.inputs["A"]); nt.links.new(moss.outputs["Color"], mix.inputs["B"])
+    nt.links.new(mix.outputs["Result"], em.inputs["Color"]); nt.links.new(em.outputs["Emission"], out.inputs["Surface"])
+    tnode = nt.nodes.new("ShaderNodeTexImage"); tnode.image = target
+    nt.nodes.active = tnode
+    me = slab_ob.data
+    keep = list(me.materials)
+    me.materials.clear(); me.materials.append(bm_)
+    for ob in bpy.context.view_layer.objects:
+        ob.select_set(False)
+    slab_ob.select_set(True)
+    bpy.context.view_layer.objects.active = slab_ob
+    bpy.ops.object.bake(type="EMIT", margin=8, use_clear=True)
+    me.materials.clear()
+    for m in keep:
+        me.materials.append(m)
+    os.makedirs(BUILD, exist_ok=True)
+    path = os.path.join(BUILD, "rock_moss_diff.jpg")
+    target.file_format = "JPEG"
+    target.filepath_raw = path
+    sc.render.image_settings.quality = 88
+    target.save(filepath=path, quality=88)
+    bpy.data.images.remove(target)
+    bpy.data.materials.remove(bm_)
+    baked = bpy.data.images.load(path, check_existing=False)
+    tex = next(n for n in M["rock"].node_tree.nodes if n.type == "TEX_IMAGE" and n.image and n.image.colorspace_settings.name == "sRGB")
+    tex.image = baked
+    sc.render.engine = engine
 
 
 def build_base(hd, M, cb):
@@ -497,6 +659,8 @@ def build_base(hd, M, cb):
     me = build_slab(hd, M["rock"])
     slab = bpy.data.objects.new("rock", me)
     cb.objects.link(slab)
+    if hd:
+        bake_slab(slab, M)
     # contact shadow on the bench (under the board) and on the board (under the slab)
     bm = bmesh.new()
     for (rx, ry, z) in ((BOARD_RX * 1.18, BOARD_RY * 1.25, TABLE_Z + 0.0006), (SLAB_W * 0.56, SLAB_W * 0.36, 0.0006)):
@@ -510,6 +674,22 @@ def build_base(hd, M, cb):
                 l[uv].uv = (l.vert.co.x / (2 * rx) + 0.5, l.vert.co.y / (2 * ry) + 0.5)
     new_obj("contact-shadow", bm, M["shadow"], cb, smooth=None)
     moss = new_obj("moss", build_moss(slab, hd, M["moss"], 11), M["moss"], cb, smooth=90, recalc=False)
+    if hd:
+        # fronds join the moss node as its second material, so they ride the turntable with it
+        fr, bent = moss_fronds(moss)
+        me = moss.data
+        n0 = len(me.vertices)
+        bm = bmesh.new(); bm.from_mesh(me)
+        nf0 = len(bm.faces)
+        bm.from_mesh(fr)
+        bm.faces.ensure_lookup_table()
+        for i in range(nf0, len(bm.faces)):
+            bm.faces[i].material_index = 1
+            bm.faces[i].smooth = True
+        bm.to_mesh(me); bm.free(); bpy.data.meshes.remove(fr)
+        me.materials.append(M["fronds"])
+        me.update()
+        me.normals_split_custom_set_from_vertices([v.normal.copy() for v in me.vertices][:n0] + bent)
     return {"bench": table, "board": board, "rock": slab, "moss": moss}
 
 
@@ -530,23 +710,23 @@ class Skeleton:
     def __init__(self):
         self.chains = []
 
-    def add(self, pts, wrap=None):
+    def add(self, pts, wrap=None, tile=BARK_TILE):
         """pts: [(Vector, radius)]."""
         if wrap is None:
-            wrap = max(1, round(TAU * pts[0][1] / BARK_TILE))
+            wrap = max(1, round(TAU * pts[0][1] / tile))
         self.chains.append((pts, wrap))
 
-    def object(self, name):
+    def object(self, name, chain_ids=False):
         me = bpy.data.meshes.new(name)
-        verts, edges, rad, wrap = [], [], [], []
-        for pts, w in self.chains:
+        verts, edges, rad, wrap, chain = [], [], [], [], []
+        for k, (pts, w) in enumerate(self.chains):
             base = len(verts)
             for i, (p, r) in enumerate(pts):
-                verts.append(tuple(p)); rad.append(r); wrap.append(float(w))
+                verts.append(tuple(p)); rad.append(r); wrap.append(float(w)); chain.append(float(k))
                 if i:
                     edges.append((base + i - 1, base + i))
         me.from_pydata(verts, edges, [])
-        for nm, vals in (("radius", rad), ("wrap", wrap)):
+        for nm, vals in (("radius", rad), ("wrap", wrap)) + ((("chain", chain),) if chain_ids else ()):
             a = me.attributes.new(nm, "FLOAT", "POINT")
             a.data.foreach_set("value", vals)
         ob = bpy.data.objects.new(name, me)
@@ -554,9 +734,11 @@ class Skeleton:
         return ob
 
 
-def sweep(skel, name, ring, res):
-    """GN: edge chains -> Catmull-Rom curves -> radius-scaled open-arc sweep with seamless bark UVs."""
-    src = skel.object(name + "-skel")
+def sweep(skel, name, ring, res, tile=BARK_TILE, deform=None):
+    """GN: edge chains -> Catmull-Rom curves -> radius-scaled open-arc sweep with seamless bark UVs.
+    `deform(me, ring)` reshapes the evaluated sweep (ring-major vertices, seam duplicates still
+    apart) before the seam is welded."""
+    src = skel.object(name + "-skel", chain_ids=deform is not None)
     g = GN(name, with_input=True)
     c = g.n("GeometryNodeMeshToCurve", {"Mesh": g.inp}).outputs["Curve"]
     c = g.n("GeometryNodeCurveSplineType", {"Curve": c}, spline_type="CATMULL_ROM").outputs["Curve"]
@@ -577,41 +759,169 @@ def sweep(skel, name, ring, res):
     mesh = g.n("GeometryNodeCurveToMesh", {"Curve": c, "Profile Curve": prof,
                                            "Scale": g.n("GeometryNodeInputRadius").outputs[0],
                                            "Fill Caps": False}).outputs["Mesh"]
-    uv = g.xyz(g.math("MULTIPLY", g.named("around"), g.named("wrap")), g.math("DIVIDE", g.named("along"), BARK_TILE))
+    uv = g.xyz(g.math("MULTIPLY", g.named("around"), g.named("wrap")), g.math("DIVIDE", g.named("along"), tile))
     mesh = g.store(mesh, "uvw", uv, "FLOAT_VECTOR", "CORNER")
-    bm = g.bmesh(mesh, ob=src)
+    if deform is None:
+        bm = g.bmesh(mesh, ob=src)
+    else:
+        me = g.mesh(mesh, ob=src)
+        deform(me, ring)
+        bm = bmesh.new(); bm.from_mesh(me); bpy.data.meshes.remove(me)
+        bmesh.ops.remove_doubles(bm, verts=bm.verts, dist=1e-7)
     bpy.data.objects.remove(src, do_unlink=True)
-    for nm in ("along", "around", "wrap", "radius"):
+    for nm in ("along", "around", "wrap", "radius", "chain"):
         lay = bm.verts.layers.float.get(nm)
         if lay is not None:
             bm.verts.layers.float.remove(lay)
     holes = [e for e in bm.edges if e.is_boundary]
     if holes:
         bmesh.ops.holes_fill(bm, edges=holes, sides=0)
+    if deform is not None:
+        canonical(bm)
     return bm
 
 
-def add_pad(pads, centre, radii, tip, fine, rng, hd):
+def add_pad(pads, centre, radii, tip, fine, rng, hd, hd_rng=None):
+    """One pad and the twigs into it. HD draws the same values from `rng` as Standard (so both sets
+    share one skeleton) and grows more twigs from `hd_rng`."""
     k = len(pads)
     pads.append({"centre": centre.copy(), "radii": radii, "tip": tip.copy()})
-    n = 4 if hd else 3
+    n = 3
     for j in range(n):
         a = TAU * (j + rng.random() * 0.6) / n
         end = centre + Vector((math.cos(a) * radii[0] * 0.62, math.sin(a) * radii[1] * 0.62, radii[2] * (0.05 + 0.25 * rng.random())))
-        mid = tip.lerp(end, 0.5) + Vector((0, 0, 0.004))
-        fine.add([(tip, 0.0034), (mid, 0.0024), (end, 0.0012)], wrap=1)
+        if not hd:
+            mid = tip.lerp(end, 0.5) + Vector((0, 0, 0.004))
+            fine.add([(tip, 0.0034), (mid, 0.0024), (end, 0.0012)], wrap=1)
+    if hd:
+        n = 7
+        for j in range(n):
+            a = TAU * (j + hd_rng.random() * 0.7) / n
+            reach = 0.45 + 0.35 * hd_rng.random()
+            end = centre + Vector((math.cos(a) * radii[0] * reach, math.sin(a) * radii[1] * reach,
+                                   radii[2] * (0.0 + 0.3 * hd_rng.random())))
+            mid = tip.lerp(end, 0.45) + Vector((0, 0, 0.003 + 0.004 * hd_rng.random()))
+            fine.add([(tip, 0.0044), (mid, 0.0029), (end, 0.0012)], wrap=1)
     return k
+
+
+class Height:
+    """The HD bark height map (fetch_sources.py bark_height.png), bilinear with wrap-around."""
+
+    def __init__(self):
+        im = bpy.data.images.load(os.path.join(PREP, "hd", "bark_height.png"), check_existing=False)
+        im.colorspace_settings.name = "Non-Color"
+        w, h = im.size
+        px = np.empty(w * h * 4, dtype=np.float32)
+        im.pixels.foreach_get(px)
+        self.h = px[0::4].reshape(h, w)
+        bpy.data.images.remove(im)
+
+    def __call__(self, uv):
+        h, w = self.h.shape
+        x = np.mod(uv[:, 0], 1.0) * w - 0.5
+        y = np.mod(uv[:, 1], 1.0) * h - 0.5
+        x0 = np.floor(x).astype(np.int64); y0 = np.floor(y).astype(np.int64)
+        fx, fy = x - x0, y - y0
+        a = self.h[y0 % h, x0 % w]; b = self.h[y0 % h, (x0 + 1) % w]
+        c = self.h[(y0 + 1) % h, x0 % w]; d = self.h[(y0 + 1) % h, (x0 + 1) % w]
+        return (a * (1 - fx) + b * fx) * (1 - fy) + (c * (1 - fx) + d * fx) * fy
+
+
+def ring_frame(me, ring):
+    """Positions, per-vertex UVs and ring centres of a sweep (vertices are ring-major)."""
+    n = len(me.vertices)
+    co = np.empty(n * 3, dtype=np.float64); me.vertices.foreach_get("co", co); co = co.reshape(-1, 3)
+    luv = np.empty(len(me.loops) * 2, dtype=np.float64); me.uv_layers[0].data.foreach_get("uv", luv)
+    lv = np.empty(len(me.loops), dtype=np.int64); me.loops.foreach_get("vertex_index", lv)
+    uv = np.zeros((n, 2)); uv[lv] = luv.reshape(-1, 2)
+    along = np.empty(n); me.attributes["along"].data.foreach_get("value", along)
+    assert n % ring == 0 and np.ptp(along.reshape(-1, ring), axis=1).max() < 1e-5, "sweep is not ring-major"
+    rings = co.reshape(-1, ring, 3)
+    seam = np.abs(rings[:, 0] - rings[:, -1]).max() < 1e-6
+    centre = np.repeat((rings[:, :-1] if seam else rings).mean(axis=1), ring, axis=0)
+    return co, uv, centre
+
+
+def put_co(me, co):
+    me.vertices.foreach_set("co", co.astype(np.float32).ravel())
+    me.update()
+
+
+def lumps(co, scale, seed):
+    return np.array([noise.noise(Vector(p) * scale + Vector((seed, 0.0, 0.0))) for p in co])
+
+
+def gnarl_trunk(foot, height):
+    """Flutes that flare into the nebari and spiral up the trunk, burls, and bark-scan relief."""
+    lobes = [(math.radians(az), w) for az, _, w in ROOTS_HD]
+
+    def deform(me, ring):
+        co, uv, c = ring_frame(me, ring)
+        d = co - c
+        r = np.linalg.norm(d, axis=1)
+        n = d / np.maximum(r, 1e-9)[:, None]
+        h = np.maximum(0.0, co[:, 2] - foot.z)
+        phi = np.arctan2(n[:, 1], n[:, 0])
+        f = np.zeros(len(co))
+        for a, w in lobes:
+            dphi = np.angle(np.exp(1j * (phi - a - TRUNK_TWIST * h)))
+            f += w * np.exp(-0.5 * (dphi / 0.3) ** 2)
+        amp = 0.8 * np.exp(-h / 0.035) + 0.16 * np.exp(-h / 0.3)
+        s = 1.0 + amp * (f - 0.32)
+        s *= 1.0 + 0.11 * lumps(co, 11.0, 3.0) + 0.035 * lumps(co, 37.0, 9.0)
+        relief = (height(uv) - 0.5) * 0.0055 * np.clip(r / 0.035, 0.35, 1.0)
+        put_co(me, c + n * (r * s + relief)[:, None])
+    return deform
+
+
+def gnarl_limb(height, burl, relief_amp, flatten=0.0):
+    """Branches and roots: small burls and bark relief; roots flatten their underside onto the slab."""
+    def deform(me, ring):
+        co, uv, c = ring_frame(me, ring)
+        d = co - c
+        r = np.linalg.norm(d, axis=1)
+        n = d / np.maximum(r, 1e-9)[:, None]
+        s = 1.0 + burl * lumps(co, 45.0, 17.0)
+        if flatten:
+            s *= np.where(n[:, 2] < 0, 1.0 - flatten * -n[:, 2], 1.0)
+        relief = (height(uv) - 0.5) * relief_amp * np.clip(r / 0.02, 0.3, 1.0)
+        put_co(me, c + n * (r * s + relief)[:, None])
+    return deform
+
+
+def hd_roots(base, ground, rng):
+    roots = Skeleton()
+    for i, (az, reach, w) in enumerate(ROOTS_HD):
+        d = Vector((math.cos(math.radians(az)), math.sin(math.radians(az)), 0))
+        side = Vector((-d.y, d.x, 0))
+        bend = rng.uniform(-1.0, 1.0)
+        pts = []
+        for j, f in enumerate((0.0, 0.16, 0.34, 0.54, 0.76, 1.0)):
+            q = base + d * reach * f + side * (0.018 * bend * f * f + 0.004 * math.sin(9.0 * f + i))
+            z = ground(q.x, q.y)
+            r = (0.034 * w) * (1 - f) ** 1.25 + 0.0032
+            zz = base.z + 0.045 if j == 0 else z + 0.15 * r - 0.001 - 0.005 * f
+            pts.append((Vector((q.x, q.y, zz)), r))
+        roots.add(pts, wrap=2 if w > 0.8 else 1)
+    return roots
 
 
 def build_tree(hd, M, ct, slab_ob, ground):
     rng = random.Random(TREE_SEED)
+    hd_rng = random.Random(HD_SEED)
     hit = ground(TRUNK_XY[0], TRUNK_XY[1])
     base = Vector((TRUNK_XY[0], TRUNK_XY[1], hit))
     thick, thin, fine = Skeleton(), Skeleton(), Skeleton()
-    thick.add([(base + Vector(p[:3]), p[3]) for p in TRUNK])
+    if hd:
+        top = TRUNK[-1][2]
+        thick.add([(base + Vector(p[:3]), p[3] * (1.0 - 0.15 * max(0.0, p[2]) / top)) for p in TRUNK],
+                  tile=BARK_TILE_HD)
+    else:
+        thick.add([(base + Vector(p[:3]), p[3]) for p in TRUNK])
     pads = []
     # nebari: surface roots hugging the slab
-    for az, reach in ROOTS:
+    for az, reach in ([] if hd else ROOTS):
         d = Vector((math.cos(math.radians(az)), math.sin(math.radians(az)), 0))
         pts = []
         for i, f in enumerate((0.0, 0.3, 0.62, 1.0)):
@@ -633,7 +943,7 @@ def build_tree(hd, M, ct, slab_ob, ground):
                (p0 + d * reach + Vector((0, 0, 0.0)), 0.006)]
         thin.add(pts, wrap=1 if r0 * 0.62 < 0.012 else 2)
         tip = pts[-1][0]
-        add_pad(pads, tip + Vector((0, 0, radii[2] * 0.45)), radii, tip, fine, rng, hd)
+        add_pad(pads, tip + Vector((0, 0, radii[2] * 0.45)), radii, tip, fine, rng, hd, hd_rng)
         if sec:
             daz, at, reach2, r2 = sec
             sp_, sr = pts[1] if at < 0.45 else pts[2]
@@ -641,18 +951,26 @@ def build_tree(hd, M, ct, slab_ob, ground):
             d2 = Vector((math.cos(a2), math.sin(a2), 0))
             tip2 = sp_ + d2 * reach2 + Vector((0, 0, 0.012))
             thin.add([(sp_, sr * 0.8), (sp_.lerp(tip2, 0.5) + Vector((0, 0, -0.004)), sr * 0.55), (tip2, 0.0035)], wrap=1)
-            add_pad(pads, tip2 + Vector((0, 0, r2[2] * 0.45)), r2, tip2, fine, rng, hd)
+            add_pad(pads, tip2 + Vector((0, 0, r2[2] * 0.45)), r2, tip2, fine, rng, hd, hd_rng)
     apex, _ = trunk_at(1.0)
     apex = base + apex
-    add_pad(pads, apex + Vector((0, 0, APEX_PAD[2] * 0.35)), APEX_PAD, apex, fine, rng, hd)
+    add_pad(pads, apex + Vector((0, 0, APEX_PAD[2] * 0.35)), APEX_PAD, apex, fine, rng, hd, hd_rng)
     assert len(pads) <= MAX_PADS, len(pads)
-    bm = sweep(thick, "trunk-thick", 16 if hd else 10, 6 if hd else 4)
-    for sk, nm, ring, res in ((thin, "branches", 10 if hd else 7, 5 if hd else 3), (fine, "twigs", 4, 3 if hd else 2)):
-        part = sweep(sk, nm, ring, res)
+    if hd:
+        height = Height()
+        bm = sweep(thick, "trunk-thick", 40, 12, BARK_TILE_HD, gnarl_trunk(base, height))
+        parts = ((hd_roots(base, ground, hd_rng), "roots", 14, 6, gnarl_limb(height, 0.10, 0.003, flatten=0.45)),
+                 (thin, "branches", 12, 6, gnarl_limb(height, 0.07, 0.0022)), (fine, "twigs", 5, 3, None))
+    else:
+        bm = sweep(thick, "trunk-thick", 10, 4)
+        parts = ((thin, "branches", 7, 3, None), (fine, "twigs", 4, 2, None))
+    for sk, nm, ring, res, deform in parts:
+        part = sweep(sk, nm, ring, res, BARK_TILE_HD if hd else BARK_TILE, deform)
         me = bpy.data.meshes.new("tmp"); part.to_mesh(me); part.free()
         bm.from_mesh(me); bpy.data.meshes.remove(me)
     trunk = new_obj("trunk", bm, M["bark"], ct, smooth=90, recalc=False)
-    foliage = new_obj("foliage", build_foliage(pads, hd), M["leaf"], ct, smooth=90, recalc=False)
+    leaves = build_foliage_hd(pads) if hd else build_foliage(pads, hd)
+    foliage = new_obj("foliage", leaves, M["leaf"], ct, smooth=90, recalc=False)
     foliage_data(foliage, pads)
     return trunk, foliage, pads, base
 
@@ -729,6 +1047,91 @@ def build_foliage(pads, hd):
     return bm
 
 
+def atlas_card(g, rect, size, grid, bend=(0.0, 0.0)):
+    """One card cut to an HD atlas rect (shipped px), stem at the origin, blade along +Y, normal +Z;
+    `bend` = (cup across, droop along) in card units."""
+    a = hd_atlas()
+    W, H = a["size"]
+    x0, y0, x1, y1 = rect
+    aspect = (x1 - x0) / (y1 - y0)
+    gr = g.n("GeometryNodeMeshGrid", {"Size X": aspect, "Size Y": 1.0, "Vertices X": grid[0], "Vertices Y": grid[1]})
+    uvf = g.sep(gr.outputs["UV Map"])
+    u = g.mad(uvf[0], (x1 - x0) / W, x0 / W)
+    v = g.mad(uvf[1], -(y1 - y0) / H, 1 - y0 / H)
+    geo = g.store(gr.outputs["Mesh"], "uvw", g.xyz(u, v, 0.0), "FLOAT_VECTOR", "CORNER")
+    geo = g.xform(geo, t=(0, 0.5, 0))
+    if bend != (0.0, 0.0):
+        p = g.sep(g.pos())
+        cup = g.math("MULTIPLY", g.math("MULTIPLY", p[0], p[0]), -bend[0])
+        droop = g.math("MULTIPLY", g.math("MULTIPLY", p[1], p[1]), -bend[1])
+        geo = g.n("GeometryNodeSetPosition", {"Geometry": geo, "Offset": g.xyz(0, 0, g.math("ADD", cup, droop))}).outputs["Geometry"]
+    return g.xform(geo, s=(size, size, size))
+
+
+# HD pad shells: (dome scale, low cut, sprig spacing or None, leaf spacing) in metres
+HD_SHELLS = ((0.9, -0.5, 0.0125, 0.0092), (0.8, -0.4, 0.0155, 0.0108), (0.56, -0.15, None, 0.0135))
+
+
+def build_foliage_hd(pads):
+    """GN per pad: clumped Poisson points on three noise-swollen shells; the outer two carry scanned
+    leaf sprays (the pad's silhouette), every shell carries single scanned leaves. Each card keeps a
+    density rank and a shade for COLOR_0."""
+    a = hd_atlas()
+    bm = bmesh.new()
+    for k, pad in enumerate(pads):
+        rx, ry, rz = pad["radii"]
+        rz *= 1.15
+        g = GN(f"pad-hd-{k}")
+        sprigs = g.n("GeometryNodeGeometryToInstance", {"Geometry": [atlas_card(g, r, 1.0, (3, 3), (0.5, 0.18))
+                                                                     for r in a["sprigs"]]}).outputs["Instances"]
+        leaves = g.n("GeometryNodeGeometryToInstance", {"Geometry": [atlas_card(g, r, 1.0, (2, 2))
+                                                                     for r in a["leaves"]]}).outputs["Instances"]
+        layers = []
+        for li, (scale, cut, d_sprig, d_leaf) in enumerate(HD_SHELLS):
+            ico = g.n("GeometryNodeMeshIcoSphere", {"Radius": 1.0, "Subdivisions": 3})
+            lump = g.n("ShaderNodeTexNoise", {"Vector": g.pos(), "Scale": 1.6, "Detail": 1.0, "W": float(k)},
+                       noise_dimensions="4D")
+            cloud = g.vmath("SCALE", g.pos(), scale=g.mad(lump.outputs["Fac"], 0.6, 0.7))
+            sh = g.n("GeometryNodeSetPosition", {"Geometry": ico.outputs["Mesh"], "Position": cloud}).outputs["Geometry"]
+            dome = g.xform(sh, s=(rx * scale, ry * scale, rz * scale))
+            low = g.math("LESS_THAN", g.sep(g.pos())[2], cut * rz * scale)
+            dome = g.n("GeometryNodeDeleteGeometry", {"Geometry": dome, "Selection": low}, domain="FACE").outputs["Geometry"]
+            # tufts: density falls away between noise clumps, so pads read as clustered sprays
+            tuft = g.n("ShaderNodeTexNoise", {"Vector": g.pos(), "Scale": 22.0 / max(rx, ry) * 0.06, "Detail": 2.0,
+                                              "W": float(k) + 0.5 * li}, noise_dimensions="4D")
+            dens = g.math("POWER", g.n("ShaderNodeMapRange", {"Value": tuft.outputs["Fac"], "From Min": 0.36,
+                                                               "From Max": 0.62}).outputs["Result"], 0.7)
+            for kind, (inst, d, sz, n_tiles, tilt) in enumerate(((sprigs, d_sprig, (0.04, 0.056), 4, (0.1, 0.5)),
+                                                                 (leaves, d_leaf, (0.017, 0.026), 7, (-0.15, 0.55)))):
+                if d is None:
+                    continue
+                seed = 31 * k + 7 * li + kind
+                dist = g.n("GeometryNodeDistributePointsOnFaces", {"Mesh": dome, "Distance Min": d,
+                                                                    "Density Max": 4.0 / (d * d), "Density Factor": dens,
+                                                                    "Seed": seed}, distribute_method="POISSON")
+                up = g.vmath("NORMALIZE", g.vmath("ADD", dist.outputs["Normal"], (0.0, 0.0, 0.8)))
+                r1 = g.n("FunctionNodeAlignRotationToVector", {"Vector": up}, axis="Z").outputs[0]
+                r2 = g.n("FunctionNodeAlignRotationToVector", {"Rotation": r1, "Vector": g.pos()}, axis="Y", pivot_axis="Z").outputs[0]
+                tw = g.n("FunctionNodeAxisAngleToRotation", {"Axis": (0.0, 0.0, 1.0), "Angle": g.rand(-0.9, 0.9, 101 + seed)}).outputs[0]
+                tl = g.n("FunctionNodeAxisAngleToRotation", {"Axis": (1.0, 0.0, 0.0), "Angle": g.rand(tilt[0], tilt[1], 202 + seed)}).outputs[0]
+                rot = g.n("FunctionNodeRotateRotation", {"Rotation": r2, "Rotate By": tw}, rotation_space="LOCAL").outputs[0]
+                rot = g.n("FunctionNodeRotateRotation", {"Rotation": rot, "Rotate By": tl}, rotation_space="LOCAL").outputs[0]
+                iop = g.n("GeometryNodeInstanceOnPoints", {"Points": dist.outputs["Points"], "Instance": inst,
+                                                          "Pick Instance": True,
+                                                          "Instance Index": g.rand(0, n_tiles - 1, 404 + seed, "INT"),
+                                                          "Rotation": rot, "Scale": g.rand(sz[0], sz[1], 303 + seed)}).outputs["Instances"]
+                iop = g.store(iop, "rank", g.rand(0.0, 1.0, 505 + seed), "FLOAT", "INSTANCE")
+                iop = g.store(iop, "shade", g.rand(0.78, 1.0, 606 + seed), "FLOAT", "INSTANCE")
+                layers.append(iop)
+        real = g.n("GeometryNodeRealizeInstances", {"Geometry": g.join(*layers)}).outputs["Geometry"]
+        real = g.xform(real, t=tuple(pad["centre"]))
+        me = g.mesh(real)
+        bm.from_mesh(me)
+        pad["verts"] = len(bm.verts)
+        bpy.data.meshes.remove(me)
+    return bm
+
+
 def foliage_data(ob, pads):
     """COLOR_0 = (AO, pad code, rank) and bent normals (the pad dome's), per vertex."""
     me = ob.data
@@ -736,6 +1139,11 @@ def foliage_data(ob, pads):
     rk = [0.0] * len(me.vertices)
     if rank is not None:
         rank.data.foreach_get("value", rk)
+    shade = me.attributes.get("shade")
+    sh = [1.0] * len(me.vertices)
+    if shade is not None:
+        shade.data.foreach_get("value", sh)
+        me.attributes.remove(shade)
     rgb, normals = [], []
     start = 0
     for k, pad in enumerate(pads):
@@ -746,7 +1154,7 @@ def foliage_data(ob, pads):
             q = Vector(((p.x - c.x) / rx, (p.y - c.y) / ry, (p.z - c.z) / rz))
             depth = min(1.0, q.length)
             ao = max(0.32, min(1.0, 0.42 + 0.38 * depth + 0.28 * max(-0.4, min(1.0, q.z))))
-            rgb.append((ao, (k + 0.5) / MAX_PADS, rk[i]))
+            rgb.append((ao * sh[i], (k + 0.5) / MAX_PADS, rk[i]))
             dome = Vector((q.x / rx, q.y / ry, q.z / rz + 1.2 / rz)).normalized()
             card = me.vertices[i].normal
             if card.dot(dome) < 0:
@@ -762,6 +1170,21 @@ def foliage_data(ob, pads):
 
 def templates(hd, M, ct):
     park = (0.0, 0.0, -3.0)
+    if hd:
+        # a double blossom: the scanned-petal flower cupped, and a smaller copy turned half a petal
+        a = hd_atlas()
+        g = GN("blossom-hd")
+        outer = g.xform(atlas_card(g, a["blossom"], 0.032, (4, 4), (0.0, 0.0)), t=(0, -0.016, 0))
+        inner = g.xform(g.xform(atlas_card(g, a["blossom"], 0.022, (3, 3)), t=(0, -0.011, 0)), t=(0, 0, 0.0018), r=(0, 0, math.pi / 5))
+        flower = g.join(outer, inner)
+        p = g.sep(g.pos())
+        bowl = g.math("MULTIPLY", g.mad(p[0], p[0], g.math("MULTIPLY", p[1], p[1])), 9.0)
+        flower = g.n("GeometryNodeSetPosition", {"Geometry": flower, "Offset": g.xyz(0, 0, bowl)}).outputs["Geometry"]
+        new_obj("blossom-card", g.bmesh(flower, merge=0), M["blossom"], ct, loc=park, smooth=None, recalc=False)
+        g = GN("fall-hd")
+        leaf = atlas_card(g, a["fall"], 0.026, (2, 3), (0.35, 0.2))
+        new_obj("falling-leaf", g.bmesh(leaf, merge=0), M["fall"], ct, loc=(0.1, 0.0, -3.0), smooth=None, recalc=False)
+        return
     bm = bmesh.new(); quad(bm, 0.03, BLOSSOM_TILE)
     new_obj("blossom-card", bm, M["blossom"], ct, loc=park, smooth=None, recalc=False)
     bm = bmesh.new(); quad(bm, 0.026, FALL_TILE)
@@ -1053,7 +1476,8 @@ def main():
         meta["sets"][s] = export(s, info["pads"])
         if RENDER:
             render(s)
-        if s == "standard" or len(SETS) == 1:
+        if s == "standard":
+            # pads and the leaf-landing grid come from the Standard build; the HD tree shares its skeleton
             write_data(info)
         if s != SETS[-1]:
             clear_set(s)

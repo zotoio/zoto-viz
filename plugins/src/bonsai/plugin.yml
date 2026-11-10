@@ -30,14 +30,14 @@ assets:
     triangles: 10748
   - id: bonsai-base-hd
     path: assets/bonsai-base-hd.glb
-    sha256: e2891caa65582da2176dba0e748054dd0a7d64afdf610eb7974e006ec08d3d86
-    bytes: 366632
-    triangles: 22423
+    sha256: fb56893cc716d19828395c96452d4430fe1c4e11a33745fe21950ebc3dba34f1
+    bytes: 492724
+    triangles: 34631
   - id: bonsai-tree-hd
     path: assets/bonsai-tree-hd.glb
-    sha256: dba5b6c41a324980961999af1b4b9aeeb04ed7afac2c938cc6d3a3084350fbe7
-    bytes: 774444
-    triangles: 27816
+    sha256: 504e1123ca5df700de0b75cde310ad4e1f0a197bfb525ab9851be1c92449d9eb
+    bytes: 617364
+    triangles: 36906
   - id: env-hd
     path: assets/env-hd.jpg
     role: environment
