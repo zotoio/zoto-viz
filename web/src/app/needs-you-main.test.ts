@@ -365,9 +365,9 @@ describe("Pedant: no pack code runs before the OK", { timeout: 120_000 }, () => 
     vi.unstubAllGlobals();
   });
 
-  it("each of the 31 consent packs, auto-consent off: Needs you on the tile, no modal, 0 network listeners per pick", async () => {
+  it("each of the 30 consent packs, auto-consent off: Needs you on the tile, no modal, 0 network listeners per pick", async () => {
     const packs = shippedConsentPacks();
-    expect(packs).toHaveLength(31);
+    expect(packs).toHaveLength(30);
     const h = await mainHost();
     h.configureApplyModeForTests({ liveMode: "topology", lastConsentedMode: "topology", pluginSpecs: packs });
     setLastConsentedModeId("topology");

@@ -75,14 +75,14 @@ describe("picker: hidden — the 7 fixture packs", () => {
     expect(inPane, "mosaic pane pickers list none either").toEqual([]);
   });
 
-  it("(b) pick-every-view: 71 view packs before, 64 after (picker rows drop by the 7 as well)", () => {
+  it("(b) pick-every-view: 70 view packs before, 63 after (picker rows drop by the 7 as well)", () => {
     applyPluginCatalog(shippedCatalog(true));
     const beforeRows = viewSelectOptions().length;
     const beforePacks = new Set(viewSelectOptions().map((o) => packOf(o.value))).size;
     applyPluginCatalog(shippedCatalog());
     const afterRows = viewSelectOptions().length;
     const afterPacks = new Set(viewSelectOptions().map((o) => packOf(o.value))).size;
-    expect({ beforePacks, afterPacks, dropped: beforeRows - afterRows }).toEqual({ beforePacks: 71, afterPacks: 64, dropped: 7 });
+    expect({ beforePacks, afterPacks, dropped: beforeRows - afterRows }).toEqual({ beforePacks: 70, afterPacks: 63, dropped: 7 });
     expect(allModes().filter((m) => HIDDEN.includes(m.pluginId ?? "")).length, "still in the catalog").toBe(7);
   });
 
