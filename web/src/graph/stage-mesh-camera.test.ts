@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aquariumStagePose, koiStagePose, orreryStagePose, rocketCarStagePose, stageMeshPackId, stageMeshPose } from "./stage-mesh-camera";
+import { aquariumStagePose, auroraFjordStagePose, koiStagePose, orreryStagePose, rocketCarStagePose, stageMeshPackId, stageMeshPose } from "./stage-mesh-camera";
 
 function slots(values: Record<string, number>) {
   return (slot: number, index: number) => values[`${slot}:${index}`] ?? 0;
@@ -86,5 +86,25 @@ describe("stage mesh camera", () => {
     const rest = orreryStagePose(slots({}), 2);
     expect(rest.target).toEqual([0, 0.2, 0]);
     expect(rest.fov).toBe(30);
+  });
+  it("aurora-fjord: follows the pack camera (slot0 1..7) and widens on narrow panes", () => {
+    const cam = slots({ "0:0": 1, "0:1": 6, "0:2": 15, "0:3": 40, "0:4": -4, "0:5": 90, "0:6": -800, "0:7": 34 });
+    const pose = stageMeshPose("aurora-fjord", cam, 32 / 9);
+    expect(pose?.position).toEqual([6, 15, 40]);
+    expect(pose?.target).toEqual([-4, 90, -800]);
+    expect(pose?.fov).toBeCloseTo(34, 3);
+    expect(pose?.near).toBe(0.5);
+    const square = auroraFjordStagePose(cam, 1);
+    const half = Math.atan(Math.tan(((square.fov ?? 0) * Math.PI) / 360) * 1);
+    expect(square.fov!).toBeGreaterThan(34);
+    expect((half * 180) / Math.PI).toBeGreaterThanOrEqual(28 - 1e-6);
+    expect(auroraFjordStagePose(cam, 0.2).fov).toBeLessThanOrEqual(75);
+  });
+
+  it("aurora-fjord: rest pose down the fjord before the pack's first frame", () => {
+    const rest = auroraFjordStagePose(slots({}), 32 / 9);
+    expect(rest.position).toEqual([8, 14, 40]);
+    expect(rest.target[2]).toBeLessThan(-500);
+    expect(rest.fov).toBe(34);
   });
 });
