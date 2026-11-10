@@ -59,7 +59,7 @@ config:
       - [standard, Standard]
       - [hd, HD]
     default: standard
-    hint: Standard meshes and 128-256 px colour maps, or the HD Blender set (assets ending -hd) with normal and roughness maps, perlage brass, clear-coated stones and study reflections.
+    hint: Standard meshes and 128-256 px colour maps, or the HD Blender set (assets ending -hd) with leather and perlage normal maps, crossed-out wheels, clear-coated stones and the study's light reflected in the brass.
   - key: preset
     label: preset
     type: select
