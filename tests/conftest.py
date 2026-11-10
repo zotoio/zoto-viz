@@ -1,12 +1,34 @@
-"""Isolate the user-local plugin drop zone so scan() never reads ~/.zoto-viz."""
+"""Isolate HOME and the user-local plugin drop zone so the suite never reads or writes ~/.zoto-viz.
+
+HOME (and the XDG base dirs) must point at a scratch dir *before* any ``service`` import:
+``service.paths._HOME`` and module-level files such as ``plugins.CONSENT_FILE`` are bound at import.
+"""
 from __future__ import annotations
 
+import atexit
+import os
+import shutil
+import tempfile
 from pathlib import Path
 
-import pytest
+TEST_HOME = Path(tempfile.mkdtemp(prefix="zoto-viz-test-home-")).resolve()
+atexit.register(shutil.rmtree, TEST_HOME, ignore_errors=True)
+os.environ["ZOTO_VIZ_TEST_HOME"] = str(TEST_HOME)
+os.environ["HOME"] = str(TEST_HOME)
+if os.name == "nt":
+    os.environ["USERPROFILE"] = str(TEST_HOME)
+for _var, _rel in (
+    ("XDG_CONFIG_HOME", ".config"),
+    ("XDG_DATA_HOME", ".local/share"),
+    ("XDG_CACHE_HOME", ".cache"),
+    ("XDG_STATE_HOME", ".local/state"),
+):
+    os.environ[_var] = str(TEST_HOME / _rel)
 
-from service import paths
-from service import plugin_local
+import pytest  # noqa: E402
+
+from service import paths  # noqa: E402
+from service import plugin_local  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
