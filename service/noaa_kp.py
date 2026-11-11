@@ -216,6 +216,18 @@ def _payload(doc: dict[str, Any], *, stale: bool = False, error: str = "") -> di
     return out
 
 
+async def _read_body(content: Any) -> bytes:
+    """The whole body, at most ``MAX_BODY`` bytes. One ``read(n)`` can stop at a network chunk."""
+    body = bytearray()
+    while True:
+        chunk = await content.read(MAX_BODY + 1 - len(body))
+        if not chunk:
+            return bytes(body)
+        body += chunk
+        if len(body) > MAX_BODY:
+            raise ValueError("response too large")
+
+
 async def _get(sess: ClientSession, prev: dict[str, Any] | None) -> tuple[int, bytes, dict[str, str]]:
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
     if prev and prev.get("etag"):
@@ -229,9 +241,7 @@ async def _get(sess: ClientSession, prev: dict[str, Any] | None) -> tuple[int, b
             raise ValueError(f"http {r.status}")
         if r.status != 200:
             raise ValueError(f"kp: unexpected http {r.status}")
-        body = await r.content.read(MAX_BODY + 1)
-        if len(body) > MAX_BODY:
-            raise ValueError("response too large")
+        body = await _read_body(r.content)
         return 200, body, {
             "etag": r.headers.get("ETag") or "",
             "lastModified": r.headers.get("Last-Modified") or "",

@@ -1253,8 +1253,10 @@ async def poll(now: float | None = None) -> dict[str, dict[str, Any]]:
         for row in due:
             wait = int(row.get("interval") or DEFAULT_INTERVAL)
             live = _live.get(row["id"]) or {}
-            if not live.get("ok"):
-                wait = min(wait, noaa_kp.RETRY_S if noaa_kp.matches(str(row.get("url") or "")) else 30)
+            noaa = noaa_kp.matches(str(row.get("url") or ""))
+            # A NOAA failure with a cached reading stays ok (views keep the last Kp) but is still a failure.
+            if not live.get("ok") or (noaa and live.get("stale")):
+                wait = min(wait, noaa_kp.RETRY_S if noaa else 30)
             _due[row["id"]] = t + wait
     return snapshot()
 
