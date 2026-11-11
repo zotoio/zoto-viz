@@ -537,6 +537,11 @@ export class HostMeshLane {
     return this.env.load(this.assetUrl(packId, decl.path, decl.sha256));
   }
 
+  /** Rebuild GPU-generated state (the HD environment PMREM) after a WebGL context restore. */
+  contextRestored(): void {
+    this.env.contextRestored();
+  }
+
   clear(): void {
     this.loadEpoch += 1;
     this.pendingByAsset.clear();
