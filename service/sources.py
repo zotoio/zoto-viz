@@ -25,6 +25,7 @@ from aiohttp import ClientError, ClientSession, ClientTimeout, web
 from yarl import URL
 
 from . import agent_assets
+from . import http_headers
 from . import nasa_api
 from . import noaa_kp
 from . import paths
@@ -983,7 +984,11 @@ async def _http_body(url: str) -> tuple[str, str]:
         if key in seen:
             raise ValueError("too many redirects")
         seen.add(key)
-        async with sess.get(URL(current, encoded=True), allow_redirects=False) as r:
+        async with sess.get(
+            URL(current, encoded=True),
+            allow_redirects=False,
+            headers=http_headers.outbound_headers(current, accept=http_headers.FEED_ACCEPT),
+        ) as r:
             ctype = (r.headers.get("Content-Type") or "").split(";")[0].strip().lower()
             loc = (r.headers.get("Location") or "").strip()
             if r.status in (301, 302, 303, 307, 308) and loc:
@@ -1012,7 +1017,7 @@ async def session() -> ClientSession:
     if _session is None or _session.closed:
         _session = ClientSession(
             timeout=ClientTimeout(total=FETCH_S),
-            headers={"User-Agent": "zoto-viz/1.0", "Accept": "application/rss+xml, application/atom+xml, application/json, text/xml, */*"},
+            headers=http_headers.feed_session_headers(),
         )
     return _session
 

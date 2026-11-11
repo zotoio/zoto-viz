@@ -21,6 +21,7 @@ from urllib.parse import urljoin, urlparse
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
 
 from . import agent
+from . import http_headers
 from . import paths
 
 MAX_BYTES = 24_000_000
@@ -28,7 +29,7 @@ MAX_SVG = 80_000
 MAX_REDIRECTS = 5
 FETCH_S = 30
 FETCH_TRIES = 3
-USER_AGENT = "zoto-viz/1.0 (source stills; +https://zoto.local)"
+USER_AGENT = http_headers.USER_AGENT
 GENERIC_MIME = {
     "",
     "application/octet-stream",
@@ -210,14 +211,7 @@ _inflight: dict[str, asyncio.Task[dict[str, Any]]] = {}
 
 
 def _fetch_headers(url: str) -> dict[str, str]:
-    host = urlparse(url).hostname or ""
-    headers = {
-        "User-Agent": USER_AGENT,
-        "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
-    }
-    if host:
-        headers["Referer"] = f"https://{host}/"
-    return headers
+    return http_headers.outbound_headers(url, accept=http_headers.IMAGE_ACCEPT)
 
 
 def image_http_status(exc: BaseException) -> int:
