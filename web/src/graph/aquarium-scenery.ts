@@ -408,7 +408,15 @@ export function buildAquariumScenery(): AquariumScenery {
   const schedCol = new THREE.Color(0xd9a35a);
 
   const disposeSpecies = (): void => {
-    for (const s of species.values()) for (const m of s.meshes) { m.removeFromParent(); m.dispose(); }
+    // Each species mesh owns a cloned geometry and material (InstancedMesh.dispose frees neither).
+    for (const s of species.values()) {
+      for (const m of s.meshes) {
+        m.removeFromParent();
+        m.dispose();
+        m.geometry.dispose();
+        for (const mat of ([] as THREE.Material[]).concat(m.material)) mat.dispose();
+      }
+    }
     species.clear();
   };
 

@@ -298,6 +298,13 @@ export function buildAquariumHdLights(): THREE.Group {
   return g;
 }
 
+/** A skinned clone owns its Skeleton (and the renderer's bone texture for it); the template's geometry and materials stay shared. */
+export function disposeCloneSkeletons(root: THREE.Object3D): void {
+  root.traverse((o) => {
+    if ((o as THREE.SkinnedMesh).isSkinnedMesh) (o as THREE.SkinnedMesh).skeleton?.dispose();
+  });
+}
+
 function stopSkinnedMixer(row: LiveSkinned): void {
   row.mixer.stopAllAction();
   row.mixer.uncacheRoot(row.root);
@@ -662,10 +669,23 @@ export class HostMeshLane {
     assetId: string,
     instances: { matrix: Float32Array; extras: HostMeshInstanceExtras }[],
   ): void {
-    this.clearAssetLive(assetId);
-    const list: LiveRigid[] = [];
     const cap = Math.min(this.maxInstancesPerAsset, instances.length);
     const tmp = new THREE.Matrix4();
+    // A sandbox writes these slots every frame: move the live copies rather than re-clone them.
+    const prev = this.rigidLive.get(assetId);
+    if (prev && prev.length === cap) {
+      for (let i = 0; i < cap; i++) {
+        const inst = instances[i]!;
+        const root = prev[i]!.root;
+        root.matrix.copy(tmp.fromArray(inst.matrix));
+        tagAquariumDecor(root, inst.matrix, inst.extras);
+        applyRigidArticulation(root, inst.extras);
+        root.updateMatrixWorld(true);
+      }
+      return;
+    }
+    this.clearAssetLive(assetId);
+    const list: LiveRigid[] = [];
     for (let i = 0; i < cap; i++) {
       const inst = instances[i]!;
       const root = tpl.template.clone(true);
@@ -687,11 +707,30 @@ export class HostMeshLane {
     assetId: string,
     instances: { matrix: Float32Array; extras: HostMeshInstanceExtras }[],
   ): void {
-    this.clearAssetLive(assetId);
-    if (!tpl.swimClip) return;
-    const list: LiveSkinned[] = [];
+    if (!tpl.swimClip) {
+      this.clearAssetLive(assetId);
+      return;
+    }
     const cap = Math.min(this.maxInstancesPerAsset, instances.length);
     const tmp = new THREE.Matrix4();
+    // Every-frame packets (koi, aquarium) move the live fish. Re-cloning each packet built a new
+    // Skeleton, and so a new bone texture, per fish per frame (thousands of GPU textures a minute).
+    const prev = this.skinnedLive.get(assetId);
+    if (prev && prev.length === cap) {
+      for (let i = 0; i < cap; i++) {
+        const inst = instances[i]!;
+        const row = prev[i]!;
+        row.root.matrix.copy(tmp.fromArray(inst.matrix));
+        tagAquariumDecor(row.root, inst.matrix, inst.extras);
+        row.root.updateMatrixWorld(true);
+        if (row.hd) {
+          row.hd.turnRate = (inst.extras.flags & 1) === 0 ? inst.extras.param1 : 0;
+        }
+      }
+      return;
+    }
+    this.clearAssetLive(assetId);
+    const list: LiveSkinned[] = [];
     for (let i = 0; i < cap; i++) {
       const inst = instances[i]!;
       const root = cloneSkinnedRoot(tpl.template) as THREE.Object3D;
@@ -729,6 +768,7 @@ export class HostMeshLane {
       for (const s of skin) {
         stopSkinnedMixer(s);
         s.root.removeFromParent();
+        disposeCloneSkeletons(s.root);
       }
       this.skinnedLive.delete(assetId);
     }
