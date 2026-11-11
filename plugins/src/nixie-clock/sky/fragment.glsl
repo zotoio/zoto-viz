@@ -38,31 +38,56 @@ float glyph(int n, vec2 uv) {
   return mix(mix(s00, s10, w.x), mix(s01, s11, w.x), w.y);
 }
 
+const float NIXIE_TUBE_W = 0.11;
+const float NIXIE_TUBE_H = 0.34;
+const float NIXIE_GLYPH_FONT_ASPECT = 5.0 / 7.0;
+
+float nixieGlyphAspectFix(vec2 res) {
+  float boxW = 0.64 * NIXIE_TUBE_W * res.x;
+  float boxH = 0.70 * NIXIE_TUBE_H * res.y;
+  return (boxW / max(boxH, 1.0)) / NIXIE_GLYPH_FONT_ASPECT;
+}
+
+vec2 nixieGlyphUv(vec2 local, vec2 res) {
+  vec2 duv = (local - vec2(0.18, 0.16)) / vec2(0.64, 0.70);
+  float fix = nixieGlyphAspectFix(res);
+  duv.x = (duv.x - 0.5) / fix + 0.5;
+  return duv;
+}
+
 void main() {
   float packed = slot0(11.0);
-  float showSec = packed > 64.0 ? slot0(7.0) : 1.0;
-  float glow = packed > 64.0 ? max(0.35, slot0(8.0)) : 1.0;
-  float flicker = packed > 64.0 ? clamp(slot0(9.0), 0.0, 1.0) : 0.2;
+  bool hostPack = packed > 64.0;
+  float showSec = hostPack ? slot0(7.0) : 1.0;
+  float glow = hostPack ? max(0.35, slot0(8.0)) : 1.0;
+  float flicker = hostPack ? clamp(slot0(9.0), 0.0, 1.0) : 0.2;
   float aud = max(uAudio, slot0(10.0));
   float pulse = slot0(14.0);
-  float blink = packed > 64.0 ? slot0(6.0) : step(0.5, fract(uTime * 2.0));
-  vec2 res = vec2(max(slot0(11.0), 8.0), max(slot0(12.0), 8.0));
+  float blink = hostPack ? slot0(6.0) : step(0.5, fract(uTime * 2.0));
+  vec2 res;
+  if (uResolution.x > 8.0 && uResolution.y > 8.0) {
+    res = uResolution;
+  } else if (hostPack) {
+    res = vec2(max(slot0(11.0), 8.0), max(slot0(12.0), 8.0));
+  } else {
+    res = vec2(1280.0, 800.0);
+  }
   vec3 dir = normalize(vDir);
   vec2 uv;
-  if (packed > 64.0) {
+  if (hostPack) {
     uv = gl_FragCoord.xy / res;
   } else {
     uv = vec2(dir.x * 0.95 + 0.5, dir.y * 0.85 + 0.46);
   }
 
   float cells = showSec > 0.5 ? 6.0 : 4.0;
-  float tubeW = 0.11;
+  float tubeW = NIXIE_TUBE_W;
   float gap = 0.016;
   float pairGap = 0.04;
   float span = cells * tubeW + (cells - 1.0) * gap + 2.0 * pairGap;
   float x0 = 0.5 - span * 0.5;
   float y0 = 0.34;
-  float tubeH = 0.34;
+  float tubeH = NIXIE_TUBE_H;
 
   vec3 wood = vec3(0.05, 0.025, 0.015);
   float grain = 0.62 + 0.38 * sin(uv.x * 28.0 + sin(uv.y * 12.0) * 1.6);
@@ -87,8 +112,8 @@ void main() {
     if (glass < 0.01) continue;
 
     float digit = slot0(float(i));
-    float hour12 = packed > 64.0 ? step(0.5, slot0(13.0)) : 0.0;
-    if (packed < 64.0) {
+    float hour12 = hostPack ? step(0.5, slot0(13.0)) : 0.0;
+    if (!hostPack) {
       float sec = floor(mod(uTime, 86400.0));
       float hh = floor(sec / 3600.0);
       float mm = floor(mod(sec, 3600.0) / 60.0);
@@ -105,7 +130,7 @@ void main() {
     float live = 0.0;
     if (digit >= 0.0) {
       for (int d = 0; d < 10; d++) {
-        vec2 duv = (local - vec2(0.18, 0.16)) / vec2(0.64, 0.70);
+        vec2 duv = nixieGlyphUv(local, res);
         duv += vec2(float(d % 3) - 1.0, float(d / 3) - 1.5) * 0.012;
         float g = glyph(d, duv);
         ghosts += g * 0.07;
