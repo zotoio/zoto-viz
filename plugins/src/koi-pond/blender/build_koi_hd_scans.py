@@ -34,6 +34,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -424,11 +425,12 @@ def lily_pad(B: Builder, cx: float, cz: float, R: float, notch: float, seed: flo
     for j in range(1, NV + 1):
         rho = (j / NV) ** 0.85
         rings.append([B.v(*pt(rho, i / NU), tint) for i in range(NU + 1)])
+    # i runs clockwise seen from above (+Y), so wind against it for an up-facing top
     for i in range(NU):
-        B.f(c, rings[0][i], rings[0][i + 1])
+        B.f(c, rings[0][i + 1], rings[0][i])
     for j in range(NV - 1):
         for i in range(NU):
-            B.f(rings[j][i], rings[j + 1][i], rings[j + 1][i + 1], rings[j][i + 1])
+            B.f(rings[j][i], rings[j][i + 1], rings[j + 1][i + 1], rings[j + 1][i])
     # rim thickness: a short skirt under the curled edge
     skirt = []
     for i in range(NU + 1):
@@ -625,6 +627,20 @@ def content_meshes() -> list:
     return [o for o in bpy.data.objects if o.type == "MESH" and o not in shapes]
 
 
+# Surfaces seen from above (Blender Z is glTF/three +Y); each must report an area-weighted facing.
+FACING_UP = {"koi-pond-scape-hd.glb": ("substrate",), "lily-pads-hd.glb": ("lily-pads",)}
+
+
+def named_ancestor(o: bpy.types.Object | None, names: tuple[str, ...]) -> str | None:
+    """gltfpack keeps the name on the node and moves the geometry onto an unnamed child."""
+    while o is not None:
+        base = re.sub(r"\.\d{3}$", "", o.name)
+        if base in names:
+            return base
+        o = o.parent
+    return None
+
+
 def verify(name: str) -> dict:
     path = os.path.join(ASSETS, name)
     j = glb_json(path)
@@ -641,22 +657,36 @@ def verify(name: str) -> dict:
         "reimported_meshes": len(meshes),
     }
     bad = []
+    expect_up = FACING_UP.get(name, ())
+    up_area: dict[str, list[float]] = {}
     for o in meshes:
         bm = bmesh.new()
         bm.from_mesh(o.data)
         degenerate = sum(1 for f in bm.faces if f.calc_area() < 1e-12)
         nan = sum(1 for v in bm.verts if any(math.isnan(c) for c in v.co))
+        surface = named_ancestor(o, expect_up)
+        if surface:
+            bm.transform(o.matrix_world)
+            bm.normal_update()
+            acc = up_area.setdefault(surface, [0.0, 0.0])
+            for f in bm.faces:
+                a = f.calc_area()
+                acc[0] += f.normal.z * a
+                acc[1] += a
         bm.free()
         if degenerate > len(o.data.polygons) * 0.01 or nan:
             bad.append({"mesh": o.name, "degenerate": degenerate, "nan": nan})
         if not o.data.uv_layers:
             bad.append({"mesh": o.name, "uv": "missing"})
-        if o.name in ("substrate", "lily-pads") and o.data.polygons:
-            # seen from above; Blender Z is glTF/three +Y
-            up = sum(p.normal.z * p.area for p in o.data.polygons) / sum(p.area for p in o.data.polygons)
-            info.setdefault("facing_up", {})[o.name] = round(up, 3)
-            if up < 0.5:
-                bad.append({"mesh": o.name, "facing_up": up})
+    for surface in expect_up:
+        up_sum, area = up_area.get(surface, (0.0, 0.0))
+        if area <= 0:
+            bad.append({"mesh": surface, "facing_up": "missing"})
+            continue
+        up = up_sum / area
+        info.setdefault("facing_up", {})[surface] = round(up, 3)
+        if up < 0.5:
+            bad.append({"mesh": surface, "facing_up": up})
     info["problems"] = bad
     if name.split("-")[1] in ("kohaku", "showa", "ogon"):
         mesh = next(o for o in meshes if any(m.type == "ARMATURE" for m in o.modifiers))

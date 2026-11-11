@@ -68,8 +68,8 @@ assets:
     triangles: 5876
   - id: lily-pads-hd
     path: assets/lily-pads-hd.glb
-    sha256: 6ae3bb6c7e179a831963b9715ff48cb48f87c1fd94ef21330122863a0593aebf
-    bytes: 357436
+    sha256: 5d4bb319f41dc489ebcce6a4be6ba0871ee1ce92134925f2bdc8ebe7293364e0
+    bytes: 347760
     triangles: 17796
   - id: pond-rocks-hd
     path: assets/pond-rocks-hd.glb
