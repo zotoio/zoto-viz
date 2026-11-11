@@ -69,10 +69,25 @@ function bool(raw: string | undefined, def: boolean): boolean {
   return def;
 }
 
-/** Preset first, then any knob the user set explicitly (all config.read values are strings). */
-export function parseBonsaiOptions(raw: Record<string, string | undefined> = {}, maxInstances = 48): BonsaiOptions {
-  const preset = sel(raw.preset, PRESETS, BONSAI_DEFAULTS.preset);
-  const p = { ...BONSAI_DEFAULTS, ...PRESET_PATCH[preset] };
+function atDefault(raw: string, def: unknown): boolean {
+  if (typeof def === "number") return Number(raw) === def;
+  if (typeof def === "boolean") return bool(raw, !def) === def;
+  return raw === def;
+}
+
+/**
+ * Preset first, then any knob the user set explicitly (all config.read values are strings). The
+ * host sends every knob, defaults included, so a knob still at its default yields to the preset.
+ */
+export function parseBonsaiOptions(input: Record<string, string | undefined> = {}, maxInstances = 48): BonsaiOptions {
+  const preset = sel(input.preset, PRESETS, BONSAI_DEFAULTS.preset);
+  const patch: Partial<BonsaiOptions> = PRESET_PATCH[preset];
+  const raw = { ...input };
+  for (const key of Object.keys(patch) as (keyof BonsaiOptions)[]) {
+    const v = raw[key];
+    if (v !== undefined && atDefault(v, BONSAI_DEFAULTS[key])) delete raw[key];
+  }
+  const p = { ...BONSAI_DEFAULTS, ...patch };
   // blossoms and falling leaves share the instance cap; falling leaves keep their pool first
   const fallCap = Math.round(num(raw.fallCap, Math.min(p.fallCap, maxInstances), 0, Math.min(16, maxInstances)));
   const blossomRoom = Math.max(0, Math.min(32, maxInstances - fallCap));
